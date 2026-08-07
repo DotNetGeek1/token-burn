@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 10
+const SAVE_VERSION := 11
 
 ## A round is one full cycle of the game: take contracts, work them to
 ## resolution, pay the bills. A prompt is one action inside a round — a burn or
@@ -104,11 +104,10 @@ var statistics: Dictionary = {
 	"overtime_rounds": 0,
 }
 
-## The endgame layer. Empty status means the player has not committed to an
-## Ascension Contract yet; see AscensionSystem for what each field means once
-## one is underway. The last three fields are the ladder rather than any one
-## contract: which rungs this run has already climbed, and what it is owed for
-## climbing them.
+## The endgame layer. Empty status means the player has not committed to the
+## location's boss contract yet; see AscensionSystem for what each field means
+## once one is underway. There is only ever one contract per run, so nothing here
+## outlives it.
 var ascension: Dictionary = {
 	"status": "",
 	"contract_id": "",
@@ -119,9 +118,6 @@ var ascension: Dictionary = {
 	"violations": 0,
 	"quality_sum": 0.0,
 	"quality_count": 0,
-	"completed_ids": [],
-	"highest_tier_completed": 0,
-	"pending_picks": 0,
 }
 
 var flags: Dictionary = {
@@ -135,6 +131,8 @@ var flags: Dictionary = {
 	"post_victory": false,
 	"post_victory_phase": "",
 	"legacy_banked": false,
+	"location_completed": false,
+	"next_location": "",
 	"draft_kind": "",
 }
 
@@ -327,8 +325,6 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_round_and_prompt()
 	if from_version < 8:
 		_migrate_to_workflows()
-	if from_version < 9:
-		_migrate_to_ascension_ladder()
 	if from_version < 10:
 		# Cooling used to be a running total that moving premises added to, so an
 		# old save can be carrying several locations' worth of it at once. The
@@ -336,17 +332,18 @@ func _migrate(from_version: int) -> void:
 		# the first time ComputeSystem recalculates, which happens on load.
 		compute["cooling"] = 0.0
 		compute["meta_cooling"] = 0.0
+	if from_version < 11:
+		_migrate_off_the_ascension_ladder()
 
 
-## A single Ascension Contract used to be the whole endgame, so a save from
-## before the ladder has no record of rungs climbed. It cannot have climbed any:
-## completing one contract ended the run outright, which is exactly the bug the
-## ladder replaces. The counters therefore start clean, and a contract that was
-## underway when the save was written stays underway as rung one.
-func _migrate_to_ascension_ladder() -> void:
-	ascension["completed_ids"] = []
-	ascension["highest_tier_completed"] = 0
-	ascension["pending_picks"] = 0
+## The three-rung ladder became one boss contract per location. A save taken
+## part-way up it keeps whichever contract was committed — that is now the run's
+## boss, and clearing it wins — while the rungs already climbed and any reward
+## picks not yet spent are dropped. Neither has anywhere to go in the new model,
+## and carrying them would leave a run owed a draft nothing can ever open.
+func _migrate_off_the_ascension_ladder() -> void:
+	for stale in ["completed_ids", "highest_tier_completed", "pending_picks"]:
+		ascension.erase(stale)
 
 
 ## One global pipeline became a list of named workflows, each assignable to a
@@ -546,9 +543,6 @@ func _default_ascension() -> Dictionary:
 		"violations": 0,
 		"quality_sum": 0.0,
 		"quality_count": 0,
-		"completed_ids": [],
-		"highest_tier_completed": 0,
-		"pending_picks": 0,
 	}
 
 
@@ -564,6 +558,8 @@ func _default_flags() -> Dictionary:
 		"post_victory": false,
 		"post_victory_phase": "",
 		"legacy_banked": false,
+		"location_completed": false,
+		"next_location": "",
 		"draft_kind": "",
 	}
 

@@ -188,11 +188,7 @@ func _refresh_ascension_tracker() -> void:
 	var burned: float = float(progress.get("tokens_burned", 0.0))
 	var total: float = maxf(1.0, float(progress.get("total_burn", 1.0)))
 	ascension_burn_bar.setup(
-		"RUNG %d/%d · %s" % [
-			int(progress.get("rung", 1)),
-			int(progress.get("rungs", 3)),
-			str(contract.get("name", "Ascension Contract")).to_upper(),
-		],
+		"FINAL BURN · %s" % str(contract.get("name", "Ascension Contract")).to_upper(),
 		burned,
 		total,
 		"tokens",

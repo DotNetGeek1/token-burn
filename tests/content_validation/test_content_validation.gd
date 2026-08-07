@@ -143,8 +143,8 @@ func _cost_of_units(upgrade: UpgradeDefinition, units: int) -> float:
 	return total
 
 
-## Ascension Contracts are the only exit from a run, so an unreachable pool is
-## an unfinishable game rather than a missing bonus.
+## Ascension Contracts are the only exit from a run, so a location without one is
+## an unfinishable chapter rather than a missing bonus.
 func _validate_ascension_contracts() -> void:
 	var contracts: Array = ContentDatabase.ascension_contracts
 	assert_true(contracts.size() > 0, "Content loads the Ascension Contract pool")
@@ -153,7 +153,7 @@ func _validate_ascension_contracts() -> void:
 		int(thresholds.get("earliest_round", 0)) < Simulation.ROUNDS_PER_RUN,
 		"Qualification opens before the year is out"
 	)
-	var lowest_tier: int = 99
+	var bosses: Dictionary = {}
 	for contract in contracts:
 		var id: String = str(contract.get("id", ""))
 		assert_true(id.begins_with("ascension."), "Contract id is namespaced: %s" % id)
@@ -161,11 +161,20 @@ func _validate_ascension_contracts() -> void:
 		assert_true(float(contract.get("total_burn", 0.0)) > 0.0, "Contract %s asks for a burn" % id)
 		assert_true(int(contract.get("deadline_prompts", 0)) > 0, "Contract %s has a deadline" % id)
 		assert_true(int(contract.get("picks", 0)) > 0, "Contract %s pays out at least one pick" % id)
-		lowest_tier = mini(lowest_tier, int(contract.get("required_infrastructure_tier", 0)))
-	assert_true(
-		lowest_tier <= int(thresholds.get("min_infrastructure_tier", 0)),
-		"Some contract is reachable at the infrastructure tier qualification asks for"
-	)
+		if bool(contract.get("alternate", false)):
+			continue
+		var location: String = str(contract.get("location", ""))
+		assert_true(location != "", "Primary contract %s names the location it is the boss of" % id)
+		assert_false(bosses.has(location), "%s has exactly one boss contract" % location)
+		bosses[location] = id
+		var qualification: Dictionary = Dictionary(contract.get("qualification", thresholds))
+		assert_true(
+			int(qualification.get("earliest_round", thresholds.get("earliest_round", 1)))
+				< Simulation.ROUNDS_PER_RUN,
+			"%s opens before the year is out" % id
+		)
+	for location in MetaProgress.location_order():
+		assert_true(bosses.has(str(location)), "%s has a way out of it" % str(location))
 
 
 func run() -> void:

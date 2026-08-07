@@ -167,10 +167,7 @@ func _test_angels_call_only_once_the_rent_has_cleared() -> void:
 	)
 	assert_true(paid.phase == paid.Phase.ANGEL_ROUND, "And the angels call once it has")
 	assert_true(paid.pending_choices.size() > 0, "With offers on the table")
-	# The same screen also serves the Ascension ladder's reward draft, which is
-	# worth several picks. An angel round must stay worth exactly one.
-	assert_false(paid.draft_is_ascension_reward(), "An angel round is an angel round")
-	assert_eq(paid.draft_picks_remaining(), 1, "And is worth one pick, not several")
+	assert_eq(paid.draft_picks_remaining(), 1, "And is worth exactly one pick")
 	# Angels give things away; anything with a price tag belongs on the Market.
 	for offer in paid.pending_choices:
 		assert_almost_eq(float(offer.get("cost", 0.0)), 0.0, 0.001, "Angel offers are free")

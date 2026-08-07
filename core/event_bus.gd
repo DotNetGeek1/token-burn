@@ -21,8 +21,6 @@ signal perk_acquired(perk_id: String)
 signal operation_acquired(operation_id: String)
 signal heat_threshold_crossed(level: float)
 signal achievement_unlocked(achievement_id: String)
-## A Tier 1 or 2 Ascension Contract completed: a level-up mid-run, not an ending.
-signal ascension_rung_completed(contract_id: String, tier: int)
 signal run_ended(victory: bool)
 
 
@@ -66,10 +64,6 @@ func emit_event(event_name: String, payload: Dictionary = {}) -> void:
 			heat_threshold_crossed.emit(payload.get("level", 0.0))
 		"achievement.unlocked":
 			achievement_unlocked.emit(payload.get("achievement_id", ""))
-		"ascension.rung_completed":
-			ascension_rung_completed.emit(
-				payload.get("contract_id", ""), int(payload.get("tier", 1))
-			)
 		"run.ended":
 			run_ended.emit(payload.get("victory", false))
 		_:

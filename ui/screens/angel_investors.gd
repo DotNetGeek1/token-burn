@@ -83,34 +83,14 @@ func show_choices() -> void:
 	get_tree().call_group("main_ui", "sync_overlay_input")
 
 
-## The two drafts read differently because they mean differently: an angel is
-## handing out a favour, an Ascension Reward is being paid what a rung of the
-## ladder promised. The pick counter only exists on the second, where taking one
-## thing does not close the table.
 func _refresh_heading() -> void:
-	if not Simulation.draft_is_ascension_reward():
-		title_label.text = "THE ANGEL ROUND"
-		subtitle_label.text = "Nobody wants equity. Everybody wants to be in the story."
-		decline_button.set_lines("TAKE NOTHING", "Thank everyone and leave")
-		return
-	var ladder: Dictionary = Simulation.ascension_ladder()
-	var picks: int = Simulation.draft_picks_remaining()
-	title_label.text = "ASCENSION REWARD"
-	subtitle_label.text = (
-		"Rung %d of %d is behind you. This is what it pays, and it pays into this run."
-		% [int(ladder.get("highest_tier_completed", 1)), int(ladder.get("total", 3))]
-	)
-	decline_button.set_lines(
-		"TAKE NOTHING",
-		"Forfeits %d pick(s)" % picks if picks > 1 else "Forfeits the pick"
-	)
+	title_label.text = "THE ANGEL ROUND"
+	subtitle_label.text = "Nobody wants equity. Everybody wants to be in the story."
+	decline_button.set_lines("TAKE NOTHING", "Thank everyone and leave")
 
 
 func _kind_chip_text(offer_type: String) -> String:
-	var noun: String = "module" if offer_type == "operation" else "perk"
-	if not Simulation.draft_is_ascension_reward():
-		return "Free %s" % noun
-	return "%d pick(s) left · %s" % [Simulation.draft_picks_remaining(), noun.capitalize()]
+	return "Free %s" % ("module" if offer_type == "operation" else "perk")
 
 
 func _show_offer_detail(offer: Dictionary, investor: Dictionary) -> void:

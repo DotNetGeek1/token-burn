@@ -26,19 +26,21 @@ func _ready() -> void:
 	_run_legacy_tests()
 	_run_batch("random", 12)
 	# The builder plays the game the way the design assumes one is played: it
-	# buys cooling before the machine that needs it and commits to a contract
-	# once it can. Set in the garage, the chapter the first Ascension Contract
-	# belongs to: a run can no longer buy its way into bigger premises, so the
-	# sweep has to name where it is played.
-	#
-	# What is asserted is that the endgame can still be *entered* — qualified for
-	# and committed to. Whether a garage build can then finish the contract is a
-	# balance question about that chapter's economy, which the location identity
-	# and balance pass owns; it is reported here rather than asserted.
-	var builder: Dictionary = _run_batch("builder", 8, "garage")
+	# buys cooling before the machine that needs it and commits to the boss once
+	# it can. Set in the bedroom, which is chapter one and therefore the campaign
+	# gate: if a build there cannot beat First Scale-Up, nobody ever reaches the
+	# garage and the campaign has no first step.
+	var bedroom: Dictionary = _run_batch("builder", 8, "bedroom")
 	_assert(
-		float(builder.get("committed_rate", 0.0)) > 0.0,
-		"A building policy can still qualify for and commit to an Ascension Contract"
+		float(bedroom.get("ascended_rate", 0.0)) > 0.0,
+		"A building policy can beat the bedroom's Ascension Contract"
+	)
+	# The garage is the chapter after it. Its economy is a Task 8 balance
+	# question, so entering the endgame is asserted and finishing it reported.
+	var garage: Dictionary = _run_batch("builder", 8, "garage")
+	_assert(
+		float(garage.get("committed_rate", 0.0)) > 0.0,
+		"And can still qualify for and commit to the garage's"
 	)
 	print("=".repeat(40))
 	print("Results: %d passed, %d failed" % [_passed, _failed])
@@ -50,14 +52,15 @@ func _ready() -> void:
 ## longer tell a run that ascended from one that merely failed to die.
 func _run_batch(policy: String, count: int, location: String = "bedroom") -> Dictionary:
 	var summary: Dictionary = BatchRunner.new().run(count, policy, location)
-	print("Batch [%s in %s] %d runs — ascended %.0f%%, qualified %.0f%%, climbed a rung %.0f%% (avg %.2f rungs), outcomes: %s" % [
+	print("Batch [%s in %s] %d runs — ascended %.0f%%, qualified %.0f%%, committed %.0f%%, avg peak %s, avg final burn %s, outcomes: %s" % [
 		policy,
 		location,
 		count,
 		float(summary.get("ascended_rate", 0.0)) * 100.0,
 		float(summary.get("qualified_rate", 0.0)) * 100.0,
-		float(summary.get("rung_rate", 0.0)) * 100.0,
-		float(summary.get("avg_rungs_climbed", 0.0)),
+		float(summary.get("committed_rate", 0.0)) * 100.0,
+		NumberFormat.format_token_rate(float(summary.get("avg_peak_token_rate", 0.0))),
+		NumberFormat.format(float(summary.get("avg_final_burn_tokens", 0.0))),
 		BatchRunner.describe_outcomes(summary),
 	])
 	_assert(

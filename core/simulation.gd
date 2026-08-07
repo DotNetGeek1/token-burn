@@ -102,12 +102,7 @@ func repair_after_load() -> void:
 			phase = Phase.ROUND_PREP
 		Phase.ANGEL_ROUND:
 			if pending_choices.is_empty():
-				# Which table was up matters: an ascension reward still owes the
-				# run picks, and re-dealing an angel draft over it would eat them.
-				if draft_is_ascension_reward():
-					_present_ascension_reward()
-				else:
-					_present_angel_offers()
+				_present_angel_offers()
 			if pending_choices.is_empty():
 				phase = Phase.ROUND_PREP
 
@@ -897,10 +892,15 @@ func ascension_progress() -> Dictionary:
 	return _ascension_system.progress(run_state, ContentDatabase)
 
 
-## Where the run stands on the three-rung ladder, for the readouts that have to
-## say so without asking four separate questions.
-func ascension_ladder() -> Dictionary:
-	return _ascension_system.ladder(run_state)
+## Where the run stands against the boss of the location it is being played in,
+## for the readouts that have to say so without re-deriving any of the rules.
+func ascension_summary() -> Dictionary:
+	return _ascension_system.summary(run_state, ContentDatabase)
+
+
+## The one contract this run is playing for, whether or not it has qualified.
+func ascension_boss_contract() -> Dictionary:
+	return _ascension_system.location_contract(run_state, ContentDatabase)
 
 
 ## Commits the run to one Ascension Contract. From the next prompt on, every
@@ -915,24 +915,7 @@ func commit_ascension_contract(contract_id: String) -> bool:
 	return true
 
 
-## A rung of the ladder has been climbed mid-round. The contract's picks become a
-## reward draft spent on this run, and the tier above opens up. What this
-## deliberately does not do is end anything: the round carries on, and the draft
-## waits until the work it interrupted has resolved.
-func _complete_ascension_rung(contract: Dictionary) -> void:
-	_ascension_system.complete_rung(run_state, contract)
-	var rung: int = int(contract.get("tier", 1))
-	round_log.append("%s is complete. Rung %d of %d — the ladder goes higher." % [
-		str(contract.get("name", "The contract")), rung, AscensionSystem.FINAL_TIER,
-	])
-	EventBus.emit_event("ascension.rung_completed", {
-		"contract_id": str(contract.get("id", "")),
-		"tier": rung,
-	})
-	_achievement_system.evaluate_tick(run_state, ContentDatabase)
-
-
-## A Tier 3 contract has cleared: the game is beaten. The run is not thrown away
+## The location's boss has cleared: the game is beaten. The run is not thrown away
 ## with it. The round it happened in is settled properly — the work pays out, the
 ## bills land, the angels call if the rent cleared — and the phase that would have
 ## come next is remembered, so continuing into endless mode resumes from a clean
@@ -946,6 +929,7 @@ func _reach_victory(contract: Dictionary) -> void:
 	MetaProgress.record_best_score(RunScore.compute(run_state, ContentDatabase))
 	MetaProgress.bank_victory(maxi(1, int(contract.get("picks", 1))))
 	MetaProgress.record_ascension(str(contract.get("id", "")))
+	_complete_run_location()
 	if bool(contract.get("unlocks_age", false)):
 		MetaProgress.advance_age(Ages.max_age_index())
 	var ending_unlock: String = str(contract.get("ending_unlock", ""))
@@ -968,6 +952,26 @@ func _reach_victory(contract: Dictionary) -> void:
 	phase = Phase.RUN_END
 	EventBus.emit_event("run.ended", {"victory": true})
 	_autosave()
+
+
+## Beating the boss retires the chapter and opens the next one. Guarded once-only
+## because `_end_run`'s "ascended" branch settles the same victory from the other
+## direction, and a location must not be completed twice.
+func _complete_run_location() -> void:
+	if bool(run_state.flags.get("location_completed", false)):
+		return
+	run_state.flags["location_completed"] = true
+	var location: String = str(run_state.build.get("dwelling", ""))
+	if location == "":
+		return
+	run_state.flags["next_location"] = MetaProgress.next_location_after(location)
+	MetaProgress.complete_location(location)
+
+
+## The location this victory opened up, empty if the run was played in the last
+## chapter there is.
+func next_location_unlocked() -> String:
+	return str(run_state.flags.get("next_location", ""))
 
 
 ## True while a victory is being settled: the bills landing in that window cannot
@@ -1122,15 +1126,10 @@ func _finish_prompt(result: Dictionary) -> void:
 			round_log.append(str(message))
 		var outcome: String = str(ascension_result.get("outcome", ""))
 		if outcome == AscensionSystem.STATUS_COMPLETED:
-			var contract: Dictionary = _ascension_system.current_contract(run_state, ContentDatabase)
-			if _ascension_system.is_final_contract(contract):
-				_work_running = false
-				_reach_victory(contract)
-				work_session_finished.emit({"phase": phase, "summary": last_session_summary})
-				return
-			# A rung, not the finish line: the round carries on from here and the
-			# reward draft opens once the work it interrupted has resolved.
-			_complete_ascension_rung(contract)
+			_work_running = false
+			_reach_victory(_ascension_system.current_contract(run_state, ContentDatabase))
+			work_session_finished.emit({"phase": phase, "summary": last_session_summary})
+			return
 		elif outcome == AscensionSystem.STATUS_FAILED:
 			_work_running = false
 			run_state.flags["loss_reason"] = "Ascension contract failed."
@@ -1459,37 +1458,18 @@ func accept_offer(offer_type: String, offer_id: String) -> bool:
 
 
 ## Walks away with nothing. Always allowed: a full board and a bad offer is a
-## real situation. Declining an ascension reward forfeits every pick still on it,
-## rather than putting the same table back up on the next round.
+## real situation.
 func decline_offers() -> void:
 	if phase != Phase.ANGEL_ROUND:
 		return
-	if draft_is_ascension_reward():
-		_ascension_system.set_pending_picks(run_state, 0)
-	else:
-		run_state.statistics["angel_offers_declined"] = int(
-			run_state.statistics.get("angel_offers_declined", 0)
-		) + 1
+	run_state.statistics["angel_offers_declined"] = int(
+		run_state.statistics.get("angel_offers_declined", 0)
+	) + 1
 	_after_angel_round()
 
 
-## Spends one pick on the draft. An angel draft closes on the first one; an
-## ascension reward stays open, minus what was taken, until its picks run out.
-func _spend_draft_pick(offer_type: String, offer_id: String) -> void:
-	if not draft_is_ascension_reward():
-		_after_angel_round()
-		return
-	var remaining: int = _ascension_system.pending_picks(run_state) - 1
-	_ascension_system.set_pending_picks(run_state, remaining)
-	var kept: Array = []
-	for offer in pending_choices:
-		if str(offer.get("type", "")) == offer_type and str(offer.get("id", "")) == offer_id:
-			continue
-		kept.append(offer)
-	pending_choices = kept
-	if remaining > 0 and not pending_choices.is_empty():
-		_autosave()
-		return
+## Spends the draft's one pick and closes it.
+func _spend_draft_pick(_offer_type: String, _offer_id: String) -> void:
 	_after_angel_round()
 
 
@@ -1568,9 +1548,8 @@ func buy_upgrade(upgrade_id: String) -> bool:
 	_board_system.ensure_board(run_state, ContentDatabase)
 	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
 	EventBus.emit_event("upgrade.purchased", {"upgrade_id": upgrade_id})
-	# Shopping past the angels closes their draft; it does not spend the picks a
-	# rung of the Ascension ladder already paid out.
-	if phase == Phase.ANGEL_ROUND and not draft_is_ascension_reward():
+	# Shopping past the angels closes their draft.
+	if phase == Phase.ANGEL_ROUND:
 		_after_angel_round()
 	_autosave()
 	return true
@@ -1639,20 +1618,8 @@ func query_effect_breakdown(target_path: String, chain_id: String = "") -> Dicti
 	return effect_resolver.query_trace_breakdown(target_path, chain_id)
 
 
-## What the draft on the table is. The angel draft is the round's free offer, one
-## pick and out. The ascension reward is paid for climbing a rung and can be worth
-## several picks, so it stays open until they are spent.
+## The only draft there is: the round's free offer, one pick and out.
 const DRAFT_ANGEL := "angel"
-const DRAFT_ASCENSION := "ascension"
-
-## How many offers an ascension reward puts on the table, per kind. Wider than the
-## angel draft because the picks are the payout for a rung, not a passing gift.
-const ASCENSION_REWARD_OFFERS := 3
-
-## How far the ascension reward flattens the rarity curve. At 1.0 rarity stops
-## mattering entirely, which is how a reward draft comes to hold the things an
-## ordinary round rarely offers.
-const ASCENSION_REWARD_RARITY_BIAS := 0.75
 
 ## The round's angel draft. Everything here is free: somebody with more money
 ## than sense is handing out modules and perks. Anything with a price tag is sold
@@ -1684,70 +1651,16 @@ func _present_angel_offers() -> void:
 	phase = Phase.ANGEL_ROUND
 
 
-## The payout for climbing a rung of the Ascension ladder, spent on this run
-## rather than banked for the next one. Same shape as the angel draft so the same
-## screen can present it, but wider, rarer, and worth as many picks as the
-## contract promised. Returns false when there is nothing owed or nothing left to
-## offer, so the caller can carry on to whatever comes next.
-func _present_ascension_reward() -> bool:
-	var picks: int = _ascension_system.pending_picks(run_state)
-	if picks <= 0:
-		return false
-	var rung: int = _ascension_system.highest_tier_completed(run_state)
-	pending_choices = []
-	for operation in ContentDatabase.draw_operations(
-		rng.derive("ascension_reward_modules.%d" % rung),
-		ASCENSION_REWARD_OFFERS,
-		owned_operations(),
-		ASCENSION_REWARD_RARITY_BIAS
-	):
-		pending_choices.append({
-			"type": "operation",
-			"id": operation.id,
-			"label": operation.name,
-			"description": get_operation_description(operation.id),
-			"cost": 0.0,
-		})
-	for perk in ContentDatabase.draw_perks(
-		rng.derive("ascension_reward_perks.%d" % rung),
-		ASCENSION_REWARD_OFFERS,
-		run_state.build["perks"],
-		ASCENSION_REWARD_RARITY_BIAS
-	):
-		pending_choices.append({
-			"type": "perk",
-			"id": perk.id,
-			"label": perk.name,
-			"description": _render_perk(perk),
-			"cost": 0.0,
-		})
-	if pending_choices.is_empty():
-		_ascension_system.set_pending_picks(run_state, 0)
-		return false
-	run_state.flags["draft_kind"] = DRAFT_ASCENSION
-	phase = Phase.ANGEL_ROUND
-	return true
-
-
-## Which draft is on the table, so a screen can title itself and the accept path
-## knows whether one pick closes it.
+## Which draft is on the table, so a screen can title itself.
 func draft_kind() -> String:
 	if phase != Phase.ANGEL_ROUND:
 		return ""
 	return str(run_state.flags.get("draft_kind", DRAFT_ANGEL))
 
 
-func draft_is_ascension_reward() -> bool:
-	return draft_kind() == DRAFT_ASCENSION
-
-
 ## Picks still to spend on the draft. An angel draft is always worth exactly one.
 func draft_picks_remaining() -> int:
-	if phase != Phase.ANGEL_ROUND:
-		return 0
-	if draft_is_ascension_reward():
-		return _ascension_system.pending_picks(run_state)
-	return 1
+	return 1 if phase == Phase.ANGEL_ROUND else 0
 
 
 ## Closes the round: the bills land, the rig cools off, and — if the rent
@@ -1799,10 +1712,6 @@ func _end_round() -> void:
 	# prep, which is where a defaulting run stays.
 	if bool(statement.get("paid_in_full", false)):
 		_present_angel_offers()
-		return
-	# A rung of the Ascension ladder was earned, not given, so its reward lands
-	# whatever the landlord thinks of the operation.
-	_present_ascension_reward()
 
 
 ## Ages the run's status effects by one round and drops the ones that have run
@@ -1914,10 +1823,6 @@ func _after_angel_round() -> void:
 		_round_end_pending = false
 		_end_round()
 		return
-	# Rungs of the Ascension ladder pay out after the angels, so a round that
-	# happened to do both hands over one table at a time.
-	if _present_ascension_reward():
-		return
 	phase = Phase.ROUND_PREP
 	_ensure_job_offers()
 
@@ -1949,6 +1854,7 @@ func _end_run(victory: bool, outcome: String = "") -> void:
 			run_state.flags["ascension_tier"] = int(contract.get("tier", 1))
 			MetaProgress.bank_victory(picks)
 			MetaProgress.record_ascension(str(contract.get("id", "")))
+			_complete_run_location()
 			if bool(contract.get("unlocks_age", false)):
 				MetaProgress.advance_age(Ages.max_age_index())
 			var ending_unlock: String = str(contract.get("ending_unlock", ""))

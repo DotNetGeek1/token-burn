@@ -233,25 +233,27 @@ func _capacity_warnings(offer: Dictionary, queued: Array) -> Array:
 ## the burn board's own tracker takes over.
 func _refresh_ascend_button() -> void:
 	ascend_button.visible = true
-	var ladder: Dictionary = Simulation.ascension_ladder()
-	var rung: String = "Rung %d of %d" % [int(ladder.get("rung", 1)), int(ladder.get("total", 3))]
+	var summary: Dictionary = Simulation.ascension_summary()
+	var boss: String = str(Dictionary(summary.get("contract", {})).get("name", "Ascension Contract"))
 	if Simulation.ascension_active():
-		ascend_button.set_lines("ASCENSION UNDERWAY", "%s · follow it on the burn board" % rung)
+		ascend_button.set_lines("ASCENSION UNDERWAY", "%s · follow it on the burn board" % boss)
 		ascend_button.disabled = true
 		return
 	ascend_button.disabled = false
 	if Simulation.in_overtime():
-		ascend_button.set_lines("ASCENSION CONTRACT", "%s · OVERTIME — the run only ends when the top one is done" % rung)
+		ascend_button.set_lines(boss.to_upper(), "OVERTIME — the run only ends when this is done")
 		return
-	var qualification: Dictionary = Simulation.ascension_qualification()
-	if bool(qualification.get("qualified", false)):
-		ascend_button.set_lines("ASCENSION CONTRACT", "%s · the build has qualified" % rung)
+	var qualification: Dictionary = Dictionary(summary.get("qualification", {}))
+	if bool(summary.get("qualified", false)):
+		ascend_button.set_lines(boss.to_upper(), "ASCENSION READY — commit when you are")
 		return
-	var remaining: int = Simulation.rounds_remaining()
 	ascend_button.set_lines(
-		"ASCENSION CONTRACT",
-		"%s · %s · %d round(s) left in the year" % [
-			rung, _qualification_summary(qualification), remaining,
+		boss.to_upper(),
+		"%d/%d requirements · %s · %d round(s) left in the year" % [
+			int(summary.get("requirements_met", 0)),
+			int(summary.get("requirements_total", 0)),
+			_qualification_summary(qualification),
+			Simulation.rounds_remaining(),
 		]
 	)
 
@@ -261,8 +263,6 @@ func _refresh_ascend_button() -> void:
 func _qualification_summary(qualification: Dictionary) -> String:
 	if not bool(qualification.get("round_ok", true)):
 		return "Opens in round %d" % int(qualification.get("earliest_round", 1))
-	if not bool(qualification.get("infra_ok", true)):
-		return "Needs infrastructure tier %d" % int(qualification.get("min_infrastructure_tier", 0))
 	if not bool(qualification.get("peak_ok", true)):
 		return "Needs %s peak throughput" % NumberFormat.format_token_rate(
 			float(qualification.get("min_peak_token_rate", 0.0))

@@ -1,14 +1,13 @@
 extends Control
 
-## The ladder out of the year, one rung at a time: which Ascension Contract to
-## commit to next. Committing switches the run into a Final Burn — there is no
-## undo, so this opens as an explicit overlay rather than something that could be
-## tapped by accident.
+## The way out of the year: the one boss contract this location has, and what the
+## build still has to prove before it can be committed to. Committing switches the
+## run into a Final Burn — there is no undo, so this opens as an explicit overlay
+## rather than something that could be tapped by accident.
 ##
-## Only the top rung ends the run. The two below it are level-ups that pay their
-## picks straight back into the run, which is what the cards have to say plainly:
-## a player who reads "Banks 1 pick" as "the game is over now" will never take the
-## first one.
+## Completing it wins the run and opens the next location. Failing it ends the
+## run. Both halves are said plainly on the card, because a player who does not
+## know the stakes cannot make the decision this overlay exists to ask for.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
 const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
@@ -47,55 +46,48 @@ func hide_overlay() -> void:
 func _refresh() -> void:
 	for child in cards_list.get_children():
 		child.queue_free()
-	var contracts: Array = Simulation.ascension_eligible_contracts()
+	var summary: Dictionary = Simulation.ascension_summary()
+	var contract: Dictionary = Dictionary(summary.get("contract", {}))
 	empty_label.visible = false
-	if contracts.is_empty():
-		_show_qualification_progress()
-	else:
-		subtitle_label.text = _rung_subtitle()
-		for contract in contracts:
-			cards_list.add_child(_build_card(contract))
-	_refresh_close_button()
-
-
-## Says which rung this is and what clearing it does, because the answer changes
-## at the top: below it the run continues and gets paid, at it the run is won.
-func _rung_subtitle() -> String:
-	var ladder: Dictionary = Simulation.ascension_ladder()
-	var rung: int = int(ladder.get("rung", 1))
-	var total: int = int(ladder.get("total", 3))
-	if rung >= total:
-		return (
-			"Rung %d of %d — the last one. Completing any of these beats the game. There is no undo."
-			% [rung, total]
-		)
-	return (
-		"Rung %d of %d. Completing one pays its picks straight back into this run and opens the tier above. There is no undo."
-		% [rung, total]
-	)
-
-
-## With nothing in reach, the overlay stops being a dead end and becomes the
-## checklist instead: every bar the run has to clear, and where it stands on
-## each. The endgame was invisible until it was already available, which is how
-## a first run reaches the end of the year without knowing it existed.
-func _show_qualification_progress() -> void:
-	var q: Dictionary = Simulation.ascension_qualification()
-	var ladder: Dictionary = Simulation.ascension_ladder()
-	subtitle_label.text = (
-		"These are the %d rungs out of the year, climbed one at a time. The run ends by completing the last one, not by the calendar running out. Here is what the build still has to prove for rung %d."
-		% [int(ladder.get("total", 3)), int(ladder.get("rung", 1))]
-	)
-	for row in _requirement_rows(q):
+	subtitle_label.text = _subtitle(summary)
+	if contract.is_empty():
+		cards_list.add_child(_note(
+			"There is no Ascension Contract for this location yet. Ordinary work is all there is here."
+		))
+		_refresh_close_button()
+		return
+	# The checklist is always shown, qualified or not: a card the player cannot
+	# yet press has to say what would make it pressable, and one they can press
+	# is worth showing the margin on.
+	if bool(summary.get("qualified", false)) and not bool(summary.get("committed", false)):
+		cards_list.add_child(_build_card(contract))
+	for row in _requirement_rows(Dictionary(summary.get("qualification", {}))):
 		cards_list.add_child(_requirement_row(
 			str(row["label"]), str(row["value"]), bool(row["met"])
 		))
-	if bool(q.get("qualified", false)):
-		cards_list.add_child(_note(
-			"The build qualifies, but nothing on rung %d is within reach of its infrastructure tier yet. "
-			% int(ladder.get("rung", 1))
-			+ "Take the next machine up."
-		))
+	_refresh_close_button()
+
+
+## Names the boss, where the run stands against it, and what it is worth — win or
+## lose. The endgame used to be invisible until it was already available, which is
+## how a first run reaches the end of the year without knowing it existed.
+func _subtitle(summary: Dictionary) -> String:
+	var contract: Dictionary = Dictionary(summary.get("contract", {}))
+	var location: String = MetaProgress.location_name(str(summary.get("location", "")))
+	if contract.is_empty():
+		return "%s has no contract out of it." % location
+	var boss: String = str(contract.get("name", "the contract"))
+	if bool(summary.get("committed", false)):
+		return "%s is underway. Every prompt from here is measured against it." % boss
+	if bool(summary.get("qualified", false)):
+		return (
+			"%s is the way out of %s, and the build has qualified for it. Completing it wins the run; failing it ends it."
+			% [boss, location]
+		)
+	return (
+		"%s is the way out of %s. The run ends by completing it, not by the calendar running out. Here is what the build still has to prove."
+		% [boss, location]
+	)
 
 
 func _requirement_rows(q: Dictionary) -> Array:
@@ -115,14 +107,6 @@ func _requirement_rows(q: Dictionary) -> Array:
 				NumberFormat.format_token_rate(float(q.get("min_peak_token_rate", 0.0))),
 			],
 			"met": bool(q.get("peak_ok", false)),
-		},
-		{
-			"label": "Infrastructure tier",
-			"value": "%d of %d needed" % [
-				int(q.get("infrastructure_tier", 0)),
-				int(q.get("min_infrastructure_tier", 0)),
-			],
-			"met": bool(q.get("infra_ok", false)),
 		},
 		{
 			"label": "Income vs costs",
@@ -179,7 +163,7 @@ func _build_card(contract: Dictionary) -> GameCard:
 		"COMMIT TO THIS",
 		AssetCatalog.unlock_icon("ascension")
 	)
-	card.set_kicker(_tier_kicker(contract), UiThemeBuilder.color("red"))
+	card.set_kicker(_boss_kicker(contract), UiThemeBuilder.color("red"))
 	card.set_headline(str(contract.get("burn_label", "")), "compute")
 	card.set_chips(_chips(contract))
 	card.set_action_style("warning", "danger", "DangerButton")
@@ -188,25 +172,17 @@ func _build_card(contract: Dictionary) -> GameCard:
 	return card
 
 
-func _is_final(contract: Dictionary) -> bool:
-	return int(contract.get("tier", 1)) >= AscensionSystem.FINAL_TIER
-
-
-func _tier_kicker(contract: Dictionary) -> String:
-	var tier: int = int(contract.get("tier", 1))
-	if _is_final(contract):
-		return "Tier %d — the finish line" % tier
-	return "Tier %d — a level-up, not the end" % tier
+func _boss_kicker(contract: Dictionary) -> String:
+	return "%s — the way out" % MetaProgress.location_name(str(contract.get("location", "")))
 
 
 func _chips(contract: Dictionary) -> Array:
-	var picks: int = int(contract.get("picks", 1))
 	return [
 		{"text": "%d prompt deadline" % int(contract.get("deadline_prompts", 12)), "role": "warning"},
 		{"text": "Quality %d+" % int(contract.get("quality_min", 0)), "role": "energy"},
 		{"text": "Max %d violation(s)" % int(contract.get("max_failed_burns", 0)), "role": "danger"},
 		{
-			"text": "Banks %d pick(s)" % picks if _is_final(contract) else "Pays %d pick(s) into this run" % picks,
+			"text": "Banks %d pick(s)" % int(contract.get("picks", 1)),
 			"role": "perk",
 			"filled": true,
 		},
@@ -223,30 +199,21 @@ func _show_detail(contract: Dictionary) -> void:
 		{"stat": "Deadline", "value": "%d prompts" % int(contract.get("deadline_prompts", 12))},
 		{
 			"stat": "Reward",
-			"value": (
-				"%d unlock pick(s)" % int(contract.get("picks", 1)) if _is_final(contract)
-				else "%d reward pick(s), spent now" % int(contract.get("picks", 1))
-			),
+			"value": "%d unlock pick(s)" % int(contract.get("picks", 1)),
 			"role": "perk",
 		},
 	]
-	if _is_final(contract):
-		rows.append({
-			"rule": "This one ends it",
-			"text": "Completing a Tier %d contract beats the game. You can carry the run on into an endless tail afterwards." % AscensionSystem.FINAL_TIER,
-		})
-	else:
-		rows.append({
-			"rule": "The run continues",
-			"text": "Completing this hands the run back with its reward picks to spend and the next tier of contracts on the table.",
-		})
+	rows.append({
+		"rule": "This one ends it, either way",
+		"text": _stakes_text(contract),
+	})
 	if bool(contract.get("unlocks_age", false)):
 		rows.append({"rule": "Advances the Compute Age", "text": "Completing this contract moves every future run into the next age."})
 	if str(contract.get("ending_unlock", "")) != "":
 		rows.append({"rule": "Unique reward", "text": "This ending unlocks a permanent mechanic no other contract grants."})
 	_detail_sheet.show_detail(
 		str(contract.get("name", "Contract")),
-		"Tier %d Ascension Contract" % int(contract.get("tier", 1)),
+		"%s Ascension Contract" % MetaProgress.location_name(str(contract.get("location", ""))),
 		rows,
 		[],
 		"COMMIT TO THIS",
@@ -257,15 +224,26 @@ func _show_detail(contract: Dictionary) -> void:
 	_detail_sheet.action_confirmed.connect(_confirm_commit.bind(contract))
 
 
+## What committing actually buys and costs, in one sentence each, because this is
+## the only decision in the game that cannot be walked back.
+func _stakes_text(contract: Dictionary) -> String:
+	var next_location: String = MetaProgress.next_location_after(
+		str(contract.get("location", ""))
+	)
+	var won: String = (
+		"Completing it wins the run and unlocks %s to start the next one in."
+			% MetaProgress.location_name(next_location)
+		if next_location != ""
+		else "Completing it wins the run; this is the last location there is."
+	)
+	return "%s Failing it ends the run there and then." % won
+
+
 func _confirm_commit(contract: Dictionary) -> void:
 	var rows: Array = [
 		{"text": "There is no undo. Ordinary contracts still pay the bills, but every round from here is measured against %s." % str(contract.get("name", "this contract"))},
+		{"rule": "Win or lose, it ends here", "text": _stakes_text(contract)},
 	]
-	if not _is_final(contract):
-		rows.append({
-			"rule": "Clearing it is not the end",
-			"text": "The run carries on with %d reward pick(s) to spend and the tier above unlocked." % int(contract.get("picks", 1)),
-		})
 	_detail_sheet.show_detail(
 		"Commit to %s?" % str(contract.get("name", "this contract")),
 		"Final Burn",

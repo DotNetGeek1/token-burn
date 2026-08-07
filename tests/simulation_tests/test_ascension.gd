@@ -1,13 +1,13 @@
 extends TestCase
 
-## The endgame layer: qualification gates the Final Burn, committing to a
-## contract locks the run onto it, and every prompt is measured against the
-## contract's requirements until it completes, fails, or the clock runs out.
+## The endgame layer: every location has exactly one boss contract. Qualification
+## gates the Final Burn, committing locks the run onto it, and every prompt is
+## measured against its requirements until it completes or fails.
 ##
-## Contracts are a three-rung ladder. Tiers 1 and 2 are level-ups that hand the
-## run back with reward picks to spend on it; only a Tier 3 contract wins, and even
-## then the run can be carried on. The tests below are mostly about that
-## distinction, because the bug they exist for is a run that ended on rung one.
+## Completing it wins the run and opens the next location. Failing it ends the
+## run. There is no ladder inside a run any more, and most of the tests below
+## exist to keep it that way — the bug they guard against is a run that survived
+## an ending in either direction.
 
 const SCRATCH_PROFILE := "user://profile_test_ascension.json"
 
@@ -18,25 +18,28 @@ func run() -> void:
 	var restore_path: String = MetaProgress.profile_path
 	var restore_enabled: bool = MetaProgress.enabled
 
-	_test_an_unqualified_build_has_no_eligible_contracts()
-	_test_qualifying_opens_eligible_contracts()
+	_test_an_unqualified_build_has_no_boss_on_the_table()
+	_test_qualification_reports_every_unmet_condition()
+	_test_the_boss_offered_belongs_to_the_run_s_location()
 	_test_committing_locks_in_the_contract()
 	_test_completing_a_contract_meets_its_requirement()
 	_test_falling_short_of_the_deadline_fails_the_contract()
 	_test_the_year_running_out_does_not_end_the_run()
 	_test_overtime_costs_climb_every_round()
-	_test_committing_in_overtime_still_climbs_a_rung()
+	_test_committing_in_overtime_still_wins_the_run()
 	_test_overtime_still_ends_when_the_business_collapses()
 	_test_overtime_closes_out_an_operation_earning_millions()
 	_test_endless_stays_off_while_the_meta_layer_is_disabled()
 	_test_qualification_latches_once_cleared()
-	_test_a_rung_hands_the_run_back()
-	_test_the_ladder_is_climbed_one_rung_at_a_time()
-	_test_a_rung_pays_its_picks_into_this_run()
-	_test_only_the_top_rung_ends_the_run()
+	_test_beating_the_boss_wins_the_run()
+	_test_beating_the_boss_unlocks_the_next_location()
+	_test_a_failed_contract_ends_the_run()
+	_test_no_ladder_state_is_left_in_the_run()
+	_test_replaying_a_completed_location_offers_its_boss_again()
 	_test_a_won_run_can_carry_on_into_endless()
 	_test_run_score_reports_lifetime_tokens()
 	_test_ascension_state_survives_a_save_round_trip()
+	_test_a_save_mid_ladder_keeps_its_contract_and_sheds_the_rungs()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -56,7 +59,34 @@ func _sim() -> Node:
 	return sim
 
 
-func _test_an_unqualified_build_has_no_eligible_contracts() -> void:
+## Clears the bars the run's own location asks for, without having to actually
+## buy every upgrade in the chapter.
+func _qualify(sim: Node) -> void:
+	_qualify_state(sim.run_state)
+
+
+func _qualify_state(run_state: RunState) -> void:
+	var thresholds: Dictionary = AscensionSystem.new().qualification_thresholds(
+		run_state, ContentDatabase
+	)
+	run_state.calendar["round"] = maxi(6, int(thresholds.get("earliest_round", 1)))
+	run_state.economy["last_round_costs"] = 100.0
+	run_state.economy["income"] = 500.0
+	run_state.statistics["peak_token_rate"] = float(
+		thresholds.get("min_peak_token_rate", 0.0)
+	) * 1.25 + 1.0
+
+
+## Puts a run in a location without playing the chapters below it.
+func _run_in(sim: Node, location: String) -> void:
+	sim.apply_run_location(sim.run_state, location)
+
+
+func _boss_id(sim: Node) -> String:
+	return str(sim.ascension_boss_contract().get("id", ""))
+
+
+func _test_an_unqualified_build_has_no_boss_on_the_table() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5001)
@@ -65,32 +95,57 @@ func _test_an_unqualified_build_has_no_eligible_contracts() -> void:
 		"A fresh run with stock hardware has not qualified for anything yet"
 	)
 	assert_false(bool(sim.ascension_qualification().get("qualified", false)), "Qualification starts false")
+	assert_eq(
+		_boss_id(sim), "ascension.first_scale_up",
+		"But the bedroom's boss is already named, so the goal is never invisible"
+	)
 	sim.free()
 
 
-## Qualification only needs the three thresholds met; it does not require
-## actually buying every upgrade in the game.
-func _qualify(sim: Node) -> void:
-	sim.run_state.calendar["round"] = 6
-	sim.run_state.economy["last_round_costs"] = 100.0
-	sim.run_state.economy["income"] = 500.0
-	sim.run_state.statistics["peak_token_rate"] = 25000000.0
-	sim.run_state.build["hardware"] = ["used_laptop", "gpu_rack"]
-
-
-func _test_qualifying_opens_eligible_contracts() -> void:
+## The checklist is the whole point of the overlay, so each bar has to report
+## itself rather than collapsing into one "not yet".
+func _test_qualification_reports_every_unmet_condition() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5002)
+	sim.run_state.calendar["round"] = 1
+	sim.run_state.economy["last_round_costs"] = 100.0
+	sim.run_state.economy["income"] = 10.0
+	sim.run_state.statistics["peak_token_rate"] = 0.0
+	var q: Dictionary = sim.ascension_qualification()
+	assert_false(bool(q.get("round_ok", true)), "Round one is too early")
+	assert_false(bool(q.get("peak_ok", true)), "A rig that has burned nothing has no peak rate")
+	assert_false(bool(q.get("income_ok", true)), "And income does not cover the costs")
+	var summary: Dictionary = sim.ascension_summary()
+	assert_eq(int(summary.get("requirements_met", -1)), 0, "So nothing on the checklist is met")
+	assert_eq(int(summary.get("requirements_total", 0)), 3, "Out of three bars")
+
 	_qualify(sim)
-	var qualification: Dictionary = sim.ascension_qualification()
-	assert_true(bool(qualification.get("qualified", false)), "Income, peak rate, and tier all clear their bars")
-	var eligible: Array = sim.ascension_eligible_contracts()
-	assert_true(eligible.size() > 0, "Tier 1 contracts open up once qualified")
-	for contract in eligible:
-		assert_true(int(contract.get("required_infrastructure_tier", 0)) <= 1, "Tier 1 hardware only reaches Tier 1 contracts")
-	assert_eq(int(sim.ascension_ladder().get("rung", 0)), 1, "A run that has climbed nothing starts on rung one")
+	var later: Dictionary = sim.ascension_summary()
+	assert_eq(int(later.get("requirements_met", 0)), 3, "Clearing all three clears the checklist")
+	assert_true(bool(later.get("qualified", false)), "And the run qualifies")
 	sim.free()
+
+
+func _test_the_boss_offered_belongs_to_the_run_s_location() -> void:
+	_fresh_profile()
+	for pair in [
+		["bedroom", "ascension.first_scale_up"],
+		["garage", "ascension.million_token_operator"],
+		["office_unit", "ascension.regional_provider"],
+		["warehouse", "ascension.datacentre_magnate"],
+		["datacentre_campus", "ascension.national_backbone"],
+		["private_power_grid", "ascension.the_monopoly"],
+		["moon_facility", "ascension.final_prompt"],
+	]:
+		var sim: Node = _sim()
+		sim.start_run(5100)
+		_run_in(sim, str(pair[0]))
+		_qualify(sim)
+		var eligible: Array = sim.ascension_eligible_contracts()
+		assert_eq(eligible.size(), 1, "%s offers exactly one boss" % str(pair[0]))
+		assert_eq(str(eligible[0].get("id", "")), str(pair[1]), "And it is the one that chapter owns")
+		sim.free()
 
 
 func _test_committing_locks_in_the_contract() -> void:
@@ -98,19 +153,29 @@ func _test_committing_locks_in_the_contract() -> void:
 	var sim: Node = _sim()
 	sim.start_run(5003)
 	_qualify(sim)
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "An eligible contract can be committed to")
+	assert_true(
+		sim.commit_ascension_contract("ascension.million_token_operator") == false,
+		"Another location's boss cannot be reached for"
+	)
+	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "The location's boss can be committed to")
 	assert_true(sim.ascension_active(), "The Final Burn is now underway")
 	assert_false(
-		sim.commit_ascension_contract("ascension.million_token_operator"),
-		"A second contract cannot be committed to on top of the first"
+		sim.commit_ascension_contract("ascension.first_scale_up"),
+		"A second commitment cannot be made on top of the first"
 	)
 	sim.free()
 
 
+## Committing has to be earned: the overlay can be opened at any time, but the
+## button behind it only works once the bars are clear.
 func _test_completing_a_contract_meets_its_requirement() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5004)
+	assert_false(
+		sim.commit_ascension_contract("ascension.first_scale_up"),
+		"An unqualified build cannot commit"
+	)
 	_qualify(sim)
 	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed")
 	_meet_requirement(sim, "ascension.first_scale_up")
@@ -135,18 +200,6 @@ func _meet_requirement(sim: Node, contract_id: String) -> Dictionary:
 	return contract
 
 
-## Puts the run on a rung it has not actually climbed, so a test about the tier
-## above does not have to play the two below it first.
-func _stand_on_rung(sim: Node, rung: int) -> void:
-	sim.run_state.ascension["highest_tier_completed"] = rung - 1
-
-
-## Infrastructure tier 5, which is what every Tier 3 contract asks for.
-func _own_the_top_of_the_ladder(sim: Node) -> void:
-	sim.run_state.build["hardware"] = ["used_laptop", "industrial_campus"]
-	sim.run_state.build["dwelling"] = "private_power_grid"
-
-
 func _test_falling_short_of_the_deadline_fails_the_contract() -> void:
 	_fresh_profile()
 	var ascension := AscensionSystem.new()
@@ -164,14 +217,6 @@ func _test_falling_short_of_the_deadline_fails_the_contract() -> void:
 		if outcome != "":
 			break
 	assert_eq(outcome, "failed", "Running out the clock without the burn requirement fails the contract")
-
-
-func _qualify_state(run_state: RunState) -> void:
-	run_state.calendar["round"] = 6
-	run_state.economy["last_round_costs"] = 100.0
-	run_state.economy["income"] = 500.0
-	run_state.statistics["peak_token_rate"] = 25000000.0
-	run_state.build["hardware"] = ["used_laptop", "gpu_rack"]
 
 
 ## The reported bug: the player got past round twelve with no contract and the
@@ -217,9 +262,9 @@ func _test_overtime_costs_climb_every_round() -> void:
 	sim.free()
 
 
-## Overtime is not a dead end: committing there still counts, and clearing a rung
-## in it moves the run up the ladder rather than leaving it stranded.
-func _test_committing_in_overtime_still_climbs_a_rung() -> void:
+## Overtime is not a dead end: committing there still counts, and clearing the
+## boss in it wins the run rather than leaving it stranded.
+func _test_committing_in_overtime_still_wins_the_run() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5012)
@@ -235,13 +280,8 @@ func _test_committing_in_overtime_still_climbs_a_rung() -> void:
 	)
 	_meet_requirement(sim, "ascension.first_scale_up")
 	sim._finish_prompt({"ok": true, "messages": []})
-	assert_eq(
-		int(sim.ascension_ladder().get("highest_tier_completed", 0)),
-		1,
-		"Finishing it in overtime still climbs the rung"
-	)
-	assert_true(sim.phase != sim.Phase.RUN_END, "And does not end the run, even in overtime")
-	assert_true(sim.in_overtime(), "Overtime keeps its grip until the top rung is done")
+	assert_eq(sim.phase, sim.Phase.RUN_END, "Finishing it in overtime still wins the run")
+	assert_true(bool(sim.run_state.flags.get("victory", false)), "As a victory")
 	sim.free()
 
 
@@ -308,8 +348,8 @@ func _test_endless_stays_off_while_the_meta_layer_is_disabled() -> void:
 	sim.free()
 
 
-## The Job Board's way into the endgame must not blink out again because one
-## round's income dipped under the bar.
+## The way into the endgame must not blink out again because one round's income
+## dipped under the bar.
 func _test_qualification_latches_once_cleared() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
@@ -320,130 +360,93 @@ func _test_qualification_latches_once_cleared() -> void:
 	var later: Dictionary = sim.ascension_qualification()
 	assert_false(bool(later.get("income_ok", true)), "A bad round is still reported as a bad round")
 	assert_true(bool(later.get("qualified", false)), "But qualification, once cleared, stays cleared")
-	assert_true(sim.ascension_eligible_contracts().size() > 0, "And the contracts stay on the table")
+	assert_true(sim.ascension_eligible_contracts().size() > 0, "And the boss stays on the table")
 	sim.free()
 
 
-## The reported bug in one test: a Tier 1 contract used to end the whole game, so
-## a first-time player's reward for reaching the endgame was being thrown out of
-## it. A rung hands the run back instead.
-func _test_a_rung_hands_the_run_back() -> void:
+## The redesign in one test: there is no rung any more, so the first contract a
+## run completes is the last thing it does.
+func _test_beating_the_boss_wins_the_run() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5020)
 	_qualify(sim)
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed to rung one")
+	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed to the bedroom's boss")
 	var contract: Dictionary = _meet_requirement(sim, "ascension.first_scale_up")
 	sim._finish_prompt({"ok": true, "messages": []})
 
-	assert_true(sim.phase != sim.Phase.RUN_END, "Clearing a Tier 1 contract does not end the run")
-	assert_false(bool(sim.run_state.flags.get("victory", false)), "And is not a victory")
-	assert_eq(str(sim.run_state.flags.get("outcome", "")), "", "Nothing has been decided yet")
-	assert_false(sim.ascension_active(), "The Final Burn is over, so nothing is underway")
-	assert_eq(int(sim.ascension_ladder().get("highest_tier_completed", 0)), 1, "Rung one is behind it")
-	assert_eq(int(sim.ascension_ladder().get("rung", 0)), 2, "And rung two is the one to climb next")
-	assert_eq(MetaProgress.pending_picks(), 0, "A rung banks nothing for the next run")
+	assert_eq(sim.phase, sim.Phase.RUN_END, "Completing the boss ends the run")
+	assert_true(bool(sim.run_state.flags.get("victory", false)), "As a victory")
+	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascended", "Named as an ascension")
+	assert_false(sim.ascension_active(), "The Final Burn is over")
 	assert_eq(
-		int(sim.ascension_ladder().get("pending_picks", 0)),
-		int(contract.get("picks", 1)),
-		"It owes this run the contract's picks instead"
+		MetaProgress.pending_picks(), int(contract.get("picks", 1)),
+		"And it banks its picks for the next run"
 	)
 	assert_eq(
-		MetaProgress.ascension_completions("ascension.first_scale_up"),
-		0,
-		"And the profile records nothing: the run is still going"
+		MetaProgress.ascension_completions("ascension.first_scale_up"), 1,
+		"The profile remembers which contract was completed"
 	)
 	sim.free()
 
 
-func _test_the_ladder_is_climbed_one_rung_at_a_time() -> void:
+func _test_beating_the_boss_unlocks_the_next_location() -> void:
 	_fresh_profile()
+	assert_false(MetaProgress.is_location_unlocked("garage"), "The garage starts locked")
 	var sim: Node = _sim()
-	sim.start_run(5021)
+	sim.start_run(5024)
 	_qualify(sim)
-	# Infrastructure for a Tier 2 contract, so only the rung gate can be refusing.
-	sim.run_state.build["hardware"] = ["used_laptop", "gpu_rack", "garage_datacentre"]
-	for contract in sim.ascension_eligible_contracts():
-		assert_eq(int(contract.get("tier", 0)), 1, "Only rung one is on the table to begin with")
-	assert_false(
-		sim.commit_ascension_contract("ascension.datacentre_magnate"),
-		"A Tier 2 contract cannot be reached over the top of rung one"
-	)
-
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed to rung one")
+	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed")
 	_meet_requirement(sim, "ascension.first_scale_up")
 	sim._finish_prompt({"ok": true, "messages": []})
-	var eligible: Array = sim.ascension_eligible_contracts()
-	assert_true(eligible.size() > 0, "Clearing rung one opens rung two")
-	for contract in eligible:
-		assert_eq(int(contract.get("tier", 0)), 2, "And rung two is all that is on the table now")
-		assert_true(
-			str(contract.get("id", "")) != "ascension.first_scale_up",
-			"A contract already completed is not offered again"
+
+	assert_true("bedroom" in MetaProgress.completed_locations(), "The bedroom is behind the player")
+	assert_true(MetaProgress.is_location_unlocked("garage"), "And the garage is open")
+	assert_eq(sim.next_location_unlocked(), "garage", "Which the verdict screen can name")
+	sim.free()
+
+
+func _test_a_failed_contract_ends_the_run() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5025)
+	_qualify(sim)
+	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed")
+	var contract: Dictionary = ContentDatabase.get_ascension_contract("ascension.first_scale_up")
+	sim.run_state.statistics["hidden_bugs_shipped"] = int(contract.get("max_hidden_bugs", 0)) + 1
+	sim._finish_prompt({"ok": true, "messages": []})
+
+	assert_eq(sim.phase, sim.Phase.RUN_END, "Failing the contract ends the run")
+	assert_false(bool(sim.run_state.flags.get("victory", false)), "As a loss")
+	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascension_failed", "Named as the contract failing")
+	assert_false(MetaProgress.is_location_unlocked("garage"), "And nothing is unlocked by losing")
+	sim.free()
+
+
+func _test_no_ladder_state_is_left_in_the_run() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5026)
+	for stale in ["completed_ids", "highest_tier_completed", "pending_picks"]:
+		assert_false(
+			sim.run_state.ascension.has(stale),
+			"A run carries no ladder state: %s is gone" % stale
 		)
 	sim.free()
 
 
-## The picks a rung pays are spent on the run that earned them, which is the whole
-## point of the redesign: the perks a draft hands over need rounds left to matter.
-func _test_a_rung_pays_its_picks_into_this_run() -> void:
+## Replaying a chapter already beaten is allowed, and its boss is still the way
+## out of it — the campaign is the ladder, not the run.
+func _test_replaying_a_completed_location_offers_its_boss_again() -> void:
 	_fresh_profile()
+	MetaProgress.complete_location("bedroom")
 	var sim: Node = _sim()
-	sim.start_run(5022)
+	sim.start_run(5027)
+	_run_in(sim, "bedroom")
 	_qualify(sim)
-	sim.run_state.economy["cash"] = 500000.0
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed to rung one")
-	var contract: Dictionary = _meet_requirement(sim, "ascension.first_scale_up")
-	sim._finish_prompt({"ok": true, "messages": []})
-
-	# The round the rung was cleared in closes normally, and the reward comes after
-	# the angels rather than instead of them.
-	sim._end_round()
-	if sim.phase == sim.Phase.ANGEL_ROUND and not sim.draft_is_ascension_reward():
-		sim.decline_offers()
-	assert_eq(sim.phase, sim.Phase.ANGEL_ROUND, "The rung's reward draft opens once the round closes")
-	assert_true(sim.draft_is_ascension_reward(), "And it is the ascension reward, not another angel")
-	assert_eq(
-		sim.draft_picks_remaining(),
-		int(contract.get("picks", 1)),
-		"Worth exactly what the contract promised"
-	)
-	assert_true(sim.pending_choices.size() > 0, "With offers on the table")
-
-	var offer: Dictionary = sim.pending_choices[0]
-	assert_true(sim.accept_offer(str(offer.get("type", "")), str(offer.get("id", ""))), "A pick can be spent")
-	assert_eq(sim.draft_picks_remaining(), 0, "Rung one was worth one pick, and it is spent")
-	assert_eq(sim.phase, sim.Phase.ROUND_PREP, "Spending the last pick closes the draft")
-	sim.free()
-
-
-func _test_only_the_top_rung_ends_the_run() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5006)
-	_qualify(sim)
-	_stand_on_rung(sim, 3)
-	_own_the_top_of_the_ladder(sim)
-	assert_true(
-		sim.commit_ascension_contract("ascension.final_prompt"),
-		"The top rung is reachable once the two below it are done"
-	)
-	var contract: Dictionary = _meet_requirement(sim, "ascension.final_prompt")
-	sim._finish_prompt({"ok": true, "messages": []})
-
-	assert_eq(sim.phase, sim.Phase.RUN_END, "Only a Tier 3 contract ends the run")
-	assert_true(bool(sim.run_state.flags.get("victory", false)), "As a victory")
-	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascended", "Named as an ascension")
-	assert_eq(
-		MetaProgress.pending_picks(),
-		int(contract.get("picks", 1)),
-		"The finale banks its picks for the next run"
-	)
-	assert_eq(
-		MetaProgress.ascension_completions("ascension.final_prompt"),
-		1,
-		"The profile remembers which contract was completed"
-	)
+	var eligible: Array = sim.ascension_eligible_contracts()
+	assert_eq(eligible.size(), 1, "The bedroom still has its boss")
+	assert_eq(str(eligible[0].get("id", "")), "ascension.first_scale_up", "And it is the same one")
 	sim.free()
 
 
@@ -453,9 +456,8 @@ func _test_a_won_run_can_carry_on_into_endless() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5023)
+	_run_in(sim, "private_power_grid")
 	_qualify(sim)
-	_stand_on_rung(sim, 3)
-	_own_the_top_of_the_ladder(sim)
 	sim.run_state.economy["cash"] = 5000000.0
 	assert_true(sim.commit_ascension_contract("ascension.the_monopoly"), "Committed to a finale")
 	_meet_requirement(sim, "ascension.the_monopoly")
@@ -522,19 +524,34 @@ func _test_ascension_state_survives_a_save_round_trip() -> void:
 	assert_almost_eq(float(reloaded.ascension.get("tokens_burned", 0.0)), 12345.0, 0.01, "So does progress")
 	assert_eq(int(reloaded.ascension.get("violations", 0)), 2, "So does the violation count")
 
-	# The ladder outlives any one contract, so it has to survive a save even more
-	# than the Final Burn does: losing it would put the run back on rung one with
-	# the tier above already beaten.
-	ascension.complete_rung(run_state, ContentDatabase.get_ascension_contract("ascension.first_scale_up"))
-	var climbed := RunState.new()
-	climbed.from_dict(run_state.to_dict())
-	assert_eq(int(climbed.ascension.get("highest_tier_completed", 0)), 1, "The rung climbed survives a save")
-	assert_true(
-		"ascension.first_scale_up" in Array(climbed.ascension.get("completed_ids", [])),
-		"So does which contract climbed it"
+
+## A save written part-way up the old ladder: the contract it was burning for is
+## now the run's boss, and the rungs it had climbed have nowhere to go.
+func _test_a_save_mid_ladder_keeps_its_contract_and_sheds_the_rungs() -> void:
+	var run_state := RunState.new()
+	run_state.reset()
+	run_state.from_dict({
+		"save_version": 10,
+		"ascension": {
+			"status": "committed",
+			"contract_id": "ascension.first_scale_up",
+			"committed_round": 5,
+			"baseline_tokens": 100.0,
+			"tokens_burned": 50.0,
+			"prompts_remaining": 8,
+			"violations": 1,
+			"quality_sum": 40.0,
+			"quality_count": 1,
+			"completed_ids": ["ascension.first_scale_up"],
+			"highest_tier_completed": 1,
+			"pending_picks": 2,
+		},
+	})
+	assert_eq(str(run_state.ascension.get("status", "")), "committed", "The contract stays committed")
+	assert_eq(
+		str(run_state.ascension.get("contract_id", "")), "ascension.first_scale_up",
+		"And it is still the run's boss"
 	)
-	assert_eq(int(climbed.ascension.get("pending_picks", 0)), 1, "So do the picks it still owes the run")
-	assert_true(
-		ascension.commit(climbed, "ascension.first_scale_up", ContentDatabase) == false,
-		"And a contract already completed cannot be committed to again"
-	)
+	assert_eq(int(run_state.ascension.get("prompts_remaining", 0)), 8, "With its deadline where it was")
+	for stale in ["completed_ids", "highest_tier_completed", "pending_picks"]:
+		assert_false(run_state.ascension.has(stale), "The ladder field %s is gone" % stale)

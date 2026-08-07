@@ -8,10 +8,10 @@ extends RefCounted
 ## the endgame. What matters is the *shape* of the outcomes: how many ascended,
 ## how many collapsed, and how many never terminated at all.
 ##
-## Ascension is a three-rung ladder, and only the top rung ends a run, so how far
-## up the ladder a policy gets is reported separately from whether it finished.
-## A sample where nobody climbs a rung means the endgame is unreachable; one where
-## they climb but never finish means the top of the ladder is priced wrong.
+## Every location has one boss contract, so the endgame is reported in three
+## stages rather than one: how many qualified for it, how many committed, and how
+## many finished. A sample where nobody qualifies means the bars are wrong; one
+## where they commit but never finish means the contract itself is priced wrong.
 
 ## A run that has not resolved in this many policy steps is stuck, not slow, and
 ## is reported as such rather than being quietly dropped from the sample.
@@ -44,8 +44,7 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 	var qualified_runs: int = 0
 	var committed_runs: int = 0
 	var overtime_runs: int = 0
-	var rung_runs: int = 0
-	var rungs_climbed: int = 0
+	var final_burn_tokens: Array[float] = []
 	invalid_number_count = 0
 	guard_limit_count = 0
 	# Balance numbers describe a first run from nothing, so unlocks stay out.
@@ -85,12 +84,11 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 			qualified_runs += 1
 		if str(sim.run_state.ascension.get("contract_id", "")) != "":
 			committed_runs += 1
+			# How much a committed run actually managed to burn, which is the
+			# number a contract's `total_burn` has to be priced against.
+			final_burn_tokens.append(float(sim.run_state.ascension.get("tokens_burned", 0.0)))
 		if int(sim.run_state.statistics.get("overtime_rounds", 0)) > 0:
 			overtime_runs += 1
-		var highest_rung: int = int(sim.run_state.ascension.get("highest_tier_completed", 0))
-		rungs_climbed += highest_rung
-		if highest_rung > 0:
-			rung_runs += 1
 		peak_token_rates.append(float(sim.run_state.statistics.get("peak_token_rate", 0.0)))
 		peak_cash.append(float(sim.run_state.statistics.get("peak_cash", 0.0)))
 		for perk_id in sim.run_state.build.get("perks", []):
@@ -107,12 +105,11 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 		"qualified_rate": float(qualified_runs) / float(runs),
 		"committed_rate": float(committed_runs) / float(runs),
 		"overtime_rate": float(overtime_runs) / float(runs),
-		"rung_rate": float(rung_runs) / float(runs),
-		"avg_rungs_climbed": float(rungs_climbed) / float(runs),
 		"stuck_count": stuck,
 		"outcomes": outcomes,
 		"avg_rounds": float(total_rounds) / float(runs),
 		"avg_peak_token_rate": _average(peak_token_rates),
+		"avg_final_burn_tokens": _average(final_burn_tokens),
 		"avg_peak_cash": _average(peak_cash),
 		"invalid_number_count": invalid_number_count,
 		"guard_limit_count": guard_limit_count,

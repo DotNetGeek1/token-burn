@@ -70,6 +70,8 @@ const CHIP_FONT_SIZE_MIN := 24
 @onready var token_chip: StatChip = $VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow/TokenChip
 @onready var rep_chip: StatChip = $VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow/RepChip
 @onready var round_chip: StatChip = $VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow/RoundChip
+@onready var ascension_row: Button = $VBox/StatusBar/Margin/StatusVBox/AscensionRow
+@onready var ascension_bar: Control = $VBox/StatusBar/Margin/StatusVBox/AscensionBar
 @onready var content_container: Control = $VBox/Body/ContentContainer
 @onready var bottom_nav: PanelContainer = $VBox/BottomNav
 @onready var nav_bar: HBoxContainer = $VBox/BottomNav/NavHBox
@@ -339,6 +341,7 @@ func _connect_nav_buttons() -> void:
 
 
 func _connect_events() -> void:
+	ascension_row.pressed.connect(open_ascension_select)
 	EventBus.run_started.connect(refresh_all)
 	EventBus.run_started.connect(_reset_ascension_prompts)
 	Simulation.work_session_finished.connect(_on_work_session_finished)
@@ -357,7 +360,6 @@ func _connect_events() -> void:
 	EventBus.tokens_consumed.connect(func(_amount): _refresh_status_bar())
 	EventBus.bill_due.connect(func(_type, _amount): _refresh_status_bar())
 	EventBus.achievement_unlocked.connect(_on_achievement_unlocked)
-	EventBus.ascension_rung_completed.connect(_on_ascension_rung_completed)
 
 
 ## Awards can land in the middle of a burn, several at once, so the splash owns a
@@ -611,6 +613,48 @@ func _refresh_status_bar() -> void:
 	rep_chip.tooltip_text = _reputation_tooltip(reputation)
 	_pulse_changed_chips(cash, token_rate, reputation)
 	_refresh_round_chip()
+	_refresh_ascension_tracker()
+
+
+## The run's goal, on screen at all times rather than behind a tab the player has
+## to already know about. It names the boss for this location, counts down the
+## bars still to clear, says ASCENSION READY once they are, and turns into the
+## Final Burn's progress once the contract is underway. Tapping it opens the
+## overlay, which is the only place the commitment can actually be made.
+func _refresh_ascension_tracker() -> void:
+	var summary: Dictionary = Simulation.ascension_summary()
+	var contract: Dictionary = Dictionary(summary.get("contract", {}))
+	if contract.is_empty() or Simulation.phase == Simulation.Phase.RUN_END:
+		ascension_row.visible = false
+		ascension_bar.visible = false
+		return
+	ascension_row.visible = true
+	var boss: String = str(contract.get("name", "Ascension Contract")).to_upper()
+	var progress: Dictionary = Dictionary(summary.get("progress", {}))
+	if bool(summary.get("committed", false)) and not progress.is_empty():
+		var burned: float = float(progress.get("tokens_burned", 0.0))
+		var total: float = maxf(1.0, float(progress.get("total_burn", 1.0)))
+		ascension_row.text = "%s · FINAL BURN · %d PROMPT(S) LEFT" % [
+			boss, int(progress.get("prompts_remaining", 0)),
+		]
+		ascension_row.add_theme_color_override("font_color", UiThemeBuilder.semantic("danger"))
+		ascension_bar.visible = true
+		ascension_bar.setup(
+			boss, burned, total, "tokens",
+			"%s / %s tokens" % [NumberFormat.format(burned), NumberFormat.format(total)]
+		)
+		return
+	ascension_bar.visible = false
+	if bool(summary.get("qualified", false)):
+		ascension_row.text = "%s · ASCENSION READY" % boss
+		ascension_row.add_theme_color_override("font_color", UiThemeBuilder.semantic("success"))
+	else:
+		ascension_row.text = "%s · %d / %d REQUIREMENTS" % [
+			boss,
+			int(summary.get("requirements_met", 0)),
+			int(summary.get("requirements_total", 0)),
+		]
+		ascension_row.add_theme_color_override("font_color", UiThemeBuilder.semantic("warning"))
 
 
 ## The round the endgame stops being optional reading and starts being the
@@ -621,12 +665,11 @@ const ASCENSION_WARNING_ROUND := 9
 const ASCENSION_PROMPT_ROUND := 11
 
 ## Opened at most once per run for each reason, because a screen that reopens
-## every round is a screen the player learns to dismiss without reading. The rung
-## prompt is the exception that proves the rule: it is armed once per rung climbed,
-## because a new rung is new information every time.
+## every round is a screen the player learns to dismiss without reading. The
+## always-visible tracker under the status bar carries the goal the rest of the
+## time.
 var _ascension_prompted_on_qualify: bool = false
 var _ascension_prompted_late: bool = false
-var _ascension_rung_prompt: bool = false
 
 
 ## A round has no prompt budget any more, so the chip counts up rather than down:
@@ -676,14 +719,13 @@ func _ascension_urgency_line(round_number: int, overtime: bool) -> String:
 	# A run that has already beaten the top rung is past being hurried.
 	if Simulation.in_post_victory():
 		return ""
-	var ladder: Dictionary = Simulation.ascension_ladder()
-	var rung: String = "Rung %d of %d" % [int(ladder.get("rung", 1)), int(ladder.get("total", 3))]
+	var boss: String = str(Simulation.ascension_boss_contract().get("name", "The Ascension Contract"))
 	if overtime:
-		return "%s and no contract committed. The Job Board is where you take one." % rung
+		return "%s is not committed. The Job Board is where you take it." % boss
 	if round_number < ASCENSION_WARNING_ROUND:
 		return ""
-	return "%s, nothing committed — %d round(s) left before overtime and rising costs." % [
-		rung, Simulation.rounds_remaining(),
+	return "%s not committed — %d round(s) left before overtime and rising costs." % [
+		boss, Simulation.rounds_remaining(),
 	]
 
 
@@ -693,14 +735,6 @@ func _ascension_urgency_line(round_number: int, overtime: bool) -> String:
 func _reset_ascension_prompts() -> void:
 	_ascension_prompted_on_qualify = false
 	_ascension_prompted_late = false
-	_ascension_rung_prompt = false
-
-
-## Climbing a rung opens the next one, which is the moment worth showing. The
-## reward draft the rung paid out gets the screen first, so this only arms the
-## prompt; `_maybe_prompt_ascension` fires it once the table is clear.
-func _on_ascension_rung_completed(_contract_id: String, _tier: int) -> void:
-	_ascension_rung_prompt = true
 
 
 func _maybe_prompt_ascension() -> void:
@@ -712,10 +746,6 @@ func _maybe_prompt_ascension() -> void:
 	if Simulation.phase == Simulation.Phase.ANGEL_ROUND:
 		return
 	if _round_debrief.visible or _bills_screen.visible or _run_end.visible:
-		return
-	if _ascension_rung_prompt:
-		_ascension_rung_prompt = false
-		open_ascension_select()
 		return
 	var round_number: int = int(Simulation.run_state.calendar.get("round", 1))
 	var qualified: bool = bool(Simulation.ascension_qualification().get("qualified", false))

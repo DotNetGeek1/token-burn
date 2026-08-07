@@ -92,7 +92,7 @@ func _set_verdict(outcome: String, loss_reason: String, score: Dictionary) -> vo
 				"%s: requirement met. The infrastructure holds, for now." % contract_name
 				if contract_name != "" else "The Ascension Contract is complete."
 			)
-			body_label.text += " The company does not have to stop here."
+			body_label.text += " " + _campaign_progress_text()
 		"retired":
 			# Only reachable from a save written before overtime existed; the
 			# calendar no longer ends a run on its own.
@@ -107,6 +107,19 @@ func _set_verdict(outcome: String, loss_reason: String, score: Dictionary) -> vo
 			# contract, so name the cause rather than leaving it as bad luck.
 			if bool(Simulation.run_state.flags.get("overtime", false)) and outcome != "ascension_failed":
 				body_label.text += " The year had already run out: overtime costs climb every round until an Ascension Contract is completed."
+
+
+## A win is a chapter, not just a score: the location is behind the player and
+## the next one is open. Naming it here is the only place the campaign's shape
+## is visible at the moment it changes.
+func _campaign_progress_text() -> String:
+	var location: String = MetaProgress.location_name(
+		str(Simulation.run_state.build.get("dwelling", ""))
+	)
+	var next_location: String = MetaProgress.location_name(Simulation.next_location_unlocked())
+	if next_location == "":
+		return "%s is behind you, and there is nowhere further up to go. The company does not have to stop here." % location
+	return "%s is behind you. %s is unlocked — a new run starts there." % [location, next_location]
 
 
 func _fill_score_rows(score: Dictionary) -> void:
@@ -212,9 +225,14 @@ func _on_continue() -> void:
 	get_tree().call_group("main_ui", "refresh_all")
 
 
+## A new run after a win starts in the location the win opened, rather than
+## dropping the player back into the chapter they have just beaten.
 func _on_restart() -> void:
 	hide_overlay()
 	get_tree().call_group("flow_overlay", "hide_overlay")
+	var next_location: String = Simulation.next_location_unlocked()
+	if _earned_this_run and next_location != "":
+		MetaProgress.select_location(next_location)
 	Simulation.start_run()
 	get_tree().call_group("ui_refresh", "refresh")
 	get_tree().call_group("main_ui", "refresh_all")

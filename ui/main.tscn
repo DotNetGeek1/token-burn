@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://ui/main.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://stat_chip" path="res://ui/common/stat_chip.tscn" id="2"]
+[ext_resource type="PackedScene" uid="uid://resource_bar" path="res://ui/common/resource_bar.tscn" id="3"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -62,7 +63,7 @@ grow_vertical = 2
 theme_override_constants/separation = 0
 
 [node name="StatusBar" type="PanelContainer" parent="VBox"]
-custom_minimum_size = Vector2(0, 104)
+custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
 
 [node name="Margin" type="MarginContainer" parent="VBox/StatusBar"]
@@ -107,6 +108,18 @@ layout_mode = 2
 
 [node name="RoundChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
+
+[node name="AscensionRow" type="Button" parent="VBox/StatusBar/Margin/StatusVBox"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+flat = true
+alignment = 0
+text = "ASCENSION"
+
+[node name="AscensionBar" parent="VBox/StatusBar/Margin/StatusVBox" instance=ExtResource("3")]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+visible = false
 
 [node name="Body" type="HBoxContainer" parent="VBox"]
 layout_mode = 2

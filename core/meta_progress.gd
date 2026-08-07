@@ -403,6 +403,14 @@ func next_location_after(location_id: String) -> String:
 	return str(order[index + 1])
 
 
+## A location id as a player-facing name. Derived rather than authored: the ids
+## are already readable words, and a second list of them would only drift.
+func location_name(location_id: String) -> String:
+	if location_id == "":
+		return ""
+	return location_id.replace("_", " ").capitalize()
+
+
 ## Brings the profile up to date with a location the player is demonstrably in:
 ## a save from before the campaign existed can be mid-warehouse, and everything
 ## below that rung must count as already earned.

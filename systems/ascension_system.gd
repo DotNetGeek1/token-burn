@@ -1,26 +1,20 @@
 class_name AscensionSystem
 extends RefCounted
 
-## The endgame layer, and the run's level-up track. Surviving the year keeps the
-## lights on; Ascension Contracts are the ladder out of it. Qualification checks
-## whether the build is stable enough to attempt one; committing starts a Final
-## Burn, in which every prompt is measured against the contract's requirements
-## until it is completed, failed, or the clock runs out.
+## The endgame layer. Surviving the year keeps the lights on; the location's boss
+## contract is the way out of it. Qualification checks whether the build is stable
+## enough to attempt it; committing starts a Final Burn, in which every prompt is
+## measured against the contract's requirements until it is completed, failed, or
+## the clock runs out.
 ##
-## Contracts come in three tiers and are climbed one rung at a time. Tiers 1 and
-## 2 are level-ups: completing one pays out its picks as an in-run reward draft
-## and hands the run back, with the next tier now on the table. Only a Tier 3
-## contract is the finish line, which is why a run no longer ends the first time
-## a contract clears.
+## Every location has exactly one boss. Completing it wins the run and opens the
+## next location; failing it ends the run. There is no ladder inside a run — the
+## ladder is the campaign, and it is climbed one run at a time.
 
 const STATUS_NONE := ""
 const STATUS_COMMITTED := "committed"
 const STATUS_COMPLETED := "completed"
 const STATUS_FAILED := "failed"
-
-## The top of the ladder. A contract at this tier beats the game; anything below
-## it is a rung on the way there.
-const FINAL_TIER := 3
 
 
 ## Highest infrastructure tier reached by the dwelling or any owned hardware.
@@ -45,17 +39,15 @@ func infrastructure_tier(run_state: RunState, content_db: Node) -> int:
 ## endgame must not flicker in and out of the Job Board while the player is
 ## deciding. `bars_met` still reports the live reading for the progress panel.
 func qualification(run_state: RunState, content_db: Node) -> Dictionary:
-	var thresholds: Dictionary = content_db.ascension_qualification
+	var thresholds: Dictionary = qualification_thresholds(run_state, content_db)
 	var last_costs: float = float(run_state.economy.get("last_round_costs", 0.0))
 	var income: float = float(run_state.economy.get("income", 0.0))
 	var income_ratio: float = income / maxf(1.0, last_costs)
 	var income_ok: bool = last_costs <= 0.0 or income_ratio >= float(thresholds.get("min_income_ratio", 1.0))
 	var peak_rate: float = float(run_state.statistics.get("peak_token_rate", 0.0))
 	var peak_ok: bool = peak_rate >= float(thresholds.get("min_peak_token_rate", 0.0))
-	var tier: int = infrastructure_tier(run_state, content_db)
-	var infra_ok: bool = tier >= int(thresholds.get("min_infrastructure_tier", 0))
 	var round_ok: bool = int(run_state.calendar.get("round", 1)) >= int(thresholds.get("earliest_round", 1))
-	var bars_met: bool = income_ok and peak_ok and infra_ok and round_ok
+	var bars_met: bool = income_ok and peak_ok and round_ok
 	if bars_met:
 		run_state.flags["ascension_qualified"] = true
 	return {
@@ -67,67 +59,53 @@ func qualification(run_state: RunState, content_db: Node) -> Dictionary:
 		"peak_ok": peak_ok,
 		"peak_token_rate": peak_rate,
 		"min_peak_token_rate": float(thresholds.get("min_peak_token_rate", 0.0)),
-		"infra_ok": infra_ok,
-		"infrastructure_tier": tier,
-		"min_infrastructure_tier": int(thresholds.get("min_infrastructure_tier", 0)),
 		"round_ok": round_ok,
 		"earliest_round": int(thresholds.get("earliest_round", 1)),
 	}
 
 
-## The highest contract tier this run has already completed. Zero means the run
-## is still on the first rung.
-func highest_tier_completed(run_state: RunState) -> int:
-	return int(run_state.ascension.get("highest_tier_completed", 0))
+## The bars this run has to clear, which belong to the location's boss rather
+## than to the game as a whole: a Bedroom run cannot be asked to prove what a
+## Warehouse run can. The global block in the content file is the fallback for a
+## location with no boss authored yet.
+func qualification_thresholds(run_state: RunState, content_db: Node) -> Dictionary:
+	var thresholds: Dictionary = Dictionary(content_db.ascension_qualification).duplicate(true)
+	var boss: Dictionary = location_contract(run_state, content_db)
+	for key in Dictionary(boss.get("qualification", {})).keys():
+		thresholds[key] = boss["qualification"][key]
+	return thresholds
 
 
-## The rung the run is on now: one above whatever it has finished, and never past
-## the top. Clamping at the top is what keeps the remaining Tier 3 endings on the
-## table once one of them has already been beaten, which is the whole point of
-## carrying a won run on into endless.
-func current_rung(run_state: RunState) -> int:
-	return mini(FINAL_TIER, highest_tier_completed(run_state) + 1)
-
-
-func is_final_contract(contract: Dictionary) -> bool:
-	return int(contract.get("tier", 1)) >= FINAL_TIER
-
-
-func completed_contract_ids(run_state: RunState) -> Array:
-	return Array(run_state.ascension.get("completed_ids", []))
-
-
-## Everything the UI needs to say where the run is on the ladder without asking
-## four separate questions.
-func ladder(run_state: RunState) -> Dictionary:
-	return {
-		"rung": current_rung(run_state),
-		"total": FINAL_TIER,
-		"highest_tier_completed": highest_tier_completed(run_state),
-		"completed_ids": completed_contract_ids(run_state),
-		"pending_picks": int(run_state.ascension.get("pending_picks", 0)),
-	}
-
-
-## Contracts the current build could actually attempt: qualification cleared at
-## some point, the contract's own infrastructure tier met now, and the contract
-## on the rung the run has actually reached. A run cannot skip to the finale, and
-## cannot climb the same rung twice.
-func eligible_contracts(run_state: RunState, content_db: Node) -> Array:
-	if not bool(qualification(run_state, content_db).get("qualified", false)):
-		return []
-	var tier: int = infrastructure_tier(run_state, content_db)
-	var rung: int = current_rung(run_state)
-	var completed: Array = completed_contract_ids(run_state)
-	var eligible: Array = []
+## The one contract this run is playing for, whether or not it has qualified yet.
+## Every location has exactly one; the alternate finales are retained content and
+## are never offered as a location's boss.
+func location_contract(run_state: RunState, content_db: Node) -> Dictionary:
+	var location: String = str(run_state.build.get("dwelling", ""))
+	if location == "":
+		return {}
 	for contract in content_db.ascension_contracts:
-		if int(contract.get("tier", 1)) != rung:
+		if bool(contract.get("alternate", false)):
 			continue
-		if str(contract.get("id", "")) in completed:
-			continue
-		if int(contract.get("required_infrastructure_tier", 0)) <= tier:
-			eligible.append(Dictionary(contract).duplicate(true))
-	return eligible
+		if str(contract.get("location", "")) == location:
+			return Dictionary(contract).duplicate(true)
+	return {}
+
+
+## The boss once it can actually be committed to: the location's contract, gated
+## on qualification. Empty means "not yet", not "never".
+func boss_contract(run_state: RunState, content_db: Node) -> Dictionary:
+	if not bool(qualification(run_state, content_db).get("qualified", false)):
+		return {}
+	if is_active(run_state):
+		return {}
+	return location_contract(run_state, content_db)
+
+
+## Kept as an array so the overlay and the batch policies can keep treating the
+## endgame as "whatever is on the table", which is now never more than one thing.
+func eligible_contracts(run_state: RunState, content_db: Node) -> Array:
+	var boss: Dictionary = boss_contract(run_state, content_db)
+	return [] if boss.is_empty() else [boss]
 
 
 func is_active(run_state: RunState) -> bool:
@@ -161,10 +139,7 @@ func commit(run_state: RunState, contract_id: String, content_db: Node) -> bool:
 		return false
 	if not (contract in eligible_contracts(run_state, content_db)):
 		return false
-	# The ladder outlives any one contract, so committing resets the Final Burn's
-	# counters without forgetting which rungs the run has already climbed or what
-	# it is still owed for climbing them.
-	run_state.ascension = _with_ladder(run_state, {
+	run_state.ascension = {
 		"status": STATUS_COMMITTED,
 		"contract_id": contract_id,
 		"committed_round": int(run_state.calendar.get("round", 1)),
@@ -174,68 +149,15 @@ func commit(run_state: RunState, contract_id: String, content_db: Node) -> bool:
 		"violations": 0,
 		"quality_sum": 0.0,
 		"quality_count": 0,
-	})
+	}
 	return true
 
 
-func _with_ladder(run_state: RunState, fields: Dictionary) -> Dictionary:
-	var merged: Dictionary = fields.duplicate(true)
-	merged["completed_ids"] = completed_contract_ids(run_state)
-	merged["highest_tier_completed"] = highest_tier_completed(run_state)
-	merged["pending_picks"] = int(run_state.ascension.get("pending_picks", 0))
-	return merged
-
-
-## A Tier 1 or 2 contract clearing: the rung is banked, the contract's picks are
-## added to what the run is owed, and the Final Burn state is wound back to idle
-## so the next rung can be committed to. The run carries on.
-func complete_rung(run_state: RunState, contract: Dictionary) -> void:
-	var completed: Array = completed_contract_ids(run_state)
-	var contract_id: String = str(contract.get("id", ""))
-	if contract_id != "" and not (contract_id in completed):
-		completed.append(contract_id)
-	var picks: int = maxi(0, int(contract.get("picks", 1)))
-	run_state.ascension = {
-		"status": STATUS_NONE,
-		"contract_id": "",
-		"committed_round": 0,
-		"baseline_tokens": 0.0,
-		"tokens_burned": 0.0,
-		"prompts_remaining": 0,
-		"violations": 0,
-		"quality_sum": 0.0,
-		"quality_count": 0,
-		"completed_ids": completed,
-		"highest_tier_completed": maxi(
-			highest_tier_completed(run_state), int(contract.get("tier", 1))
-		),
-		"pending_picks": int(run_state.ascension.get("pending_picks", 0)) + picks,
-	}
-
-
-## A Tier 3 contract clearing: the run is won. The contract stays named in the
-## state so the verdict screen can say which ending was reached, but the status
-## leaves "committed" so the tracker stands down and a continued run can reach for
-## one of the other endings.
-func record_final(run_state: RunState, contract: Dictionary) -> void:
-	var completed: Array = completed_contract_ids(run_state)
-	var contract_id: String = str(contract.get("id", ""))
-	if contract_id != "" and not (contract_id in completed):
-		completed.append(contract_id)
-	run_state.ascension["completed_ids"] = completed
-	run_state.ascension["highest_tier_completed"] = maxi(
-		highest_tier_completed(run_state), int(contract.get("tier", 1))
-	)
+## The boss cleared: the run is won. The contract stays named in the state so the
+## verdict screen can say which one it was, but the status leaves "committed" so
+## the tracker stands down and a continued run is not still burning for it.
+func record_final(run_state: RunState, _contract: Dictionary) -> void:
 	run_state.ascension["status"] = STATUS_COMPLETED
-
-
-## Reward picks the run has earned from rungs and not yet spent.
-func pending_picks(run_state: RunState) -> int:
-	return maxi(0, int(run_state.ascension.get("pending_picks", 0)))
-
-
-func set_pending_picks(run_state: RunState, value: int) -> void:
-	run_state.ascension["pending_picks"] = maxi(0, value)
 
 
 ## One prompt of the Final Burn: ages the deadline, checks throughput and heat
@@ -330,7 +252,32 @@ func progress(run_state: RunState, content_db: Node) -> Dictionary:
 		"max_failed_burns": int(contract.get("max_failed_burns", 0)),
 		"hidden_bugs_shipped": int(run_state.statistics.get("hidden_bugs_shipped", 0)),
 		"max_hidden_bugs": int(contract.get("max_hidden_bugs", 0)),
-		"rung": int(contract.get("tier", 1)),
-		"rungs": FINAL_TIER,
-		"is_final": is_final_contract(contract),
+	}
+
+
+## Everything a readout needs to say where the run stands against its boss,
+## without asking four separate questions or re-deriving any of the rules.
+func summary(run_state: RunState, content_db: Node) -> Dictionary:
+	var contract: Dictionary = location_contract(run_state, content_db)
+	var q: Dictionary = qualification(run_state, content_db)
+	var requirements: Array = [
+		{"label": "Round", "met": bool(q.get("round_ok", false))},
+		{"label": "Peak throughput", "met": bool(q.get("peak_ok", false))},
+		{"label": "Income vs costs", "met": bool(q.get("income_ok", false))},
+	]
+	var met: int = 0
+	for requirement in requirements:
+		if bool(requirement["met"]):
+			met += 1
+	return {
+		"location": str(run_state.build.get("dwelling", "")),
+		"contract": contract,
+		"qualification": q,
+		"requirements": requirements,
+		"requirements_met": met,
+		"requirements_total": requirements.size(),
+		"qualified": bool(q.get("qualified", false)),
+		"committed": is_active(run_state),
+		"completed": str(run_state.ascension.get("status", STATUS_NONE)) == STATUS_COMPLETED,
+		"progress": progress(run_state, content_db),
 	}
