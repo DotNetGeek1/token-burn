@@ -73,7 +73,7 @@ func _validate_every_machine_can_be_cooled() -> void:
 		if power <= 0.0:
 			continue
 		var dwelling: String = upgrade.requires_dwelling if upgrade.requires_dwelling != "" else "bedroom"
-		var have: float = _dwelling_chain_cooling(dwelling) + _cooling_of(upgrade)
+		var have: float = _location_cooling(dwelling) + _cooling_of(upgrade)
 		var needed: float = (power + starting_draw) * gain_factor / cooling_factor
 		var shortfall: float = needed - have
 		if shortfall <= 0.0:
@@ -118,23 +118,11 @@ func _validate_every_machine_can_be_cooled() -> void:
 		)
 
 
-## Dwellings are a ladder and moving in adds to what the last rung gave, so the
-## cooling a space is worth is the whole chain below it, not its own line.
-func _dwelling_chain_cooling(key: String) -> float:
+## A run happens in one location and gets that location's cooling, once. Nothing
+## from the chapters below it carries over, because it was never bought.
+func _location_cooling(key: String) -> float:
 	var dwellings: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
-	var total: float = float(Dictionary(dwellings.get("bedroom", {})).get("cooling_capacity", 0.0))
-	var current: String = key
-	var safety: int = 0
-	while current != "" and current != "bedroom" and safety < 16:
-		safety += 1
-		total += float(Dictionary(dwellings.get(current, {})).get("cooling_capacity", 0.0))
-		var step: UpgradeDefinition = null
-		for upgrade in ContentDatabase.upgrades:
-			if upgrade.dwelling_key == current:
-				step = upgrade
-				break
-		current = step.requires_dwelling if step != null else ""
-	return total
+	return float(Dictionary(dwellings.get(key, {})).get("cooling_capacity", 0.0))
 
 
 func _cooling_of(upgrade: UpgradeDefinition) -> float:

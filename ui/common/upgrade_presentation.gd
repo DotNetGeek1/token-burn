@@ -16,12 +16,12 @@ const GROUPS := {
 	"sales": {"label": "Sales", "color": "yellow"},
 }
 
-const GROUP_ORDER := ["hardware", "component", "cooling", "workspace", "dwelling", "cloud", "sales", "advertising"]
+const GROUP_ORDER := ["hardware", "component", "cooling", "workspace", "cloud", "sales", "advertising"]
 
-## The Market's three counters. Property is a ladder, Hardware is what fills the
-## room it buys, and everything you rent rather than own sits in Services.
+## The Market's two counters. Where the run happens is a chapter rather than a
+## purchase, so there is no property shelf: everything here fills the space the
+## run already has, or is rented rather than owned.
 const TABS := [
-	{"key": "property", "label": "PROPERTY", "groups": ["dwelling"]},
 	{"key": "hardware", "label": "HARDWARE", "groups": ["hardware", "component", "cooling", "workspace"]},
 	{"key": "services", "label": "CLOUD", "groups": ["cloud", "sales", "advertising"]},
 ]
@@ -82,12 +82,6 @@ static func effect_line(upgrade: UpgradeDefinition) -> String:
 		var line: String = _effect_text(effect)
 		if line != "":
 			parts.append(line)
-	if upgrade.dwelling_key != "":
-		var dwelling: Dictionary = ContentDatabase.balance.get("dwelling_costs", {}).get(upgrade.dwelling_key, {})
-		if not dwelling.is_empty():
-			parts.append("%d hardware slots" % int(dwelling.get("hardware_slots", 0)))
-			parts.append("+%d cooling" % int(dwelling.get("cooling_capacity", 0)))
-			parts.append("%s rent" % NumberFormat.format_cash(float(dwelling.get("rent", 0.0))))
 	if upgrade.recurring_cost_delta > 0.0:
 		parts.append("%s/round" % NumberFormat.format_cash(upgrade.recurring_cost_delta))
 	if upgrade.category == "component" and upgrade.requires_hardware != "":
@@ -164,13 +158,14 @@ static func blockers(upgrade: UpgradeDefinition, affordable: bool) -> Array:
 	return chips
 
 
-## Named after the thing the player has to get first, so a locked property reads
-## as the next step rather than as a dead card.
+## Named after the thing the player has to get first, so a locked card reads as
+## the next step rather than as a dead one. Premises are the exception: the run
+## cannot move, so the card says which chapter this belongs to instead.
 static func prerequisite_text(upgrade: UpgradeDefinition) -> String:
 	if UpgradeSystem.prerequisites_met(Simulation.run_state, upgrade, ContentDatabase):
 		return ""
 	if upgrade.requires_dwelling != "":
-		return "Requires the %s" % _dwelling_name(upgrade.requires_dwelling)
+		return "Needs the %s or better" % _dwelling_name(upgrade.requires_dwelling)
 	if upgrade.requires_hardware != "" and UpgradeSystem.installed_count(
 		Simulation.run_state, upgrade.requires_hardware
 	) <= 0:

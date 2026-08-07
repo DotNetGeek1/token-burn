@@ -1,8 +1,9 @@
 extends TestCase
 
 ## Floor space is the constraint the early game is built around: machines can be
-## bought more than once, so a room runs out of room, and the way past that is
-## either a bigger room or selling something that is already in this one.
+## bought more than once, so a room runs out of room, and the only way past that
+## inside a run is to sell something already standing in it. A bigger room is a
+## later chapter of the campaign, not a purchase.
 ## Components sidestep the constraint on purpose — they go inside a machine that
 ## is already standing there — so the cap they answer to is host count.
 
@@ -19,8 +20,9 @@ func run() -> void:
 	_test_what_cannot_be_sold()
 
 
-func _shop() -> Dictionary:
+func _shop(location: String = "bedroom") -> Dictionary:
 	var state := RunState.new()
+	Simulation.apply_run_location(state, location)
 	state.economy["cash"] = 100000000.0
 	return {
 		"state": state,
@@ -51,18 +53,21 @@ func _test_machines_can_be_bought_twice() -> void:
 	assert_eq(_slots_used(shop), 2, "And takes the bedroom's second slot")
 	assert_false(_buy(shop, "upgrade.custom_desktop"), "A second desktop has nowhere to stand")
 
-	assert_true(_buy(shop, "upgrade.garage"), "The garage is the answer to a full room")
-	assert_true(_buy(shop, "upgrade.custom_desktop"), "Where a second desktop finally fits")
-	assert_true(_buy(shop, "upgrade.custom_desktop"), "And a third")
-	assert_eq(_slots_used(shop), 4, "Four machines in a four-slot garage")
-	assert_false(_buy(shop, "upgrade.custom_desktop"), "The fourth desktop is one too many")
+	# The same shopping trip a chapter later, where the room is the thing that
+	# changed rather than anything on the shelves.
+	var garage: Dictionary = _shop("garage")
+	assert_true(_buy(garage, "upgrade.custom_desktop"), "A desktop fits beside the laptop")
+	assert_true(_buy(garage, "upgrade.custom_desktop"), "And a second one")
+	assert_true(_buy(garage, "upgrade.custom_desktop"), "And a third")
+	assert_eq(_slots_used(garage), 4, "Four machines in a four-slot garage")
+	assert_false(_buy(garage, "upgrade.custom_desktop"), "The fourth desktop is one too many")
 	assert_eq(
-		UpgradeSystem.installed_count(shop["state"], "custom_desktop"),
+		UpgradeSystem.installed_count(garage["state"], "custom_desktop"),
 		3,
 		"Every copy bought is a machine owned"
 	)
 	assert_eq(
-		UpgradeSystem.upgrade_level(shop["state"], "upgrade.custom_desktop"),
+		UpgradeSystem.upgrade_level(garage["state"], "upgrade.custom_desktop"),
 		3,
 		"And the level tracks the count so pricing can climb with it"
 	)
@@ -105,18 +110,21 @@ func _test_a_component_needs_a_machine_to_go_in() -> void:
 	assert_true(_buy(shop, "upgrade.second_gpu"), "So the card goes in")
 	assert_false(_buy(shop, "upgrade.second_gpu"), "But a second card needs a second desktop")
 
-	assert_true(_buy(shop, "upgrade.garage"), "Room for another machine")
-	assert_true(_buy(shop, "upgrade.custom_desktop"), "And another desktop to fill it")
-	assert_true(_buy(shop, "upgrade.second_gpu"), "Which has a slot for the second card")
+	var garage: Dictionary = _shop("garage")
+	assert_true(_buy(garage, "upgrade.custom_desktop"), "A garage has room for two desktops")
+	assert_true(_buy(garage, "upgrade.custom_desktop"), "So the second one goes in")
+	assert_true(_buy(garage, "upgrade.second_gpu"), "Which is a home for the first card")
+	assert_true(_buy(garage, "upgrade.second_gpu"), "And the second")
+	assert_false(_buy(garage, "upgrade.second_gpu"), "But not a third")
 	assert_eq(
-		UpgradeSystem.installed_count(shop["state"], "second_gpu"),
+		UpgradeSystem.installed_count(garage["state"], "second_gpu"),
 		2,
 		"One card per desktop owned, no more"
 	)
 
 
 func _test_duplicates_add_up_to_throughput() -> void:
-	var shop: Dictionary = _shop()
+	var shop: Dictionary = _shop("garage")
 	var compute := ComputeSystem.new()
 	var rng := DeterministicRng.new(7)
 	compute.recalculate(shop["state"], shop["resolver"], [], rng)
@@ -127,7 +135,6 @@ func _test_duplicates_add_up_to_throughput() -> void:
 	var two_machines: float = float(shop["state"].compute.get("local_capacity", 0.0))
 	assert_true(two_machines > one_machine, "A second machine raises local capacity")
 
-	assert_true(_buy(shop, "upgrade.garage"), "Move somewhere with room")
 	assert_true(_buy(shop, "upgrade.custom_desktop"), "And buy the same model again")
 	compute.recalculate(shop["state"], shop["resolver"], [], rng)
 	assert_almost_eq(
@@ -143,9 +150,8 @@ func _test_duplicates_add_up_to_throughput() -> void:
 
 
 func _test_selling_frees_the_slot_and_pays_back() -> void:
-	var shop: Dictionary = _shop()
+	var shop: Dictionary = _shop("garage")
 	assert_true(_buy(shop, "upgrade.custom_desktop"), "Buy a machine")
-	assert_true(_buy(shop, "upgrade.garage"), "Move somewhere it is not the last word")
 	assert_true(_buy(shop, "upgrade.custom_desktop"), "Buy a second")
 	var slots_before: int = _slots_used(shop)
 	var cash_before: float = float(shop["state"].economy.get("cash", 0.0))

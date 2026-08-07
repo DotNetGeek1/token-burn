@@ -164,11 +164,33 @@ func reset_run(p_seed: int = 0) -> void:
 	_work_tick = 0
 	_auto_arrange_signature = ""
 	_invalidate_subscriptions()
+	# Where the run happens is decided before it starts and never moves again,
+	# so rent and floor space are settled before anything is bought.
+	apply_run_location(run_state, MetaProgress.selected_location())
 	# Permanent unlocks land before the board is sized, so an unlocked slot is
 	# there to be filled rather than turning up a round late.
 	MetaProgress.apply_to_run(run_state)
 	_board_system.ensure_board(run_state, ContentDatabase)
 	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
+
+
+## Settles the run into its location. A location is a chapter, not a purchase:
+## its rent, floor space and environmental cooling replace the defaults once,
+## at the start, rather than being added to whatever was already there.
+func apply_run_location(state: RunState, location_id: String) -> void:
+	var dwelling_costs: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
+	var location: String = location_id
+	if not dwelling_costs.has(location):
+		location = MetaProgress.DEFAULT_LOCATION
+	state.build["dwelling"] = location
+	if not dwelling_costs.has(location):
+		return
+	var stats: Dictionary = dwelling_costs[location]
+	var rent_multiplier: float = float(state.economy.get("rent_multiplier", 1.0))
+	state.economy["round_rent"] = float(
+		stats.get("rent", state.economy.get("round_rent", 0.0))
+	) * rent_multiplier
+	state.compute["cooling"] = ComputeSystem.derive_cooling(state)
 
 
 func start_run(p_seed: int = 0) -> void:
@@ -2039,6 +2061,14 @@ func load_saved_run() -> bool:
 	# Saves written before the redesign called the round a month.
 	_round_end_pending = bool(data.get("round_end_pending", data.get("month_end_pending", false)))
 	_invalidate_subscriptions()
+	# A save from before the campaign existed can be mid-warehouse, having
+	# climbed there with cash. That rung and everything under it is earned, so
+	# the profile catches up rather than stranding the run somewhere it is no
+	# longer allowed to be.
+	MetaProgress.ensure_location_unlocked_through(str(run_state.build.get("dwelling", "")))
+	# Cooling from permanent unlocks is a function of the profile, not of the
+	# run, so it is read back rather than restored from the save.
+	run_state.compute["meta_cooling"] = MetaProgress.cooling_bonus()
 	if phase == Phase.IDLE:
 		start_run(run_seed)
 		return true

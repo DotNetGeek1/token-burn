@@ -30,7 +30,10 @@ var guard_limit_count: int = 0
 var verbose: bool = false
 
 
-func run(count: int = 1000, policy: String = "random") -> Dictionary:
+## `location` is the chapter of the campaign every run in the sweep is set in.
+## A run can no longer buy its way to bigger premises, so the sweep has to be
+## told where it is happening the same way the campaign would tell it.
+func run(count: int = 1000, policy: String = "random", location: String = MetaProgress.DEFAULT_LOCATION) -> Dictionary:
 	var wins: int = 0
 	var total_rounds: int = 0
 	var stuck: int = 0
@@ -53,6 +56,7 @@ func run(count: int = 1000, policy: String = "random") -> Dictionary:
 		var seed_value: int = 1000 + i
 		var started_at: int = Time.get_ticks_msec()
 		sim.start_run(seed_value)
+		sim.apply_run_location(sim.run_state, location)
 		var safety: int = 0
 		while sim.phase != sim.Phase.RUN_END and safety < SAFETY_STEPS:
 			safety += 1
@@ -97,6 +101,7 @@ func run(count: int = 1000, policy: String = "random") -> Dictionary:
 	return {
 		"runs": count,
 		"policy": policy,
+		"location": location,
 		"win_rate": float(wins) / float(runs),
 		"ascended_rate": float(int(outcomes.get("ascended", 0))) / float(runs),
 		"qualified_rate": float(qualified_runs) / float(runs),
@@ -297,13 +302,6 @@ func _builder_next_purchase(sim: Node, budget: float) -> String:
 	var component: String = _affordable(sim, budget, ["component"], false)
 	if component != "" and sim.upgrade_heat_warning(component) == "":
 		return component
-	# Property next, because a rung of the ladder is both the floor space and
-	# the extraction that everything above it depends on, and it is cheap
-	# relative to the machines it unlocks. A policy that buys machines first
-	# fills a bedroom with air conditioners and never leaves it.
-	var premises: String = _affordable(sim, budget, ["dwelling"], false)
-	if premises != "":
-		return premises
 	var machine: String = _affordable(sim, budget, ["hardware"], false)
 	if machine != "" and sim.upgrade_heat_warning(machine) != "":
 		# The machine is affordable but the room cannot cool it, which is what
@@ -348,21 +346,9 @@ func _affordable(sim: Node, budget: float, tags: Array, cooling_only: bool) -> S
 		# run that over-bought.
 		if upgrade.recurring_cost_delta > _recurring_headroom(sim):
 			continue
-		# Moving up the property ladder also moves the rent up, and rent missed
-		# twice is an eviction. The deposit is the cheap part.
-		if cost + _rent_of(upgrade) * 2.0 > budget:
-			continue
 		best = upgrade.id
 		best_cost = cost
 	return best
-
-
-func _rent_of(upgrade: UpgradeDefinition) -> float:
-	if upgrade.dwelling_key == "":
-		return 0.0
-	return float(Dictionary(
-		ContentDatabase.balance.get("dwelling_costs", {}).get(upgrade.dwelling_key, {})
-	).get("rent", 0.0))
 
 
 func _recurring_headroom(sim: Node) -> float:

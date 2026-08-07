@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 9
+const SAVE_VERSION := 10
 
 ## A round is one full cycle of the game: take contracts, work them to
 ## resolution, pay the bills. A prompt is one action inside a round — a burn or
@@ -43,7 +43,12 @@ var compute: Dictionary = {
 	"token_rate": 1_000_000.0,
 	"prompt_rate": 1_000_000.0,
 	"power_draw": 65.0,
-	"cooling": 16.0,
+	## Derived by ComputeSystem from the run's location, what is installed in it
+	## and `meta_cooling`. Never added to directly: see ComputeSystem.derive_cooling.
+	"cooling": 0.0,
+	## Cooling from permanent unlocks, which is the one part of the total that
+	## nothing in the run can be read back from.
+	"meta_cooling": 0.0,
 	"heat": 0.0,
 	"heat_capacity": 100.0,
 	"efficiency": 1.0,
@@ -324,6 +329,13 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_workflows()
 	if from_version < 9:
 		_migrate_to_ascension_ladder()
+	if from_version < 10:
+		# Cooling used to be a running total that moving premises added to, so an
+		# old save can be carrying several locations' worth of it at once. The
+		# stored figure is discarded and rebuilt from what the run actually has
+		# the first time ComputeSystem recalculates, which happens on load.
+		compute["cooling"] = 0.0
+		compute["meta_cooling"] = 0.0
 
 
 ## A single Ascension Contract used to be the whole endgame, so a save from
@@ -460,7 +472,8 @@ func _default_compute() -> Dictionary:
 		"token_rate": 1_000_000.0,
 		"prompt_rate": 1_000_000.0,
 		"power_draw": 65.0,
-		"cooling": 16.0,
+		"cooling": 0.0,
+		"meta_cooling": 0.0,
 		"heat": 0.0,
 		"heat_capacity": 100.0,
 		"efficiency": 1.0,

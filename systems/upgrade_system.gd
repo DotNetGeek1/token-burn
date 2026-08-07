@@ -37,9 +37,9 @@ static func installed_key(upgrade: UpgradeDefinition) -> String:
 
 ## Whether the run has the thing this upgrade sits on top of: premises at least
 ## as serious as it needs, the machine it bolts onto, or the cloud account the
-## rest of that shelf is billed against. Property names the rung below it, which
-## makes the ladder climbable only one step at a time; a rack names the smallest
-## room that can hold it.
+## rest of that shelf is billed against. A rack names the smallest room that can
+## hold it, and since a run never moves, that is really a statement about which
+## chapter of the campaign the rack belongs to.
 static func prerequisites_met(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
 	if upgrade.requires_dwelling != "":
 		var have: int = dwelling_tier(str(run_state.build.get("dwelling", "")), content_db)
@@ -89,9 +89,31 @@ static func hardware_slots_used(run_state: RunState, content_db: Node) -> int:
 
 
 static func hardware_slots_total(run_state: RunState, content_db: Node) -> int:
+	return int(_location_stats(run_state, content_db).get("hardware_slots", 0))
+
+
+## What the run's location keeps cool on its own, before anything is installed.
+## Read from the location every time rather than banked into a running total, so
+## it can only ever count once however often the rig is recalculated.
+static func location_cooling(run_state: RunState, content_db: Node) -> float:
+	return float(_location_stats(run_state, content_db).get("cooling_capacity", 0.0))
+
+
+## Cooling from kit the run has bought, summed from what is actually installed.
+## Derived rather than accumulated: a cooler that was sold takes its cooling with
+## it without anyone having to remember to subtract it.
+static func installed_cooling(run_state: RunState, content_db: Node) -> float:
+	var total: float = 0.0
+	for key in run_state.build.get("hardware", []):
+		var upgrade: UpgradeDefinition = upgrade_for_installed(content_db, str(key))
+		if upgrade != null:
+			total += cooling_from(upgrade)
+	return total
+
+
+static func _location_stats(run_state: RunState, content_db: Node) -> Dictionary:
 	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
-	var costs: Dictionary = content_db.balance.get("dwelling_costs", {}).get(dwelling, {})
-	return int(costs.get("hardware_slots", 0))
+	return Dictionary(content_db.balance.get("dwelling_costs", {}).get(dwelling, {}))
 
 
 ## The dwelling only has so much floor, and every machine standing on it counts,
@@ -137,8 +159,6 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 			var key: String = installed_key(upgrade)
 			if key != "":
 				run_state.build["hardware"].append(key)
-		"dwelling":
-			_move_in(run_state, upgrade, content_db)
 		"cloud":
 			run_state.build["cloud_tier"] = upgrade_id
 		"advertising":
@@ -147,18 +167,6 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 		run_state.build["upgrades"].append(upgrade_id)
 	effect_resolver.apply_effects(run_state, upgrade.effects, "upgrade.%s" % upgrade_id)
 	return true
-
-
-func _move_in(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> void:
-	var dwelling_key: String = upgrade.dwelling_key if upgrade.dwelling_key != "" else upgrade.id
-	run_state.build["dwelling"] = dwelling_key
-	var dwelling_costs: Dictionary = content_db.balance.get("dwelling_costs", {})
-	if not dwelling_costs.has(dwelling_key):
-		return
-	var dwelling: Dictionary = dwelling_costs[dwelling_key]
-	var rent_multiplier: float = float(run_state.economy.get("rent_multiplier", 1.0))
-	run_state.economy["round_rent"] = float(dwelling.get("rent", run_state.economy["round_rent"])) * rent_multiplier
-	run_state.compute["cooling"] = float(run_state.compute.get("cooling", 0.0)) + float(dwelling.get("cooling_capacity", 0.0))
 
 
 func can_purchase(run_state: RunState, upgrade_id: String, content_db: Node) -> bool:
@@ -174,6 +182,11 @@ func can_purchase(run_state: RunState, upgrade_id: String, content_db: Node) -> 
 ## Every refusal that is not about cash, shared by the check and the purchase so
 ## the Market can never offer a button the sim would decline.
 func _passes_gates(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
+	# Premises are a chapter of the campaign, not stock. They still exist as
+	# content — the location a run happens in is described by one — but no run
+	# can buy its way from one to another.
+	if upgrade.category == "dwelling":
+		return false
 	if is_maxed(run_state, upgrade):
 		return false
 	if not upgrade.repeatable and upgrade.id in run_state.build["upgrades"]:
@@ -260,16 +273,16 @@ func sell(run_state: RunState, key: String, content_db: Node, economy_system: Ec
 		0.0,
 		float(run_state.economy.get("recurring_costs", 0.0)) - upgrade.recurring_cost_delta
 	)
-	run_state.compute["cooling"] = maxf(
-		0.0, float(run_state.compute.get("cooling", 0.0)) - _cooling_from(upgrade)
-	)
+	# Nothing is done about cooling here: it is derived from what is installed,
+	# so removing the unit has already removed its contribution.
 	# Credited rather than booked as income: selling the furniture is not the
 	# business earning, and ascension qualification reads income.
 	economy_system.credit(run_state, refund, "hardware_sale:%s" % key)
 	return true
 
 
-static func _cooling_from(upgrade: UpgradeDefinition) -> float:
+## Cooling one unit of this upgrade provides, read off the effects it declares.
+static func cooling_from(upgrade: UpgradeDefinition) -> float:
 	var total: float = 0.0
 	for effect in upgrade.effects:
 		if effect.target == "compute.cooling":

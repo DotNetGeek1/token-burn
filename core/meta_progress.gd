@@ -8,7 +8,23 @@ extends Node
 
 const DEFAULT_PROFILE_PATH := "user://profile.json"
 const CATALOG_PATH := "res://content/meta/unlocks.json"
-const PROFILE_VERSION := 2
+const PROFILE_VERSION := 3
+
+## Where a run that has unlocked nothing takes place. The campaign always has at
+## least this rung, so no profile can ever end up with nowhere to play.
+const DEFAULT_LOCATION := "bedroom"
+
+## Used only if the balance data cannot be read. The order matters: it is what
+## "the next location" means when one is cleared.
+const FALLBACK_LOCATION_ORDER := [
+	"bedroom",
+	"garage",
+	"office_unit",
+	"warehouse",
+	"datacentre_campus",
+	"private_power_grid",
+	"moon_facility",
+]
 
 ## Cumulative counters that outlive a run, so an achievement can ask for ten
 ## losses or a lifetime of tokens rather than only what one run managed.
@@ -273,6 +289,164 @@ func set_difficulty(difficulty_id: String) -> void:
 	profile_changed.emit()
 
 
+# --- Campaign locations ------------------------------------------------------
+
+## The campaign is a list of places rather than a ladder bought during a run:
+## a run happens in exactly one of them, and clearing it is what opens the next.
+## With the meta layer switched off — the test suite, balance sweeps — every run
+## starts from the first rung, for the same reason Endless is forced off there.
+
+## The full campaign in order, from content so the order and the balance data
+## that describes each location cannot drift apart.
+func location_order() -> Array:
+	var order: Array = Array(
+		ContentDatabase.balance.get("economy", {}).get("location_order", [])
+	)
+	if order.is_empty():
+		return FALLBACK_LOCATION_ORDER.duplicate()
+	var ids: Array = []
+	for entry in order:
+		ids.append(str(entry))
+	return ids
+
+
+func unlocked_locations() -> Array:
+	if not enabled:
+		return [DEFAULT_LOCATION]
+	_ensure_loaded()
+	return Array(_locations().get("unlocked", [])).duplicate()
+
+
+func is_location_unlocked(location_id: String) -> bool:
+	return location_id in unlocked_locations()
+
+
+func completed_locations() -> Array:
+	if not enabled:
+		return []
+	_ensure_loaded()
+	return Array(_locations().get("completed", [])).duplicate()
+
+
+## Where the next run will take place.
+func selected_location() -> String:
+	if not enabled:
+		return DEFAULT_LOCATION
+	_ensure_loaded()
+	var selected: String = str(_locations().get("selected", DEFAULT_LOCATION))
+	if not is_location_unlocked(selected):
+		return DEFAULT_LOCATION
+	return selected
+
+
+## Chooses where the next run happens. Refuses rather than silently falling back
+## so a stale menu cannot start a run somewhere the player has not earned.
+func select_location(location_id: String) -> bool:
+	if not enabled:
+		return false
+	_ensure_loaded()
+	if not is_location_unlocked(location_id):
+		return false
+	var locations: Dictionary = _locations()
+	locations["selected"] = location_id
+	_profile["locations"] = locations
+	_save()
+	profile_changed.emit()
+	return true
+
+
+## Opens a location permanently. Returns false when it was already open, so a
+## caller can tell a first clear from a replay.
+func unlock_location(location_id: String) -> bool:
+	if not enabled:
+		return false
+	if not (location_id in location_order()):
+		return false
+	_ensure_loaded()
+	var locations: Dictionary = _locations()
+	var unlocked: Array = Array(locations.get("unlocked", []))
+	if location_id in unlocked:
+		return false
+	unlocked.append(location_id)
+	locations["unlocked"] = _sorted_by_campaign_order(unlocked)
+	_profile["locations"] = locations
+	_save()
+	profile_changed.emit()
+	return true
+
+
+## Records a location as beaten and opens whatever follows it. Replaying a
+## cleared location is allowed, so completion is a set rather than a counter.
+func complete_location(location_id: String) -> void:
+	if not enabled:
+		return
+	_ensure_loaded()
+	var locations: Dictionary = _locations()
+	var completed: Array = Array(locations.get("completed", []))
+	if not (location_id in completed):
+		completed.append(location_id)
+		locations["completed"] = _sorted_by_campaign_order(completed)
+		_profile["locations"] = locations
+		_save()
+	var next_id: String = next_location_after(location_id)
+	if next_id != "":
+		unlock_location(next_id)
+	profile_changed.emit()
+
+
+## The rung above this one, or "" at the top of the campaign.
+func next_location_after(location_id: String) -> String:
+	var order: Array = location_order()
+	var index: int = order.find(location_id)
+	if index < 0 or index + 1 >= order.size():
+		return ""
+	return str(order[index + 1])
+
+
+## Brings the profile up to date with a location the player is demonstrably in:
+## a save from before the campaign existed can be mid-warehouse, and everything
+## below that rung must count as already earned.
+func ensure_location_unlocked_through(location_id: String) -> void:
+	if not enabled:
+		return
+	var order: Array = location_order()
+	var index: int = order.find(location_id)
+	if index < 0:
+		return
+	for i in range(index + 1):
+		unlock_location(str(order[i]))
+
+
+func _locations() -> Dictionary:
+	var locations: Dictionary = Dictionary(_profile.get("locations", {}))
+	if locations.is_empty():
+		locations = _default_locations()
+		_profile["locations"] = locations
+	return locations
+
+
+func _default_locations() -> Dictionary:
+	return {
+		"unlocked": [DEFAULT_LOCATION],
+		"selected": DEFAULT_LOCATION,
+		"completed": [],
+	}
+
+
+func _sorted_by_campaign_order(ids: Array) -> Array:
+	var order: Array = location_order()
+	var sorted: Array = []
+	for entry in order:
+		if str(entry) in ids:
+			sorted.append(str(entry))
+	# Anything the campaign no longer lists is kept rather than dropped: a
+	# renamed location should not quietly cost the player an unlock.
+	for entry in ids:
+		if not (str(entry) in sorted):
+			sorted.append(str(entry))
+	return sorted
+
+
 ## Endless mode unlocks the first time any Tier 3 Ascension Contract is
 ## completed once: proof the build can already reach the real finish line, so
 ## an infinite tail past round 12 is a bonus rather than a way to dodge it.
@@ -321,6 +495,21 @@ func spend_pick(unlock_id: String) -> bool:
 	return true
 
 
+## Cooling every owned unlock is worth. A function of the profile alone, so a
+## run being loaded can recover it without replaying the whole unlock list.
+func cooling_bonus() -> float:
+	if not enabled:
+		return 0.0
+	_ensure_loaded()
+	var total: float = 0.0
+	var unlocks: Dictionary = _profile.get("unlocks", {})
+	for unlock_id in unlocks.keys():
+		var unlock: Dictionary = _catalog_by_id.get(unlock_id, {})
+		if str(unlock.get("kind", "")) == "cooling":
+			total += float(unlock.get("amount", 0.0)) * float(int(unlocks[unlock_id]))
+	return total
+
+
 ## Folds every owned unlock into a freshly reset run. Called before the board is
 ## sized, so an extra slot is already in place when the slots are laid out.
 func apply_to_run(run_state: RunState) -> void:
@@ -366,7 +555,11 @@ func _apply_one(run_state: RunState, unlock: Dictionary) -> void:
 				owned.append(operation_id)
 				run_state.build["operations"] = owned
 		"cooling":
-			run_state.compute["cooling"] = float(run_state.compute.get("cooling", 0.0)) + amount
+			# Kept apart from the run's own cooling, which is derived from the
+			# location and the kit in it and would overwrite anything added here.
+			run_state.compute["meta_cooling"] = (
+				float(run_state.compute.get("meta_cooling", 0.0)) + amount
+			)
 		"starting_cash":
 			run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + amount
 		"efficiency_base":
@@ -446,6 +639,7 @@ func _default_profile() -> Dictionary:
 		"lifetime_stats": {},
 		"difficulty": "normal",
 		"endless_enabled": false,
+		"locations": _default_locations(),
 	}
 
 
@@ -504,6 +698,22 @@ func _load_profile() -> void:
 	var lifetime: Dictionary = {}
 	for key in Dictionary(loaded.get("lifetime_stats", {})).keys():
 		lifetime[str(key)] = float(loaded["lifetime_stats"][key])
+	var locations: Dictionary = _default_locations()
+	if loaded.get("locations", null) is Dictionary:
+		var stored: Dictionary = loaded["locations"]
+		var unlocked: Array = [DEFAULT_LOCATION]
+		for entry in Array(stored.get("unlocked", [])):
+			if not (str(entry) in unlocked):
+				unlocked.append(str(entry))
+		var completed: Array = []
+		for entry in Array(stored.get("completed", [])):
+			if not (str(entry) in completed):
+				completed.append(str(entry))
+		locations = {
+			"unlocked": unlocked,
+			"selected": str(stored.get("selected", DEFAULT_LOCATION)),
+			"completed": completed,
+		}
 	_profile = {
 		"version": PROFILE_VERSION,
 		"victories": int(loaded.get("victories", 0)),
@@ -517,6 +727,7 @@ func _load_profile() -> void:
 		"lifetime_stats": lifetime,
 		"difficulty": str(loaded.get("difficulty", "normal")),
 		"endless_enabled": bool(loaded.get("endless_enabled", false)),
+		"locations": locations,
 	}
 	_migrate_profile(int(loaded.get("version", 1)))
 
@@ -535,6 +746,16 @@ func _migrate_profile(from_version: int) -> void:
 			float(stats.get("tokens_burned", 0.0)),
 			float(Dictionary(_profile.get("best_scores", {})).get("total_tokens_burned", 0.0))
 		)
+	if from_version < 3:
+		# Profiles written before the campaign existed have no record of which
+		# premises they reached — that lived in the run save, not here. They
+		# start the campaign at the bottom; loading an in-progress run reopens
+		# whatever rung it was actually on.
+		var locations: Dictionary = _locations()
+		locations["unlocked"] = _sorted_by_campaign_order(
+			Array(locations.get("unlocked", [DEFAULT_LOCATION]))
+		)
+		_profile["locations"] = locations
 	_save()
 
 

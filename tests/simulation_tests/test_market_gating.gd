@@ -1,9 +1,9 @@
 extends TestCase
 
 ## The Market's three hard gates: cloud is a capability you buy rather than one
-## you start with, property is a ladder climbed a rung at a time, and a machine
-## needs somewhere to stand. Each of these used to be a warning the sim ignored,
-## so these tests are about refusal, not about presentation.
+## you start with, premises are not for sale at all, and a machine needs
+## somewhere to stand. Each of these used to be a warning the sim ignored, so
+## these tests are about refusal, not about presentation.
 
 const SCRATCH_PROFILE := "user://profile_gating_test.json"
 
@@ -14,8 +14,10 @@ func run() -> void:
 	_test_cloud_needs_an_account()
 	_test_cloud_stock_needs_the_account()
 	_test_a_burst_costs_more_than_loose_change()
-	_test_property_is_climbed_one_rung_at_a_time()
+	_test_premises_are_not_for_sale()
+	_test_the_market_never_stocks_premises()
 	_test_hardware_needs_the_premises_for_it()
+	_test_a_run_cannot_move_out_of_its_location()
 	_test_hardware_needs_floor_space()
 	_test_the_meta_unlock_opens_the_account()
 
@@ -118,22 +120,53 @@ func _test_a_burst_costs_more_than_loose_change() -> void:
 	sim.free()
 
 
-func _test_property_is_climbed_one_rung_at_a_time() -> void:
+## Where the run happens is a chapter of the campaign, won rather than bought.
+## However much cash is in hand, none of it moves the run.
+func _test_premises_are_not_for_sale() -> void:
 	var shop: Dictionary = _shop()
 	assert_eq(shop["state"].build.get("dwelling", ""), "bedroom", "A run starts in the bedroom")
-	assert_false(_buy(shop, "upgrade.warehouse"), "A warehouse cannot be leased from a bedroom")
-	assert_false(_buy(shop, "upgrade.moon_facility"), "Nor can the last rung be bought first")
-	assert_eq(shop["state"].build.get("dwelling", ""), "bedroom", "A refused move changes nothing")
+	for premises in [
+		"upgrade.garage",
+		"upgrade.office_unit",
+		"upgrade.warehouse",
+		"upgrade.datacentre_campus",
+		"upgrade.private_power_grid",
+		"upgrade.moon_facility",
+	]:
+		assert_false(
+			shop["upgrades"].can_purchase(shop["state"], premises, ContentDatabase),
+			"%s is not on sale" % premises
+		)
+		assert_false(_buy(shop, premises), "And buying it outright is refused too")
+	assert_eq(
+		shop["state"].build.get("dwelling", ""),
+		"bedroom",
+		"So the run is still in the bedroom it started in"
+	)
+	assert_almost_eq(
+		float(shop["state"].compute.get("cooling", 0.0)),
+		float(RunState.new().compute.get("cooling", 0.0)),
+		0.01,
+		"And nothing has quietly added another chapter's cooling to it"
+	)
 
-	assert_true(_buy(shop, "upgrade.garage"), "The next rung is available")
-	assert_eq(shop["state"].build.get("dwelling", ""), "garage", "And it moves the run")
-	assert_false(_buy(shop, "upgrade.warehouse"), "The warehouse is still two steps away")
-	assert_true(_buy(shop, "upgrade.office_unit"), "The office comes after the garage")
-	assert_true(_buy(shop, "upgrade.warehouse"), "And the warehouse after the office")
 
-	var office_cost: float = ContentDatabase.get_upgrade("upgrade.office_unit").cost
-	var warehouse_cost: float = ContentDatabase.get_upgrade("upgrade.warehouse").cost
-	assert_true(office_cost < warehouse_cost, "Each rung costs more than the one below it")
+## The shelves the Market builds, checked directly: premises are absent rather
+## than present-and-greyed, because seeing an unbuyable ladder is the confusion
+## this refactor removes.
+func _test_the_market_never_stocks_premises() -> void:
+	for upgrade in ContentDatabase.upgrades:
+		if upgrade.category != "dwelling":
+			continue
+		assert_false(
+			UpgradePresentation.group_key(upgrade) in UpgradePresentation.GROUP_ORDER,
+			"%s has no shelf to sit on" % upgrade.id
+		)
+	for tab in UpgradePresentation.TABS:
+		assert_false(
+			"dwelling" in Array(tab["groups"]),
+			"No Market counter sells premises (%s)" % str(tab["key"])
+		)
 
 
 func _test_hardware_needs_the_premises_for_it() -> void:
@@ -146,9 +179,28 @@ func _test_hardware_needs_the_premises_for_it() -> void:
 	)
 	assert_false(_buy(shop, "upgrade.compute_cluster"), "Nor does anything above it")
 
-	assert_true(_buy(shop, "upgrade.garage"), "Moving to the garage buys somewhere to put one")
-	assert_true(_buy(shop, "upgrade.gpu_rack"), "And the rack finally has a home")
-	assert_false(_buy(shop, "upgrade.compute_cluster"), "A cluster still wants the office")
+	# A garage run, which is what the campaign hands the player rather than
+	# something they buy partway through a bedroom run.
+	var garage: Dictionary = _shop()
+	Simulation.apply_run_location(garage["state"], "garage")
+	assert_true(_buy(garage, "upgrade.gpu_rack"), "In the garage the rack has a home")
+	assert_false(_buy(garage, "upgrade.compute_cluster"), "A cluster still wants the office")
+
+
+## The invariant the whole refactor rests on: a run's location is fixed. Nothing
+## on any shelf, bought in any order, changes it.
+func _test_a_run_cannot_move_out_of_its_location() -> void:
+	var sim: Node = _sim()
+	sim.start_run(4204)
+	sim.run_state.economy["cash"] = 1.0e12
+	for upgrade in ContentDatabase.upgrades:
+		sim.buy_upgrade(upgrade.id)
+	assert_eq(
+		str(sim.run_state.build.get("dwelling", "")),
+		"bedroom",
+		"Buying everything the Market will sell leaves the run where it started"
+	)
+	sim.free()
 
 
 func _test_hardware_needs_floor_space() -> void:

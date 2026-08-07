@@ -19,6 +19,15 @@
     "round_end_retained": 0.5,
     "vent_ratio": 0.45
   },
+  "location_order": [
+    "bedroom",
+    "garage",
+    "office_unit",
+    "warehouse",
+    "datacentre_campus",
+    "private_power_grid",
+    "moon_facility"
+  ],
   "infrastructure_tiers": {
     "dwelling": {
       "bedroom": 0,

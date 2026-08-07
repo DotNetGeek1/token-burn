@@ -9,7 +9,7 @@ const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
 @onready var upgrades_list: VBoxContainer = $Margin/VBox/Scroll/UpgradesList
 
 var _detail_sheet: DetailSheet = null
-var _active_tab: String = "property"
+var _active_tab: String = "hardware"
 var _tab_buttons: Dictionary = {}
 
 
@@ -86,11 +86,13 @@ func _refresh_tabs(shelves: Dictionary) -> void:
 
 ## Stock the run could still be shown. Items whose unlock has not happened yet
 ## are absent rather than greyed: the cloud shelf is a rumour until the account
-## exists. Property further up the ladder stays visible, because seeing the next
-## rung is the point of a ladder.
+## exists. Premises are absent entirely — where the run happens was settled
+## before it started and no amount of cash moves it.
 func _shelves() -> Dictionary:
 	var shelves: Dictionary = {}
 	for upgrade in ContentDatabase.upgrades:
+		if upgrade.category == "dwelling":
+			continue
 		if UpgradeSystem.is_maxed(Simulation.run_state, upgrade):
 			continue
 		if not upgrade.repeatable:
@@ -105,7 +107,7 @@ func _shelves() -> Dictionary:
 		if not shelves.has(key):
 			shelves[key] = []
 		shelves[key].append(upgrade)
-	# Cheapest first, which for property is also the order the ladder is climbed.
+	# Cheapest first, so a shelf reads as a run of affordable steps.
 	for key in shelves:
 		shelves[key].sort_custom(func(a: UpgradeDefinition, b: UpgradeDefinition) -> bool:
 			return _card_cost(a) < _card_cost(b)
@@ -299,16 +301,19 @@ func _show_upgrade_detail(upgrade: UpgradeDefinition, group_key: String, can_buy
 		})
 	var prerequisite: String = UpgradePresentation.prerequisite_text(upgrade)
 	if prerequisite != "":
+		var reason: String = "Take the step before it first."
+		if upgrade.requires_dwelling != "":
+			reason = "This belongs to a later chapter than the one this run is in."
 		rows.append({
 			"rule": prerequisite,
-			"text": "This is further up the ladder than you are. Take the step before it first.",
+			"text": reason,
 			"role": "warning",
 		})
 	if UpgradePresentation.hardware_space_full(upgrade):
 		var space: Dictionary = UpgradePresentation.hardware_space()
 		rows.append({
 			"rule": "No hardware space",
-			"text": "The %s holds %d machines and all %d are running. Move somewhere bigger before buying another." % [
+			"text": "The %s holds %d machines and all %d are running. Sell something before buying another." % [
 				space.get("dwelling", ""),
 				int(space.get("total", 0)),
 				int(space.get("used", 0)),

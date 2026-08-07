@@ -587,6 +587,10 @@ const DERIVED_PATHS := [
 	"compute.efficiency",
 	"compute.local_capacity",
 	"compute.power_draw",
+	## An upgrade's `+N cooling` is a description of the unit, not an instruction
+	## to add N to the run. ComputeSystem sums it back out of what is installed,
+	## which is what stops moving, reloading or recalculating counting it twice.
+	"compute.cooling",
 ]
 
 

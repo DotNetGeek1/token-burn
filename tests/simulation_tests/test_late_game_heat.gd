@@ -5,27 +5,18 @@ extends TestCase
 ## started being something the property ladder happened to include, so a rig
 ## grown past the garage could not be brought back down at all.
 ##
-## Every era is checked the way a player reaches it: buy the space, buy the
-## machine, buy the cooling that era sells, and then ask whether venting still
-## works. If it does not, the era is unplayable.
+## Every era is checked the way a player reaches it: start in that chapter's
+## location, buy the machine, buy the cooling that era sells, and then ask
+## whether venting still works. If it does not, the era is unplayable.
 
-## Each rung of the intended ladder: the space, the machine that belongs in it,
-## and the cooling on sale there.
+## Each chapter of the campaign: where the run happens, the machine that belongs
+## in it, and the cooling on sale there.
 const ERAS := [
-	{"dwelling": "", "hardware": "upgrade.custom_desktop", "cooler": "upgrade.portable_ac"},
-	{"dwelling": "upgrade.garage", "hardware": "upgrade.gpu_rack", "cooler": "upgrade.immersion_cooling"},
-	{"dwelling": "upgrade.office_unit", "hardware": "upgrade.compute_cluster", "cooler": "upgrade.industrial_chiller"},
-	{"dwelling": "upgrade.warehouse", "hardware": "upgrade.garage_datacentre", "cooler": "upgrade.chilled_water_plant"},
-	{"dwelling": "upgrade.datacentre_campus", "hardware": "upgrade.compute_warehouse", "cooler": "upgrade.cryo_exchange"},
-]
-
-## The property ladder is climbed one rung at a time, so reaching a rung means
-## buying everything under it too.
-const LADDER := [
-	"upgrade.garage",
-	"upgrade.office_unit",
-	"upgrade.warehouse",
-	"upgrade.datacentre_campus",
+	{"location": "bedroom", "hardware": "upgrade.custom_desktop", "cooler": "upgrade.portable_ac"},
+	{"location": "garage", "hardware": "upgrade.gpu_rack", "cooler": "upgrade.immersion_cooling"},
+	{"location": "office_unit", "hardware": "upgrade.compute_cluster", "cooler": "upgrade.industrial_chiller"},
+	{"location": "warehouse", "hardware": "upgrade.garage_datacentre", "cooler": "upgrade.chilled_water_plant"},
+	{"location": "datacentre_campus", "hardware": "upgrade.compute_warehouse", "cooler": "upgrade.cryo_exchange"},
 ]
 
 
@@ -104,20 +95,14 @@ func _test_a_hot_late_rig_can_be_cooled_back_to_zero() -> void:
 	sim.free()
 
 
-## A run that has climbed to one era of the ladder, with the money already
-## spent and nothing else bought that would muddy the heat maths.
+## A run set in one chapter of the campaign, with the money already there and
+## nothing else bought that would muddy the heat maths.
 func _rig_for(era: Dictionary) -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(6100)
+	sim.apply_run_location(sim.run_state, str(era["location"]))
 	sim.run_state.economy["cash"] = 1.0e15
-	var target: String = str(era["dwelling"])
-	for step in LADDER:
-		if target == "":
-			break
-		assert_true(sim.buy_upgrade(step), "Rented the %s" % step)
-		if step == target:
-			break
 	assert_true(sim.buy_upgrade(str(era["hardware"])), "Bought the %s" % str(era["hardware"]))
 	var cooler: String = str(era["cooler"])
 	var safety: int = 0

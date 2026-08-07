@@ -13,6 +13,7 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	run_state.compute["local_capacity"] = hardware_rate
 	run_state.compute["power_draw"] = power_draw
 	_update_power_cost(run_state, power_draw)
+	var base_cooling: float = derive_cooling(run_state)
 	var cloud_rate: float = float(run_state.compute.get("cloud_capacity", 0.0)) + float(
 		run_state.compute.get("cloud_burst", 0.0)
 	)
@@ -36,10 +37,27 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	mod_ctx.set_value("compute.token_rate", base_rate)
 	mod_ctx.set_value("compute.efficiency", base_efficiency)
 	mod_ctx.set_value("compute.local_capacity", hardware_rate)
+	mod_ctx.set_value("compute.cooling", base_cooling)
 	effect_resolver.dispatch("compute.recalculate", mod_ctx, subscriptions)
 	var efficiency: float = float(mod_ctx.get_value("compute.efficiency", base_efficiency))
 	run_state.compute["efficiency"] = efficiency
 	run_state.compute["token_rate"] = float(mod_ctx.get_value("compute.token_rate", base_rate)) * efficiency
+	run_state.compute["cooling"] = maxf(0.0, float(mod_ctx.get_value("compute.cooling", base_cooling)))
+
+
+## Cooling is derived from the run rather than accumulated onto it. Moving in,
+## reloading and recalculating used to each add the same environmental cooling
+## again; adding up what the run demonstrably has makes that impossible.
+##
+##     location cooling + installed cooling + permanent unlocks
+##
+## Modifiers get a say on top, for the length of one recalculation only.
+static func derive_cooling(run_state: RunState) -> float:
+	return (
+		UpgradeSystem.location_cooling(run_state, ContentDatabase)
+		+ UpgradeSystem.installed_cooling(run_state, ContentDatabase)
+		+ float(run_state.compute.get("meta_cooling", 0.0))
+	)
 
 
 ## Electricity is a standing charge plus metered draw, so bigger rigs cost more

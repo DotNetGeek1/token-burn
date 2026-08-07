@@ -94,7 +94,7 @@ func _show_qualification_progress() -> void:
 		cards_list.add_child(_note(
 			"The build qualifies, but nothing on rung %d is within reach of its infrastructure tier yet. "
 			% int(ladder.get("rung", 1))
-			+ "Take the next property or the next machine up."
+			+ "Take the next machine up."
 		))
 
 

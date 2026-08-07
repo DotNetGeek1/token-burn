@@ -186,18 +186,16 @@ func _test_power_scales_with_hardware() -> void:
 	assert_eq(state.compute.get("power_draw", 0.0), 2065.0, "Power draw sums the installed hardware")
 
 
+## Rent is a property of the chapter the run is set in, settled when it starts
+## and never renegotiated.
 func _test_rent_scales_with_dwelling() -> void:
 	var state := RunState.new()
-	var upgrades := UpgradeSystem.new()
-	var economy := EconomySystem.new()
-	var resolver := EffectResolver.new()
 	var starting_rent: float = float(state.economy.get("round_rent", 0.0))
-	state.economy["cash"] = 100000.0
-	assert_true(upgrades.purchase(state, "upgrade.garage", ContentDatabase, resolver, economy), "Dwelling upgrade purchased")
+	Simulation.apply_run_location(state, "garage")
 	var dwelling_rent: float = float(ContentDatabase.balance.get("dwelling_costs", {}).get("garage", {}).get("rent", 0.0))
 	var multiplier: float = float(state.economy.get("rent_multiplier", 1.0))
-	assert_eq(state.economy.get("round_rent", 0.0), dwelling_rent * multiplier, "Rent follows the dwelling tier and difficulty")
-	assert_true(float(state.economy.get("round_rent", 0.0)) > starting_rent, "Moving somewhere bigger raises rent")
+	assert_eq(state.economy.get("round_rent", 0.0), dwelling_rent * multiplier, "Rent follows the location and difficulty")
+	assert_true(float(state.economy.get("round_rent", 0.0)) > starting_rent, "A bigger space costs more to keep")
 
 
 func _test_pending_bills_processing(economy: EconomySystem) -> void:

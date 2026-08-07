@@ -14,17 +14,19 @@ func run() -> void:
 	_test_current_rate_scale_matches_recalculation()
 
 
-func _make_sim(run_seed: int = 601) -> Node:
+## A rack belongs to the garage chapter, so these run there rather than buying
+## their way out of a bedroom.
+func _make_sim(run_seed: int = 601, location: String = "garage") -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(run_seed)
+	sim.apply_run_location(sim.run_state, location)
 	sim.run_state.economy["cash"] = 500_000.0
 	return sim
 
 
 func _test_gpu_rack_adds_full_rate_without_modifiers() -> void:
 	var sim := _make_sim(601)
-	assert_true(sim.buy_upgrade("upgrade.garage"), "Garage rented for the rack")
 	var before: float = float(sim.run_state.compute.get("token_rate", 0.0))
 	assert_true(sim.buy_upgrade("upgrade.gpu_rack"), "GPU rack purchased")
 	var after: float = float(sim.run_state.compute.get("token_rate", 0.0))
@@ -39,7 +41,6 @@ func _test_gpu_rack_adds_full_rate_without_modifiers() -> void:
 
 func _test_gpu_rack_respects_efficiency_debuff() -> void:
 	var sim := _make_sim(602)
-	assert_true(sim.buy_upgrade("upgrade.garage"), "Garage rented for the rack")
 	sim.run_state.compute["efficiency_base"] = 0.82
 	sim._compute_system.recalculate(
 		sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
@@ -60,8 +61,8 @@ func _test_cooling_shortfall_reports_heat_per_prompt() -> void:
 	var prior_autosave: bool = Simulation.autosave_enabled
 	Simulation.autosave_enabled = false
 	Simulation.start_run(603)
+	Simulation.apply_run_location(Simulation.run_state, "garage")
 	Simulation.run_state.economy["cash"] = 500_000.0
-	assert_true(Simulation.buy_upgrade("upgrade.garage"), "Garage rented")
 	var gpu_rack: UpgradeDefinition = ContentDatabase.get_upgrade("upgrade.gpu_rack")
 	assert_true(gpu_rack != null, "GPU rack upgrade exists")
 	var shortfall: Dictionary = UpgradePresentation.cooling_shortfall(gpu_rack)

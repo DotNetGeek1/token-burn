@@ -15,7 +15,10 @@ func run() -> void:
 
 
 func _test_bedroom_sustains_starting_laptop() -> void:
-	var outlook: Dictionary = Simulation.heat_outlook()
+	# Cooling is derived from the location the run is in, so there has to be a
+	# run: an untouched simulation is not in a bedroom, it is nowhere.
+	var sim: Node = _make_sim(779)
+	var outlook: Dictionary = sim.heat_outlook()
 	assert_true(
 		bool(outlook.get("sustainable", false)),
 		"Starting bedroom cooling should keep up with the used laptop (need %d, have %d)" % [
@@ -27,6 +30,7 @@ func _test_bedroom_sustains_starting_laptop() -> void:
 		float(outlook.get("heat_per_prompt", 0.0)) <= 0.0,
 		"Ambient heat should not climb every prompt before any burns"
 	)
+	sim.free()
 
 
 func _test_same_source_rate_modifier_replaces() -> void:

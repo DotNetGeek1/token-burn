@@ -25,9 +25,13 @@ func _test_every_rig_can_be_cooled() -> void:
 	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.025))
 	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.35))
 	var dwellings: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
+	# One run, one location: the best environment on offer, not every one of
+	# them stacked on top of each other.
 	var best_dwelling_cooling: float = 0.0
 	for key in dwellings.keys():
-		best_dwelling_cooling += float(dwellings[key].get("cooling_capacity", 0.0))
+		best_dwelling_cooling = maxf(
+			best_dwelling_cooling, float(dwellings[key].get("cooling_capacity", 0.0))
+		)
 	var upgrade_cooling: float = 0.0
 	for upgrade in ContentDatabase.upgrades:
 		for effect in upgrade.effects:
@@ -45,28 +49,28 @@ func _test_every_rig_can_be_cooled() -> void:
 		"Every rig together can be cooled (need %d, max purchasable %d)" % [int(ceil(needed)), int(max_cooling)]
 	)
 
-	# The warehouse is the space that makes a rack viable, so it must be buyable.
-	var has_warehouse_upgrade: bool = false
-	for upgrade in ContentDatabase.upgrades:
-		if upgrade.dwelling_key == "warehouse":
-			has_warehouse_upgrade = true
-	assert_true(has_warehouse_upgrade, "Warehouse dwelling is purchasable")
+	# The warehouse is the space that makes a rack viable, so the campaign has
+	# to contain it as a chapter the player can eventually reach.
+	assert_true(
+		"warehouse" in MetaProgress.location_order(),
+		"The warehouse is a location the campaign leads to"
+	)
 
 
 func _test_rack_needs_industrial_space() -> void:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(501)
+	sim.apply_run_location(sim.run_state, "garage")
 	sim.run_state.economy["cash"] = 200000.0
 	assert_true(sim.buy_upgrade("upgrade.portable_ac"), "Air conditioner bought")
-	assert_true(sim.buy_upgrade("upgrade.garage"), "Garage rented")
 	assert_true(sim.buy_upgrade("upgrade.gpu_rack"), "GPU rack bought")
 	var garage_outlook: Dictionary = sim.heat_outlook()
 	assert_false(bool(garage_outlook.get("sustainable", true)), "A rack still cooks in the garage")
 
-	# Property is a ladder, so the office is the step between the two.
-	assert_true(sim.buy_upgrade("upgrade.office_unit"), "Office unit rented")
-	assert_true(sim.buy_upgrade("upgrade.warehouse"), "Warehouse leased")
+	# The same rig, a chapter later. Nothing was bought to get here: the run
+	# would have started in the warehouse.
+	sim.apply_run_location(sim.run_state, "warehouse")
 	var warehouse_outlook: Dictionary = sim.heat_outlook()
 	assert_true(bool(warehouse_outlook.get("sustainable", false)), "A rack is sustainable in the warehouse")
 	assert_true(float(warehouse_outlook.get("heat_per_prompt", 1.0)) <= 0.0, "Warehouse cooling out-paces the rack")
