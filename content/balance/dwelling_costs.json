@@ -1,0 +1,37 @@
+{
+  "bedroom": {
+    "rent": 400,
+    "hardware_slots": 2,
+    "cooling_capacity": 16
+  },
+  "garage": {
+    "rent": 1400,
+    "hardware_slots": 4,
+    "cooling_capacity": 120
+  },
+  "office_unit": {
+    "rent": 3200,
+    "hardware_slots": 8,
+    "cooling_capacity": 480
+  },
+  "warehouse": {
+    "rent": 8000,
+    "hardware_slots": 16,
+    "cooling_capacity": 2000
+  },
+  "datacentre_campus": {
+    "rent": 150000,
+    "hardware_slots": 40,
+    "cooling_capacity": 15000
+  },
+  "private_power_grid": {
+    "rent": 900000,
+    "hardware_slots": 80,
+    "cooling_capacity": 60000
+  },
+  "moon_facility": {
+    "rent": 6000000,
+    "hardware_slots": 160,
+    "cooling_capacity": 300000
+  }
+}

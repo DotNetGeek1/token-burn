@@ -1,0 +1,9 @@
+[
+  {"threshold": 1000000, "template": "Equivalent to {value} novels"},
+  {"threshold": 1000000000, "template": "{value} years of human speech"},
+  {"threshold": 1000000000000, "template": "{value} copies of Stack Overflow"},
+  {"threshold": 1000000000000000, "template": "{value} React components generated"},
+  {"threshold": 1000000000000000000, "template": "About {value} internets of context"},
+  {"threshold": 1000000000000000000000, "template": "{value} times every word ever spoken by humanity"},
+  {"threshold": 1000000000000000000000000, "template": "{value} civilisations' worth of prompts"}
+]

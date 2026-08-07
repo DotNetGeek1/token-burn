@@ -1,0 +1,48 @@
+{
+  "job_reward_curve": {
+    "base": 400,
+    "exponent": 1.42
+  },
+  "token_requirement_curve": {
+    "base": 1000000,
+    "exponent": 1.15
+  },
+  "starting_rent": 400,
+  "power_cost_per_watt_prompt": 0.05,
+  "cloud_burst_cost_per_token": 0.00008,
+  "cloud_burst_activation_fee": 25,
+  "heat": {
+    "gain_per_power": 0.06,
+    "cooling_factor": 0.25,
+    "throttle_ratio": 0.8,
+    "throttle_multiplier": 0.75,
+    "round_end_retained": 0.5,
+    "vent_ratio": 0.45
+  },
+  "infrastructure_tiers": {
+    "dwelling": {
+      "bedroom": 0,
+      "garage": 1,
+      "office_unit": 2,
+      "warehouse": 3,
+      "datacentre_campus": 4,
+      "private_power_grid": 5,
+      "moon_facility": 5
+    },
+    "hardware": {
+      "used_laptop": 0,
+      "custom_desktop": 0,
+      "portable_ac": 0,
+      "immersion_cooling": 0,
+      "industrial_chiller": 0,
+      "chilled_water_plant": 0,
+      "cryo_exchange": 0,
+      "gpu_rack": 1,
+      "compute_cluster": 2,
+      "garage_datacentre": 3,
+      "compute_warehouse": 4,
+      "industrial_campus": 5,
+      "orbital_cooling_array": 0
+    }
+  }
+}

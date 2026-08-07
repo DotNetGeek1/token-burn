@@ -1,0 +1,861 @@
+[
+  {
+    "id": "op.prompt",
+    "name": "Hand-Written Prompt",
+    "category": "prompt",
+    "rarity": "common",
+    "starter": true,
+    "opens_pipeline": true,
+    "badge": "×{progress}",
+    "tags": ["prompt", "safe"],
+    "description_template": "Honest work. ×{progress} progress and +{quality} quality, free.",
+    "parameters": {"progress": 1.25, "quality": 4, "combo_progress": 1.2, "combo_quality": 8},
+    "combos": [
+      {
+        "name": "Read the Docs",
+        "after": ["op.prompt_library"],
+        "description": "Straight after the Prompt Library: ×{combo_progress} progress and +{combo_quality} quality on top."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$combo_progress",
+        "conditions": [{"left": "$prev_op", "operator": "in", "right": ["op.prompt_library"]}]
+      },
+      {
+        "operation": "add",
+        "target": "stage.quality",
+        "value": "$combo_quality",
+        "conditions": [{"left": "$prev_op", "operator": "in", "right": ["op.prompt_library"]}]
+      }
+    ]
+  },
+  {
+    "id": "op.large_context",
+    "name": "Large Context",
+    "category": "context",
+    "rarity": "common",
+    "starter": false,
+    "badge": "+{quality} Q",
+    "tags": ["context", "quality"],
+    "description_template": "Feed it the whole repository. +{quality} quality for ${cost} a batch.",
+    "parameters": {"quality": 16, "cost": 45},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.cheap_model",
+    "name": "Cheap Model",
+    "category": "model",
+    "rarity": "common",
+    "starter": true,
+    "opens_pipeline": true,
+    "badge": "×{progress}",
+    "tags": ["model", "risk"],
+    "description_template": "×{progress} progress and +{bugs} bug, for ${cost} a batch.",
+    "parameters": {"progress": 1.8, "bugs": 1, "cost": 12, "combo_bugs": -1},
+    "combos": [
+      {
+        "name": "Something to Copy",
+        "after": ["op.distillation", "op.premium_model", "op.foundation_model"],
+        "description": "Placed under a proper model it has good output to imitate, and writes no bug at all."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.bugs", "value": "$bugs"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {
+        "operation": "add",
+        "target": "stage.bugs",
+        "value": "$combo_bugs",
+        "conditions": [
+          {
+            "left": "$prev_op",
+            "operator": "in",
+            "right": ["op.distillation", "op.premium_model", "op.foundation_model"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.premium_model",
+    "name": "Frontier Model",
+    "category": "model",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "×{progress}",
+    "tags": ["model", "quality", "expensive"],
+    "description_template": "×{progress} progress and +{quality} quality. Bills ${cost} a batch.",
+    "parameters": {"progress": 1.4, "quality": 18, "cost": 220},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.agent_swarm",
+    "name": "Agent Swarm",
+    "category": "agent",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "Repeat",
+    "tags": ["agent", "recursion", "heat"],
+    "description_template": "Runs the stage above this one again at {strength}% strength. +{heat} heat, ${cost} a batch.",
+    "parameters": {"repeat": 1.0, "strength": 100, "heat": 8, "cost": 30, "combo_heat": -6},
+    "combos": [
+      {
+        "name": "Briefed First",
+        "after": ["op.whiteboard", "op.rubber_duck", "op.large_context"],
+        "description": "Agents given the context up front need less supervising: {combo_heat} heat."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "add", "target": "stage.repeat_previous", "value": "$repeat"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {
+        "operation": "add",
+        "target": "stage.heat",
+        "value": "$combo_heat",
+        "conditions": [
+          {
+            "left": "$prev_op",
+            "operator": "in",
+            "right": ["op.whiteboard", "op.rubber_duck", "op.large_context"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.token_cache",
+    "name": "Token Cache",
+    "category": "cache",
+    "rarity": "common",
+    "starter": false,
+    "badge": "-{discount_pct}%",
+    "tags": ["cache", "economy", "positional"],
+    "description_template": "The stage below this one costs {discount_pct}% less. Placed last there is nothing below it, so it banks output instead: +{stored_quality} quality.",
+    "parameters": {
+      "cost_mult": 0.6,
+      "discount_pct": 0.4,
+      "stored_quality": 7,
+      "combo_cost_mult": 0.5
+    },
+    "combos": [
+      {
+        "name": "Warm Cache",
+        "before": ["op.premium_model", "op.foundation_model", "op.quantum_annealer", "op.agi_prototype"],
+        "description": "Above one of the expensive models, the discount doubles down: another ×{combo_cost_mult} on its bill."
+      }
+    ],
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.next_cost_mult",
+        "value": "$cost_mult",
+        "conditions": []
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.next_cost_mult",
+        "value": "$combo_cost_mult",
+        "conditions": [
+          {
+            "left": "$next_op",
+            "operator": "in",
+            "right": ["op.premium_model", "op.foundation_model", "op.quantum_annealer", "op.agi_prototype"]
+          }
+        ]
+      },
+      {
+        "operation": "add",
+        "target": "stage.quality",
+        "value": "$stored_quality",
+        "conditions": [{"left": "$is_last_stage", "operator": "==", "right": true}]
+      }
+    ]
+  },
+  {
+    "id": "op.unit_tests",
+    "name": "Unit Tests",
+    "category": "test",
+    "rarity": "common",
+    "starter": true,
+    "opens_pipeline": true,
+    "badge": "Test",
+    "tags": ["test", "bugs", "quality"],
+    "description_template": "Reveals up to {reveal} hidden bugs and fixes up to {fix}. +{quality} quality, ×{progress} progress, free.",
+    "parameters": {
+      "reveal": 2,
+      "fix": 2,
+      "quality": 6,
+      "progress": 0.85,
+      "combo_fix": 2,
+      "combo_quality": 6
+    },
+    "combos": [
+      {
+        "name": "Caught in Review",
+        "after": ["op.cheap_model", "op.stack_overflow", "op.tech_debt_collector", "op.vibe_coder"],
+        "description": "Testing whatever the stage above just wrote: +{combo_fix} more fixes and +{combo_quality} more quality."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "add", "target": "stage.reveal_bugs", "value": "$reveal"},
+      {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {
+        "operation": "add",
+        "target": "stage.fix_bugs",
+        "value": "$combo_fix",
+        "conditions": [
+          {
+            "left": "$prev_op",
+            "operator": "in",
+            "right": ["op.cheap_model", "op.stack_overflow", "op.tech_debt_collector", "op.vibe_coder"]
+          }
+        ]
+      },
+      {
+        "operation": "add",
+        "target": "stage.quality",
+        "value": "$combo_quality",
+        "conditions": [
+          {
+            "left": "$prev_op",
+            "operator": "in",
+            "right": ["op.cheap_model", "op.stack_overflow", "op.tech_debt_collector", "op.vibe_coder"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.overclock",
+    "name": "Overclock",
+    "category": "hardware",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "×{throughput}",
+    "tags": ["hardware", "heat", "risk"],
+    "description_template": "×{throughput} tokens through the whole pipeline. +{heat} heat, ${cost} a batch.",
+    "parameters": {"throughput": 2.0, "heat": 18, "cost": 10},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.token_mult", "value": "$throughput"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.ship_it",
+    "name": "Ship It",
+    "category": "deploy",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "Q→P",
+    "tags": ["deploy", "risk", "positional"],
+    "description_template": "Converts {convert_pct}% of this batch's quality straight into progress. Every bug written below it stays hidden.",
+    "parameters": {"convert": 1.0, "convert_pct": 1.0, "combo_progress": 1.5},
+    "combos": [
+      {
+        "name": "Nobody Stopped Us",
+        "after": ["op.vibe_coder", "op.launch_party", "op.tech_debt_collector"],
+        "description": "Following another shortcut, the whole batch runs at ×{combo_progress} progress."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality_to_progress", "value": "$convert"},
+      {"operation": "add", "target": "stage.hide_bugs", "value": 1},
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$combo_progress",
+        "conditions": [
+          {
+            "left": "$prev_op",
+            "operator": "in",
+            "right": ["op.vibe_coder", "op.launch_party", "op.tech_debt_collector"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.linter",
+    "name": "Aggressive Linter",
+    "category": "test",
+    "rarity": "common",
+    "starter": false,
+    "badge": "Fix {fix}",
+    "tags": ["test", "bugs"],
+    "description_template": "Fixes up to {fix} visible bugs and adds +{quality} quality. Slows the batch to ×{progress}.",
+    "parameters": {"fix": 3, "quality": 5, "progress": 0.9, "combo_fix": 2, "combo_progress": 1.1},
+    "combos": [
+      {
+        "name": "Style Guide Enforcement",
+        "after": ["op.cheap_model", "op.stack_overflow"],
+        "description": "Cheap output is easy to lint: +{combo_fix} more fixes and ×{combo_progress} progress back."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {
+        "operation": "add",
+        "target": "stage.fix_bugs",
+        "value": "$combo_fix",
+        "conditions": [
+          {"left": "$prev_op", "operator": "in", "right": ["op.cheap_model", "op.stack_overflow"]}
+        ]
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$combo_progress",
+        "conditions": [
+          {"left": "$prev_op", "operator": "in", "right": ["op.cheap_model", "op.stack_overflow"]}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.whiteboard",
+    "name": "Whiteboard Session",
+    "category": "context",
+    "rarity": "common",
+    "starter": false,
+    "badge": "Next ×{boost}",
+    "tags": ["context", "positional"],
+    "description_template": "Costs nothing and does nothing on its own. The stage below it runs at ×{boost} strength.",
+    "parameters": {"boost": 1.5},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.next_multiplier", "value": "$boost"}
+    ]
+  },
+  {
+    "id": "op.spot_instance",
+    "name": "Spot Instance",
+    "category": "hardware",
+    "rarity": "common",
+    "starter": false,
+    "badge": "×{throughput}?",
+    "tags": ["hardware", "risk", "economy"],
+    "description_template": "Usually ×{throughput} tokens for ${cost} and +{heat} heat a batch. Roughly one batch in four, the region has nothing spare and you get ×1.",
+    "parameters": {"throughput": 1.7, "cost": 8, "heat": 4},
+    "slot_effects": [
+      {"operation": "reroll", "target": "stage.token_mult", "value": {"pick": [1.7, 1.7, 1.7, 1.0]}},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"}
+    ]
+  },
+  {
+    "id": "op.monorepo",
+    "name": "The Monorepo",
+    "category": "context",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "×{progress}+",
+    "tags": ["context", "scaling"],
+    "description_template": "×{progress} progress and +{quality} quality for ${cost}, and ×{long_bonus} again once the pipeline runs {long_stages} stages or more.",
+    "parameters": {
+      "progress": 1.3,
+      "long_bonus": 1.4,
+      "long_stages": 4,
+      "quality": 6,
+      "cost": 30,
+      "combo_progress": 1.3
+    },
+    "combos": [
+      {
+        "name": "Indexed",
+        "after": ["op.large_context", "op.whiteboard"],
+        "description": "Somebody explained the repository first: ×{combo_progress} progress on top."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$long_bonus",
+        "conditions": [{"left": "$stage_count", "operator": ">=", "right": "$long_stages"}]
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$combo_progress",
+        "conditions": [
+          {"left": "$prev_op", "operator": "in", "right": ["op.large_context", "op.whiteboard"]}
+        ]
+      },
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.compliance_review",
+    "name": "Compliance Review",
+    "category": "test",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "Reveal all",
+    "tags": ["test", "bugs", "quality"],
+    "description_template": "Drags every hidden bug into the daylight and adds +{quality} quality, at ×{progress} progress and ${cost} a batch. Fixes nothing; now you simply know.",
+    "parameters": {"reveal": 99, "quality": 12, "progress": 0.8, "cost": 40},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.reveal_bugs", "value": "$reveal"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.pair_programmer",
+    "name": "Pair Programmer",
+    "category": "agent",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "Echo {strength}%",
+    "tags": ["agent", "recursion"],
+    "description_template": "Reruns the stage above at {strength}% strength and cleans up after it: -{fix} bug, ${cost} a batch.",
+    "parameters": {"repeat": 0.6, "strength": 60, "fix": 1, "cost": 55, "combo_repeat": 0.4, "combo_fix": 1},
+    "combos": [
+      {
+        "name": "Already Talked It Through",
+        "after": ["op.rubber_duck", "op.whiteboard"],
+        "description": "With the problem already stated out loud: +{combo_repeat} more echo and -{combo_fix} more bug."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "add", "target": "stage.repeat_previous", "value": "$repeat"},
+      {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {
+        "operation": "add",
+        "target": "stage.repeat_previous",
+        "value": "$combo_repeat",
+        "conditions": [
+          {"left": "$prev_op", "operator": "in", "right": ["op.rubber_duck", "op.whiteboard"]}
+        ]
+      },
+      {
+        "operation": "add",
+        "target": "stage.fix_bugs",
+        "value": "$combo_fix",
+        "conditions": [
+          {"left": "$prev_op", "operator": "in", "right": ["op.rubber_duck", "op.whiteboard"]}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.prompt_library",
+    "name": "Prompt Library",
+    "category": "prompt",
+    "rarity": "common",
+    "starter": false,
+    "badge": "×{progress}",
+    "tags": ["prompt", "safe", "positional"],
+    "description_template": "×{progress} progress and +{quality} quality, or ×{first_bonus} progress instead when it opens the pipeline.",
+    "parameters": {"progress": 1.3, "first_bonus": 1.7, "quality": 3},
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$progress",
+        "conditions": [{"left": "$is_first_stage", "operator": "==", "right": false}]
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$first_bonus",
+        "conditions": [{"left": "$is_first_stage", "operator": "==", "right": true}]
+      },
+      {"operation": "add", "target": "stage.quality", "value": "$quality"}
+    ]
+  },
+  {
+    "id": "op.distillation",
+    "name": "Distilled Model",
+    "category": "model",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "×{progress}",
+    "tags": ["model", "economy"],
+    "description_template": "×{progress} progress at ${cost} a batch, and the stage below it costs {discount_pct}% less.",
+    "parameters": {"progress": 1.45, "cost": 18, "cost_mult": 0.7, "discount_pct": 0.3},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "multiply", "target": "stage.next_cost_mult", "value": "$cost_mult"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.liquid_cooling",
+    "name": "Liquid Cooling Loop",
+    "category": "hardware",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "Cool",
+    "tags": ["hardware", "cooling", "positional"],
+    "description_template": "Takes {heat_cut} heat back off the batch for ${cost}, and lets the stage below it run at ×{boost}.",
+    "parameters": {
+      "heat_cut": 14,
+      "boost": 1.2,
+      "cost": 25,
+      "combo_heat": -12,
+      "combo_boost": 1.15
+    },
+    "combos": [
+      {
+        "name": "Loop Under Load",
+        "before": ["op.overclock", "op.quantum_annealer", "op.crunch_mode", "op.foundation_model"],
+        "description": "Plumbed straight into something that runs hot: {combo_heat} more heat and ×{combo_boost} more on the stage below."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "add", "target": "stage.heat", "value": -14},
+      {"operation": "multiply", "target": "stage.next_multiplier", "value": "$boost"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {
+        "operation": "add",
+        "target": "stage.heat",
+        "value": "$combo_heat",
+        "conditions": [
+          {
+            "left": "$next_op",
+            "operator": "in",
+            "right": ["op.overclock", "op.quantum_annealer", "op.crunch_mode", "op.foundation_model"]
+          }
+        ]
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.next_multiplier",
+        "value": "$combo_boost",
+        "conditions": [
+          {
+            "left": "$next_op",
+            "operator": "in",
+            "right": ["op.overclock", "op.quantum_annealer", "op.crunch_mode", "op.foundation_model"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.circuit_breaker",
+    "name": "Circuit Breaker",
+    "category": "hardware",
+    "rarity": "rare",
+    "starter": false,
+    "badge": "Cond.",
+    "tags": ["hardware", "cooling", "conditional"],
+    "description_template": "Below {trip}% heat: ×{progress} progress. At or above it the breaker trips and sheds {shed} heat instead.",
+    "parameters": {"trip": 70, "progress": 1.15, "shed": 20},
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$progress",
+        "conditions": [{"left": "$heat_ratio", "operator": "<", "right": 0.7}]
+      },
+      {
+        "operation": "add",
+        "target": "stage.heat",
+        "value": -20,
+        "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": 0.7}]
+      }
+    ]
+  },
+  {
+    "id": "op.launch_party",
+    "name": "Launch Party",
+    "category": "deploy",
+    "rarity": "rare",
+    "starter": false,
+    "badge": "Q→P {convert_pct}%",
+    "tags": ["deploy", "risk", "positional"],
+    "description_template": "Converts {convert_pct}% of the batch's quality into progress for ${cost}, and buries {hidden} bug in the aftermath.",
+    "parameters": {"convert": 0.6, "convert_pct": 0.6, "hidden": 1, "cost": 90},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality_to_progress", "value": "$convert"},
+      {"operation": "add", "target": "stage.hidden_bugs", "value": "$hidden"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.rubber_duck",
+    "name": "Rubber Duck",
+    "category": "context",
+    "rarity": "common",
+    "starter": false,
+    "unlock_achievement": "ach.retired",
+    "badge": "+{quality} Q",
+    "tags": ["context", "quality", "safe", "positional"],
+    "description_template": "Explain the problem out loud to a small yellow bird. +{quality} quality, and the stage below it runs at ×{boost}.",
+    "parameters": {"quality": 8, "boost": 1.1},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.next_multiplier", "value": "$boost"}
+    ]
+  },
+  {
+    "id": "op.stack_overflow",
+    "name": "Copy-Paste from Stack Overflow",
+    "category": "prompt",
+    "rarity": "common",
+    "starter": false,
+    "unlock_achievement": "ach.round_one_wipeout",
+    "badge": "×{progress}",
+    "tags": ["prompt", "risk", "bugs"],
+    "description_template": "Accepted answer, 2011, forty-one comments explaining why it is wrong. ×{progress} progress, +{bugs} bugs, ${cost} a batch.",
+    "parameters": {"progress": 1.9, "bugs": 2, "cost": 4},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.bugs", "value": "$bugs"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.the_intern",
+    "name": "The Intern",
+    "category": "agent",
+    "rarity": "common",
+    "starter": false,
+    "unlock_achievement": "ach.deep_pockets",
+    "badge": "Echo {strength}%",
+    "tags": ["agent", "recursion", "risk"],
+    "description_template": "Reruns the stage above at {strength}% strength for ${cost}, and contributes anywhere from {quality_worst} to +{quality_best} quality.",
+    "parameters": {"repeat": 0.4, "strength": 40, "cost": 5, "quality_worst": -4, "quality_best": 12},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.repeat_previous", "value": "$repeat"},
+      {"operation": "reroll", "target": "stage.quality", "value": {"pick": [-4, 0, 5, 12]}},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.regex_wizard",
+    "name": "Regex Wizard",
+    "category": "test",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "Fix {fix}",
+    "tags": ["test", "bugs", "positional"],
+    "description_template": "One unreadable line that fixes {fix} bugs and adds +{quality} quality for ${cost} — ×{first_bonus} as much quality if it opens the pipeline, before anyone can object.",
+    "parameters": {"fix": 2, "quality": 7, "first_bonus": 1.4, "cost": 15},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {
+        "operation": "multiply",
+        "target": "stage.quality",
+        "value": "$first_bonus",
+        "conditions": [{"left": "$is_first_stage", "operator": "==", "right": true}]
+      },
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.tech_debt_collector",
+    "name": "Tech Debt Collector",
+    "category": "deploy",
+    "rarity": "uncommon",
+    "starter": false,
+    "badge": "×{progress}",
+    "tags": ["deploy", "risk", "economy"],
+    "description_template": "Borrows against tomorrow at ×{progress} progress and ${cost} a batch. Buries {hidden} bug as collateral.",
+    "parameters": {"progress": 1.75, "hidden": 1, "cost": 12},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.hidden_bugs", "value": "$hidden"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.chaos_monkey",
+    "name": "Chaos Monkey",
+    "category": "test",
+    "rarity": "uncommon",
+    "starter": false,
+    "unlock_achievement": "ach.datacentre_flambe",
+    "badge": "×?",
+    "tags": ["test", "risk", "bugs"],
+    "description_template": "Breaks things on purpose so they cannot break by surprise. Reveals {reveal} hidden bugs, +{heat} heat, ${cost} a batch, and a progress multiplier somewhere between ×{worst} and ×{best}.",
+    "parameters": {"reveal": 3, "heat": 6, "cost": 20, "worst": 0.7, "best": 2.2},
+    "slot_effects": [
+      {"operation": "reroll", "target": "stage.progress_mult", "value": {"pick": [0.7, 1.0, 1.6, 2.2]}},
+      {"operation": "add", "target": "stage.reveal_bugs", "value": "$reveal"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.vibe_coder",
+    "name": "Vibe Coder",
+    "category": "deploy",
+    "rarity": "uncommon",
+    "starter": false,
+    "unlock_achievement": "ach.bug_farm",
+    "badge": "Q→P {convert_pct}%",
+    "tags": ["deploy", "risk", "positional"],
+    "description_template": "Did not read it. Felt right. Turns {convert_pct}% of quality into progress, adds +{quality} quality of its own, and hides {hidden} bug on the way out.",
+    "parameters": {"convert": 0.45, "convert_pct": 0.45, "hidden": 1, "quality": 5},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality_to_progress", "value": "$convert"},
+      {"operation": "add", "target": "stage.hidden_bugs", "value": "$hidden"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"}
+    ]
+  },
+  {
+    "id": "op.blameless_postmortem",
+    "name": "Blameless Post-Mortem",
+    "category": "test",
+    "rarity": "rare",
+    "starter": false,
+    "unlock_achievement": "ach.serial_loser",
+    "badge": "Fix {fix}",
+    "tags": ["test", "bugs", "quality"],
+    "description_template": "Nobody is at fault, which is why it keeps happening. Reveals {reveal} and fixes {fix} bugs, +{quality} quality, ×{progress} progress, ${cost} a batch.",
+    "parameters": {
+      "reveal": 4,
+      "fix": 4,
+      "quality": 14,
+      "progress": 0.88,
+      "cost": 35,
+      "combo_fix": 4
+    },
+    "combos": [
+      {
+        "name": "Everything Is On the Board",
+        "after": ["op.compliance_review", "op.chaos_monkey"],
+        "description": "Following a stage that surfaced everything, it fixes {combo_fix} more."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "add", "target": "stage.reveal_bugs", "value": "$reveal"},
+      {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {
+        "operation": "add",
+        "target": "stage.fix_bugs",
+        "value": "$combo_fix",
+        "conditions": [
+          {"left": "$prev_op", "operator": "in", "right": ["op.compliance_review", "op.chaos_monkey"]}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.quantum_annealer",
+    "name": "Quantum Annealer",
+    "category": "hardware",
+    "rarity": "rare",
+    "starter": false,
+    "unlock_achievement": "ach.trillion_burn",
+    "badge": "×{throughput}",
+    "tags": ["hardware", "heat", "risk", "expensive"],
+    "description_template": "×{throughput} tokens through the whole pipeline for ${cost} a batch. Adds {heat} heat, which is the polite word for it.",
+    "parameters": {"throughput": 3.2, "heat": 34, "cost": 260},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.token_mult", "value": "$throughput"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.crunch_mode",
+    "name": "Crunch Mode",
+    "category": "agent",
+    "rarity": "rare",
+    "starter": false,
+    "unlock_achievement": "ach.full_board",
+    "badge": "Repeat ×2",
+    "tags": ["agent", "recursion", "heat", "risk"],
+    "description_template": "Runs the stage above this one again at {strength}% strength. +{heat} heat, +{bugs} bug, ${cost} a batch, and everyone is very tired.",
+    "parameters": {"repeat": 1.8, "strength": 180, "heat": 22, "bugs": 1, "cost": 120},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.repeat_previous", "value": "$repeat"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.bugs", "value": "$bugs"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.foundation_model",
+    "name": "Foundation Model",
+    "category": "model",
+    "rarity": "legendary",
+    "starter": false,
+    "unlock_achievement": "ach.tier_three",
+    "badge": "×{progress}",
+    "tags": ["model", "quality", "expensive"],
+    "description_template": "You trained your own. ×{progress} progress, +{quality} quality, +{heat} heat, and an invoice of ${cost} a batch that you have stopped reading.",
+    "parameters": {"progress": 2.4, "quality": 40, "cost": 900, "heat": 12},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.agi_prototype",
+    "name": "AGI Prototype",
+    "category": "model",
+    "rarity": "legendary",
+    "starter": false,
+    "unlock_achievement": "ach.endless_ten",
+    "badge": "Next ×{boost}",
+    "tags": ["model", "heat", "risk", "positional"],
+    "description_template": "It has read the pipeline and has notes. ×{progress} progress here, ×{boost} on the stage below it, +{heat} heat, ${cost} a batch, and {hidden} hidden bug it insists is a feature.",
+    "parameters": {
+      "progress": 1.6,
+      "boost": 2.2,
+      "heat": 28,
+      "hidden": 1,
+      "cost": 400,
+      "combo_boost": 1.5
+    },
+    "combos": [
+      {
+        "name": "It Supervises Itself",
+        "before": ["op.agent_swarm", "op.crunch_mode", "op.pair_programmer", "op.the_intern"],
+        "description": "Handing the echo stage below it a plan: another ×{combo_boost} on top of the boost."
+      }
+    ],
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "multiply", "target": "stage.next_multiplier", "value": "$boost"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.hidden_bugs", "value": "$hidden"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {
+        "operation": "multiply",
+        "target": "stage.next_multiplier",
+        "value": "$combo_boost",
+        "conditions": [
+          {
+            "left": "$next_op",
+            "operator": "in",
+            "right": ["op.agent_swarm", "op.crunch_mode", "op.pair_programmer", "op.the_intern"]
+          }
+        ]
+      }
+    ]
+  }
+]

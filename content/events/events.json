@@ -1,0 +1,279 @@
+[
+  {
+    "id": "event.cloud_price_spike",
+    "name": "Cloud Price Spike",
+    "description": "Your provider raises prices overnight.",
+    "trigger_event": "round.ended",
+    "weight": 1.2,
+    "conditions": [],
+    "effects": [
+      {"operation": "multiply", "target": "economy.cloud_liability", "value": 1.5}
+    ]
+  },
+  {
+    "id": "event.power_cut",
+    "name": "Power Cut",
+    "description": "Local compute is offline for a day.",
+    "trigger_event": "round.ended",
+    "weight": 1.0,
+    "conditions": [],
+    "effects": [
+      {"operation": "multiply", "target": "compute.token_rate", "value": 0.7}
+    ]
+  },
+  {
+    "id": "event.viral_post",
+    "name": "Viral Post",
+    "description": "Your ad campaign worked too well.",
+    "trigger_event": "round.ended",
+    "weight": 0.9,
+    "conditions": [],
+    "effects": [
+      {"operation": "add", "target": "business.reputation", "value": 5}
+    ]
+  },
+  {
+    "id": "event.client_referral",
+    "name": "Client Referral",
+    "description": "A happy client sends more work.",
+    "trigger_event": "round.ended",
+    "weight": 1.1,
+    "conditions": [],
+    "effects": [
+      {"operation": "add", "target": "business.demand_modifier", "value": 1}
+    ]
+  },
+  {
+    "id": "event.hardware_failure",
+    "name": "Hardware Failure",
+    "description": "A fan dies. Heat spikes.",
+    "trigger_event": "round.ended",
+    "weight": 0.8,
+    "conditions": [],
+    "effects": [
+      {"operation": "add", "target": "compute.heat", "value": 25}
+    ]
+  },
+  {
+    "id": "event.scope_creep_email",
+    "name": "Scope Creep Email",
+    "description": "\"Quick question — can you also rebuild the whole platform? It's basically done already.\"",
+    "trigger_event": "round.ended",
+    "weight": 1.0,
+    "conditions": [],
+    "effects": [
+      {"operation": "multiply", "target": "compute.token_rate", "value": 0.88},
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.scope_creep",
+          "name": "Scope Creep Backlog",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "prompt.started",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {"operation": "add", "target": "business.demand_modifier", "value": 0.35}
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "event.cloud_bill_shock",
+    "name": "Cloud Bill Shock",
+    "description": "Finance forwards the invoice with a single sweating emoji.",
+    "trigger_event": "round.ended",
+    "weight": 1.1,
+    "conditions": [
+      {"left": "economy.cloud_liability", "operator": ">", "right": 0}
+    ],
+    "effects": [
+      {"operation": "defer_cost", "target": "economy.cash", "value": 220}
+    ]
+  },
+  {
+    "id": "event.landlord_inspection",
+    "name": "Landlord Inspection",
+    "description": "Surprise visit. The server rack is definitely not a humidifier.",
+    "trigger_event": "round.ended",
+    "weight": 0.95,
+    "conditions": [],
+    "effects": [
+      {"operation": "add", "target": "compute.heat", "value": 18},
+      {"operation": "multiply", "target": "compute.token_rate", "value": 0.72}
+    ]
+  },
+  {
+    "id": "event.viral_bug",
+    "name": "Viral Bug",
+    "description": "Production is down. Twitter is up. Your DMs are not.",
+    "trigger_event": "round.ended",
+    "weight": 0.85,
+    "conditions": [],
+    "effects": [
+      {"operation": "multiply", "target": "compute.efficiency_base", "value": 0.68},
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.incident_war_room",
+          "name": "Incident War Room",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "prompt.started",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {"operation": "add", "target": "compute.heat", "value": 4}
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "event.investor_call",
+    "name": "Investor Call",
+    "description": "\"Just a friendly bridge round. Totally standard terms.\"",
+    "trigger_event": "round.ended",
+    "weight": 0.75,
+    "conditions": [
+      {"left": "economy.cash", "operator": "<", "right": 350}
+    ],
+    "effects": [
+      {"operation": "borrow", "target": "economy.cash", "value": 450},
+      {"operation": "add", "target": "business.reputation", "value": 4}
+    ]
+  },
+  {
+    "id": "event.linkedin_humblebrag",
+    "name": "LinkedIn Humblebrag",
+    "description": "You sponsored a thought-leadership post. Engagement is up. Cash is not.",
+    "trigger_event": "round.ended",
+    "weight": 0.9,
+    "conditions": [],
+    "effects": [
+      {"operation": "add", "target": "economy.cash", "value": -140},
+      {"operation": "add", "target": "business.reputation", "value": 7}
+    ]
+  },
+  {
+    "id": "event.slack_ping_storm",
+    "name": "Slack Ping Storm",
+    "description": "Forty-seven channels. All marked urgent. Zero context.",
+    "trigger_event": "round.ended",
+    "weight": 1.0,
+    "conditions": [],
+    "effects": [
+      {"operation": "discount", "target": "compute.efficiency_base", "value": 0.15},
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.notification_fatigue",
+          "name": "Notification Fatigue",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "compute.recalculate",
+              "priority": 5,
+              "conditions": [],
+              "effects": [
+                {"operation": "multiply", "target": "compute.efficiency", "value": 0.97}
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "event.conference_sponsorship",
+    "name": "Conference Sponsorship",
+    "description": "You bought the bronze booth package. They gave you a lanyard and a invoice.",
+    "trigger_event": "round.ended",
+    "weight": 0.8,
+    "conditions": [
+      {"left": "economy.cash", "operator": ">=", "right": 250}
+    ],
+    "effects": [
+      {"operation": "add", "target": "economy.cash", "value": -280},
+      {"operation": "add", "target": "business.reputation", "value": 9},
+      {"operation": "add", "target": "business.demand_modifier", "value": 0.5}
+    ]
+  },
+  {
+    "id": "event.pr_agency_invoice",
+    "name": "PR Agency Invoice",
+    "description": "They converted your runway into press coverage. Mostly coverage.",
+    "trigger_event": "round.ended",
+    "weight": 0.85,
+    "conditions": [
+      {"left": "economy.cash", "operator": ">=", "right": 200}
+    ],
+    "effects": [
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.pr_retainer",
+          "name": "PR Retainer",
+          "rounds": 3,
+          "subscriptions": [
+            {
+              "event": "round.started",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {
+                  "operation": "convert",
+                  "from": "economy.cash",
+                  "target": "business.reputation",
+                  "value": 0.035,
+                  "consume": true
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "event.cascade_standup",
+    "name": "Cascade Standup",
+    "description": "Someone said \"quick sync\" and now the whole sprint is re-estimating.",
+    "trigger_event": "round.ended",
+    "weight": 0.9,
+    "conditions": [],
+    "effects": [
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.standup_cascade",
+          "name": "Standup Cascade",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "prompt.started",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {"operation": "trigger", "target": "", "value": "compute.recalculate"}
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

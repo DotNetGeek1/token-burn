@@ -1,0 +1,62 @@
+{
+  "demand.testing": {
+    "name": "Defect-Prone Work",
+    "requirement": "A stage that fixes bugs",
+    "short": "Needs testing",
+    "match": {"capability": "fix_bugs"},
+    "met_note": "Something in the workflow actually tests the output.",
+    "unmet_note": "Nothing in this workflow tests anything, and this contract will produce plenty to test.",
+    "met": {"quality": 6},
+    "unmet": {"quality": -10, "hidden_bugs": 1, "bug_chance_mult": 2.5}
+  },
+  "demand.audit": {
+    "name": "Audited On Delivery",
+    "requirement": "A stage that reveals hidden bugs",
+    "short": "Needs an audit pass",
+    "match": {"capability": "reveal_bugs"},
+    "met_note": "Hidden defects are being surfaced before the client's auditors get there.",
+    "unmet_note": "Nothing here looks for hidden defects. The auditors will look for you.",
+    "met": {"quality": 8},
+    "unmet": {"quality": -8, "hidden_bugs": 1, "bug_chance_mult": 1.8}
+  },
+  "demand.craft": {
+    "name": "Client With Taste",
+    "requirement": "A stage worth at least 10 quality on its own",
+    "short": "Needs a quality stage",
+    "match": {"capability": "heavy_quality"},
+    "met_note": "There is a serious quality stage carrying the work.",
+    "unmet_note": "Nothing in this workflow does careful work, and this client can tell.",
+    "met": {"quality": 5},
+    "unmet": {"quality": -12}
+  },
+  "demand.throughput": {
+    "name": "Absurd Scale",
+    "requirement": "A stage that multiplies tokens",
+    "short": "Needs raw throughput",
+    "match": {"capability": "throughput"},
+    "met_note": "The workflow has the throughput this thing eats.",
+    "unmet_note": "This much context thrashes a workflow with no throughput stage in it.",
+    "met": {"progress_mult": 1.1},
+    "unmet": {"progress_mult": 0.6}
+  },
+  "demand.cooling": {
+    "name": "One Fan, On Prem",
+    "requirement": "A stage that takes heat back off the batch",
+    "short": "Needs cooling in the pipe",
+    "match": {"capability": "cooling"},
+    "met_note": "The loop is keeping the client's box out of thermal shutdown.",
+    "unmet_note": "Nothing here sheds heat, and the client's hardware is the hardware.",
+    "met": {"quality": 4},
+    "unmet": {"quality": -5, "progress_mult": 0.85}
+  },
+  "demand.thrift": {
+    "name": "Pennies Per Word",
+    "requirement": "A workflow that bills under ${value} a batch",
+    "short": "Needs a cheap workflow",
+    "match": {"max_cost": 60},
+    "met_note": "Cheap enough that the fee is worth collecting.",
+    "unmet_note": "This workflow costs more to run than the contract is worth arguing about.",
+    "met": {"quality": 4},
+    "unmet": {"quality": -4, "cost_mult": 1.6}
+  }
+}

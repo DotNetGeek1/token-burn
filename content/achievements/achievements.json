@@ -1,0 +1,421 @@
+[
+  {
+    "id": "ach.first_contract",
+    "name": "Revenue, Technically",
+    "category": "milestone",
+    "icon": "money",
+    "hidden": false,
+    "description": "You delivered a thing and somebody paid for it. That is a business. Legally. Probably.",
+    "hint": "Complete your first contract.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [{"stat": "run.completed_jobs", "op": ">=", "value": 1}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.first_ascension",
+    "name": "Certified Visionary",
+    "category": "milestone",
+    "icon": "trophy",
+    "hidden": false,
+    "description": "One Ascension Contract, signed and delivered. Nobody has asked what the product does yet. Keep it that way.",
+    "hint": "Complete any Ascension Contract.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.outcome", "op": "==", "value": "ascended"}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.tier_two",
+    "name": "Series B Energy",
+    "category": "milestone",
+    "icon": "trophy",
+    "hidden": false,
+    "description": "A Tier 2 contract. You now own a whiteboard nobody is allowed to erase.",
+    "hint": "Complete a Tier 2 Ascension Contract.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.ascension_tier", "op": ">=", "value": 2}
+      ]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.tier_three",
+    "name": "Post-Human Quarterly",
+    "category": "milestone",
+    "icon": "brain",
+    "hidden": false,
+    "description": "Tier 3. The board has stopped asking about margins and started asking about souls.",
+    "hint": "Complete a Tier 3 Ascension Contract.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.ascension_tier", "op": ">=", "value": 3}
+      ]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.foundation_model"}
+  },
+  {
+    "id": "ach.full_board",
+    "name": "Maximum Pipeline",
+    "category": "milestone",
+    "icon": "wrench",
+    "hidden": false,
+    "description": "Eight slots, eight modules, zero slack. Every batch is now a small industrial accident on a schedule.",
+    "hint": "Fill all eight pipeline slots in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [{"stat": "run.board_filled", "op": ">=", "value": 8}]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.crunch_mode"}
+  },
+  {
+    "id": "ach.trillion_burn",
+    "name": "Thirteen Digits of Nonsense",
+    "category": "milestone",
+    "icon": "flame",
+    "hidden": false,
+    "description": "A trillion tokens in a single run. Somewhere, a glacier just filed a complaint.",
+    "hint": "Burn a trillion tokens in one run.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.tokens_burned", "op": ">=", "value": 1000000000000}]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.quantum_annealer"}
+  },
+  {
+    "id": "ach.retired",
+    "name": "Working Late",
+    "category": "milestone",
+    "icon": "clock",
+    "hidden": false,
+    "description": "Three rounds past the end of the year with no contract signed, paying a rent that goes up every time you look at it.",
+    "hint": "Survive three overtime rounds without an Ascension Contract.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [{"stat": "run.overtime_rounds", "op": ">=", "value": 3}]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.rubber_duck"}
+  },
+  {
+    "id": "ach.deep_pockets",
+    "name": "Seven Figures, No Product",
+    "category": "milestone",
+    "icon": "money",
+    "hidden": false,
+    "description": "A million in the bank and not one shippable artefact. This is, statistically, the industry standard.",
+    "hint": "Hold a million in cash at any point in a run.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.peak_cash", "op": ">=", "value": 1000000}]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.the_intern"}
+  },
+  {
+    "id": "ach.spotless",
+    "name": "Suspiciously Clean",
+    "category": "milestone",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Eight contracts, no hidden bugs. Either you are a genius or your tests are lying to both of us.",
+    "hint": "Complete eight contracts in a run without shipping a single hidden bug.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.completed_jobs", "op": ">=", "value": 8},
+        {"stat": "run.hidden_bugs_shipped", "op": "==", "value": 0}
+      ]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.endless_ten",
+    "name": "Refuses to Leave",
+    "category": "milestone",
+    "icon": "clock",
+    "hidden": false,
+    "description": "Ten rounds past the end of the year. The calendar gave up. You did not.",
+    "hint": "Survive ten Endless rounds past round twelve.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [{"stat": "run.endless_rounds", "op": ">=", "value": 10}]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.agi_prototype"}
+  },
+  {
+    "id": "ach.round_one_wipeout",
+    "name": "WTF. HOW?!",
+    "category": "disaster",
+    "icon": "skull",
+    "hidden": false,
+    "description": "Round one. ROUND ONE. We gave you a laptop, a bedroom and five hundred pounds, and you found the bottom of it immediately. Genuinely impressive. Never do it again.",
+    "hint": "Lose a run in the very first round.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "lost"},
+        {"stat": "run.rounds_survived", "op": "<=", "value": 1}
+      ]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.stack_overflow"}
+  },
+  {
+    "id": "ach.datacentre_flambe",
+    "name": "Datacentre Flambé",
+    "category": "disaster",
+    "icon": "flame",
+    "hidden": false,
+    "description": "You cooked an entire facility. Not a laptop. A facility. The fire brigade have started referring to you by first name.",
+    "hint": "Peg the heat at maximum while running Tier 3 infrastructure or better.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.max_heat_ratio", "op": ">=", "value": 0.99},
+        {"stat": "run.infrastructure_tier", "op": ">=", "value": 3}
+      ]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.chaos_monkey"}
+  },
+  {
+    "id": "ach.bug_farm",
+    "name": "Ship It and Pray",
+    "category": "disaster",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Ten hidden bugs shipped in one run. You are not writing software, you are running a wildlife sanctuary.",
+    "hint": "Ship ten hidden bugs in a single run.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.hidden_bugs_shipped", "op": ">=", "value": 10}]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.vibe_coder"}
+  },
+  {
+    "id": "ach.evicted",
+    "name": "Certified Landlord Victim",
+    "category": "disaster",
+    "icon": "skull",
+    "hidden": false,
+    "description": "Ended the run in the red and out of the building. Your possessions are on the pavement, sorted by rarity.",
+    "hint": "Lose a run with your cash below zero.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "lost"},
+        {"stat": "run.cash", "op": "<", "value": 0}
+      ]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.debt_spiral",
+    "name": "Six Figures of Regret",
+    "category": "disaster",
+    "icon": "money",
+    "hidden": false,
+    "description": "A hundred thousand in debt. At this scale it stops being your problem and becomes the bank's problem. Congratulations?",
+    "hint": "Rack up a hundred thousand in debt.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.peak_debt", "op": ">=", "value": 100000}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.nothing_ventured",
+    "name": "Nothing Ventured",
+    "category": "disaster",
+    "icon": "skull",
+    "hidden": false,
+    "description": "A whole run. Not one delivered contract. You have achieved the purest form of startup: all vision, no output.",
+    "hint": "Finish a run having completed zero contracts.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.completed_jobs", "op": "==", "value": 0}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.yes_man",
+    "name": "The Yes Man",
+    "category": "disaster",
+    "icon": "clock",
+    "hidden": false,
+    "description": "Fifteen contracts taken, and then it all came apart. Saying yes is not a strategy. It is a diary entry.",
+    "hint": "Take fifteen contracts in one run and lose anyway.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.jobs_accepted", "op": ">=", "value": 15},
+        {"stat": "run.outcome", "op": "==", "value": "lost"}
+      ]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.thermal_event",
+    "name": "Thermal Event",
+    "category": "disaster",
+    "icon": "flame",
+    "hidden": false,
+    "description": "One hundred percent heat. The official term is a thermal event. The unofficial term is what the neighbours shouted.",
+    "hint": "Push the rig to full heat.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [{"stat": "run.heat_ratio", "op": ">=", "value": 0.99}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.serial_disappointment",
+    "name": "Serial Disappointment",
+    "category": "disaster",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Ten failed contracts in one run. Ten separate people who now describe you, at parties, as a learning experience.",
+    "hint": "Fail ten contracts in a single run.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.failed_jobs", "op": ">=", "value": 10}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.serial_loser",
+    "name": "Resilience, Allegedly",
+    "category": "disaster",
+    "icon": "skull",
+    "hidden": false,
+    "description": "Ten runs, ten collapses. The investor deck now opens with the word \"scars\" and closes with the word \"please\".",
+    "hint": "Lose ten runs across your whole career.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "lifetime.losses", "op": ">=", "value": 10}]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.blameless_postmortem"}
+  },
+  {
+    "id": "ach.so_close",
+    "name": "So Close, and Yet",
+    "category": "disaster",
+    "icon": "clock",
+    "hidden": false,
+    "description": "You signed the Ascension Contract and then missed it. The paperwork survives. Your reputation does not.",
+    "hint": "Fail an Ascension Contract you committed to.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "run.outcome", "op": "==", "value": "ascension_failed"}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.monk_mode",
+    "name": "Not Taking Your Money",
+    "category": "secret",
+    "icon": "question",
+    "hidden": true,
+    "description": "Five angels turned away, nothing accepted. They are free offers. They are literally free. You okay?",
+    "hint": "Decline five angel drafts in one run without ever accepting one.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.angel_offers_declined", "op": ">=", "value": 5},
+        {"stat": "run.angel_offers_taken", "op": "==", "value": 0}
+      ]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.fire_sale",
+    "name": "Fire Sale",
+    "category": "secret",
+    "icon": "money",
+    "hidden": true,
+    "description": "Three pieces of kit sold in one run. This is not downsizing. This is a hostage situation with your own hardware.",
+    "hint": "Sell three pieces of hardware in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [{"stat": "run.hardware_sold", "op": ">=", "value": 3}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.tightrope",
+    "name": "Tightrope",
+    "category": "secret",
+    "icon": "flame",
+    "hidden": true,
+    "description": "Eight rounds deep having touched ninety-five percent heat. Every component in that room hates you personally.",
+    "hint": "Reach round eight in a run that touched ninety-five percent heat.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.max_heat_ratio", "op": ">=", "value": 0.95},
+        {"stat": "run.rounds_survived", "op": ">=", "value": 8}
+      ]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.hoarder",
+    "name": "Module Hoarder",
+    "category": "secret",
+    "icon": "wrench",
+    "hidden": true,
+    "description": "Twelve modules owned and eight slots to put them in. The bench is now longer than the pipeline. Seek help.",
+    "hint": "Own twelve modules at once.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [{"stat": "run.modules_owned", "op": ">=", "value": 12}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.trophy_cabinet",
+    "name": "Trophy Cabinet",
+    "category": "secret",
+    "icon": "trophy",
+    "hidden": true,
+    "description": "Twenty awards. Most of them for things a reasonable person would hide.",
+    "hint": "Earn twenty achievements.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "meta.achievements", "op": ">=", "value": 20}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.veteran",
+    "name": "Ten Runs Deep",
+    "category": "secret",
+    "icon": "clock",
+    "hidden": true,
+    "description": "Ten runs finished. You have seen every way this goes wrong and you keep coming back, which is either grit or a diagnosis.",
+    "hint": "Finish ten runs.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "lifetime.runs", "op": ">=", "value": 10}]
+    },
+    "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.absurd",
+    "name": "Absurd, Frankly",
+    "category": "secret",
+    "icon": "brain",
+    "hidden": true,
+    "description": "A quadrillion tokens across your career. There is no comparison left. The chart is just a straight line with your name on it.",
+    "hint": "Burn a quadrillion tokens across all your runs.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [{"stat": "lifetime.tokens_burned", "op": ">=", "value": 1000000000000000}]
+    },
+    "reward": {"type": "none"}
+  }
+]

@@ -1,0 +1,139 @@
+[
+  {
+    "id": "unlock.extra_slot",
+    "name": "One More Pipeline Slot",
+    "kind": "extra_slot",
+    "description": "Every future run starts the Burn Board one slot wider.",
+    "flavour": "You have learned that the workflow is the product. Your therapist disagrees.",
+    "repeatable": true,
+    "amount": 1
+  },
+  {
+    "id": "unlock.starting_module_linter",
+    "name": "Keep the Linter",
+    "kind": "starting_module",
+    "description": "Aggressive Linter is yours from the first round of every run.",
+    "flavour": "You kept the config file. It is the only thing you kept.",
+    "repeatable": false,
+    "operation_id": "op.linter"
+  },
+  {
+    "id": "unlock.starting_module_whiteboard",
+    "name": "Keep the Whiteboard",
+    "kind": "starting_module",
+    "description": "Whiteboard Session is yours from the first round of every run.",
+    "flavour": "The whiteboard survived the liquidation because nobody wanted it.",
+    "repeatable": false,
+    "operation_id": "op.whiteboard"
+  },
+  {
+    "id": "unlock.starting_module_distillation",
+    "name": "Keep the Distilled Weights",
+    "kind": "starting_module",
+    "description": "Distilled Model is yours from the first round of every run.",
+    "flavour": "Legally these are not the same weights. Spiritually they are exactly the same weights.",
+    "repeatable": false,
+    "operation_id": "op.distillation"
+  },
+  {
+    "id": "unlock.cooling",
+    "name": "Better Airflow, Permanently",
+    "kind": "cooling",
+    "description": "Every future run starts with more cooling, so hot pipelines survive longer.",
+    "flavour": "You now instinctively know where a room's hot spot is. This is not a useful skill elsewhere.",
+    "repeatable": true,
+    "amount": 8
+  },
+  {
+    "id": "unlock.starting_cash",
+    "name": "Something Set Aside",
+    "kind": "starting_cash",
+    "description": "Every future run starts with extra cash in the account.",
+    "flavour": "The last exit cleared, after fees, after taxes, after the lawyer.",
+    "repeatable": true,
+    "amount": 400
+  },
+  {
+    "id": "unlock.efficiency_base",
+    "name": "You Have Done This Before",
+    "kind": "efficiency_base",
+    "description": "Every future run starts with better baseline efficiency.",
+    "flavour": "Muscle memory for a job that did not exist five years ago.",
+    "repeatable": true,
+    "amount": 0.05
+  },
+  {
+    "id": "unlock.cloud_account",
+    "name": "The Account Was Never Closed",
+    "kind": "starting_cloud_account",
+    "description": "Every future run begins with a cloud account already open, so the CLOUD key works from the first session instead of waiting on the Market.",
+    "flavour": "Nobody at the provider has noticed. Nobody at the provider ever notices.",
+    "repeatable": false
+  },
+  {
+    "id": "unlock.starting_cloud",
+    "name": "Capacity Already Provisioned",
+    "kind": "starting_cloud",
+    "description": "Every future run starts with cloud capacity running, and the account to go with it.",
+    "flavour": "The invoice from the old account is still, technically, disputed.",
+    "repeatable": true,
+    "amount": 3000000,
+    "recurring_cost": 15
+  },
+  {
+    "id": "unlock.client_retainer",
+    "name": "A Client on Retainer",
+    "kind": "passive_income",
+    "description": "Every future run starts with a small passive income each round, bills or no bills.",
+    "flavour": "They do not need anything this round either. They just like paying you.",
+    "repeatable": true,
+    "amount": 60
+  },
+  {
+    "id": "unlock.rule_bug_market",
+    "name": "The Bug Market",
+    "kind": "rule_flag",
+    "description": "Undetected bugs shipped in production can now be sold instead of just risked.",
+    "flavour": "Somewhere there is a spreadsheet of your defects, and somebody is trading it.",
+    "repeatable": false,
+    "reward_only": true
+  },
+  {
+    "id": "unlock.rule_heat_recycler",
+    "name": "The Heat Recycler",
+    "kind": "rule_flag",
+    "description": "Running hot now feeds back into throughput instead of only risking a fire.",
+    "flavour": "Somebody plumbed the exhaust into the intake. It should not work. It works.",
+    "repeatable": false,
+    "reward_only": true
+  },
+  {
+    "id": "unlock.rule_failed_research",
+    "name": "Failure as Research",
+    "kind": "rule_flag",
+    "description": "A failed contract now teaches the rig something, nudging efficiency up instead of only costing reputation.",
+    "flavour": "You are, technically, allowed to call this a postmortem.",
+    "repeatable": false,
+    "reward_only": true
+  },
+  {
+    "id": "unlock.rule_conditional_module",
+    "name": "The Circuit Breaker",
+    "kind": "starting_module",
+    "description": "Circuit Breaker is yours from the first round of every run: a module that behaves differently once heat crosses its line.",
+    "flavour": "The first module in the shed that asks a question before it does anything.",
+    "repeatable": false,
+    "reward_only": true,
+    "operation_id": "op.circuit_breaker"
+  },
+  {
+    "id": "unlock.parallel_lane",
+    "name": "A Second Workflow",
+    "kind": "workflow_slot",
+    "description": "Every future run starts with room for a second workflow, so two contracts can be worked through two different pipelines.",
+    "flavour": "You never deleted the old workflow. You just stopped explaining why.",
+    "repeatable": true,
+    "amount": 1,
+    "reward_only": true
+  }
+]

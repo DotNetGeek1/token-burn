@@ -1,0 +1,74 @@
+{
+  "used_laptop": {
+    "token_rate": 1000000,
+    "power_draw": 65
+  },
+  "custom_desktop": {
+    "token_rate": 5000000,
+    "power_draw": 350
+  },
+  "gpu_rack": {
+    "token_rate": 50000000,
+    "power_draw": 2000
+  },
+  "portable_ac": {
+    "token_rate": 0,
+    "power_draw": 0
+  },
+  "immersion_cooling": {
+    "token_rate": 0,
+    "power_draw": 0
+  },
+  "industrial_chiller": {
+    "token_rate": 0,
+    "power_draw": 0
+  },
+  "chilled_water_plant": {
+    "token_rate": 0,
+    "power_draw": 0
+  },
+  "cryo_exchange": {
+    "token_rate": 0,
+    "power_draw": 0
+  },
+  "compute_cluster": {
+    "token_rate": 500000000,
+    "power_draw": 8000
+  },
+  "garage_datacentre": {
+    "token_rate": 5000000000,
+    "power_draw": 40000
+  },
+  "compute_warehouse": {
+    "token_rate": 100000000000,
+    "power_draw": 300000
+  },
+  "industrial_campus": {
+    "token_rate": 2000000000000,
+    "power_draw": 2000000
+  },
+  "orbital_cooling_array": {
+    "token_rate": 0,
+    "power_draw": 0
+  },
+  "laptop_ram": {
+    "token_rate": 1000000,
+    "power_draw": 10,
+    "component": true
+  },
+  "second_gpu": {
+    "token_rate": 3000000,
+    "power_draw": 250,
+    "component": true
+  },
+  "overclock_kit": {
+    "token_rate": 2000000,
+    "power_draw": 180,
+    "component": true
+  },
+  "rack_expansion": {
+    "token_rate": 20000000,
+    "power_draw": 900,
+    "component": true
+  }
+}

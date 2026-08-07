@@ -1,0 +1,60 @@
+{
+  "baseline_token_rate": 1000000,
+  "min_work_prompts": 6,
+  "deadline_slack_prompts": 2,
+  "min_reward_cost_multiplier": 7.0,
+  "failed_job_consolation_ratio": 0.2,
+  "queue_capacity_cap": 2.0,
+  "max_burst_multiplier": 8.0,
+  "early_delivery_bonus": {
+    "per_spare_prompt": 0.02,
+    "cap": 0.2
+  },
+  "board": {
+    "expected_progress_multiplier": 1.6,
+    "base_quality_ratio": 0.45,
+    "hidden_bug_discovery_chance": 0.6
+  },
+  "reward_scaling": {
+    "base_multiplier": 1.0,
+    "per_round_growth": 0.12
+  },
+  "token_scaling": {
+    "base_multiplier": 1.0,
+    "per_round_growth": 0.12
+  },
+  "quality_scaling": {
+    "base_threshold": 50,
+    "per_tier_increase": 8
+  },
+  "quality_payout": {
+    "penalty_floor": 0.5,
+    "bonus_max": 0.3,
+    "bonus_span": 40
+  },
+  "reputation": {
+    "reward_per_point": 0.005,
+    "reward_bonus_cap": 0.3,
+    "session_gain_excellent": 3,
+    "session_gain_met": 2,
+    "session_gain_under": 0,
+    "excellent_margin": 20
+  },
+  "max_work_prompts_by_tier": [8, 10, 12, 14, 16, 20],
+  "deadline_slack_by_tier": [2, 1, 1, 1, 1, 1],
+  "revision_risk_cap_by_tier": [0.04, 0.08, 0.12, 0.16, 0.2, 0.25],
+  "bug_chance_by_tier": [0.04, 0.07, 0.1, 0.12, 0.12, 0.12],
+  "scope_creep_pct_by_tier": [0.02, 0.03, 0.04, 0.05, 0.05, 0.05],
+  "tier_unlock_by_reputation": [0, 12, 22, 32, 42, 52],
+  "sales_level_rep_reduction": 2,
+  "tier_unlock_by_round": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+  "tier_unlock_by_token_rate": [
+    {"rate": 1000000, "tier": 0},
+    {"rate": 4000000, "tier": 1},
+    {"rate": 10000000, "tier": 2},
+    {"rate": 20000000, "tier": 3},
+    {"rate": 40000000, "tier": 4},
+    {"rate": 60000000, "tier": 5}
+  ]
+}
+

@@ -1,0 +1,577 @@
+class_name RunState
+extends RefCounted
+
+## Authoritative simulation state. UI observes this; it does not contain economic logic.
+
+const SAVE_VERSION := 9
+
+## A round is one full cycle of the game: take contracts, work them to
+## resolution, pay the bills. A prompt is one action inside a round — a burn or
+## a cool — and is the unit deadlines and running costs are measured in.
+var calendar: Dictionary = {
+	"round": 1,
+	"prompt": 1,
+	"deadline_progress": 0.0,
+}
+
+var economy: Dictionary = {
+	"cash": 500.0,
+	"debt": 0.0,
+	"recurring_costs": 0.0,
+	"income": 0.0,
+	"cloud_liability": 0.0,
+	"pending_bills": [],
+	"rent_unpaid_streak": 0,
+	"rent_multiplier": 1.0,
+	"round_rent": 400.0,
+	"power_base_cost_per_prompt": 10.0,
+	"power_cost_per_prompt": 10.0,
+	"cloud_cost_per_prompt": 0.0,
+	"costs_this_round": 0.0,
+	"last_round_costs": 0.0,
+	## Overtime's own bill line, and the cumulative-income reading it was last
+	## measured against. Zero until the year runs out with no contract finished.
+	"overtime_levy": 0.0,
+	"overtime_income_mark": 0.0,
+}
+
+var compute: Dictionary = {
+	"local_capacity": 1_000_000.0,
+	"cloud_capacity": 0.0,
+	"cloud_burst": 0.0,
+	"cloud_burst_prompts": 0,
+	"token_rate": 1_000_000.0,
+	"prompt_rate": 1_000_000.0,
+	"power_draw": 65.0,
+	"cooling": 16.0,
+	"heat": 0.0,
+	"heat_capacity": 100.0,
+	"efficiency": 1.0,
+	"efficiency_base": 1.0,
+	"rate_modifiers": [],
+}
+
+var business: Dictionary = {
+	"reputation": 10.0,
+	"demand": 3.0,
+	"demand_modifier": 0.0,
+	"advertising": 0.0,
+	"active_jobs": [],
+	"active_job": {},
+	"job_offers": [],
+	"job_queue": [],
+	"focused_job_id": "",
+	"job_board_stamp": "",
+	"job_board_seq": 0,
+}
+
+var build: Dictionary = {
+	"perks": [],
+	"hardware": ["used_laptop"],
+	"upgrades": [],
+	"status_effects": [],
+	"operations": [],
+	"board": {"slot_count": BoardSystem.DEFAULT_SLOT_COUNT, "active_workflow": 0},
+	"workflows": [],
+	"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
+	"dwelling": "bedroom",
+	"cloud_tier": "none",
+	"advertising_tier": "none",
+	"upgrade_levels": {},
+}
+
+var statistics: Dictionary = {
+	"lifetime_tokens": 0.0,
+	"failed_jobs": 0,
+	"completed_jobs": 0,
+	"absurdity_metrics": {},
+	"peak_token_rate": 0.0,
+	"peak_cash": 0.0,
+	"peak_debt": 0.0,
+	"peak_prompt_tokens": 0.0,
+	"hidden_bugs_shipped": 0,
+	"max_heat_ratio": 0.0,
+	"jobs_accepted": 0,
+	"angel_offers_taken": 0,
+	"angel_offers_declined": 0,
+	"hardware_sold": 0,
+	"modules_drafted": 0,
+	"overtime_rounds": 0,
+}
+
+## The endgame layer. Empty status means the player has not committed to an
+## Ascension Contract yet; see AscensionSystem for what each field means once
+## one is underway. The last three fields are the ladder rather than any one
+## contract: which rungs this run has already climbed, and what it is owed for
+## climbing them.
+var ascension: Dictionary = {
+	"status": "",
+	"contract_id": "",
+	"committed_round": 0,
+	"baseline_tokens": 0.0,
+	"tokens_burned": 0.0,
+	"prompts_remaining": 0,
+	"violations": 0,
+	"quality_sum": 0.0,
+	"quality_count": 0,
+	"completed_ids": [],
+	"highest_tier_completed": 0,
+	"pending_picks": 0,
+}
+
+var flags: Dictionary = {
+	"loss_reason": "",
+	"victory": false,
+	"outcome": "",
+	"ascension_tier": 0,
+	"fire_risk": false,
+	"overtime": false,
+	"ascension_qualified": false,
+	"post_victory": false,
+	"post_victory_phase": "",
+	"legacy_banked": false,
+	"draft_kind": "",
+}
+
+
+func reset(profile: Dictionary = {}) -> void:
+	calendar = _default_calendar()
+	economy = _default_economy(profile)
+	compute = _default_compute()
+	business = _default_business()
+	build = _default_build()
+	statistics = _default_statistics()
+	ascension = _default_ascension()
+	flags = _default_flags()
+
+
+func add_rate_modifier(multiplier: float, duration_prompts: int = 1, source: String = "") -> void:
+	var modifiers: Array = []
+	for entry in compute.get("rate_modifiers", []):
+		if not entry is Dictionary:
+			continue
+		# Heat throttle and boost are refreshed each prompt; stacking the same
+		# source would multiply throughput down every end_prompt tick miss.
+		if source != "" and str(entry.get("source", "")) == source:
+			continue
+		modifiers.append(entry)
+	modifiers.append({
+		"multiplier": multiplier,
+		"prompts_remaining": duration_prompts,
+		"source": source,
+	})
+	compute["rate_modifiers"] = modifiers
+
+
+## Ages temporary rate modifiers by one prompt. Must be called when a prompt
+## *ends*: a one-prompt modifier added mid-prompt has to survive long enough to
+## multiply that prompt's batch, which is exactly what BOOST and heat throttling
+## depend on.
+func tick_rate_modifiers() -> void:
+	var modifiers: Array = compute.get("rate_modifiers", [])
+	var remaining: Array = []
+	for entry in modifiers:
+		if not entry is Dictionary:
+			continue
+		var prompts_left: int = int(entry.get("prompts_remaining", 0)) - 1
+		if prompts_left > 0:
+			var copy: Dictionary = entry.duplicate(true)
+			copy["prompts_remaining"] = prompts_left
+			remaining.append(copy)
+	compute["rate_modifiers"] = remaining
+
+
+## Rented cloud capacity is returned when its lease runs out. Kept separate from
+## `cloud_capacity`, which upgrades own permanently.
+func tick_cloud_burst() -> void:
+	var prompts_left: int = int(compute.get("cloud_burst_prompts", 0)) - 1
+	if prompts_left > 0:
+		compute["cloud_burst_prompts"] = prompts_left
+		return
+	compute["cloud_burst_prompts"] = 0
+	compute["cloud_burst"] = 0.0
+
+
+func get_value_at_path(path: String) -> Variant:
+	var parts := path.split(".")
+	if parts.is_empty():
+		return null
+	var current: Variant = _get_section(parts[0])
+	if current == null:
+		return null
+	for i in range(1, parts.size()):
+		var part: String = parts[i]
+		if current is Dictionary and current.has(part):
+			current = current[part]
+		else:
+			return null
+	return current
+
+
+func set_value_at_path(path: String, value: Variant) -> void:
+	var parts := path.split(".")
+	if parts.size() < 2:
+		return
+	var current: Variant = _get_section(parts[0])
+	if not current is Dictionary:
+		return
+	var section: Dictionary = current
+	for i in range(1, parts.size() - 1):
+		var part: String = parts[i]
+		if not section.has(part) or not section[part] is Dictionary:
+			section[part] = {}
+		section = section[part]
+	section[parts[-1]] = value
+
+
+func has_active_job() -> bool:
+	return business.get("active_jobs", []).size() > 0 or business.get("active_job", {}).size() > 0
+
+
+func has_queued_jobs() -> bool:
+	return business.get("job_queue", []).size() > 0
+
+
+func has_pending_work() -> bool:
+	return has_queued_jobs() or has_active_job()
+
+
+func update_peaks() -> void:
+	statistics["peak_token_rate"] = maxf(float(statistics.get("peak_token_rate", 0.0)), float(compute.get("token_rate", 0.0)))
+	statistics["peak_cash"] = maxf(float(statistics.get("peak_cash", 0.0)), float(economy.get("cash", 0.0)))
+	statistics["peak_debt"] = maxf(float(statistics.get("peak_debt", 0.0)), float(economy.get("debt", 0.0)))
+	var heat_capacity: float = maxf(1.0, float(compute.get("heat_capacity", 100.0)))
+	statistics["max_heat_ratio"] = maxf(
+		float(statistics.get("max_heat_ratio", 0.0)),
+		float(compute.get("heat", 0.0)) / heat_capacity
+	)
+
+
+func to_dict() -> Dictionary:
+	return {
+		"save_version": SAVE_VERSION,
+		"calendar": calendar.duplicate(true),
+		"economy": economy.duplicate(true),
+		"compute": compute.duplicate(true),
+		"business": business.duplicate(true),
+		"build": build.duplicate(true),
+		"statistics": statistics.duplicate(true),
+		"ascension": ascension.duplicate(true),
+		"flags": flags.duplicate(true),
+	}
+
+
+func from_dict(data: Dictionary) -> void:
+	var version: int = int(data.get("save_version", 1))
+	calendar = _merge_section(_default_calendar(), data.get("calendar", {}))
+	economy = _merge_section(_default_economy({}), data.get("economy", {}))
+	compute = _merge_section(_default_compute(), data.get("compute", {}))
+	business = _merge_section(_default_business(), data.get("business", {}))
+	build = _merge_section(_default_build(), data.get("build", {}))
+	statistics = _merge_section(_default_statistics(), data.get("statistics", {}))
+	ascension = _merge_section(_default_ascension(), data.get("ascension", {}))
+	flags = _merge_section(_default_flags(), data.get("flags", {}))
+	_migrate(version)
+
+
+func _merge_section(defaults: Dictionary, saved: Variant) -> Dictionary:
+	var merged: Dictionary = defaults.duplicate(true)
+	if saved is Dictionary:
+		for key in saved.keys():
+			merged[key] = saved[key]
+	return merged
+
+
+func _migrate(from_version: int) -> void:
+	if from_version < 2:
+		if not compute.has("rate_modifiers"):
+			compute["rate_modifiers"] = []
+		if not business.has("demand_modifier"):
+			business["demand_modifier"] = 0.0
+	if from_version < 3:
+		# Rounds used to advance once per work session; they now advance once per
+		# production tick, so an old round index means nothing in the new budget.
+		economy["power_base_cost_per_prompt"] = float(economy.get("power_cost_per_prompt", 10.0))
+		economy["costs_this_round"] = 0.0
+	if from_version < 4:
+		# Efficiency used to be one field that recalculation both read and wrote,
+		# so old saves carry a compounded value. Only permanent changes belong in
+		# the base, and a runaway value cannot be told apart from a legitimate
+		# one, so anything absurd resets.
+		var stored: float = float(compute.get("efficiency", 1.0))
+		compute["efficiency_base"] = stored if stored <= 4.0 else 1.0
+		compute["efficiency"] = float(compute["efficiency_base"])
+		compute["prompt_rate"] = float(compute.get("token_rate", 1_000_000.0))
+	if from_version < 5:
+		# Work used to resolve itself; it is now a pipeline the player builds.
+		# BoardSystem.ensure_board grants the starter modules and lays them out,
+		# so an old save just needs the empty structures to exist.
+		build["operations"] = []
+		build["board"] = {"slots": [], "slot_count": BoardSystem.DEFAULT_SLOT_COUNT}
+		for job in business.get("active_jobs", []):
+			if job is Dictionary:
+				job["known_bugs"] = int(job.get("bugs_this_job", 0))
+				job["hidden_bugs"] = 0
+	if from_version < 6:
+		# Ascension Contracts and their score stats are additive: older saves
+		# simply start with no contract underway and a zeroed scoreboard.
+		ascension = _default_ascension()
+		if not statistics.has("hidden_bugs_shipped"):
+			statistics["hidden_bugs_shipped"] = 0
+	if from_version < 7:
+		_migrate_to_round_and_prompt()
+	if from_version < 8:
+		_migrate_to_workflows()
+	if from_version < 9:
+		_migrate_to_ascension_ladder()
+
+
+## A single Ascension Contract used to be the whole endgame, so a save from
+## before the ladder has no record of rungs climbed. It cannot have climbed any:
+## completing one contract ended the run outright, which is exactly the bug the
+## ladder replaces. The counters therefore start clean, and a contract that was
+## underway when the save was written stays underway as rung one.
+func _migrate_to_ascension_ladder() -> void:
+	ascension["completed_ids"] = []
+	ascension["highest_tier_completed"] = 0
+	ascension["pending_picks"] = 0
+
+
+## One global pipeline became a list of named workflows, each assignable to a
+## contract. The layout the save was built around becomes the first workflow and
+## a second saved lane, if the run had earned one, becomes the second — so a run
+## in progress opens on exactly the pipeline it was left on. BoardSystem does
+## the structural half; this only has to make sure nothing points at the old
+## shape and that the capacity matches what the run already had.
+func _migrate_to_workflows() -> void:
+	build["workflow_capacity"] = maxi(
+		int(build.get("workflow_capacity", BoardSystem.DEFAULT_WORKFLOW_CAPACITY)),
+		maxi(1, int(build.get("lane_count", 1)))
+	)
+	if not build.get("workflows", null) is Array:
+		build["workflows"] = []
+
+
+## The month/round split became round/prompt: a round is the whole cycle that
+## ends in rent, and a prompt is one burn or cool inside it. Old saves carry the
+## previous vocabulary in both their keys and their live contracts, so every one
+## of them is translated rather than reset — a run in progress keeps its
+## progress, its deadlines and its money.
+func _migrate_to_round_and_prompt() -> void:
+	var old_prompt: int = maxi(1, int(calendar.get("round", 1)))
+	calendar["round"] = maxi(1, int(calendar.get("month", 1)))
+	calendar["prompt"] = old_prompt
+	for stale in ["month", "day", "rounds_per_month"]:
+		calendar.erase(stale)
+
+	economy["round_rent"] = float(economy.get("monthly_rent", economy.get("round_rent", 400.0)))
+	economy["power_base_cost_per_prompt"] = float(
+		economy.get("power_base_cost_per_round", economy.get("power_base_cost_per_prompt", 10.0))
+	)
+	economy["power_cost_per_prompt"] = float(
+		economy.get("power_cost_per_round", economy.get("power_cost_per_prompt", 10.0))
+	)
+	economy["cloud_cost_per_prompt"] = float(
+		economy.get("cloud_cost_per_round", economy.get("cloud_cost_per_prompt", 0.0))
+	)
+	economy["costs_this_round"] = float(economy.get("costs_this_month", 0.0))
+	economy["last_round_costs"] = float(economy.get("last_month_costs", 0.0))
+	for stale in [
+		"monthly_rent", "power_base_cost_per_round", "power_cost_per_round",
+		"cloud_cost_per_round", "costs_this_month", "last_month_costs",
+		"passive_income_per_month",
+	]:
+		economy.erase(stale)
+
+	compute["prompt_rate"] = float(compute.get("round_rate", compute.get("token_rate", 1_000_000.0)))
+	compute["cloud_burst_prompts"] = int(compute.get("cloud_burst_rounds", 0))
+	compute.erase("round_rate")
+	compute.erase("cloud_burst_rounds")
+	var modifiers: Array = []
+	for entry in compute.get("rate_modifiers", []):
+		if not entry is Dictionary:
+			continue
+		var copy: Dictionary = entry.duplicate(true)
+		copy["prompts_remaining"] = int(copy.get("rounds_remaining", copy.get("prompts_remaining", 1)))
+		copy.erase("rounds_remaining")
+		modifiers.append(copy)
+	compute["rate_modifiers"] = modifiers
+
+	statistics["peak_prompt_tokens"] = float(statistics.get("peak_round_tokens", 0.0))
+	statistics.erase("peak_round_tokens")
+	statistics["endless_rounds"] = int(statistics.get("endless_months", 0))
+	statistics.erase("endless_months")
+
+	ascension["committed_round"] = int(ascension.get("committed_month", 0))
+	ascension["prompts_remaining"] = int(ascension.get("rounds_remaining", 0))
+	ascension.erase("committed_month")
+	ascension.erase("rounds_remaining")
+
+	for collection in ["active_jobs", "job_queue", "job_offers"]:
+		for job in business.get(collection, []):
+			if job is Dictionary:
+				_migrate_job_deadline(job)
+
+
+func _migrate_job_deadline(job: Dictionary) -> void:
+	if job.has("deadline_rounds"):
+		job["deadline_prompts"] = int(job["deadline_rounds"])
+		job.erase("deadline_rounds")
+	if job.has("rounds_remaining"):
+		job["prompts_remaining"] = int(job["rounds_remaining"])
+		job.erase("rounds_remaining")
+
+
+func _default_calendar() -> Dictionary:
+	return {
+		"round": 1,
+		"prompt": 1,
+		"deadline_progress": 0.0,
+	}
+
+
+func _default_economy(profile: Dictionary = {}) -> Dictionary:
+	var economy_balance: Dictionary = ContentDatabase.balance.get("economy", {})
+	var base_power: float = float(profile.get("power_cost_per_prompt", 10.0))
+	return {
+		"cash": float(profile.get("starting_cash", 500.0)),
+		"debt": 0.0,
+		"recurring_costs": 0.0,
+		"income": 0.0,
+		"cloud_liability": 0.0,
+		"pending_bills": [],
+		"rent_unpaid_streak": 0,
+		"rent_multiplier": float(profile.get("rent_multiplier", 1.0)),
+		"round_rent": float(economy_balance.get("starting_rent", 400.0)) * float(profile.get("rent_multiplier", 1.0)),
+		"power_base_cost_per_prompt": base_power,
+		"power_cost_per_prompt": base_power,
+		"cloud_cost_per_prompt": 0.0,
+		"costs_this_round": 0.0,
+		"last_round_costs": 0.0,
+	}
+
+
+func _default_compute() -> Dictionary:
+	return {
+		"local_capacity": 1_000_000.0,
+		"cloud_capacity": 0.0,
+		"cloud_burst": 0.0,
+		"cloud_burst_prompts": 0,
+		"token_rate": 1_000_000.0,
+		"prompt_rate": 1_000_000.0,
+		"power_draw": 65.0,
+		"cooling": 16.0,
+		"heat": 0.0,
+		"heat_capacity": 100.0,
+		"efficiency": 1.0,
+		"efficiency_base": 1.0,
+		"rate_modifiers": [],
+	}
+
+
+func _default_business() -> Dictionary:
+	return {
+		"reputation": 10.0,
+		"demand": 3.0,
+		"demand_modifier": 0.0,
+		"advertising": 0.0,
+		"active_jobs": [],
+		"active_job": {},
+		"job_offers": [],
+		"job_queue": [],
+		"focused_job_id": "",
+		"job_board_stamp": "",
+		"job_board_seq": 0,
+	}
+
+
+func _default_build() -> Dictionary:
+	return {
+		"perks": [],
+		"hardware": ["used_laptop"],
+		"upgrades": [],
+		"status_effects": [],
+		"operations": [],
+		"board": {"slot_count": BoardSystem.DEFAULT_SLOT_COUNT, "active_workflow": 0},
+		"workflows": [],
+		"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
+		"dwelling": "bedroom",
+		"cloud_tier": "none",
+		"advertising_tier": "none",
+		"upgrade_levels": {},
+	}
+
+
+func _default_statistics() -> Dictionary:
+	return {
+		"lifetime_tokens": 0.0,
+		"failed_jobs": 0,
+		"completed_jobs": 0,
+		"absurdity_metrics": {},
+		"peak_token_rate": 0.0,
+		"peak_cash": 0.0,
+		"peak_debt": 0.0,
+		"peak_prompt_tokens": 0.0,
+		"hidden_bugs_shipped": 0,
+		"max_heat_ratio": 0.0,
+		"jobs_accepted": 0,
+		"angel_offers_taken": 0,
+		"angel_offers_declined": 0,
+		"hardware_sold": 0,
+		"modules_drafted": 0,
+	}
+
+
+func _default_ascension() -> Dictionary:
+	return {
+		"status": "",
+		"contract_id": "",
+		"committed_round": 0,
+		"baseline_tokens": 0.0,
+		"tokens_burned": 0.0,
+		"prompts_remaining": 0,
+		"violations": 0,
+		"quality_sum": 0.0,
+		"quality_count": 0,
+		"completed_ids": [],
+		"highest_tier_completed": 0,
+		"pending_picks": 0,
+	}
+
+
+func _default_flags() -> Dictionary:
+	return {
+		"loss_reason": "",
+		"victory": false,
+		"outcome": "",
+		"ascension_tier": 0,
+		"fire_risk": false,
+		"overtime": false,
+		"ascension_qualified": false,
+		"post_victory": false,
+		"post_victory_phase": "",
+		"legacy_banked": false,
+		"draft_kind": "",
+	}
+
+
+func _get_section(section_name: String) -> Variant:
+	match section_name:
+		"calendar":
+			return calendar
+		"economy":
+			return economy
+		"compute":
+			return compute
+		"business":
+			return business
+		"build":
+			return build
+		"statistics":
+			return statistics
+		"ascension":
+			return ascension
+		"flags":
+			return flags
+		_:
+			return null

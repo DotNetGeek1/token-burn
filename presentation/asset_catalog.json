@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "palette": {
+    "bg": "#121212",
+    "bg_panel": "#1a1a24",
+    "stroke_dim": "#2a2a3a",
+    "green": "#39ff88",
+    "blue": "#4dc3ff",
+    "orange": "#ff6b35",
+    "red": "#e94560",
+    "purple": "#b066ff",
+    "yellow": "#ffd54a",
+    "white": "#e8e8f0",
+    "grey": "#6a6a7a",
+    "bay": "#050505",
+    "screen": "#0b1614"
+  },
+  "nav_icons": {
+    "office": "res://presentation/ui/icons/nav/office.svg",
+    "board": "res://presentation/ui/icons/stat/power.svg",
+    "jobs": "res://presentation/ui/icons/nav/jobs.svg",
+    "build": "res://presentation/ui/icons/nav/build.svg",
+    "market": "res://presentation/ui/icons/nav/market.svg",
+    "menu": "res://presentation/ui/icons/nav/menu.svg"
+  },
+  "stat_icons": {
+    "cash": "res://presentation/ui/icons/stat/cash.svg",
+    "tokens": "res://presentation/ui/icons/stat/tokens.svg",
+    "heat": "res://presentation/ui/icons/stat/heat.svg",
+    "power": "res://presentation/ui/icons/stat/power.svg",
+    "reputation": "res://presentation/ui/icons/stat/reputation.svg",
+    "quality": "res://presentation/ui/icons/stat/quality.svg",
+    "deadline": "res://presentation/ui/icons/stat/deadline.svg",
+    "agents": "res://presentation/ui/icons/stat/agents.svg"
+  },
+  "category_icons": {
+    "cloud": "res://presentation/ui/icons/category/cloud.svg",
+    "local": "res://presentation/ui/icons/category/local.svg",
+    "hybrid": "res://presentation/ui/icons/category/hybrid.svg",
+    "hardware": "res://presentation/ui/icons/category/hardware.svg",
+    "perks": "res://presentation/ui/icons/category/perks.svg"
+  },
+  "achievement_icons": {
+    "trophy": "res://presentation/achievements/trophy.png",
+    "flame": "res://presentation/achievements/flame.png",
+    "skull": "res://presentation/achievements/skull.png",
+    "bug": "res://presentation/achievements/bug.png",
+    "money": "res://presentation/achievements/money.png",
+    "brain": "res://presentation/achievements/brain.png",
+    "clock": "res://presentation/achievements/clock.png",
+    "wrench": "res://presentation/achievements/wrench.png",
+    "question": "res://presentation/achievements/question.png",
+    "locked": "res://presentation/achievements/locked.png"
+  },
+  "status_icons": {
+    "warning": "res://presentation/ui/icons/status/warning.svg",
+    "event": "res://presentation/ui/icons/status/event.svg",
+    "bug": "res://presentation/ui/icons/status/bug.svg"
+  },
+  "perk_icons": {
+    "ship_it": "res://presentation/ui/icons/perks/ship_it.svg",
+    "recursive_intern": "res://presentation/ui/icons/perks/recursive_intern.svg",
+    "stack_overflow_tab": "res://presentation/ui/icons/perks/stack_overflow_tab.svg",
+    "free_trial": "res://presentation/ui/icons/perks/free_trial.svg",
+    "quantised_everything": "res://presentation/ui/icons/perks/quantised_everything.svg",
+    "works_on_my_machine": "res://presentation/ui/icons/perks/works_on_my_machine.svg",
+    "technical_debt": "res://presentation/ui/icons/perks/technical_debt.svg",
+    "founder_mode": "res://presentation/ui/icons/perks/founder_mode.svg",
+    "infinite_context": "res://presentation/ui/icons/perks/infinite_context.svg",
+    "the_wrapper": "res://presentation/ui/icons/perks/the_wrapper.svg",
+    "vibe_check": "res://presentation/ui/icons/perks/vibe_check.svg",
+    "prompt_engineer": "res://presentation/ui/icons/perks/prompt_engineer.svg",
+    "cloud_baron": "res://presentation/ui/icons/perks/cloud_baron.svg",
+    "consultancy_mode": "res://presentation/ui/icons/perks/consultancy_mode.svg",
+    "ad_tech_goblin": "res://presentation/ui/icons/perks/ad_tech_goblin.svg",
+    "wide_bus": "res://presentation/ui/icons/perks/works_on_my_machine.svg",
+    "free_first_stage": "res://presentation/ui/icons/perks/cloud_baron.svg",
+    "free_last_stage": "res://presentation/ui/icons/perks/ship_it.svg",
+    "rubber_duck": "res://presentation/ui/icons/perks/recursive_intern.svg",
+    "thermal_paste": "res://presentation/ui/icons/perks/works_on_my_machine.svg",
+    "hot_streak": "res://presentation/ui/icons/perks/infinite_context.svg",
+    "bug_alchemy": "res://presentation/ui/icons/perks/quantised_everything.svg",
+    "test_driven": "res://presentation/ui/icons/perks/stack_overflow_tab.svg",
+    "middle_management": "res://presentation/ui/icons/perks/founder_mode.svg",
+    "pipeline_momentum": "res://presentation/ui/icons/perks/the_wrapper.svg"
+  },
+  "office_stages": {
+    "stage_01": "res://presentation/office/stage_01.png",
+    "stage_02": "res://presentation/office/stage_02.png",
+    "stage_03": "res://presentation/office/stage_03.png",
+    "stage_04": "res://presentation/office/stage_04.png",
+    "stage_05": "res://presentation/office/stage_05.png"
+  },
+  "panels": {
+    "card_bg": "res://presentation/ui/panels/card_bg.svg",
+    "card_bg_selected": "res://presentation/ui/panels/card_bg_selected.svg",
+    "progress": {
+      "bg": "res://presentation/ui/panels/progress_bg.svg",
+      "cyan": "res://presentation/ui/panels/progress_cyan.svg",
+      "green": "res://presentation/ui/panels/progress_green.svg",
+      "orange": "res://presentation/ui/panels/progress_orange.svg",
+      "yellow": "res://presentation/ui/panels/progress_yellow.svg",
+      "red": "res://presentation/ui/panels/progress_red.svg"
+    }
+  },
+  "logo": {
+    "full": "res://presentation/ui/logo/token_burn_logo.svg",
+    "header": "res://presentation/ui/logo/token_burn_header.svg"
+  },
+  "rig": {
+    "workstation": "res://presentation/rig/burn_rig.png",
+    "alarm_beacon": "res://presentation/rig/alarm_beacon.png"
+  },
+  "rig_stages": {
+    "stage_01": {
+      "art": "res://presentation/rig/rig_stage_01.png",
+      "crop_top": 0.03,
+      "crop_height": 1.0,
+      "safe_width": 0.68,
+      "screens": [[0.2656, 0.125, 0.4583, 0.4063]],
+      "vent": [0.45, 0.58]
+    },
+    "stage_02": {
+      "art": "res://presentation/rig/rig_stage_02.png",
+      "crop_top": 0.04,
+      "crop_height": 1.0,
+      "safe_width": 0.88,
+      "screens": [[0.1563, 0.1953, 0.3542, 0.4141]],
+      "vent": [0.785, 0.095]
+    },
+    "stage_03": {
+      "art": "res://presentation/rig/rig_stage_03.png",
+      "crop_top": 0.08,
+      "crop_height": 0.9,
+      "safe_width": 0.9,
+      "screens": [
+        [0.25, 0.2969, 0.2083, 0.2813],
+        [0.5417, 0.2969, 0.2083, 0.2813]
+      ],
+      "vent": [0.884, 0.155]
+    },
+    "stage_04": {
+      "art": "res://presentation/rig/rig_stage_04.png",
+      "crop_height": 1.0,
+      "safe_width": 0.92,
+      "screens": [
+        [0.0938, 0.3281, 0.3646, 0.3984],
+        [0.5469, 0.3281, 0.3646, 0.3984]
+      ],
+      "vent": [0.5, 0.02]
+    },
+    "stage_05": {
+      "art": "res://presentation/rig/rig_stage_05.png",
+      "crop_height": 1.0,
+      "safe_width": 0.96,
+      "screens": [
+        [0.3646, 0.3203, 0.276, 0.2891],
+        [0.0313, 0.3203, 0.2969, 0.2891],
+        [0.6719, 0.3203, 0.2969, 0.2969]
+      ],
+      "vent": [0.5, 0.055]
+    }
+  },
+  "rig_stage_ladder": [
+    {
+      "stage": 5,
+      "hardware": ["garage_datacentre", "compute_warehouse", "industrial_campus"]
+    },
+    {"stage": 4, "hardware": ["gpu_rack", "compute_cluster"]},
+    {"stage": 3, "machines": 2},
+    {"stage": 2, "hardware": ["custom_desktop"]}
+  ],
+  "rig_instruments": {
+    "dial": {
+      "art": "res://presentation/rig/instrument_dial.png",
+      "face_centre": [0.5, 0.4336],
+      "face_radius": 0.2969,
+      "readout": [0.2891, 0.8359, 0.4219, 0.0781]
+    },
+    "column": {
+      "art": "res://presentation/rig/instrument_column.png",
+      "label": [0.3516, 0.0885, 0.2969, 0.0573],
+      "channel": [0.3672, 0.2031, 0.2578, 0.6042],
+      "readout": [0.3438, 0.8646, 0.3047, 0.0573]
+    }
+  },
+  "title": {
+    "key_art": "res://presentation/title/title_key_art.png"
+  },
+  "event_art": {
+    "event.power_cut": "res://presentation/events/event_power_surge.png",
+    "event.cloud_bill_shock": "res://presentation/events/event_cloud_bill.png",
+    "event.viral_bug": "res://presentation/events/event_viral_bug.png",
+    "event.landlord_inspection": "res://presentation/events/event_landlord_inspection.png",
+    "default": "res://presentation/events/event_power_surge.png"
+  },
+  "chips": {
+    "common": "res://presentation/ui/chips/chip_common.svg",
+    "rare": "res://presentation/ui/chips/chip_rare.svg",
+    "epic": "res://presentation/ui/chips/chip_epic.svg",
+    "legendary": "res://presentation/ui/chips/chip_legendary.svg"
+  },
+  "buttons": {
+    "primary": "res://presentation/ui/buttons/btn_primary.svg",
+    "secondary": "res://presentation/ui/buttons/btn_secondary.svg",
+    "danger": "res://presentation/ui/buttons/btn_danger.svg",
+    "boost": "res://presentation/ui/buttons/btn_boost.svg"
+  }
+}

@@ -1,0 +1,49 @@
+[gd_scene load_steps=3 format=3 uid="uid://screen_header"]
+
+[ext_resource type="Script" path="res://ui/common/screen_header.gd" id="1"]
+[ext_resource type="Script" path="res://ui/common/game_button.gd" id="2"]
+
+[node name="ScreenHeader" type="VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+script = ExtResource("1")
+
+[node name="TitleRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="TitleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"TitleLabel"
+autowrap_mode = 3
+text = "TITLE"
+
+[node name="ContextLabel" type="Label" parent="TitleRow"]
+layout_mode = 2
+theme_type_variation = &"AccentLabel"
+horizontal_alignment = 2
+vertical_alignment = 1
+text = ""
+
+[node name="SubRow" type="HBoxContainer" parent="."]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SubLabel" type="Label" parent="SubRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"MutedLabel"
+autowrap_mode = 3
+vertical_alignment = 1
+text = ""
+
+[node name="ActionButton" type="Button" parent="SubRow"]
+visible = false
+custom_minimum_size = Vector2(140, 68)
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "EDIT"

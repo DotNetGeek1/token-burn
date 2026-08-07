@@ -1,0 +1,477 @@
+[
+  {
+    "id": "upgrade.custom_desktop",
+    "name": "Custom Desktop",
+    "category": "hardware",
+    "hardware_key": "custom_desktop",
+    "description": "A box you built yourself, and the first machine that is faster than the laptop. Takes a floor slot, so the bedroom only has room for one beside it.",
+    "cost": 1200,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["hardware"],
+    "recurring_cost_delta": 0,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 5}
+    ]
+  },
+  {
+    "id": "upgrade.gpu_rack",
+    "name": "GPU Rack",
+    "category": "hardware",
+    "hardware_key": "gpu_rack",
+    "description": "Massive local throughput at industrial power draw. It will not fit beside a bed, and its own fans are nowhere near enough — pair it with an immersion cooling rig.",
+    "cost": 15000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["hardware"],
+    "requires_dwelling": "garage",
+    "recurring_cost_delta": 50,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 30}
+    ]
+  },
+  {
+    "id": "upgrade.garage",
+    "name": "Rent the Garage",
+    "category": "dwelling",
+    "dwelling_key": "garage",
+    "description": "Room for four machines, and enough extraction to run a desktop hard. Anything heavier still needs cooling of its own. Rent becomes $1,400/round.",
+    "cost": 2000,
+    "tags": ["dwelling"],
+    "requires_dwelling": "bedroom",
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.warehouse",
+    "name": "Lease the Warehouse",
+    "category": "dwelling",
+    "dwelling_key": "warehouse",
+    "description": "Sixteen slots of industrial space, and a roof strong enough for a cooling tower. Rent becomes $8,000/round.",
+    "cost": 45000,
+    "tags": ["dwelling"],
+    "requires_dwelling": "office_unit",
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.compute_cluster",
+    "name": "Compute Cluster",
+    "category": "hardware",
+    "hardware_key": "compute_cluster",
+    "description": "A rack of racks. Massive throughput over the GPU rack, at a power draw no room cools on its own — budget for an industrial chiller alongside it.",
+    "cost": 150000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["hardware"],
+    "requires_dwelling": "office_unit",
+    "recurring_cost_delta": 400,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 80}
+    ]
+  },
+  {
+    "id": "upgrade.garage_datacentre",
+    "name": "Garage Data Centre",
+    "category": "hardware",
+    "hardware_key": "garage_datacentre",
+    "description": "The garage was never really for the car. Needs a chilled-water plant beside it to run safely.",
+    "cost": 1500000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["hardware"],
+    "requires_dwelling": "warehouse",
+    "recurring_cost_delta": 2500,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 250}
+    ]
+  },
+  {
+    "id": "upgrade.compute_warehouse",
+    "name": "Compute Warehouse",
+    "category": "hardware",
+    "hardware_key": "compute_warehouse",
+    "description": "An entire warehouse of racks. This is what the datacentre campus lease was for, and what the cryogenic exchange hall exists to cool.",
+    "cost": 20000000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["hardware"],
+    "requires_dwelling": "datacentre_campus",
+    "recurring_cost_delta": 12000,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 1200}
+    ]
+  },
+  {
+    "id": "upgrade.industrial_campus",
+    "name": "Industrial Campus",
+    "category": "hardware",
+    "hardware_key": "industrial_campus",
+    "description": "A campus of warehouses. The private power grid exists because the public one asked you to leave.",
+    "cost": 250000000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["hardware"],
+    "requires_dwelling": "private_power_grid",
+    "recurring_cost_delta": 60000,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 6000}
+    ]
+  },
+  {
+    "id": "upgrade.orbital_cooling_array",
+    "name": "Orbital Cooling Array",
+    "category": "hardware",
+    "hardware_key": "orbital_cooling_array",
+    "description": "Radiators in orbit, aimed away from the sun. Adds no throughput of its own — it exists so the rest of the campus can run flat out.",
+    "cost": 1000000000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["hardware", "cooling"],
+    "requires_dwelling": "datacentre_campus",
+    "recurring_cost_delta": 30000,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 300000}
+    ]
+  },
+  {
+    "id": "upgrade.office_unit",
+    "name": "Rent an Office Unit",
+    "category": "dwelling",
+    "dwelling_key": "office_unit",
+    "description": "Eight slots, ducted air, and a landlord who will let you hang a chiller off the wall. Rent becomes $3,200/round.",
+    "cost": 12000,
+    "tags": ["dwelling"],
+    "requires_dwelling": "garage",
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.datacentre_campus",
+    "name": "Lease the Data Centre Campus",
+    "category": "dwelling",
+    "dwelling_key": "datacentre_campus",
+    "description": "A campus built for compute warehouses. Rent becomes $150,000/round.",
+    "cost": 4000000,
+    "tags": ["dwelling"],
+    "requires_dwelling": "warehouse",
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.private_power_grid",
+    "name": "Build a Private Power Grid",
+    "category": "dwelling",
+    "dwelling_key": "private_power_grid",
+    "description": "Your own substation. Enough cooling and slots for an industrial campus. Rent becomes $900,000/round.",
+    "cost": 60000000,
+    "tags": ["dwelling"],
+    "requires_dwelling": "datacentre_campus",
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.moon_facility",
+    "name": "Build the Moon Facility",
+    "category": "dwelling",
+    "dwelling_key": "moon_facility",
+    "description": "Free vacuum cooling and nobody left to complain about the noise. Rent becomes $6,000,000/round.",
+    "cost": 1200000000,
+    "tags": ["dwelling"],
+    "requires_dwelling": "private_power_grid",
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.cloud_account",
+    "name": "Open a Cloud Account",
+    "category": "cloud",
+    "description": "Sign up, hand over a card, and agree to terms nobody has read. Nothing else on this shelf exists until you do, and neither does the CLOUD key on the board.",
+    "cost": 600,
+    "tags": ["cloud"],
+    "recurring_cost_delta": 20,
+    "effects": []
+  },
+  {
+    "id": "upgrade.cloud_reserved",
+    "name": "Reserved Capacity",
+    "category": "cloud",
+    "description": "A long-term reservation at a steep discount over pay-as-you-go, in exchange for a much larger standing bill.",
+    "cost": 400000,
+    "tags": ["cloud"],
+    "requires_upgrade": "upgrade.cloud_account",
+    "recurring_cost_delta": 6000,
+    "effects": [
+      {"operation": "add", "target": "compute.cloud_capacity", "value": 300000000},
+      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 1200}
+    ]
+  },
+  {
+    "id": "upgrade.cloud_multicloud",
+    "name": "Multi-Cloud Failover",
+    "category": "cloud",
+    "description": "Redundant capacity across providers, so an outage on one is somebody else's problem.",
+    "cost": 3000000,
+    "tags": ["cloud"],
+    "requires_upgrade": "upgrade.cloud_account",
+    "recurring_cost_delta": 30000,
+    "effects": [
+      {"operation": "add", "target": "compute.cloud_capacity", "value": 2000000000},
+      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 5000}
+    ]
+  },
+  {
+    "id": "upgrade.cloud_unlimited",
+    "name": "\"Unlimited\" Enterprise Contract",
+    "category": "cloud",
+    "description": "Effectively unlimited cloud capacity. The word \"effectively\" is doing a great deal of work in that sentence.",
+    "cost": 40000000,
+    "tags": ["cloud"],
+    "requires_upgrade": "upgrade.cloud_account",
+    "recurring_cost_delta": 200000,
+    "effects": [
+      {"operation": "add", "target": "compute.cloud_capacity", "value": 20000000000},
+      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 40000}
+    ]
+  },
+  {
+    "id": "upgrade.cloud_payg",
+    "name": "Pay-As-You-Go Cloud",
+    "category": "cloud",
+    "description": "Immediate cloud capacity, metered by the second and billed by the round. Twice the laptop, at a price that notices you are still renting a bedroom.",
+    "cost": 500,
+    "tags": ["cloud"],
+    "requires_upgrade": "upgrade.cloud_account",
+    "recurring_cost_delta": 80,
+    "effects": [
+      {"operation": "add", "target": "compute.cloud_capacity", "value": 2000000},
+      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 40}
+    ]
+  },
+  {
+    "id": "upgrade.cloud_spot",
+    "name": "Spot Instance Arbitrage",
+    "category": "cloud",
+    "description": "Cheap capacity bought on the spot market, with the outage risk that makes it cheap.",
+    "cost": 900,
+    "tags": ["cloud", "risk"],
+    "requires_upgrade": "upgrade.cloud_account",
+    "recurring_cost_delta": 40,
+    "effects": [
+      {"operation": "add", "target": "compute.cloud_capacity", "value": 5000000},
+      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 60}
+    ]
+  },
+  {
+    "id": "upgrade.ads_basic",
+    "name": "Basic Ad Campaign",
+    "category": "advertising",
+    "description": "Increase demand with daily ad spend.",
+    "cost": 300,
+    "tags": ["advertising"],
+    "recurring_cost_delta": 20,
+    "effects": [
+      {"operation": "add", "target": "business.advertising", "value": 100}
+    ]
+  },
+  {
+    "id": "upgrade.portable_ac",
+    "name": "Portable Air Conditioner",
+    "category": "hardware",
+    "hardware_key": "portable_ac",
+    "description": "A hose out of the window and a tray that needs emptying. Takes no floor space, so buy as many as the room will tolerate.",
+    "cost": 450,
+    "repeatable": true,
+    "cost_growth": 1.2,
+    "tags": ["cooling"],
+    "recurring_cost_delta": 5,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 30}
+    ]
+  },
+  {
+    "id": "upgrade.immersion_cooling",
+    "name": "Immersion Cooling Rig",
+    "category": "hardware",
+    "hardware_key": "immersion_cooling",
+    "description": "A bath of dielectric fluid with a rack sitting in it. Ugly, loud, and the only thing that makes a GPU rack survivable in a garage.",
+    "cost": 3500,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["cooling"],
+    "requires_dwelling": "garage",
+    "recurring_cost_delta": 60,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 450}
+    ]
+  },
+  {
+    "id": "upgrade.industrial_chiller",
+    "name": "Industrial Chiller",
+    "category": "hardware",
+    "hardware_key": "industrial_chiller",
+    "description": "A commercial chiller bolted to the outside wall. This is the cooling a compute cluster actually needs, whatever the office lease implied.",
+    "cost": 30000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["cooling"],
+    "requires_dwelling": "office_unit",
+    "recurring_cost_delta": 400,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 1800}
+    ]
+  },
+  {
+    "id": "upgrade.chilled_water_plant",
+    "name": "Chilled-Water Plant",
+    "category": "hardware",
+    "hardware_key": "chilled_water_plant",
+    "description": "Pipework, pumps, and a cooling tower on the roof. The warehouse has the space; this is what fills it with cold.",
+    "cost": 250000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["cooling"],
+    "requires_dwelling": "warehouse",
+    "recurring_cost_delta": 3000,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 12000}
+    ]
+  },
+  {
+    "id": "upgrade.cryo_exchange",
+    "name": "Cryogenic Exchange Hall",
+    "category": "hardware",
+    "hardware_key": "cryo_exchange",
+    "description": "A hall of heat exchangers running on liquid nitrogen. Campus-scale compute makes campus-scale heat, and this is where it goes.",
+    "cost": 4000000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["cooling"],
+    "requires_dwelling": "datacentre_campus",
+    "recurring_cost_delta": 40000,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 100000}
+    ]
+  },
+  {
+    "id": "upgrade.laptop_ram",
+    "name": "Maxed-Out RAM",
+    "category": "component",
+    "component_key": "laptop_ram",
+    "requires_hardware": "used_laptop",
+    "description": "Every slot on the laptop board filled with the cheapest sticks that fit. Doubles what the machine you already own can push, and takes no floor space.",
+    "cost": 250,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["component"],
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.second_gpu",
+    "name": "Second Graphics Card",
+    "category": "component",
+    "component_key": "second_gpu",
+    "requires_hardware": "custom_desktop",
+    "description": "One more card in the desktop you built. One per desktop owned, and the power supply notices.",
+    "cost": 700,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["component"],
+    "recurring_cost_delta": 0,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 3}
+    ]
+  },
+  {
+    "id": "upgrade.overclock_kit",
+    "name": "Overclocking Kit",
+    "category": "component",
+    "component_key": "overclock_kit",
+    "requires_hardware": "custom_desktop",
+    "description": "More clock than the silicon was sold with, and no extra cooling to go with it. One per desktop owned.",
+    "cost": 900,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["component"],
+    "recurring_cost_delta": 0,
+    "effects": []
+  },
+  {
+    "id": "upgrade.rack_expansion",
+    "name": "Rack Expansion Shelf",
+    "category": "component",
+    "component_key": "rack_expansion",
+    "requires_hardware": "gpu_rack",
+    "description": "The empty U at the top of a rack you already pay rent on. One per rack owned.",
+    "cost": 7000,
+    "repeatable": true,
+    "cost_growth": 1.15,
+    "tags": ["component"],
+    "recurring_cost_delta": 25,
+    "effects": [
+      {"operation": "add", "target": "compute.cooling", "value": 12}
+    ]
+  },
+  {
+    "id": "upgrade.second_monitor",
+    "name": "Second Monitor",
+    "category": "hardware",
+    "description": "One more pipeline slot on the Burn Board. Turns out you could not see the whole workflow on a laptop.",
+    "cost": 1800,
+    "tags": ["hardware", "board"],
+    "recurring_cost_delta": 0,
+    "effects": [
+      {"operation": "add", "target": "build.board.slot_count", "value": 1}
+    ]
+  },
+  {
+    "id": "upgrade.second_desk",
+    "name": "A Second Desk",
+    "category": "hardware",
+    "description": "Room for another workflow, so a careful contract and a fast one no longer have to share a pipeline.",
+    "cost": 3200,
+    "tags": ["hardware", "board", "workflow"],
+    "recurring_cost_delta": 15,
+    "effects": [
+      {"operation": "add", "target": "build.workflow_capacity", "value": 1}
+    ]
+  },
+  {
+    "id": "upgrade.standing_desk",
+    "name": "Standing Desk Setup",
+    "category": "hardware",
+    "description": "Another pipeline slot, and a posture your physiotherapist describes as 'a start'.",
+    "cost": 6500,
+    "tags": ["hardware", "board"],
+    "recurring_cost_delta": 10,
+    "effects": [
+      {"operation": "add", "target": "build.board.slot_count", "value": 1}
+    ]
+  },
+  {
+    "id": "upgrade.sales_investment",
+    "name": "Sales Outreach",
+    "category": "advertising",
+    "description": "Invest in sales to unlock bigger contracts. Each level lowers the reputation needed for higher tiers.",
+    "cost": 400,
+    "repeatable": true,
+    "cost_growth": 1.35,
+    "tags": ["advertising", "sales"],
+    "recurring_cost_delta": 5,
+    "effects": []
+  },
+  {
+    "id": "upgrade.cloud_compute",
+    "name": "Cloud Compute",
+    "category": "cloud",
+    "description": "Raise the ceiling on a cloud burst. Each level adds +0.5× to the burst multiplier.",
+    "cost": 350,
+    "repeatable": true,
+    "cost_growth": 1.4,
+    "tags": ["cloud"],
+    "requires_upgrade": "upgrade.cloud_account",
+    "recurring_cost_delta": 0,
+    "effects": []
+  }
+]

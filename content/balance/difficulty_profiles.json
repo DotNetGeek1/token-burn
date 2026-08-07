@@ -1,0 +1,16 @@
+{
+  "normal": {
+    "starting_cash": 500,
+    "power_cost_per_prompt": 10,
+    "rent_multiplier": 1.0,
+    "job_reward_multiplier": 1.0,
+    "token_requirement_multiplier": 1.0
+  },
+  "hard": {
+    "starting_cash": 300,
+    "power_cost_per_prompt": 12,
+    "rent_multiplier": 1.25,
+    "job_reward_multiplier": 0.85,
+    "token_requirement_multiplier": 1.35
+  }
+}

@@ -1,0 +1,24 @@
+# Token Burn — CODEOWNERS
+#
+# Maps the current flat repository layout to logical ownership teams.
+# Used for review routing and agent boundary enforcement.
+#
+# Target structure (docs/Multi_Agent_Development_Plan.md section 2) will refine
+# these paths when directories are migrated. Until then, top-level folders
+# represent team boundaries.
+
+/core/                    @architecture
+/definitions/             @architecture
+/config/                  @architecture
+/docs/decisions/          @architecture
+/docs/agent-tasks/        @architecture
+
+/systems/                 @gameplay
+
+/content/                 @content
+
+/ui/                      @ui
+
+/tests/                   @qa
+
+/presentation/            @presentation

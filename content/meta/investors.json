@@ -1,0 +1,50 @@
+[
+  {
+    "id": "investor.thermocline",
+    "name": "Dax Merrow",
+    "fund": "Thermocline Capital",
+    "patter": "I don't do diligence, I do conviction. Take it, don't take it, I've already tweeted about you."
+  },
+  {
+    "id": "investor.second_derivative",
+    "name": "Priya Ansell",
+    "fund": "Second Derivative",
+    "patter": "We're not investing in your company. We're investing in the version of you that exists in eighteen months, who is frankly more coachable."
+  },
+  {
+    "id": "investor.uncle",
+    "name": "Gerald Kemp",
+    "fund": "Kemp Family Holdings",
+    "patter": "My nephew explained tokens to me at Christmas. I understood perhaps a third of it. Here, have this, it was going to the boat otherwise."
+  },
+  {
+    "id": "investor.exit_velocity",
+    "name": "Marisol Quinn",
+    "fund": "Exit Velocity Partners",
+    "patter": "Free of charge, obviously. There's no term sheet. There's no cap table. There is a group chat, and you are now in it."
+  },
+  {
+    "id": "investor.recursive",
+    "name": "Toby Ng",
+    "fund": "Recursive Ventures",
+    "patter": "I founded a company that helps founders found companies. It failed. That makes me an expert on this exact moment in your life."
+  },
+  {
+    "id": "investor.faith",
+    "name": "Hollis Frame",
+    "fund": "Blind Faith Growth",
+    "patter": "I haven't read your deck. I haven't read anyone's deck since 2019. I look at the founder's hands and I simply know."
+  },
+  {
+    "id": "investor.wind_down",
+    "name": "Anneke Vos",
+    "fund": "Wind-Down Advisors",
+    "patter": "Statistically you will fail, and I will be there for that too. Consider this a relationship-building exercise. Take the module."
+  },
+  {
+    "id": "investor.compute_maxi",
+    "name": "Rune Halvorsen",
+    "fund": "Compute Maximalism",
+    "patter": "Everything is a scaling law if you squint. Your rent is a scaling law. Take the free thing and stop asking me about revenue."
+  }
+]

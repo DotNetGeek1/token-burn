@@ -1,0 +1,441 @@
+[
+  {
+    "id": "job.product_descriptions",
+    "name": "Write 40 Product Descriptions",
+    "description": "Client wants them 'more human'.",
+    "reward": 250,
+    "token_requirement": 12000000,
+    "quality_threshold": 55,
+    "deadline_days": 3,
+    "revision_risk": 0.08,
+    "tags": ["copy", "low_stakes"],
+    "demands": ["demand.thrift"],
+    "complications": [{"label": "More human"}]
+  },
+  {
+    "id": "job.wordpress_plugin",
+    "name": "Fix a WordPress Plugin",
+    "description": "No documentation included.",
+    "reward": 700,
+    "token_requirement": 45000000,
+    "quality_threshold": 60,
+    "deadline_days": 4,
+    "revision_risk": 0.12,
+    "tags": ["legacy", "php"],
+    "demands": ["demand.testing"],
+    "complications": [{"label": "No docs"}],
+    "board_rules": [
+      {
+        "type": "blocked_slots",
+        "value": 1,
+        "label": "Steve's undocumented script squats in the first slot"
+      }
+    ]
+  },
+  {
+    "id": "job.landing_page",
+    "name": "Quick Landing Page",
+    "description": "Just needs to look premium.",
+    "reward": 900,
+    "token_requirement": 180000000,
+    "quality_threshold": 58,
+    "deadline_days": 3,
+    "revision_risk": 0.1,
+    "tags": ["frontend"],
+    "demands": [],
+    "complications": [],
+    "board_rules": [
+      {
+        "type": "tag_bonus",
+        "tag": "prompt",
+        "value": 1.5,
+        "label": "Pure vibes: prompt modules are 50% stronger"
+      }
+    ]
+  },
+  {
+    "id": "job.auth_system",
+    "name": "Fix Authentication System",
+    "description": "Legacy code and compliance review required.",
+    "reward": 8200,
+    "token_requirement": 1400000000000,
+    "quality_threshold": 85,
+    "deadline_days": 5,
+    "revision_risk": 0.18,
+    "tags": ["fintech", "urgent"],
+    "demands": ["demand.testing", "demand.audit"],
+    "complications": [{"label": "Legacy Code"}, {"label": "Compliance Review"}]
+  },
+  {
+    "id": "job.dating_mvp",
+    "name": "Build a Dating App MVP",
+    "description": "Founder changes scope weekly.",
+    "reward": 8000,
+    "token_requirement": 900000000000,
+    "quality_threshold": 72,
+    "deadline_days": 5,
+    "revision_risk": 0.25,
+    "tags": ["mvp", "mobile"],
+    "demands": ["demand.testing"],
+    "complications": [{"label": "Scope Creep"}],
+    "board_rules": [
+      {
+        "type": "feature_creep",
+        "chance": 0.35,
+        "value": 0.08,
+        "label": "The founder keeps remembering features",
+        "features": [
+          "Authentication",
+          "Chat",
+          "Payments",
+          "Social feed",
+          "Blockchain",
+          "\"Make it like Uber\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "job.marketplace",
+    "name": "Build a 'Simple' Marketplace",
+    "description": "Two-sided payments, disputes, and admin panel 'later'.",
+    "reward": 12000,
+    "token_requirement": 2200000000000,
+    "quality_threshold": 78,
+    "deadline_days": 5,
+    "revision_risk": 0.2,
+    "tags": ["marketplace"],
+    "demands": ["demand.testing", "demand.craft"],
+    "complications": [{"label": "Payments"}]
+  },
+  {
+    "id": "job.analytics_dashboard",
+    "name": "Executive Analytics Dashboard",
+    "description": "Must impress investors by Friday.",
+    "reward": 15000,
+    "token_requirement": 3500000000000,
+    "quality_threshold": 80,
+    "deadline_days": 4,
+    "revision_risk": 0.15,
+    "tags": ["dashboard", "enterprise"],
+    "demands": ["demand.craft"],
+    "complications": [{"label": "Demo Pressure"}]
+  },
+  {
+    "id": "job.chatbot",
+    "name": "Enterprise Support Chatbot",
+    "description": "Must never hallucinate, except when it must.",
+    "reward": 24000,
+    "token_requirement": 8000000000000,
+    "quality_threshold": 82,
+    "deadline_days": 5,
+    "revision_risk": 0.16,
+    "tags": ["ai", "enterprise"],
+    "demands": ["demand.craft", "demand.testing"],
+    "complications": [{"label": "Hallucination Risk"}],
+    "board_rules": [
+      {
+        "type": "agent_scope",
+        "value": 0.06,
+        "label": "Every agent invents another requirement"
+      }
+    ]
+  },
+  {
+    "id": "job.bank_migration",
+    "name": "Migrate a Bank System",
+    "description": "Failure can end the run.",
+    "reward": 300000,
+    "token_requirement": 50000000000000,
+    "quality_threshold": 92,
+    "deadline_days": 6,
+    "revision_risk": 0.1,
+    "tags": ["banking", "high_risk"],
+    "demands": ["demand.audit", "demand.testing", "demand.craft"],
+    "complications": [{"label": "Audit Required"}],
+    "board_rules": [
+      {
+        "type": "max_hidden_bugs",
+        "value": 0,
+        "label": "Audited on delivery: any undetected defect halves the fee"
+      },
+      {
+        "type": "recursion_risk",
+        "value": 9,
+        "label": "Every recursive stage creates compliance risk"
+      }
+    ]
+  },
+  {
+    "id": "job.open_world",
+    "name": "Generate an Open-World Game",
+    "description": "Context grows exponentially.",
+    "reward": 12000000,
+    "token_requirement": 500000000000000,
+    "quality_threshold": 70,
+    "deadline_days": 6,
+    "revision_risk": 0.22,
+    "tags": ["absurd", "gaming"],
+    "demands": ["demand.throughput"],
+    "complications": [{"label": "Exponential Context"}]
+  },
+  {
+    "id": "job.civilisation",
+    "name": "Simulate a Civilisation",
+    "description": "The simulation may hire you back.",
+    "reward": 500000,
+    "token_requirement": 900000000000000,
+    "quality_threshold": 75,
+    "deadline_days": 5,
+    "revision_risk": 0.2,
+    "tags": ["absurd", "simulation"],
+    "demands": ["demand.throughput", "demand.craft"],
+    "complications": [{"label": "Recursive Clients"}]
+  },
+  {
+    "id": "job.ecommerce_reviews",
+    "name": "Write 200 Product Reviews",
+    "description": "They must sound authentic but not too authentic.",
+    "reward": 180,
+    "token_requirement": 8000000,
+    "quality_threshold": 52,
+    "deadline_days": 2,
+    "revision_risk": 0.06,
+    "tags": ["ecommerce", "copy", "low_stakes"],
+    "demands": ["demand.thrift"],
+    "complications": [{"label": "Sounds Too Real"}]
+  },
+  {
+    "id": "job.social_captions",
+    "name": "Caption 300 Social Posts",
+    "description": "Brand voice is 'fun but legally cautious'.",
+    "reward": 200,
+    "token_requirement": 9000000,
+    "quality_threshold": 50,
+    "deadline_days": 2,
+    "revision_risk": 0.07,
+    "tags": ["copy", "marketing", "low_stakes"],
+    "demands": ["demand.thrift"],
+    "complications": [{"label": "Brand Voice Police"}]
+  },
+  {
+    "id": "job.seo_blog_spam",
+    "name": "Ghostwrite 20 SEO Articles",
+    "description": "Keyword density matters more than sentences do.",
+    "reward": 240,
+    "token_requirement": 14000000,
+    "quality_threshold": 48,
+    "deadline_days": 3,
+    "revision_risk": 0.09,
+    "tags": ["copy", "marketing", "low_stakes"],
+    "demands": ["demand.thrift"],
+    "complications": [{"label": "Keyword Stuffing"}]
+  },
+  {
+    "id": "job.cv_rewriter",
+    "name": "Rewrite 60 CVs",
+    "description": "Every candidate is a 'results-driven visionary' now.",
+    "reward": 220,
+    "token_requirement": 11000000,
+    "quality_threshold": 54,
+    "deadline_days": 3,
+    "revision_risk": 0.08,
+    "tags": ["copy", "low_stakes"],
+    "demands": ["demand.thrift"],
+    "complications": [{"label": "Creative Truth"}]
+  },
+  {
+    "id": "job.discord_mod_bot",
+    "name": "Discord Moderation Bot",
+    "description": "Must ban spammers, not the community manager.",
+    "reward": 320,
+    "token_requirement": 18000000,
+    "quality_threshold": 58,
+    "deadline_days": 3,
+    "revision_risk": 0.1,
+    "tags": ["gaming", "backend"],
+    "demands": ["demand.testing"],
+    "complications": [{"label": "Overzealous Bans"}]
+  },
+  {
+    "id": "job.recipe_generator",
+    "name": "Generate 500 Recipes",
+    "description": "None of them may be dangerous. Legal insisted.",
+    "reward": 260,
+    "token_requirement": 16000000,
+    "quality_threshold": 52,
+    "deadline_days": 3,
+    "revision_risk": 0.08,
+    "tags": ["ecommerce", "copy", "low_stakes"],
+    "demands": ["demand.thrift"],
+    "complications": [{"label": "Edible Results Only"}]
+  },
+  {
+    "id": "job.chatbot_faq_starter",
+    "name": "FAQ Chatbot for a Dentist",
+    "description": "Answer 40 questions, refuse to give medical advice.",
+    "reward": 380,
+    "token_requirement": 32000000,
+    "quality_threshold": 60,
+    "deadline_days": 4,
+    "revision_risk": 0.11,
+    "tags": ["ai", "smb"],
+    "demands": [],
+    "complications": [{"label": "Liability Wording"}]
+  },
+  {
+    "id": "job.shopify_theme_tweak",
+    "name": "Shopify Theme Rescue",
+    "description": "Three agencies have already touched this theme.",
+    "reward": 600,
+    "token_requirement": 48000000,
+    "quality_threshold": 62,
+    "deadline_days": 4,
+    "revision_risk": 0.13,
+    "tags": ["ecommerce", "frontend"],
+    "demands": ["demand.testing"],
+    "complications": [{"label": "Mystery CSS"}, {"label": "No Staging Site"}]
+  },
+  {
+    "id": "job.fintech_receipt_parser",
+    "name": "Build a Receipt Parser",
+    "description": "Clients upload photos taken through car windshields.",
+    "reward": 550,
+    "token_requirement": 55000000,
+    "quality_threshold": 62,
+    "deadline_days": 4,
+    "revision_risk": 0.11,
+    "tags": ["fintech", "parsing"],
+    "demands": ["demand.testing"],
+    "complications": [{"label": "Messy Scans"}, {"label": "Currency Mismatch"}]
+  },
+  {
+    "id": "job.gaming_achievement_system",
+    "name": "Design an Achievement System",
+    "description": "Players will min-max it within hours.",
+    "reward": 3200,
+    "token_requirement": 220000000,
+    "quality_threshold": 68,
+    "deadline_days": 4,
+    "revision_risk": 0.14,
+    "tags": ["gaming", "backend"],
+    "demands": ["demand.testing"],
+    "complications": [{"label": "Exploit Hunters"}]
+  },
+  {
+    "id": "job.ecommerce_abandoned_cart",
+    "name": "Abandoned Cart Recovery Flow",
+    "description": "Twelve emails, three push notifications, one guilt trip.",
+    "reward": 2800,
+    "token_requirement": 350000000,
+    "quality_threshold": 65,
+    "deadline_days": 4,
+    "revision_risk": 0.13,
+    "tags": ["ecommerce", "marketing"],
+    "demands": ["demand.thrift"],
+    "complications": [{"label": "CAN-SPAM Complaints"}]
+  },
+  {
+    "id": "job.enterprise_sso_integration",
+    "name": "Enterprise SSO Integration",
+    "description": "Must support SAML, OIDC, and a legacy protocol nobody admits using.",
+    "reward": 18000,
+    "token_requirement": 2500000000,
+    "quality_threshold": 80,
+    "deadline_days": 5,
+    "revision_risk": 0.17,
+    "tags": ["enterprise", "security"],
+    "demands": ["demand.audit", "demand.craft"],
+    "complications": [{"label": "Identity Provider Outage"}, {"label": "Certificate Expiry"}]
+  },
+  {
+    "id": "job.gaming_matchmaking",
+    "name": "Real-Time Matchmaking Service",
+    "description": "Skill-based, ping-aware, and somehow always puts you with a smurf.",
+    "reward": 9500,
+    "token_requirement": 4000000000,
+    "quality_threshold": 76,
+    "deadline_days": 5,
+    "revision_risk": 0.19,
+    "tags": ["gaming", "realtime"],
+    "demands": ["demand.cooling", "demand.throughput"],
+    "complications": [{"label": "Queue Dodgers"}, {"label": "Latency Spikes"}]
+  },
+  {
+    "id": "job.fintech_fraud_detection",
+    "name": "Fraud Detection Pipeline",
+    "description": "Block fraud without blocking grandma's knitting subscription.",
+    "reward": 45000,
+    "token_requirement": 120000000000,
+    "quality_threshold": 88,
+    "deadline_days": 6,
+    "revision_risk": 0.12,
+    "tags": ["fintech", "high_risk"],
+    "demands": ["demand.audit", "demand.craft"],
+    "complications": [{"label": "False Positives"}, {"label": "Regulatory Review"}]
+  },
+  {
+    "id": "job.enterprise_compliance_audit",
+    "name": "SOC 2 Compliance Overhaul",
+    "description": "Auditors arrive Monday. The evidence folder is a Slack thread.",
+    "reward": 85000,
+    "token_requirement": 350000000000,
+    "quality_threshold": 90,
+    "deadline_days": 5,
+    "revision_risk": 0.1,
+    "tags": ["enterprise", "compliance"],
+    "demands": ["demand.audit", "demand.testing", "demand.craft"],
+    "complications": [{"label": "Missing Logs"}, {"label": "Auditor On Site"}],
+    "board_rules": [
+      {
+        "type": "max_hidden_bugs",
+        "value": 1,
+        "label": "The auditors will find more than one undetected defect"
+      },
+      {
+        "type": "blocked_slots",
+        "value": 2,
+        "label": "Legacy logging and a decade-old API own the top two slots"
+      }
+    ]
+  },
+  {
+    "id": "job.gaming_procedural_universe",
+    "name": "Procedural Universe Generator",
+    "description": "Every planet needs lore, economy, and at least one bugged quest.",
+    "reward": 8000000,
+    "token_requirement": 600000000000000,
+    "quality_threshold": 72,
+    "deadline_days": 6,
+    "revision_risk": 0.21,
+    "tags": ["gaming", "absurd"],
+    "demands": ["demand.throughput", "demand.testing"],
+    "complications": [{"label": "Infinite Content"}, {"label": "Physics Breaks"}]
+  },
+  {
+    "id": "job.absurd_reality_fork",
+    "name": "Fork Reality for A/B Testing",
+    "description": "Run two parallel universes and pick the one with better conversion.",
+    "reward": 25000000,
+    "token_requirement": 1500000000000000,
+    "quality_threshold": 85,
+    "deadline_days": 6,
+    "revision_risk": 0.18,
+    "tags": ["absurd", "late_game"],
+    "demands": ["demand.throughput", "demand.craft", "demand.cooling"],
+    "complications": [{"label": "Merge Conflicts"}, {"label": "Ethics Committee"}]
+  },
+  {
+    "id": "job.capstone_simulation",
+    "name": "Simulate a Civilisation (Capstone)",
+    "description": "The largest ordinary contract anyone will offer you, and it pays like it. It does not end the run — only an Ascension Contract does that.",
+    "reward": 2000000,
+    "token_requirement": 1200000000000000,
+    "quality_threshold": 88,
+    "deadline_days": 6,
+    "revision_risk": 0.15,
+    "tags": ["capstone", "absurd"],
+    "demands": ["demand.throughput", "demand.craft", "demand.audit"],
+    "complications": [{"label": "Accidental Consciousness"}]
+  }
+]

@@ -1,0 +1,470 @@
+[
+  {
+    "id": "perk.ship_it",
+    "name": "Ship It",
+    "rarity": "rare",
+    "tags": ["deadline", "reward", "risk"],
+    "description_template": "Jobs completed with under {threshold}% time remaining pay {multiplier}×.",
+    "parameters": {"threshold": 0.05, "multiplier": 2.0},
+    "subscriptions": [{
+      "event": "reward.calculated",
+      "priority": 50,
+      "conditions": [{"left": "job.time_remaining_ratio", "operator": "<", "right": "$threshold"}],
+      "effects": [{"operation": "multiply", "target": "job.reward", "value": "$multiplier"}]
+    }]
+  },
+  {
+    "id": "perk.stack_overflow_tab",
+    "name": "Stack Overflow Tab",
+    "rarity": "common",
+    "tags": ["quality", "bugs", "board"],
+    "description_template": "Every batch quietly fixes its first bug and salvages {quality_restore} quality.",
+    "parameters": {"quality_restore": 4},
+    "subscriptions": [{
+      "event": "board.batch_finished",
+      "priority": 90,
+      "conditions": [{"left": "batch.known_bugs", "operator": ">", "right": 0}],
+      "effects": [
+        {"operation": "add", "target": "batch.quality", "value": "$quality_restore"},
+        {"operation": "add", "target": "batch.known_bugs", "value": -1}
+      ]
+    }]
+  },
+  {
+    "id": "perk.free_trial",
+    "name": "Free Trial",
+    "rarity": "rare",
+    "tags": ["cloud", "risk"],
+    "description_template": "Cloud compute is free for the first {trial_prompts} prompts of a round, then costs {late_multiplier}× with deferred penalties of ${deferred_penalty}.",
+    "parameters": {
+      "trial_prompts": 3,
+      "trial_rate_bonus": 1.15,
+      "late_multiplier": 4.0,
+      "deferred_penalty": 75
+    },
+    "subscriptions": [
+      {
+        "event": "prompt.started",
+        "priority": 15,
+        "conditions": [{"left": "calendar.prompt", "operator": "<=", "right": "$trial_prompts"}],
+        "effects": [
+          {"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 1.0},
+          {"operation": "multiply", "target": "compute.token_rate", "value": "$trial_rate_bonus"}
+        ]
+      },
+      {
+        "event": "prompt.started",
+        "priority": 16,
+        "conditions": [{"left": "calendar.prompt", "operator": ">", "right": "$trial_prompts"}],
+        "effects": [
+          {"operation": "multiply", "target": "economy.cloud_liability", "value": "$late_multiplier"},
+          {"operation": "defer_cost", "target": "economy.cash", "value": "$deferred_penalty", "prompts": 2}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "perk.works_on_my_machine",
+    "name": "Works on My Machine",
+    "rarity": "common",
+    "tags": ["local", "risk"],
+    "description_template": "Local jobs gain +{bonus}% throughput.",
+    "parameters": {"bonus": 25},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 10,
+      "conditions": [],
+      "effects": [{"operation": "multiply", "target": "compute.token_rate", "value": 1.25}]
+    }]
+  },
+  {
+    "id": "perk.technical_debt",
+    "name": "Technical Debt",
+    "rarity": "uncommon",
+    "tags": ["cash", "risk"],
+    "description_template": "Borrow ${cash} immediately; every batch ships one extra hidden bug and loses {bug_quality_penalty} quality.",
+    "parameters": {"cash": 1500, "bug_quality_penalty": 4, "bug_quality_delta": -4},
+    "subscriptions": [
+      {
+        "event": "perk.acquired",
+        "priority": 5,
+        "conditions": [],
+        "effects": [{"operation": "borrow", "target": "economy.cash", "value": "$cash"}]
+      },
+      {
+        "event": "board.batch_finished",
+        "priority": 3,
+        "conditions": [],
+        "effects": [
+          {"operation": "add", "target": "batch.hidden_bugs", "value": 1},
+          {"operation": "add", "target": "batch.quality", "value": "$bug_quality_delta"}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "perk.founder_mode",
+    "name": "Founder Mode",
+    "rarity": "uncommon",
+    "tags": ["demand", "risk"],
+    "description_template": "Advertising produces +{demand_bonus} demand; scope creep risk rises by {scope_creep_bonus} each quality tick.",
+    "parameters": {"demand_bonus": 1, "scope_creep_bonus": 0.03},
+    "subscriptions": [
+      {
+        "event": "round.started",
+        "priority": 5,
+        "conditions": [],
+        "effects": [{"operation": "add", "target": "business.demand_modifier", "value": "$demand_bonus"}]
+      },
+      {
+        "event": "board.batch_finished",
+        "priority": 5,
+        "conditions": [],
+        "effects": [{"operation": "add", "target": "job.scope_creep_pct", "value": "$scope_creep_bonus"}]
+      }
+    ]
+  },
+  {
+    "id": "perk.infinite_context",
+    "name": "Infinite Context",
+    "rarity": "legendary",
+    "tags": ["tokens", "risk"],
+    "description_template": "Token rate gains {growth_multiplier}× per round elapsed, stacking up to {max_stacks} times.",
+    "parameters": {"growth_multiplier": 1.25, "max_stacks": 3},
+    "subscriptions": [{
+      "event": "prompt.started",
+      "priority": 30,
+      "conditions": [],
+      "effects": [{
+        "operation": "repeat",
+        "value": "calendar.round",
+        "max_repeats": "$max_stacks",
+        "effects": [{"operation": "multiply", "target": "compute.token_rate", "value": "$growth_multiplier"}]
+      }]
+    }]
+  },
+  {
+    "id": "perk.the_wrapper",
+    "name": "The Wrapper",
+    "rarity": "rare",
+    "tags": ["passive", "reward"],
+    "description_template": "Each completed job grants a {passive_ratio_pct}% clone bonus and spawns ${passive_income} of passive income every round.",
+    "parameters": {"passive_ratio": 0.15, "passive_ratio_pct": 15, "passive_income": 25},
+    "subscriptions": [{
+      "event": "reward.calculated",
+      "priority": 20,
+      "conditions": [],
+      "effects": [
+        {
+          "operation": "convert",
+          "from": "job.reward",
+          "target": "job.reward",
+          "value": "$passive_ratio",
+          "consume": false
+        },
+        {
+          "operation": "spawn",
+          "target": "build.status_effects",
+          "value": {
+            "id": "wrapper.passive",
+            "source_perk": "perk.the_wrapper",
+            "subscriptions": [{
+              "event": "round.started",
+              "priority": 5,
+              "conditions": [],
+              "effects": [{"operation": "add", "target": "economy.cash", "value": 25}]
+            }]
+          }
+        }
+      ]
+    }]
+  },
+  {
+    "id": "perk.vibe_check",
+    "name": "Vibe Check",
+    "rarity": "common",
+    "tags": ["speed", "quality"],
+    "description_template": "Ship on feel: +{speed_bonus}% throughput, but each batch's quality rerolls between {quality_min} and {quality_max}.",
+    "parameters": {
+      "speed_bonus": 10,
+      "quality_min": 2,
+      "quality_max": 44
+    },
+    "subscriptions": [
+      {
+        "event": "prompt.started",
+        "priority": 8,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "compute.token_rate", "value": 1.1}]
+      },
+      {
+        "event": "board.batch_finished",
+        "priority": 8,
+        "conditions": [],
+        "effects": [{
+          "operation": "reroll",
+          "target": "batch.quality",
+          "value": {"min": "$quality_min", "max": "$quality_max"}
+        }]
+      }
+    ]
+  },
+  {
+    "id": "perk.prompt_engineer",
+    "name": "Prompt Engineer",
+    "rarity": "uncommon",
+    "tags": ["efficiency"],
+    "description_template": "Gain +{efficiency}% efficiency, and every pipeline stage produces +{stage_quality_bonus} quality.",
+    "parameters": {"efficiency": 0.15, "stage_quality_bonus": 2},
+    "subscriptions": [
+      {
+        "event": "compute.recalculate",
+        "priority": 10,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "compute.efficiency", "value": 1.15}]
+      },
+      {
+        "event": "board.stage_resolved",
+        "priority": 10,
+        "conditions": [],
+        "effects": [{"operation": "add", "target": "stage.quality", "value": "$stage_quality_bonus"}]
+      }
+    ]
+  },
+  {
+    "id": "perk.cloud_baron",
+    "name": "Cloud Baron",
+    "rarity": "rare",
+    "tags": ["cloud", "economy"],
+    "description_template": "Cloud costs discounted by {cloud_discount_pct}%; liability grows +{liability_per_prompt} each prompt.",
+    "parameters": {"cloud_discount_pct": 50, "liability_per_prompt": 15},
+    "subscriptions": [
+      {
+        "event": "compute.recalculate",
+        "priority": 15,
+        "conditions": [],
+        "effects": [{"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 0.5}]
+      },
+      {
+        "event": "prompt.started",
+        "priority": 15,
+        "conditions": [],
+        "effects": [{"operation": "add", "target": "economy.cloud_liability", "value": "$liability_per_prompt"}]
+      }
+    ]
+  },
+  {
+    "id": "perk.consultancy_mode",
+    "name": "Consultancy Mode",
+    "rarity": "uncommon",
+    "tags": ["reputation", "quality"],
+    "description_template": "Jobs with quality ≥{quality_threshold} convert {reputation_ratio} of quality into reputation.",
+    "parameters": {"quality_threshold": 80, "reputation_ratio": 0.1},
+    "subscriptions": [{
+      "event": "reward.calculated",
+      "priority": 12,
+      "conditions": [{"left": "job.quality", "operator": ">=", "right": "$quality_threshold"}],
+      "effects": [{
+        "operation": "convert",
+        "from": "job.quality",
+        "target": "business.reputation",
+        "value": "$reputation_ratio",
+        "consume": false
+      }]
+    }]
+  },
+  {
+    "id": "perk.wide_bus",
+    "name": "Wide Bus",
+    "rarity": "rare",
+    "tags": ["board", "hardware"],
+    "description_template": "The Burn Board gains {slots} extra pipeline slot.",
+    "parameters": {"slots": 1},
+    "subscriptions": [{
+      "event": "perk.acquired",
+      "priority": 5,
+      "conditions": [],
+      "effects": [{"operation": "add", "target": "build.board.slot_count", "value": "$slots"}]
+    }]
+  },
+  {
+    "id": "perk.two_ways_of_working",
+    "name": "Two Ways of Working",
+    "rarity": "rare",
+    "tags": ["board", "workflow"],
+    "description_template": "Room for {workflows} more workflow, so contracts can be routed through different pipelines.",
+    "parameters": {"workflows": 1},
+    "subscriptions": [{
+      "event": "perk.acquired",
+      "priority": 5,
+      "conditions": [],
+      "effects": [{"operation": "add", "target": "build.workflow_capacity", "value": "$workflows"}]
+    }]
+  },
+  {
+    "id": "perk.free_first_stage",
+    "name": "Founder Discount",
+    "rarity": "common",
+    "tags": ["board", "economy"],
+    "description_template": "The first stage of the pipeline costs nothing.",
+    "parameters": {},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 80,
+      "conditions": [{"left": "$is_first_stage", "operator": "==", "right": true}],
+      "effects": [{"operation": "set", "target": "stage.cost", "value": 0}]
+    }]
+  },
+  {
+    "id": "perk.free_last_stage",
+    "name": "Deploy On Friday",
+    "rarity": "common",
+    "tags": ["board", "economy"],
+    "description_template": "The last stage of the pipeline costs nothing but adds {heat} heat.",
+    "parameters": {"heat": 6},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 80,
+      "conditions": [{"left": "$is_last_stage", "operator": "==", "right": true}],
+      "effects": [
+        {"operation": "set", "target": "stage.cost", "value": 0},
+        {"operation": "add", "target": "stage.heat", "value": "$heat"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.rubber_duck",
+    "name": "Rubber Duck",
+    "rarity": "uncommon",
+    "tags": ["board", "recursion"],
+    "description_template": "Every stage but the first also repeats the stage above it at {strength}% strength.",
+    "parameters": {"repeat": 0.3, "strength": 30},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 40,
+      "conditions": [{"left": "$is_first_stage", "operator": "==", "right": false}],
+      "effects": [{"operation": "add", "target": "stage.repeat_previous", "value": "$repeat"}]
+    }]
+  },
+  {
+    "id": "perk.thermal_paste",
+    "name": "Generous Thermal Paste",
+    "rarity": "common",
+    "tags": ["board", "heat"],
+    "description_template": "Pipeline stages run {heat_discount_pct}% cooler.",
+    "parameters": {"heat_discount": 0.4, "heat_discount_pct": 40},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 60,
+      "conditions": [],
+      "effects": [{"operation": "discount", "target": "stage.heat", "value": "$heat_discount"}]
+    }]
+  },
+  {
+    "id": "perk.hot_streak",
+    "name": "Thermal Runaway",
+    "rarity": "rare",
+    "tags": ["board", "heat", "risk"],
+    "description_template": "While the rig is above {threshold}% heat, batches produce {multiplier}× progress.",
+    "parameters": {"threshold": 0.9, "multiplier": 3.0},
+    "subscriptions": [{
+      "event": "board.batch_started",
+      "priority": 20,
+      "conditions": [{"left": "$heat_ratio", "operator": ">", "right": "$threshold"}],
+      "effects": [{"operation": "multiply", "target": "batch.progress_mult", "value": "$multiplier"}]
+    }]
+  },
+  {
+    "id": "perk.bug_alchemy",
+    "name": "Bug Alchemy",
+    "rarity": "rare",
+    "tags": ["board", "bugs"],
+    "description_template": "Turns {convert_pct}% of a batch's known bugs into raw progress.",
+    "parameters": {"convert": 0.3, "convert_pct": 30},
+    "subscriptions": [{
+      "event": "board.batch_finished",
+      "priority": 30,
+      "conditions": [{"left": "batch.known_bugs", "operator": ">", "right": 0}],
+      "effects": [{
+        "operation": "convert",
+        "from": "batch.known_bugs",
+        "target": "batch.progress_mult",
+        "value": "$convert",
+        "consume": true
+      }]
+    }]
+  },
+  {
+    "id": "perk.test_driven",
+    "name": "Test-Driven Everything",
+    "rarity": "uncommon",
+    "tags": ["board", "test"],
+    "description_template": "Every bug a batch fixes feeds {convert_pct}% more tokens back into it.",
+    "parameters": {"convert": 0.12, "convert_pct": 12},
+    "subscriptions": [{
+      "event": "board.batch_finished",
+      "priority": 30,
+      "conditions": [{"left": "batch.fixed", "operator": ">", "right": 0}],
+      "effects": [{
+        "operation": "convert",
+        "from": "batch.fixed",
+        "target": "batch.token_mult",
+        "value": "$convert",
+        "consume": false
+      }]
+    }]
+  },
+  {
+    "id": "perk.middle_management",
+    "name": "Middle Management",
+    "rarity": "uncommon",
+    "tags": ["board", "positional"],
+    "description_template": "The third stage of the pipeline gains ×{progress} progress and +{quality} quality.",
+    "parameters": {"progress": 1.5, "quality": 8, "position": 2},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 45,
+      "conditions": [{"left": "$stage_position", "operator": "==", "right": "$position"}],
+      "effects": [
+        {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+        {"operation": "add", "target": "stage.quality", "value": "$quality"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.pipeline_momentum",
+    "name": "Pipeline Momentum",
+    "rarity": "rare",
+    "tags": ["board", "positional"],
+    "description_template": "Each stage makes the stage below it {bonus_pct}% stronger.",
+    "parameters": {"bonus": 1.15, "bonus_pct": 15},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 70,
+      "conditions": [],
+      "effects": [{"operation": "multiply", "target": "stage.next_multiplier", "value": "$bonus"}]
+    }]
+  },
+  {
+    "id": "perk.ad_tech_goblin",
+    "name": "Ad-Tech Goblin",
+    "rarity": "rare",
+    "tags": ["advertising", "demand"],
+    "description_template": "Floods the board with +{demand_bonus} demand but erodes {quality_discount_pct}% of quality each tick.",
+    "parameters": {"demand_bonus": 2, "quality_discount_pct": 10},
+    "subscriptions": [
+      {
+        "event": "round.started",
+        "priority": 8,
+        "conditions": [],
+        "effects": [{"operation": "add", "target": "business.demand_modifier", "value": "$demand_bonus"}]
+      },
+      {
+        "event": "board.batch_finished",
+        "priority": 8,
+        "conditions": [],
+        "effects": [{"operation": "discount", "target": "batch.quality", "value": 0.1}]
+      }
+    ]
+  }
+]

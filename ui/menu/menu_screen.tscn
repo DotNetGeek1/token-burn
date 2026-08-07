@@ -1,0 +1,135 @@
+[gd_scene load_steps=3 format=3 uid="uid://menu_screen_full"]
+
+[ext_resource type="Script" path="res://ui/menu/menu_screen.gd" id="1"]
+[ext_resource type="Script" path="res://ui/common/game_button.gd" id="2"]
+
+[node name="MenuScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 24
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+text = "MORE"
+
+[node name="Subtitle" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+autowrap_mode = 2
+text = "Records, difficulty and the way back out."
+
+[node name="DifficultyLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+text = "DIFFICULTY · APPLIES FROM YOUR NEXT NEW RUN"
+
+[node name="DifficultyRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="NormalButton" type="Button" parent="Panel/Margin/VBox/DifficultyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "action"
+headline = "NORMAL"
+
+[node name="HardButton" type="Button" parent="Panel/Margin/VBox/DifficultyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "HARD"
+
+[node name="EndlessButton" type="Button" parent="Panel/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "perk"
+headline = "ENDLESS MODE"
+sub_text = "OFF"
+
+[node name="Separator" type="Control" parent="Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="WorkflowsButton" type="Button" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "action"
+headline = "WORKFLOWS"
+sub_text = "Define the pipelines your contracts run through"
+icon_key = "ship_it"
+
+[node name="MetaHubButton" type="Button" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "perk"
+headline = "THE LEGACY"
+sub_text = "Permanent unlocks and records"
+icon_key = "reputation"
+
+[node name="AchievementsButton" type="Button" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "energy"
+headline = "THE TROPHY CABINET"
+sub_text = "Achievements and the modules they unlock"
+icon_key = "quality"
+
+[node name="BurnLabButton" type="Button" parent="Panel/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "BURN LAB"
+sub_text = "Debug tooling"
+
+[node name="Spacer" type="Control" parent="Panel/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SaveLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+autowrap_mode = 2
+text = "Autosave after every decision."
+
+[node name="TitleButton" type="Button" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "QUIT TO TITLE"
+sub_text = "Your run is saved"

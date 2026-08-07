@@ -1,0 +1,184 @@
+[gd_scene load_steps=5 format=3 uid="uid://operations_screen_full"]
+
+[ext_resource type="Script" path="res://ui/operations/operations_screen.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://resource_bar" path="res://ui/common/resource_bar.tscn" id="2"]
+[ext_resource type="Script" path="res://ui/common/game_button.gd" id="3"]
+[ext_resource type="Script" path="res://ui/board/heat_gauge.gd" id="4"]
+
+[node name="OperationsScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1")
+
+[node name="Bottom" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="StatusPanel" type="PanelContainer" parent="Bottom"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Bottom/StatusPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="StatusBox" type="VBoxContainer" parent="Bottom/StatusPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="StatusTitle" type="Label" parent="Bottom/StatusPanel/Margin/StatusBox"]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 10
+text = "No contracts queued"
+horizontal_alignment = 1
+
+[node name="StatusBody" type="Label" parent="Bottom/StatusPanel/Margin/StatusBox"]
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 8
+autowrap_mode = 2
+text = "Pick up a contract from the job board to get started."
+horizontal_alignment = 1
+
+[node name="InfoRow" type="HBoxContainer" parent="Bottom/StatusPanel/Margin/StatusBox"]
+layout_mode = 2
+theme_override_constants/separation = 20
+alignment = 1
+
+[node name="TokenRateLabel" type="Label" parent="Bottom/StatusPanel/Margin/StatusBox/InfoRow"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+mouse_filter = 0
+theme_type_variation = &"AccentLabel"
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 8
+text = "0 BT/s"
+vertical_alignment = 1
+
+[node name="RewardLabel" type="Label" parent="Bottom/StatusPanel/Margin/StatusBox/InfoRow"]
+visible = false
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+mouse_filter = 0
+theme_type_variation = &"MoneyLabel"
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 8
+text = "Reward · $0"
+vertical_alignment = 1
+
+[node name="CostsLabel" type="Label" parent="Bottom/StatusPanel/Margin/StatusBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+mouse_filter = 0
+theme_type_variation = &"MutedLabel"
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 8
+text = "Running costs · $0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RoundBar" parent="Bottom/StatusPanel/Margin/StatusBox" instance=ExtResource("2")]
+
+[node name="RiskLabel" type="Label" parent="Bottom/StatusPanel/Margin/StatusBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"WarningLabel"
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 8
+autowrap_mode = 2
+horizontal_alignment = 1
+
+[node name="TokenBar" parent="Bottom/StatusPanel/Margin/StatusBox" instance=ExtResource("2")]
+visible = false
+
+[node name="QualityBar" parent="Bottom/StatusPanel/Margin/StatusBox" instance=ExtResource("2")]
+visible = false
+
+[node name="DeadlineBar" parent="Bottom/StatusPanel/Margin/StatusBox" instance=ExtResource("2")]
+visible = false
+
+[node name="HeatRow" type="HBoxContainer" parent="Bottom/StatusPanel/Margin/StatusBox"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="HeatGauge" type="Control" parent="Bottom/StatusPanel/Margin/StatusBox/HeatRow"]
+custom_minimum_size = Vector2(148, 130)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+script = ExtResource("4")
+
+[node name="HeatBar" parent="Bottom/StatusPanel/Margin/StatusBox/HeatRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="ChooseContractButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox"]
+custom_minimum_size = Vector2(0, 112)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("3")
+accent_key = "action"
+headline = "CHOOSE A CONTRACT"
+sub_text = "The job board is open"
+icon_key = "jobs"
+sound_cue = "accept"
+
+[node name="Actions" type="HBoxContainer" parent="Bottom/StatusPanel/Margin/StatusBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StartWorkButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox/Actions"]
+custom_minimum_size = Vector2(0, 112)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("3")
+accent_key = "action"
+headline = "START WORK"
+icon_key = "power"
+sound_cue = "accept"
+
+[node name="BoostButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox/Actions"]
+custom_minimum_size = Vector2(150, 112)
+layout_mode = 2
+tooltip_text = "Arm a boost for the session's first batch: +35% token rate, +12 heat."
+toggle_mode = true
+theme_type_variation = &"BoostButton"
+script = ExtResource("3")
+accent_key = "heat"
+headline = "BOOST"
+sub_text = "+35% / +12 heat"
+icon_key = "power"
+
+[node name="CloudButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox/Actions"]
+custom_minimum_size = Vector2(150, 112)
+layout_mode = 2
+tooltip_text = "Arm a cloud burst for the session's first batch: capacity rented for one round."
+toggle_mode = true
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("3")
+accent_key = "compute"
+headline = "CLOUD"
+sub_text = "Rent capacity"
+icon_key = "cloud"

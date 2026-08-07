@@ -1,0 +1,185 @@
+[gd_scene load_steps=3 format=3 uid="uid://main_scene_full"]
+
+[ext_resource type="Script" path="res://ui/main.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://stat_chip" path="res://ui/common/stat_chip.tscn" id="2"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SceneBackdrop" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="SceneBackdropNext" type="TextureRect" parent="."]
+modulate = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Scrim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 0
+
+[node name="StatusBar" type="PanelContainer" parent="VBox"]
+custom_minimum_size = Vector2(0, 104)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="VBox/StatusBar"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 6
+
+[node name="StatusVBox" type="VBoxContainer" parent="VBox/StatusBar/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="TopRow" type="HBoxContainer" parent="VBox/StatusBar/Margin/StatusVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="Logo" type="Label" parent="VBox/StatusBar/Margin/StatusVBox/TopRow"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 26
+text = "TOKEN BURN"
+vertical_alignment = 1
+
+[node name="StatsRow" type="HBoxContainer" parent="VBox/StatusBar/Margin/StatusVBox/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="CashChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+layout_mode = 2
+
+[node name="TokenChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+layout_mode = 2
+
+[node name="RepChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+layout_mode = 2
+
+[node name="RoundChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+layout_mode = 2
+
+[node name="Body" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+
+[node name="ContentContainer" type="Control" parent="VBox/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BottomNav" type="PanelContainer" parent="VBox"]
+custom_minimum_size = Vector2(0, 208)
+layout_mode = 2
+
+[node name="NavHBox" type="HBoxContainer" parent="VBox/BottomNav"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Work" type="Button" parent="VBox/BottomNav/NavHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Work"
+text = "WORK"
+flat = true
+icon_alignment = 1
+vertical_icon_alignment = 0
+expand_icon = true
+
+[node name="Jobs" type="Button" parent="VBox/BottomNav/NavHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Job board"
+text = "JOBS"
+flat = true
+icon_alignment = 1
+vertical_icon_alignment = 0
+expand_icon = true
+
+[node name="Build" type="Button" parent="VBox/BottomNav/NavHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Build the pipeline"
+text = "BUILD"
+flat = true
+icon_alignment = 1
+vertical_icon_alignment = 0
+expand_icon = true
+
+[node name="Market" type="Button" parent="VBox/BottomNav/NavHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Market"
+text = "MARKET"
+flat = true
+icon_alignment = 1
+vertical_icon_alignment = 0
+expand_icon = true
+
+[node name="More" type="Button" parent="VBox/BottomNav/NavHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "More"
+text = "MORE"
+flat = true
+icon_alignment = 1
+vertical_icon_alignment = 0
+expand_icon = true
+
+[node name="OverlayRoot" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

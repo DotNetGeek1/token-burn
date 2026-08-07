@@ -1,0 +1,171 @@
+[gd_scene load_steps=3 format=3 uid="uid://pipeline_editor"]
+
+[ext_resource type="Script" path="res://ui/board/pipeline_editor.gd" id="1"]
+[ext_resource type="Script" path="res://ui/common/game_button.gd" id="2"]
+
+[node name="PipelineEditor" type="Control"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.82)
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.02
+anchor_top = 0.02
+anchor_right = 0.98
+anchor_bottom = 0.98
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HeaderRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Panel/Margin/VBox/HeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DisplayLabel"
+theme_override_font_sizes/font_size = 36
+text = "WORKFLOWS"
+
+[node name="DoneButton" type="Button" parent="Panel/Margin/VBox/HeaderRow"]
+custom_minimum_size = Vector2(170, 84)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "action"
+headline = "DONE"
+icon_key = "ship_it"
+sound_cue = "accept"
+
+[node name="WorkflowTabs" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="WorkflowRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="NameEdit" type="LineEdit" parent="Panel/Margin/VBox/WorkflowRow"]
+custom_minimum_size = Vector2(0, 76)
+layout_mode = 2
+size_flags_horizontal = 3
+max_length = 28
+placeholder_text = "Name this workflow"
+
+[node name="NewButton" type="Button" parent="Panel/Margin/VBox/WorkflowRow"]
+custom_minimum_size = Vector2(190, 76)
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "perk"
+headline = "NEW"
+
+[node name="DeleteButton" type="Button" parent="Panel/Margin/VBox/WorkflowRow"]
+custom_minimum_size = Vector2(170, 76)
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "danger"
+headline = "DELETE"
+
+[node name="AssignedLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+autowrap_mode = 2
+text = ""
+
+[node name="BannerPanel" type="PanelContainer" parent="Panel/Margin/VBox"]
+visible = false
+layout_mode = 2
+
+[node name="BannerMargin" type="MarginContainer" parent="Panel/Margin/VBox/BannerPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="BannerRow" type="HBoxContainer" parent="Panel/Margin/VBox/BannerPanel/BannerMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BannerLabel" type="Label" parent="Panel/Margin/VBox/BannerPanel/BannerMargin/BannerRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"AccentLabel"
+autowrap_mode = 2
+vertical_alignment = 1
+text = "PLACING"
+
+[node name="RemoveButton" type="Button" parent="Panel/Margin/VBox/BannerPanel/BannerMargin/BannerRow"]
+visible = false
+custom_minimum_size = Vector2(158, 76)
+layout_mode = 2
+theme_type_variation = &"DangerButton"
+script = ExtResource("2")
+accent_key = "danger"
+headline = "REMOVE"
+
+[node name="CancelButton" type="Button" parent="Panel/Margin/VBox/BannerPanel/BannerMargin/BannerRow"]
+custom_minimum_size = Vector2(158, 76)
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "CANCEL"
+
+[node name="Scroll" type="ScrollContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Content" type="VBoxContainer" parent="Panel/Margin/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="SlotSectionLabel" type="Label" parent="Panel/Margin/VBox/Scroll/Content"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+text = "PIPELINE · TOP TO BOTTOM"
+
+[node name="SlotList" type="VBoxContainer" parent="Panel/Margin/VBox/Scroll/Content"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TraySectionLabel" type="Label" parent="Panel/Margin/VBox/Scroll/Content"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+text = "MODULES ON THE BENCH"
+
+[node name="TrayGrid" type="GridContainer" parent="Panel/Margin/VBox/Scroll/Content"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12

@@ -1,0 +1,55 @@
+[
+  {
+    "id": "age.bedroom",
+    "name": "Bedroom Age",
+    "flavour": "A laptop, a deadline, and a truly heroic amount of caffeine."
+  },
+  {
+    "id": "age.startup",
+    "name": "Startup Age",
+    "flavour": "There is a whiteboard now. Nobody has used it correctly yet.",
+    "token_scaling_multiplier": 1.1,
+    "reward_scaling_multiplier": 1.1,
+    "starting_cash_bonus": 500
+  },
+  {
+    "id": "age.datacentre",
+    "name": "Data Centre Age",
+    "flavour": "The GPUs have their own room. The room has its own electricity bill.",
+    "token_scaling_multiplier": 1.2,
+    "reward_scaling_multiplier": 1.2,
+    "starting_cash_bonus": 1500
+  },
+  {
+    "id": "age.hyperscale",
+    "name": "Hyperscale Age",
+    "flavour": "Somewhere, a cloud provider is naming a discount tier after your account.",
+    "token_scaling_multiplier": 1.35,
+    "reward_scaling_multiplier": 1.3,
+    "starting_cash_bonus": 4000
+  },
+  {
+    "id": "age.sovereign",
+    "name": "Sovereign Compute Age",
+    "flavour": "A government asked, politely, whether you would mind being regulated.",
+    "token_scaling_multiplier": 1.5,
+    "reward_scaling_multiplier": 1.4,
+    "starting_cash_bonus": 10000
+  },
+  {
+    "id": "age.planetary",
+    "name": "Planetary Compute Age",
+    "flavour": "Every data centre on Earth is, in some sense, now your problem.",
+    "token_scaling_multiplier": 1.7,
+    "reward_scaling_multiplier": 1.5,
+    "starting_cash_bonus": 25000
+  },
+  {
+    "id": "age.post_human",
+    "name": "Post-Human Compute Age",
+    "flavour": "Nobody is entirely sure who is running the company anymore. The invoices still go out on time.",
+    "token_scaling_multiplier": 2.0,
+    "reward_scaling_multiplier": 1.7,
+    "starting_cash_bonus": 60000
+  }
+]

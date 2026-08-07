@@ -1,0 +1,10 @@
+{
+  "cloud_compute_enabled": true,
+  "office_diorama_enabled": true,
+  "random_events_enabled": true,
+  "burn_lab_enabled": true,
+  "auto_work_loop_enabled": false,
+  "meta_progression_enabled": true,
+  "ui_sound_enabled": true,
+  "analytics_enabled": false
+}

@@ -1,0 +1,129 @@
+[gd_scene load_steps=3 format=3 uid="uid://run_end"]
+
+[ext_resource type="Script" path="res://ui/screens/run_end.gd" id="1"]
+[ext_resource type="Script" path="res://ui/common/game_button.gd" id="2"]
+
+[node name="RunEnd" type="Control"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.8)
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.08
+anchor_top = 0.5
+anchor_right = 0.92
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+text = "RUN ENDED"
+horizontal_alignment = 1
+
+[node name="BodyLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+autowrap_mode = 2
+horizontal_alignment = 1
+
+[node name="HeadlineLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+autowrap_mode = 2
+horizontal_alignment = 1
+text = "TOTAL TOKENS BURNED: 0"
+
+[node name="ComparisonLabel" type="Label" parent="Panel/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+autowrap_mode = 2
+horizontal_alignment = 1
+
+[node name="ScoreScroll" type="ScrollContainer" parent="Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="ScoreList" type="VBoxContainer" parent="Panel/Margin/VBox/ScoreScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="DebriefLabel" type="Label" parent="Panel/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"AccentLabel"
+autowrap_mode = 2
+horizontal_alignment = 1
+text = "ONE THING SURVIVES THE LIQUIDATION"
+
+[node name="DebriefScroll" type="ScrollContainer" parent="Panel/Margin/VBox"]
+visible = false
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="DebriefList" type="VBoxContainer" parent="Panel/Margin/VBox/DebriefScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="ContinueButton" type="Button" parent="Panel/Margin/VBox"]
+visible = false
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "compute"
+headline = "KEEP GOING"
+sub_text = "Carry this run on into endless"
+icon_key = "tokens"
+sound_cue = "accept"
+
+[node name="RestartButton" type="Button" parent="Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "action"
+headline = "NEW RUN"
+sub_text = "Back to the bedroom"
+icon_key = "heat"
+sound_cue = "accept"
+
+[node name="MenuButton" type="Button" parent="Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "TITLE SCREEN"

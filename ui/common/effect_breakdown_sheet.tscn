@@ -1,0 +1,77 @@
+[gd_scene load_steps=2 format=3 uid="uid://effect_breakdown_sheet"]
+
+[ext_resource type="Script" path="res://ui/common/effect_breakdown_sheet.gd" id="1"]
+
+[node name="EffectBreakdownSheet" type="PanelContainer"]
+visible = false
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 0.52
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 0
+script = ExtResource("1")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="HeaderHBox" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="Margin/VBox/HeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"TitleLabel"
+text = "Effect Breakdown"
+
+[node name="CloseButton" type="Button" parent="Margin/VBox/HeaderHBox"]
+custom_minimum_size = Vector2(48, 44)
+layout_mode = 2
+text = "✕"
+
+[node name="BaseLabel" type="Label" parent="Margin/VBox"]
+visible = false
+layout_mode = 2
+text = "Base: —"
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/VBox"]
+visible = false
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="StepsVBox" type="VBoxContainer" parent="Margin/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="FinalLabel" type="Label" parent="Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"ErrorLabel"
+text = "Final: —"
+
+[node name="EmptyLabel" type="Label" parent="Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+autowrap_mode = 2
+text = "No modifiers recorded yet"
+
+[node name="BodyLabel" type="Label" parent="Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+autowrap_mode = 2
+text = "Body"

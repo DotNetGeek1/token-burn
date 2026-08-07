@@ -1,0 +1,195 @@
+[gd_scene load_steps=3 format=3 uid="uid://title_screen"]
+
+[ext_resource type="Script" path="res://ui/title/title_screen.gd" id="1"]
+[ext_resource type="Script" path="res://ui/common/game_button.gd" id="2"]
+
+[node name="TitleScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="KeyArt" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Vignette" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.91, 0.27, 0.38, 0.06)
+
+[node name="Embers" type="GPUParticles2D" parent="."]
+position = Vector2(540, 1940)
+
+[node name="Layout" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="Margin" type="MarginContainer" parent="Layout"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 44
+theme_override_constants/margin_top = 56
+theme_override_constants/margin_right = 44
+theme_override_constants/margin_bottom = 40
+
+[node name="VBox" type="VBoxContainer" parent="Layout/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Wordmark" type="VBoxContainer" parent="Layout/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = -34
+
+[node name="TokenLabel" type="Label" parent="Layout/Margin/VBox/Wordmark"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_constants/outline_size = 18
+theme_override_font_sizes/font_size = 148
+text = "TOKEN"
+
+[node name="BurnLabel" type="Label" parent="Layout/Margin/VBox/Wordmark"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_constants/outline_size = 18
+theme_override_font_sizes/font_size = 148
+text = "BURN"
+
+[node name="Tagline" type="Label" parent="Layout/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+theme_override_font_sizes/font_size = 26
+text = "ROGUELITE · TYCOON · ENGINE BUILDER"
+autowrap_mode = 2
+
+[node name="Spacer" type="Control" parent="Layout/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Menu" type="VBoxContainer" parent="Layout/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="ContinueButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+custom_minimum_size = Vector2(0, 132)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "action"
+headline = "CONTINUE"
+sub_text = "Resume your run"
+icon_key = "power"
+sound_cue = "accept"
+
+[node name="NewRunButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+custom_minimum_size = Vector2(0, 116)
+layout_mode = 2
+theme_type_variation = &"BoostButton"
+script = ExtResource("2")
+accent_key = "heat"
+headline = "NEW RUN"
+sub_text = "Start again from the bedroom"
+icon_key = "heat"
+sound_cue = "accept"
+
+[node name="DifficultyRow" type="HBoxContainer" parent="Layout/Margin/VBox/Menu"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="NormalButton" type="Button" parent="Layout/Margin/VBox/Menu/DifficultyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"PrimaryButton"
+script = ExtResource("2")
+accent_key = "action"
+headline = "NORMAL"
+
+[node name="HardButton" type="Button" parent="Layout/Margin/VBox/Menu/DifficultyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "HARD"
+
+[node name="EndlessButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "perk"
+headline = "ENDLESS MODE"
+sub_text = "OFF"
+
+[node name="LegacyButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "perk"
+headline = "THE LEGACY"
+sub_text = "Permanent unlocks and records"
+icon_key = "reputation"
+
+[node name="AchievementsButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "energy"
+headline = "THE TROPHY CABINET"
+sub_text = "Achievements and the modules they unlock"
+icon_key = "quality"
+
+[node name="BurnLabButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"SecondaryButton"
+script = ExtResource("2")
+accent_key = "neutral"
+headline = "BURN LAB"
+sub_text = "Debug tooling"
+
+[node name="DeleteSaveButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"DangerButton"
+script = ExtResource("2")
+accent_key = "danger"
+headline = "DELETE SAVE"
+icon_key = "warning"
+
+[node name="QuitButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+layout_mode = 2
+theme_type_variation = &"DangerButton"
+script = ExtResource("2")
+accent_key = "danger"
+headline = "QUIT"
+
+[node name="VersionLabel" type="Label" parent="Layout/Margin/VBox"]
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+text = "v0.1.0 · Early Access"
+horizontal_alignment = 1
