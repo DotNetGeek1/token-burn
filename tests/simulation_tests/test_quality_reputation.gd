@@ -14,6 +14,8 @@ func run() -> void:
 	_test_reputation_raises_every_fee()
 	_test_reputation_names_its_next_tier()
 	_test_a_session_is_paid_in_reputation_by_quality()
+	_test_a_throughput_only_board_misses_the_bar()
+	_test_a_contract_is_judged_at_the_bar_it_advertises()
 
 
 func _payout(quality: float, threshold: float) -> float:
@@ -160,6 +162,54 @@ func _test_reputation_names_its_next_tier() -> void:
 	assert_true(
 		JobSystem.next_reputation_tier(state, ContentDatabase).is_empty(),
 		"With every tier open there is nothing left to name"
+	)
+
+
+## Shipping work is worth something on its own, but not enough to clear a real
+## client's bar. A build with no quality modules in the pipeline has to miss, or
+## the bar is decoration and the whole stat is a number that only goes up.
+func _test_a_throughput_only_board_misses_the_bar() -> void:
+	var scaling: Dictionary = ContentDatabase.balance.get("job_scaling", {})
+	var base_ratio: float = float(scaling.get("board", {}).get("base_quality_ratio", 0.45))
+	assert_true(base_ratio > 0.0, "Delivered work is still worth something")
+	# A contract carried all the way to delivery by throughput alone, and nothing
+	# else: this is the whole quality a board with no quality stages can earn.
+	var passive: float = 100.0 * base_ratio
+	var mid_tier_bar: float = float(
+		scaling.get("quality_scaling", {}).get("base_threshold", 50.0)
+	) + 2.0 * float(scaling.get("quality_scaling", {}).get("per_tier_increase", 8.0))
+	assert_true(
+		passive < mid_tier_bar,
+		"A throughput-only build lands at %.0f, under a mid-tier bar of %.0f" % [
+			passive, mid_tier_bar
+		]
+	)
+	assert_true(
+		_payout(passive, mid_tier_bar) < 1.0,
+		"And is paid less than the advertised fee for it"
+	)
+
+
+## The cap on the tier baseline used to overwrite whatever a contract asked for,
+## so a brief demanding 88 was quietly marked at 50 and every board cleared it.
+func _test_a_contract_is_judged_at_the_bar_it_advertises() -> void:
+	var demanding: JobDefinition = null
+	for job in ContentDatabase.jobs:
+		if job.quality_threshold >= 70.0:
+			demanding = job
+			break
+	if demanding == null:
+		return
+	var job_system := JobSystem.new()
+	var state := RunState.new()
+	var offer: Dictionary = job_system._scale_job(
+		demanding, 1, ContentDatabase, {}, state, DeterministicRng.new(7)
+	)
+	assert_almost_eq(
+		float(offer.get("quality_threshold", 0.0)),
+		clampf(demanding.quality_threshold, 35.0, 92.0),
+		0.001,
+		"%s is posted at the bar its brief asks for" % demanding.name
 	)
 
 

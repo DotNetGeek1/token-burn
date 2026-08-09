@@ -24,9 +24,9 @@ color = Color(0, 0, 0, 0.8)
 
 [node name="Panel" type="PanelContainer" parent="."]
 layout_mode = 1
-anchor_left = 0.08
+anchor_left = 0.24
 anchor_top = 0.5
-anchor_right = 0.92
+anchor_right = 0.76
 anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
@@ -68,7 +68,7 @@ autowrap_mode = 2
 horizontal_alignment = 1
 
 [node name="ScoreScroll" type="ScrollContainer" parent="Panel/Margin/VBox"]
-custom_minimum_size = Vector2(0, 160)
+custom_minimum_size = Vector2(0, 132)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
@@ -99,7 +99,7 @@ theme_override_constants/separation = 12
 
 [node name="ContinueButton" type="Button" parent="Panel/Margin/VBox"]
 visible = false
-custom_minimum_size = Vector2(0, 100)
+custom_minimum_size = Vector2(0, 68)
 layout_mode = 2
 theme_type_variation = &"PrimaryButton"
 script = ExtResource("2")
@@ -110,7 +110,7 @@ icon_key = "tokens"
 sound_cue = "accept"
 
 [node name="RestartButton" type="Button" parent="Panel/Margin/VBox"]
-custom_minimum_size = Vector2(0, 100)
+custom_minimum_size = Vector2(0, 68)
 layout_mode = 2
 theme_type_variation = &"PrimaryButton"
 script = ExtResource("2")
@@ -121,7 +121,7 @@ icon_key = "heat"
 sound_cue = "accept"
 
 [node name="MenuButton" type="Button" parent="Panel/Margin/VBox"]
-custom_minimum_size = Vector2(0, 92)
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")

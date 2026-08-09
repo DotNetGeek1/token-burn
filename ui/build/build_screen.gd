@@ -20,6 +20,9 @@ func _ready() -> void:
 	_setup_bottom_sheet()
 	EventBus.perk_acquired.connect(func(_id): refresh())
 	EventBus.run_started.connect(refresh)
+	resized.connect(func() -> void:
+		perks_list.columns = UiThemeBuilder.tile_columns(size.x)
+	)
 	refresh()
 
 
@@ -33,6 +36,7 @@ func refresh() -> void:
 
 
 func _refresh_perk_grid(perks: Array) -> void:
+	perks_list.columns = UiThemeBuilder.tile_columns(size.x)
 	for child in perks_list.get_children():
 		child.queue_free()
 	for perk_id in perks:
@@ -42,7 +46,7 @@ func _refresh_perk_grid(perks: Array) -> void:
 		var desc: String = Simulation.get_perk_description(str(perk_id))
 		var card: GameCard = CARD_SCENE.instantiate()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.custom_minimum_size = Vector2(0, 132)
+		card.custom_minimum_size = Vector2(0, 96)
 		card.setup(
 			perk.name,
 			_short_perk_text(desc),
@@ -57,6 +61,7 @@ func _refresh_perk_grid(perks: Array) -> void:
 			"filled": true,
 		}])
 		card.pressed.connect(_show_perk.bind(perk, desc))
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		perks_list.add_child(card)
 	UiTransition.stagger(perks_list)
 

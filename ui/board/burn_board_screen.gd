@@ -172,9 +172,8 @@ func _refresh_demands(job: Dictionary) -> void:
 		rig.push_line(str(line[0]), str(line[1]))
 
 
-## The Final Burn keeps ordinary contracts flowing, so the requirement
-## tracker sits above them as its own always-visible strip instead of
-## replacing the job bars.
+## The contract runs the whole year alongside ordinary work, so its tracker sits
+## above the job bars as its own always-visible strip rather than replacing them.
 func _refresh_ascension_tracker() -> void:
 	if not Simulation.ascension_active():
 		ascension_tracker.visible = false
@@ -188,24 +187,23 @@ func _refresh_ascension_tracker() -> void:
 	var burned: float = float(progress.get("tokens_burned", 0.0))
 	var total: float = maxf(1.0, float(progress.get("total_burn", 1.0)))
 	ascension_burn_bar.setup(
-		"FINAL BURN · %s" % str(contract.get("name", "Ascension Contract")).to_upper(),
+		"CONTRACT · %s" % str(contract.get("name", "The contract")).to_upper(),
 		burned,
 		total,
 		"tokens",
 		"%s / %s tokens" % [NumberFormat.format(burned), NumberFormat.format(total)]
 	)
-	var violations: int = int(progress.get("violations", 0))
-	var max_violations: int = int(progress.get("max_failed_burns", 0))
-	var prompts_left: int = int(progress.get("prompts_remaining", 0))
-	ascension_status_label.text = "%d prompt(s) left · %d/%d violation(s) tolerated · %s" % [
-		maxi(0, prompts_left),
-		violations,
-		max_violations,
-		"the finish line" if bool(progress.get("is_final", false)) else "a level-up, not the end",
-	]
+	var rounds_left: int = int(progress.get("rounds_remaining", 0))
+	var quality_min: float = float(progress.get("quality_min", 0.0))
+	var status: String = "%d round(s) left" % maxi(0, rounds_left)
+	if quality_min > 0.0:
+		status += " · quality %s of %s" % [
+			JobPresentation.quality_mark(float(progress.get("quality_average", 0.0))),
+			JobPresentation.quality_mark(quality_min),
+		]
+	ascension_status_label.text = status
 	ascension_status_label.add_theme_color_override(
-		"font_color",
-		UiThemeBuilder.semantic("danger" if violations >= max_violations else "warning")
+		"font_color", UiThemeBuilder.semantic("danger" if rounds_left <= 3 else "warning")
 	)
 
 
@@ -233,11 +231,13 @@ func _refresh_bars(job: Dictionary) -> void:
 		maxf(1.0, threshold),
 		int(job.get("prompts_remaining", 0)),
 		int(job.get("deadline_prompts", 1)),
-		# Raw against target, because that is what fits in the instrument's engraved
-		# window. The fee the polish is currently earning — which keeps climbing past
-		# the threshold rather than stopping — is on the JOB sheet, where there is
-		# room to print it.
-		"%d/%d" % [int(round(quality)), int(round(threshold))]
+		# Marks out of ten against the bar, because that is what fits in the
+		# instrument's engraved window. The fee the polish is currently earning —
+		# which keeps climbing past the threshold rather than stopping — is on the
+		# JOB sheet, where there is room to print it.
+		"%s/%s" % [
+			JobPresentation.quality_mark(quality), JobPresentation.quality_mark(threshold)
+		]
 	)
 
 
@@ -342,7 +342,7 @@ func _refresh_forecast(job: Dictionary) -> void:
 			float(preview.get("progress_mult", 1.0)),
 			int(round(float(preview.get("progress_tokens", 0.0)) / requirement * 100.0)),
 		],
-		"+%dq" % int(round(float(preview.get("quality", 0.0)))),
+		"+%sq" % JobPresentation.quality_mark(float(preview.get("quality", 0.0))),
 	]
 	if int(preview.get("bugs_added", 0)) > 0:
 		parts.append("+%db" % int(preview.get("bugs_added", 0)))
@@ -373,7 +373,8 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 		]
 	)
 	deck.set_burning(false)
-	burn_key.disabled = not Simulation.can_burn()
+	# Live before the session is, because pressing it is what opens the session.
+	burn_key.disabled = not Simulation.can_burn() and not Simulation.can_start_work()
 	_refresh_burn_key()
 	cool_key.disabled = not working or job.is_empty()
 	_refresh_cool_key(working, job)
@@ -448,7 +449,10 @@ func _done_percent(job: Dictionary) -> int:
 func _refresh_burn_key() -> void:
 	var preview: Dictionary = Simulation.preview_burn() if Simulation.can_burn() else {}
 	if not preview.get("ok", false):
-		burn_key.set_lines("BURN", "")
+		if Simulation.can_start_work():
+			burn_key.set_lines("BURN", "START THE ROUND")
+		else:
+			burn_key.set_lines("BURN", "")
 		return
 	var consequences: PackedStringArray = [
 		"%s BT" % NumberFormat.format(float(preview.get("tokens", 0.0))),
@@ -614,9 +618,11 @@ func _on_job_details() -> void:
 		{"stat": "Progress", "value": "%d%%" % _done_percent(job)},
 		{
 			"stat": "Quality",
-			"value": "%d/%d ×%.2f" % [
-				int(round(float(job.get("quality", 0.0)))),
-				int(round(float(job.get("quality_threshold", 0.0)))),
+			"value": "%s ×%.2f" % [
+				JobPresentation.quality_against_bar(
+					float(job.get("quality", 0.0)),
+					float(job.get("quality_threshold", 0.0))
+				),
 				JobSystem.quality_payout_multiplier(
 					float(job.get("quality", 0.0)),
 					float(job.get("quality_threshold", 0.0))
@@ -643,7 +649,15 @@ func _on_job_details() -> void:
 # --- Burning -----------------------------------------------------------------
 
 func _on_burn() -> void:
-	if _burning or not Simulation.can_burn():
+	if _burning:
+		return
+	# The first press of the round is what opens the session. There is no longer
+	# a screen in front of the deck to press START WORK on: taking a contract
+	# puts you at the machine, and the machine is started by using it.
+	if not Simulation.is_work_running() and Simulation.can_start_work():
+		Simulation.start_work()
+		refresh()
+	if not Simulation.can_burn():
 		return
 	var preview: Dictionary = Simulation.preview_burn()
 	if not preview.get("ok", false):
@@ -747,7 +761,10 @@ func _stage_summary(stage: Dictionary) -> String:
 		parts.append("×%.2f progress" % progress_delta)
 	var quality_delta: float = float(after.get("quality", 0.0)) - float(before.get("quality", 0.0))
 	if absf(quality_delta) > 0.5:
-		parts.append("%+d quality" % int(round(quality_delta)))
+		parts.append("%s%s quality" % [
+			"+" if quality_delta > 0.0 else "-",
+			JobPresentation.quality_mark(absf(quality_delta)),
+		])
 	var bug_delta: float = float(after.get("known_bugs", 0.0)) - float(before.get("known_bugs", 0.0))
 	if absf(bug_delta) > 0.4:
 		parts.append("%+d bug(s)" % int(round(bug_delta)))

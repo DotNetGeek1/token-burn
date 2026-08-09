@@ -11,10 +11,10 @@ extends PanelContainer
 ## each child its minimum size, and a Label that does not wrap makes that minimum
 ## the full length of its text. A caller that passes a whole sentence therefore
 ## used to stretch the card, the screen and the viewport with it, so past this
-## width the text wraps instead of demanding more room. The content column is 720
-## design units and a chip sits inside a card inside a screen margin, so this has
-## to stay clear of that with the nesting allowed for.
-const MAX_TEXT_WIDTH := 500.0
+## width the text wraps instead of demanding more room. The side panel is the
+## narrowest place a chip lives, and one sits inside a card inside a screen
+## margin there, so this has to stay clear of that with the nesting allowed for.
+const MAX_TEXT_WIDTH := 250.0
 
 
 static func create(text: String, role: String = "neutral", icon: Texture2D = null, filled: bool = false) -> UiChip:

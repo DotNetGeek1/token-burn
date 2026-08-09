@@ -7,41 +7,24 @@ extends Control
 
 signal continue_pressed
 
-## What the client says about the work. The verdict, not the spreadsheet, is
-## what the player remembers about a contract.
-const VERDICTS := {
-	"great": [
-		"\"Genuinely better than the humans we replaced.\"",
-		"\"We are forwarding this to the board. Unedited.\"",
-		"\"Do you have capacity for six more of these?\"",
-	],
-	"good": [
-		"\"Fine. Ship it.\"",
-		"\"Nobody complained, which is our highest praise.\"",
-		"\"A few notes, but we'll live with them.\"",
-	],
-	"poor": [
-		"\"It technically satisfies the brief.\"",
-		"\"Our intern has already found three problems.\"",
-		"\"We paid, but we're not thrilled.\"",
-	],
-	"failed": [
-		"\"We went with someone else. Faster, apparently.\"",
-		"\"The deadline was the one part that mattered.\"",
-		"\"Let's call this a learning experience. Yours.\"",
-	],
-}
-
 @onready var title_label: Label = $Panel/Margin/VBox/Title
 @onready var subtitle_label: Label = $Panel/Margin/VBox/Subtitle
 @onready var verdict_label: Label = $Panel/Margin/VBox/Verdict
 @onready var reward_value: Label = $Panel/Margin/VBox/RewardValue
 @onready var rows: VBoxContainer = $Panel/Margin/VBox/Scroll/Rows
 @onready var continue_button: GameButton = $Panel/Margin/VBox/ContinueButton
+@onready var _panel: PanelContainer = $Panel
+
+var _stat_grid: GridContainer = null
 
 
 func _ready() -> void:
 	continue_button.pressed.connect(_on_continue)
+	_panel.add_theme_stylebox_override("panel", UiThemeBuilder.docket_style())
+	subtitle_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("muted"))
+	reward_value.add_theme_color_override(
+		"font_color", UiThemeBuilder.semantic("money").darkened(0.4)
+	)
 
 
 func show_summary(summary: Dictionary) -> void:
@@ -52,19 +35,26 @@ func show_summary(summary: Dictionary) -> void:
 	var prompts_used: int = int(summary.get("prompts_used", 0))
 	title_label.text = "ROUND %d DEBRIEF" % round_number
 	if success:
-		title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("success"))
+		title_label.add_theme_color_override(
+			"font_color", UiThemeBuilder.semantic("success").darkened(0.45)
+		)
 		subtitle_label.text = "Every contract resolved and the clients accepted the work. The bills are next."
 	elif completed > 0:
-		title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("warning"))
+		title_label.add_theme_color_override(
+			"font_color", UiThemeBuilder.semantic("warning").darkened(0.45)
+		)
 		subtitle_label.text = "Some work landed, some ran out of time. You keep partial pay for what was finished, but reputation takes a hit."
 	else:
-		title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("failure"))
+		title_label.add_theme_color_override(
+			"font_color", UiThemeBuilder.semantic("failure").darkened(0.4)
+		)
 		subtitle_label.text = "Nothing was delivered this round. The bills still land, so the next round has to earn its way back."
 	_show_verdict(summary, success)
 	_slam_reward(float(summary.get("reward", 0.0)))
 
 	for child in rows.get_children():
 		child.queue_free()
+	_begin_stat_grid()
 
 	_add_row(
 		"Contracts",
@@ -110,8 +100,8 @@ func show_summary(summary: Dictionary) -> void:
 	var multiplier: float = float(summary.get("quality_multiplier", 1.0))
 	_add_row(
 		"Average quality",
-		"%.0f vs bar of %.0f" % [quality, threshold],
-		"Final quality across the round's contracts, against what the clients asked for."
+		JobPresentation.quality_against_bar(quality, threshold),
+		"Final quality across the round's contracts, marked out of ten against what the clients asked for."
 	)
 	_add_row(
 		"Quality payout",
@@ -158,19 +148,18 @@ func _quality_payout_note(multiplier: float) -> String:
 	return "The work landed exactly on the client's bar, so the fee was paid in full."
 
 
+## The one voice in the game gets the last word on the round. This is the opening
+## line of the call he is about to make, so the note on the docket and the phone
+## that follows it are the same man saying the same thing.
 func _show_verdict(summary: Dictionary, success: bool) -> void:
-	var quality: float = float(summary.get("avg_quality", 0.0))
-	var band: String = "failed"
-	if success:
-		band = "great" if quality >= 80.0 else ("good" if quality >= 55.0 else "poor")
-	var pool: Array = VERDICTS[band]
-	# Seeded on the round's numbers so the same result reads the same way if the
-	# player reopens the debrief.
-	var index: int = absi(int(quality) + int(summary.get("reward", 0.0))) % pool.size()
-	verdict_label.text = str(pool[index])
+	var quip: String = InvestorVoice.debrief_quip(summary)
+	verdict_label.visible = quip != ""
+	if quip == "":
+		return
+	verdict_label.text = "%s — %s" % [quip, InvestorVoice.investor_name()]
 	verdict_label.add_theme_color_override(
 		"font_color",
-		UiThemeBuilder.semantic("success" if success else "failure")
+		UiThemeBuilder.semantic("success" if success else "failure").darkened(0.4)
 	)
 
 
@@ -187,26 +176,40 @@ func _slam_reward(reward: float) -> void:
 	UiSound.play("complete")
 
 
+func _begin_stat_grid() -> void:
+	_stat_grid = GridContainer.new()
+	_stat_grid.columns = 2
+	_stat_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stat_grid.add_theme_constant_override("h_separation", UiThemeBuilder.SPACE_LG)
+	_stat_grid.add_theme_constant_override("v_separation", UiThemeBuilder.SPACE_MD)
+	rows.add_child(_stat_grid)
+
+
 func _add_row(name_text: String, value_text: String, explanation: String) -> void:
 	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 2)
 	var line := HBoxContainer.new()
 	var name_label := Label.new()
 	name_label.text = name_text
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("title"))
 	line.add_child(name_label)
 	var value_label := Label.new()
 	value_label.text = value_text
 	value_label.theme_type_variation = &"AccentLabel"
+	value_label.add_theme_font_override("font", UiThemeBuilder.mono_font())
+	value_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink())
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	line.add_child(value_label)
 	box.add_child(line)
 	var explain := Label.new()
 	explain.text = explanation
 	explain.theme_type_variation = &"MutedLabel"
+	explain.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("muted"))
 	explain.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(explain)
-	rows.add_child(box)
+	(_stat_grid if _stat_grid != null else rows).add_child(box)
 
 
 func _on_continue() -> void:

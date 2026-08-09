@@ -169,6 +169,63 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 	return true
 
 
+## Installs an upgrade the run did not pay for: the kit carried over from the
+## location the player just beat. It is otherwise a purchase — the standing bill,
+## the floor space and the effects all land the same way — because a machine that
+## costs nothing to keep would make moving up strictly free.
+##
+## The affordability and one-per-run gates are deliberately skipped: this kit was
+## already bought and already passed them, and re-checking cash against a stake
+## that has not been paid in yet would drop half the rig on the way.
+func install_carried(
+	run_state: RunState, upgrade_id: String, content_db: Node, effect_resolver: EffectResolver
+) -> bool:
+	var upgrade: UpgradeDefinition = content_db.get_upgrade(upgrade_id)
+	if upgrade == null or upgrade.category == "dwelling":
+		return false
+	# Floor space is the one gate that still applies: it belongs to the new room
+	# rather than to the kit, and every location has at least as much as the last.
+	if hardware_space_full(run_state, upgrade, content_db):
+		return false
+	run_state.economy["recurring_costs"] = (
+		float(run_state.economy.get("recurring_costs", 0.0)) + upgrade.recurring_cost_delta
+	)
+	if upgrade.repeatable:
+		if not run_state.build.has("upgrade_levels"):
+			run_state.build["upgrade_levels"] = {}
+		run_state.build["upgrade_levels"][upgrade_id] = upgrade_level(run_state, upgrade_id) + 1
+	match upgrade.category:
+		"hardware", "component":
+			var key: String = installed_key(upgrade)
+			if key != "":
+				run_state.build["hardware"].append(key)
+		"cloud":
+			run_state.build["cloud_tier"] = upgrade_id
+		"advertising":
+			run_state.build["advertising_tier"] = upgrade_id
+	if not upgrade.repeatable and not (upgrade_id in run_state.build["upgrades"]):
+		run_state.build["upgrades"].append(upgrade_id)
+	effect_resolver.apply_effects(run_state, upgrade.effects, "upgrade.%s" % upgrade_id)
+	return true
+
+
+## Everything the run bought, as a level count per upgrade id, in the order the
+## campaign has to reinstall it: a component cannot go into a machine that has
+## not been racked yet.
+static func owned_upgrade_levels(run_state: RunState, content_db: Node) -> Dictionary:
+	var levels: Dictionary = {}
+	for upgrade_id in Array(run_state.build.get("upgrades", [])):
+		levels[str(upgrade_id)] = 1
+	for upgrade_id in Dictionary(run_state.build.get("upgrade_levels", {})).keys():
+		levels[str(upgrade_id)] = int(run_state.build["upgrade_levels"][upgrade_id])
+	# Dwellings are chapters, not stock, and must never be carried as kit.
+	for upgrade_id in levels.keys():
+		var upgrade: UpgradeDefinition = content_db.get_upgrade(str(upgrade_id))
+		if upgrade == null or upgrade.category == "dwelling":
+			levels.erase(upgrade_id)
+	return levels
+
+
 func can_purchase(run_state: RunState, upgrade_id: String, content_db: Node) -> bool:
 	var upgrade: UpgradeDefinition = content_db.get_upgrade(upgrade_id)
 	if upgrade == null:

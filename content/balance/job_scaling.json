@@ -12,7 +12,7 @@
   },
   "board": {
     "expected_progress_multiplier": 1.6,
-    "base_quality_ratio": 0.45,
+    "base_quality_ratio": 0.2,
     "hidden_bug_discovery_chance": 0.6
   },
   "reward_scaling": {
@@ -48,6 +48,15 @@
   "tier_unlock_by_reputation": [0, 12, 22, 32, 42, 52],
   "sales_level_rep_reduction": 2,
   "tier_unlock_by_round": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+  "location_round_offset": {
+    "bedroom": 0,
+    "garage": 10,
+    "office_unit": 20,
+    "warehouse": 30,
+    "datacentre_campus": 40,
+    "private_power_grid": 50,
+    "moon_facility": 60
+  },
   "tier_unlock_by_token_rate": [
     {"rate": 1000000, "tier": 0},
     {"rate": 4000000, "tier": 1},

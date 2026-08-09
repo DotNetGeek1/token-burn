@@ -183,6 +183,9 @@ func _test_hardware_needs_the_premises_for_it() -> void:
 	# something they buy partway through a bedroom run.
 	var garage: Dictionary = _shop()
 	Simulation.apply_run_location(garage["state"], "garage")
+	# Moving in resets the balance to the location's stake. This test is about
+	# floor space rather than affordability, so put the money back.
+	garage["state"].economy["cash"] = 100000000.0
 	assert_true(_buy(garage, "upgrade.gpu_rack"), "In the garage the rack has a home")
 	assert_false(_buy(garage, "upgrade.compute_cluster"), "A cluster still wants the office")
 

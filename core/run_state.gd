@@ -3,7 +3,11 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 11
+const SAVE_VERSION := 12
+
+## What a run on Normal starts the first chapter with, and the figure every
+## location's stake and every difficulty profile is expressed relative to.
+const DEFAULT_STARTING_CASH := 500.0
 
 ## A round is one full cycle of the game: take contracts, work them to
 ## resolution, pay the bills. A prompt is one action inside a round — a burn or
@@ -15,7 +19,8 @@ var calendar: Dictionary = {
 }
 
 var economy: Dictionary = {
-	"cash": 500.0,
+	"cash": DEFAULT_STARTING_CASH,
+	"cash_multiplier": 1.0,
 	"debt": 0.0,
 	"recurring_costs": 0.0,
 	"income": 0.0,
@@ -29,10 +34,6 @@ var economy: Dictionary = {
 	"cloud_cost_per_prompt": 0.0,
 	"costs_this_round": 0.0,
 	"last_round_costs": 0.0,
-	## Overtime's own bill line, and the cumulative-income reading it was last
-	## measured against. Zero until the year runs out with no contract finished.
-	"overtime_levy": 0.0,
-	"overtime_income_mark": 0.0,
 }
 
 var compute: Dictionary = {
@@ -101,21 +102,17 @@ var statistics: Dictionary = {
 	"angel_offers_declined": 0,
 	"hardware_sold": 0,
 	"modules_drafted": 0,
-	"overtime_rounds": 0,
 }
 
-## The endgame layer. Empty status means the player has not committed to the
-## location's boss contract yet; see AscensionSystem for what each field means
-## once one is underway. There is only ever one contract per run, so nothing here
-## outlives it.
+## The location's contract, which is live from the first prompt of the run; see
+## AscensionSystem for what each field means. There is only ever one contract per
+## run, so nothing here outlives it.
 var ascension: Dictionary = {
 	"status": "",
 	"contract_id": "",
-	"committed_round": 0,
 	"baseline_tokens": 0.0,
 	"tokens_burned": 0.0,
-	"prompts_remaining": 0,
-	"violations": 0,
+	"deadline_round": 0,
 	"quality_sum": 0.0,
 	"quality_count": 0,
 }
@@ -126,8 +123,6 @@ var flags: Dictionary = {
 	"outcome": "",
 	"ascension_tier": 0,
 	"fire_risk": false,
-	"overtime": false,
-	"ascension_qualified": false,
 	"post_victory": false,
 	"post_victory_phase": "",
 	"legacy_banked": false,
@@ -334,6 +329,8 @@ func _migrate(from_version: int) -> void:
 		compute["meta_cooling"] = 0.0
 	if from_version < 11:
 		_migrate_off_the_ascension_ladder()
+	if from_version < 12:
+		_migrate_to_the_contract_as_the_level()
 
 
 ## The three-rung ladder became one boss contract per location. A save taken
@@ -344,6 +341,27 @@ func _migrate(from_version: int) -> void:
 func _migrate_off_the_ascension_ladder() -> void:
 	for stale in ["completed_ids", "highest_tier_completed", "pending_picks"]:
 		ascension.erase(stale)
+
+
+## The contract stopped being something taken on part-way through a run and
+## became the run's win condition, stated up front and measured from round one.
+## A save that had committed keeps its contract and its progress; one that never
+## did is put under its location's contract from wherever it currently stands,
+## since there is no longer any other way for the run to end well. The
+## prompt-by-prompt policing the Final Burn used — throughput floors, heat
+## ceilings, violation counts — has no equivalent and is dropped, as is overtime.
+func _migrate_to_the_contract_as_the_level() -> void:
+	for stale in ["committed_round", "prompts_remaining", "violations"]:
+		ascension.erase(stale)
+	economy.erase("overtime_levy")
+	economy.erase("overtime_income_mark")
+	statistics.erase("overtime_rounds")
+	flags.erase("overtime")
+	flags.erase("ascension_qualified")
+	if str(ascension.get("status", "")) == "committed":
+		ascension["status"] = "active"
+	if not ascension.has("deadline_round") or int(ascension.get("deadline_round", 0)) <= 0:
+		ascension["deadline_round"] = 12
 
 
 ## One global pipeline became a list of named workflows, each assignable to a
@@ -411,8 +429,6 @@ func _migrate_to_round_and_prompt() -> void:
 	statistics["endless_rounds"] = int(statistics.get("endless_months", 0))
 	statistics.erase("endless_months")
 
-	ascension["committed_round"] = int(ascension.get("committed_month", 0))
-	ascension["prompts_remaining"] = int(ascension.get("rounds_remaining", 0))
 	ascension.erase("committed_month")
 	ascension.erase("rounds_remaining")
 
@@ -442,8 +458,13 @@ func _default_calendar() -> Dictionary:
 func _default_economy(profile: Dictionary = {}) -> Dictionary:
 	var economy_balance: Dictionary = ContentDatabase.balance.get("economy", {})
 	var base_power: float = float(profile.get("power_cost_per_prompt", 10.0))
+	var starting_cash: float = float(profile.get("starting_cash", DEFAULT_STARTING_CASH))
 	return {
-		"cash": float(profile.get("starting_cash", 500.0)),
+		"cash": starting_cash,
+		# Every location has a stake sized for its own rent; the difficulty is a
+		# multiplier on all of them rather than a figure that only bites in the
+		# bedroom, so a hard run is short of money in the warehouse too.
+		"cash_multiplier": starting_cash / DEFAULT_STARTING_CASH,
 		"debt": 0.0,
 		"recurring_costs": 0.0,
 		"income": 0.0,
@@ -536,11 +557,9 @@ func _default_ascension() -> Dictionary:
 	return {
 		"status": "",
 		"contract_id": "",
-		"committed_round": 0,
 		"baseline_tokens": 0.0,
 		"tokens_burned": 0.0,
-		"prompts_remaining": 0,
-		"violations": 0,
+		"deadline_round": 0,
 		"quality_sum": 0.0,
 		"quality_count": 0,
 	}
@@ -553,8 +572,6 @@ func _default_flags() -> Dictionary:
 		"outcome": "",
 		"ascension_tier": 0,
 		"fire_risk": false,
-		"overtime": false,
-		"ascension_qualified": false,
 		"post_victory": false,
 		"post_victory_phase": "",
 		"legacy_banked": false,

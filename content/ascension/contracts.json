@@ -1,9 +1,4 @@
 {
-  "qualification": {
-    "min_income_ratio": 1.0,
-    "min_peak_token_rate": 20000000,
-    "earliest_round": 4
-  },
   "contracts": [
     {
       "id": "ascension.first_scale_up",
@@ -11,22 +6,13 @@
       "location": "bedroom",
       "tier": 1,
       "flavour": "A regional logistics chain wants their whole ops stack rewritten by someone who has clearly never done this before. You have not.",
-      "burn_label": "120 Megatokens",
-      "total_burn": 120000000,
-      "min_prompt_rate": 2000000,
-      "quality_min": 35,
-      "max_heat_pct": 0.9,
-      "max_failed_burns": 6,
-      "max_hidden_bugs": 12,
-      "deadline_prompts": 12,
+      "burn_label": "40 Megatokens",
+      "total_burn": 40000000,
+      "quality_min": 30,
+      "deadline_rounds": 12,
       "picks": 1,
       "unlocks_age": false,
-      "ending_unlock": "",
-      "qualification": {
-        "min_income_ratio": 1.0,
-        "min_peak_token_rate": 6000000,
-        "earliest_round": 4
-      }
+      "ending_unlock": ""
     },
     {
       "id": "ascension.million_token_operator",
@@ -34,22 +20,13 @@
       "location": "garage",
       "tier": 1,
       "flavour": "Train the first planetary-scale model. Or a very convincing imitation of one, if that is faster.",
-      "burn_label": "50 Petatokens",
-      "total_burn": 50000000000,
-      "min_prompt_rate": 3000000,
-      "quality_min": 40,
-      "max_heat_pct": 0.9,
-      "max_failed_burns": 5,
-      "max_hidden_bugs": 10,
-      "deadline_prompts": 12,
+      "burn_label": "600 Megatokens",
+      "total_burn": 600000000,
+      "quality_min": 35,
+      "deadline_rounds": 12,
       "picks": 1,
       "unlocks_age": false,
-      "ending_unlock": "",
-      "qualification": {
-        "min_income_ratio": 1.0,
-        "min_peak_token_rate": 20000000,
-        "earliest_round": 4
-      }
+      "ending_unlock": ""
     },
     {
       "id": "ascension.regional_provider",
@@ -57,22 +34,13 @@
       "location": "office_unit",
       "tier": 2,
       "flavour": "Every startup in the business park wants inference and none of them want to buy a machine. You are now the utility, and utilities do not get to have an outage.",
-      "burn_label": "400 Petatokens",
-      "total_burn": 400000000000,
-      "min_prompt_rate": 40000000,
-      "quality_min": 50,
-      "max_heat_pct": 0.9,
-      "max_failed_burns": 5,
-      "max_hidden_bugs": 10,
-      "deadline_prompts": 12,
+      "burn_label": "8 Gigatokens",
+      "total_burn": 8000000000,
+      "quality_min": 40,
+      "deadline_rounds": 12,
       "picks": 2,
       "unlocks_age": false,
-      "ending_unlock": "",
-      "qualification": {
-        "min_income_ratio": 1.0,
-        "min_peak_token_rate": 150000000,
-        "earliest_round": 4
-      }
+      "ending_unlock": ""
     },
     {
       "id": "ascension.datacentre_magnate",
@@ -80,22 +48,13 @@
       "location": "warehouse",
       "tier": 2,
       "flavour": "Rewrite the entire public internet. Twice, because the first pass introduced a recursion bug that rewrote itself.",
-      "burn_label": "3.0 Exatokens",
-      "total_burn": 3000000000000,
-      "min_prompt_rate": 200000000,
-      "quality_min": 60,
-      "max_heat_pct": 0.9,
-      "max_failed_burns": 4,
-      "max_hidden_bugs": 8,
-      "deadline_prompts": 12,
+      "burn_label": "90 Gigatokens",
+      "total_burn": 90000000000,
+      "quality_min": 45,
+      "deadline_rounds": 12,
       "picks": 2,
       "unlocks_age": false,
-      "ending_unlock": "",
-      "qualification": {
-        "min_income_ratio": 1.0,
-        "min_peak_token_rate": 2000000000,
-        "earliest_round": 4
-      }
+      "ending_unlock": ""
     },
     {
       "id": "ascension.national_backbone",
@@ -103,22 +62,13 @@
       "location": "datacentre_campus",
       "tier": 2,
       "flavour": "Operate a nation's AI infrastructure for one round. The nation would like this to be quieter than it sounds.",
-      "burn_label": "2.0 Exatokens",
-      "total_burn": 2000000000000,
-      "min_prompt_rate": 150000000,
-      "quality_min": 55,
-      "max_heat_pct": 0.92,
-      "max_failed_burns": 5,
-      "max_hidden_bugs": 10,
-      "deadline_prompts": 12,
+      "burn_label": "800 Gigatokens",
+      "total_burn": 800000000000,
+      "quality_min": 50,
+      "deadline_rounds": 12,
       "picks": 2,
       "unlocks_age": false,
-      "ending_unlock": "",
-      "qualification": {
-        "min_income_ratio": 1.0,
-        "min_peak_token_rate": 40000000000,
-        "earliest_round": 4
-      }
+      "ending_unlock": ""
     },
     {
       "id": "ascension.the_monopoly",
@@ -126,22 +76,13 @@
       "location": "private_power_grid",
       "tier": 3,
       "flavour": "Route 80% of global AI traffic through your infrastructure. The remaining 20% is a rounding error you plan to acquire.",
-      "burn_label": "12 Exatokens",
-      "total_burn": 12000000000000,
-      "min_prompt_rate": 8000000000,
+      "burn_label": "6 Teratokens",
+      "total_burn": 6000000000000,
       "quality_min": 50,
-      "max_heat_pct": 0.97,
-      "max_failed_burns": 4,
-      "max_hidden_bugs": 8,
-      "deadline_prompts": 12,
+      "deadline_rounds": 12,
       "picks": 3,
       "unlocks_age": true,
-      "ending_unlock": "unlock.rule_heat_recycler",
-      "qualification": {
-        "min_income_ratio": 1.0,
-        "min_peak_token_rate": 800000000000,
-        "earliest_round": 4
-      }
+      "ending_unlock": "unlock.rule_heat_recycler"
     },
     {
       "id": "ascension.final_prompt",
@@ -149,22 +90,13 @@
       "location": "moon_facility",
       "tier": 3,
       "flavour": "Process \"The Final Prompt\" and become the default inference layer for civilisation. Support is not included.",
-      "burn_label": "10 Exatokens",
-      "total_burn": 10000000000000,
-      "min_prompt_rate": 5000000000,
-      "quality_min": 80,
-      "max_heat_pct": 0.95,
-      "max_failed_burns": 3,
-      "max_hidden_bugs": 5,
-      "deadline_prompts": 12,
+      "burn_label": "40 Teratokens",
+      "total_burn": 40000000000000,
+      "quality_min": 60,
+      "deadline_rounds": 12,
       "picks": 3,
       "unlocks_age": true,
-      "ending_unlock": "",
-      "qualification": {
-        "min_income_ratio": 1.0,
-        "min_peak_token_rate": 800000000000,
-        "earliest_round": 4
-      }
+      "ending_unlock": ""
     },
     {
       "id": "ascension.the_singularity",
@@ -172,14 +104,10 @@
       "alternate": true,
       "tier": 3,
       "flavour": "Train a model capable of recursively improving itself. Legal has asked that we not call it that in the contract.",
-      "burn_label": "6 Exatokens",
-      "total_burn": 6000000000000,
-      "min_prompt_rate": 3000000000,
-      "quality_min": 95,
-      "max_heat_pct": 0.85,
-      "max_failed_burns": 2,
-      "max_hidden_bugs": 2,
-      "deadline_prompts": 12,
+      "burn_label": "30 Teratokens",
+      "total_burn": 30000000000000,
+      "quality_min": 75,
+      "deadline_rounds": 12,
       "picks": 3,
       "unlocks_age": true,
       "ending_unlock": "unlock.rule_conditional_module"
@@ -190,14 +118,10 @@
       "alternate": true,
       "tier": 3,
       "flavour": "Process and preserve all human knowledge. Some of it was already wrong; that part processes fastest.",
-      "burn_label": "8 Exatokens",
-      "total_burn": 8000000000000,
-      "min_prompt_rate": 4000000000,
-      "quality_min": 70,
-      "max_heat_pct": 0.8,
-      "max_failed_burns": 5,
-      "max_hidden_bugs": 6,
-      "deadline_prompts": 14,
+      "burn_label": "35 Teratokens",
+      "total_burn": 35000000000000,
+      "quality_min": 65,
+      "deadline_rounds": 14,
       "picks": 3,
       "unlocks_age": true,
       "ending_unlock": "unlock.rule_failed_research"
@@ -208,14 +132,10 @@
       "alternate": true,
       "tier": 3,
       "flavour": "Simulate an entire civilisation. It has already started asking questions about its render distance.",
-      "burn_label": "10 Exatokens",
-      "total_burn": 10000000000000,
-      "min_prompt_rate": 4000000000,
-      "quality_min": 65,
-      "max_heat_pct": 0.9,
-      "max_failed_burns": 6,
-      "max_hidden_bugs": 10,
-      "deadline_prompts": 16,
+      "burn_label": "45 Teratokens",
+      "total_burn": 45000000000000,
+      "quality_min": 60,
+      "deadline_rounds": 16,
       "picks": 3,
       "unlocks_age": true,
       "ending_unlock": "unlock.parallel_lane"
@@ -226,14 +146,10 @@
       "alternate": true,
       "tier": 3,
       "flavour": "Generate every advert every human will ever see. Reputation is not a load-bearing requirement here.",
-      "burn_label": "15 Exatokens",
-      "total_burn": 15000000000000,
-      "min_prompt_rate": 9000000000,
+      "burn_label": "60 Teratokens",
+      "total_burn": 60000000000000,
       "quality_min": 20,
-      "max_heat_pct": 0.98,
-      "max_failed_burns": 8,
-      "max_hidden_bugs": 20,
-      "deadline_prompts": 10,
+      "deadline_rounds": 10,
       "picks": 3,
       "unlocks_age": true,
       "ending_unlock": "unlock.rule_bug_market"

@@ -16,38 +16,50 @@ extends RefCounted
 ## - card_style: interactive cards, brighter edge and a clipped corner.
 ## - info_strip_style: flat compact strips with no container of their own.
 
-# Type scale, in 720-wide design units. A handset maps those 720 units onto a
-# ~411dp panel, so one design unit is about 0.57sp: multiply by 0.57 to sanity
-# check a size against Android's 12sp readability floor. Keep them generous
-# ("large numerical typography" per the UX doc).
-const FONT_SMALL := 22
+# Type scale, in 1280x720 landscape design units. The scale was originally
+# tuned for a 720-wide portrait column; landscape has nearly twice the width but
+# little more than half the height, so every size is roughly three quarters of
+# its portrait value. That keeps a line of body text about as tall relative to
+# the screen as it used to be while letting far more of it fit across.
+const FONT_SMALL := 16
 ## Secondary prose (subtitles, sub-lines, footers). It sits between SMALL and
 ## BODY because SMALL was tuned for uppercase kickers, and reusing it for whole
 ## sentences left the explanatory half of the UI harder to read than the numbers
 ## it was explaining.
-const FONT_MUTED := 25
-const FONT_BODY := 26
-const FONT_TITLE := 36
-const FONT_DISPLAY := 48
-const FONT_STAT := 40
+const FONT_MUTED := 18
+const FONT_BODY := 19
+const FONT_TITLE := 27
+const FONT_DISPLAY := 36
+const FONT_STAT := 30
 
 # Spacing scale
-const SPACE_XS := 4
-const SPACE_SM := 8
-const SPACE_MD := 16
-const SPACE_LG := 24
+const SPACE_XS := 3
+const SPACE_SM := 6
+const SPACE_MD := 12
+const SPACE_LG := 18
 
-# Maximum width of the main content column. Matches the 720-wide portrait
-# design; on wider windows (desktop/landscape) the column is centered instead
-# of stretching edge to edge.
+# Width of the right-hand panel that carries the job board, the market, the
+# build and the menu. The desk fills everything to its left.
+const SIDE_PANEL_WIDTH := 442.0
+# Kept for screens that still want a readable measure for a column of prose.
 const CONTENT_MAX_WIDTH := 720.0
 
-const CORNER_RADIUS := 12
-# 88 design units is ~50dp on a handset, just clear of the 48dp minimum.
-const TOUCH_TARGET := 88
+## Narrowest a card tile can be and still read: below this a job title wraps to
+## three lines and the stat chips stack.
+const MIN_TILE_WIDTH := 300.0
+## Beyond this a tile stops being a tile and starts being a banner.
+const MAX_TILE_COLUMNS := 3
+
+const CORNER_RADIUS := 10
+# Cards and keys are cut from the machine's case, so they barely round at all.
+const CARD_CORNER := 3
+const KEY_CORNER := 4
+# 64 design units on a 1280-wide landscape panel is ~48dp on a handset held
+# sideways, which is the minimum comfortable thumb target.
+const TOUCH_TARGET := 64
 # Game buttons are the primary way the player acts, so they get more than the
 # bare minimum thumb target.
-const ACTION_TARGET := 104
+const ACTION_TARGET := 76
 
 # Bebas Neue is condensed and caps-only, so it needs more points than Inter to
 # read at the same optical size.
@@ -57,7 +69,10 @@ const MONO_FONT_PATH := "res://presentation/fonts/ShareTechMono-Regular.ttf"
 const HEADER_SCALE := 1.2
 
 # Depth of the bottom bevel that makes buttons read as physical keycaps.
-const BUTTON_BEVEL := 8
+const BUTTON_BEVEL := 6
+## Vertical padding inside an action button. Landscape has half the height to
+## spend, so caps are shallower than they were in portrait.
+const BUTTON_PAD_V := 9
 
 ## Colour semantics. Every screen should ask for a role rather than a colour so
 ## green keeps meaning money and cyan keeps meaning "this is the thing to tap".
@@ -110,6 +125,13 @@ static func body_bold_font() -> Font:
 
 ## Fixed pitch face for the rig terminal and any other readout that has to line
 ## its columns up.
+## How many card tiles fit across a container of this width. Every catalogue
+## screen asks the same question, and every one of them used to answer it with
+## "one", which is why a 1280-wide window showed two job offers.
+static func tile_columns(available_width: float) -> int:
+	return clampi(int(available_width / MIN_TILE_WIDTH), 1, MAX_TILE_COLUMNS)
+
+
 static func mono_font() -> Font:
 	_ensure_fonts()
 	return _mono_font
@@ -204,10 +226,12 @@ static func build() -> Theme:
 	_add_label_variation(theme, "StatLabel", white, header_size(FONT_STAT), true)
 	# Both grey roles are lifted well clear of the panel behind them: at the
 	# catalogue grey these read as disabled rather than secondary.
-	_add_label_variation(theme, "SectionLabel", grey.lightened(0.3), header_size(FONT_SMALL), true)
+	# Kickers and figures are machine output, so they take the terminal face the
+	# rig's own readouts use rather than the poster face used for titles.
+	_add_mono_label_variation(theme, "SectionLabel", grey.lightened(0.3), FONT_SMALL)
 	_add_label_variation(theme, "MutedLabel", grey.lightened(0.45), FONT_MUTED)
 	_add_label_variation(theme, "AccentLabel", blue, FONT_BODY)
-	_add_label_variation(theme, "MoneyLabel", green, header_size(FONT_BODY), true)
+	_add_mono_label_variation(theme, "MoneyLabel", green, FONT_BODY)
 	_add_label_variation(theme, "WarningLabel", orange, FONT_MUTED)
 	_add_label_variation(theme, "ErrorLabel", red, FONT_BODY)
 	if _header_font != null:
@@ -260,6 +284,20 @@ static func _add_label_variation(
 			theme.set_font("font", variation, _header_font)
 
 
+## A label role that reads as something the machine printed. Sized off the base
+## scale rather than through `header_size`, which exists to compensate for the
+## condensed poster face and would oversize a monospace.
+static func _add_mono_label_variation(
+	theme: Theme, variation: String, font_color: Color, font_size: int
+) -> void:
+	theme.set_type_variation(variation, "Label")
+	theme.set_color("font_color", variation, font_color)
+	theme.set_font_size("font_size", variation, font_size)
+	_ensure_fonts()
+	if _mono_font != null:
+		theme.set_font("font", variation, _mono_font)
+
+
 static func _add_button_variation(theme: Theme, variation: String, accent: Color, filled: bool = true) -> void:
 	theme.set_type_variation(variation, "Button")
 	theme.set_stylebox("normal", variation, action_button_style(accent, false, filled))
@@ -279,30 +317,31 @@ static func _add_button_variation(theme: Theme, variation: String, accent: Color
 	theme.set_color("icon_disabled_color", variation, Color(1, 1, 1, 0.35))
 
 
-## Heavy game action button: accent-tinted fill, thick edge, clipped corner and a
-## deep bottom bevel so it reads as a physical key rather than a settings row.
+## Heavy game action button. Every button in the game is now the same object the
+## burn deck's keys are: a cap cut from the case, squared off, lit by its own
+## legend rather than by a halo around it. The neon bloom and the big clipped
+## corner made these look like an app's call-to-action floating over the art.
 static func action_button_style(accent: Color, bright: bool, filled: bool = true) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	var base: Color = color("bg_panel")
-	var mix: float = 0.34 if filled else 0.14
+	var base: Color = color("bay").lightened(0.1)
+	var mix: float = 0.32 if filled else 0.12
 	if bright:
-		mix += 0.18
+		mix += 0.16
 	style.bg_color = base.lerp(accent, mix)
-	# Vertical sheen: lighter at the top edge, so the cap looks lit from above.
-	style.bg_color = style.bg_color.lightened(0.04 if bright else 0.0)
-	style.border_width_left = 3
-	style.border_width_top = 3
-	style.border_width_right = 3
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
 	style.border_width_bottom = BUTTON_BEVEL
-	style.border_color = accent if bright else accent.darkened(0.12)
-	_clip_corners(style, 18, 4)
+	style.border_color = accent.darkened(0.05 if bright else 0.22)
+	style.set_corner_radius_all(KEY_CORNER)
 	style.content_margin_left = SPACE_LG
 	style.content_margin_right = SPACE_LG
-	style.content_margin_top = 14
-	style.content_margin_bottom = 14
-	style.shadow_color = Color(accent.r, accent.g, accent.b, 0.34 if bright else 0.18)
-	style.shadow_size = 14 if filled else 8
-	style.shadow_offset = Vector2(0, 4)
+	style.content_margin_top = BUTTON_PAD_V
+	style.content_margin_bottom = BUTTON_PAD_V
+	# Just enough spill to look powered, not enough to look like a neon sign.
+	style.shadow_color = Color(accent.r, accent.g, accent.b, 0.2 if bright else 0.1)
+	style.shadow_size = 5 if filled else 3
+	style.shadow_offset = Vector2(0, 2)
 	return style
 
 
@@ -337,18 +376,18 @@ static func deck_key_style(
 	style.border_width_top = 2
 	style.border_width_bottom = BUTTON_BEVEL
 	style.border_color = edge
-	style.set_corner_radius_all(8)
+	style.set_corner_radius_all(6)
 	style.content_margin_left = SPACE_SM
 	style.content_margin_right = SPACE_SM
-	style.content_margin_top = 10
-	style.content_margin_bottom = 10
+	style.content_margin_top = 7
+	style.content_margin_bottom = 7
 	if state == "pressed":
 		# The cap is driven into the tray: the bevel moves to the top edge and the
 		# content goes down with it.
 		style.border_width_top = BUTTON_BEVEL
 		style.border_width_bottom = 2
-		style.content_margin_top = 10 + BUTTON_BEVEL - 2
-		style.content_margin_bottom = 10 - (BUTTON_BEVEL - 2)
+		style.content_margin_top = 7 + BUTTON_BEVEL - 2
+		style.content_margin_bottom = 7 - (BUTTON_BEVEL - 2)
 	return style
 
 
@@ -360,8 +399,8 @@ static func pressed_button_style(accent: Color, filled: bool = true) -> StyleBox
 	style.border_width_top = BUTTON_BEVEL
 	style.border_color = accent.darkened(0.25)
 	style.bg_color = style.bg_color.darkened(0.12)
-	style.content_margin_top = 14 + BUTTON_BEVEL - 3
-	style.content_margin_bottom = 14 - (BUTTON_BEVEL - 3)
+	style.content_margin_top = BUTTON_PAD_V + BUTTON_BEVEL - 3
+	style.content_margin_bottom = BUTTON_PAD_V - (BUTTON_BEVEL - 3)
 	style.shadow_size = 0
 	return style
 
@@ -375,21 +414,12 @@ static func disabled_button_style() -> StyleBoxFlat:
 	style.border_width_right = 2
 	style.border_width_bottom = 4
 	style.border_color = color("stroke_dim")
-	_clip_corners(style, 18, 4)
+	style.set_corner_radius_all(KEY_CORNER)
 	style.content_margin_left = SPACE_LG
 	style.content_margin_right = SPACE_LG
-	style.content_margin_top = 14
-	style.content_margin_bottom = 14
+	style.content_margin_top = BUTTON_PAD_V
+	style.content_margin_bottom = BUTTON_PAD_V
 	return style
-
-
-## Asymmetric radii read as a clipped technical corner rather than app-style
-## uniform rounding.
-static func _clip_corners(style: StyleBoxFlat, large: int, small: int) -> void:
-	style.corner_radius_top_left = large
-	style.corner_radius_top_right = small
-	style.corner_radius_bottom_right = large
-	style.corner_radius_bottom_left = small
 
 
 static func flat_button(bg: Color, border: Color, bright: bool, alpha: float = 1.0) -> StyleBoxFlat:
@@ -398,22 +428,22 @@ static func flat_button(bg: Color, border: Color, bright: bool, alpha: float = 1
 	style.border_width_left = 2
 	style.border_width_top = 2
 	style.border_width_right = 2
-	style.border_width_bottom = 6
+	style.border_width_bottom = 5
 	style.border_color = border if bright else border.darkened(0.35)
-	_clip_corners(style, 14, 4)
-	style.content_margin_left = 14
-	style.content_margin_right = 14
-	style.content_margin_top = 10
-	style.content_margin_bottom = 10
+	style.set_corner_radius_all(KEY_CORNER)
+	style.content_margin_left = 11
+	style.content_margin_right = 11
+	style.content_margin_top = 7
+	style.content_margin_bottom = 7
 	return style
 
 
 static func flat_button_pressed(bg: Color, border: Color) -> StyleBoxFlat:
 	var style: StyleBoxFlat = flat_button(bg, border, true)
 	style.border_width_bottom = 2
-	style.border_width_top = 6
-	style.content_margin_top = 14
-	style.content_margin_bottom = 6
+	style.border_width_top = 5
+	style.content_margin_top = 10
+	style.content_margin_bottom = 4
 	return style
 
 
@@ -442,26 +472,28 @@ static func info_strip_style() -> StyleBoxFlat:
 	return style
 
 
-## Tier 2 surface: interactive card. Brighter edge, subtle lift, clipped corner,
-## and an optional accent stripe down the left for category identity.
+## Tier 2 surface: interactive card. A pane of bay glass set in the case, not a
+## floating app card — square corners, a hard bezel edge with the light on the
+## top rim, and an accent stripe down the left for category identity. The old
+## 20px rounding and coloured lift read as a phone app pasted over the art.
 static func card_style(accent_key: String = "") -> StyleBox:
 	var style := StyleBoxFlat.new()
-	var base: Color = color("bg_panel")
-	style.bg_color = Color(base.r, base.g, base.b, 0.94)
+	var base: Color = color("bay").lerp(color("bg_panel"), 0.35)
+	style.bg_color = Color(base.r, base.g, base.b, 0.96)
 	style.border_width_left = 2
 	style.border_width_top = 2
 	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = color("stroke_dim").lightened(0.22)
-	_clip_corners(style, 20, 4)
-	style.shadow_color = Color(0, 0, 0, 0.45)
-	style.shadow_size = 8
-	style.shadow_offset = Vector2(0, 3)
+	style.border_width_bottom = 3
+	style.border_color = color("stroke_dim").lightened(0.16)
+	style.set_corner_radius_all(CARD_CORNER)
+	style.shadow_color = Color(0, 0, 0, 0.5)
+	style.shadow_size = 5
+	style.shadow_offset = Vector2(0, 2)
 	if accent_key != "":
 		var accent: Color = AssetCatalog.rarity_color(accent_key) if _is_rarity(accent_key) else color(accent_key)
-		style.border_width_left = 8
-		style.border_color = accent.darkened(0.1)
-		style.bg_color = base.lerp(accent, 0.06)
+		style.border_width_left = 5
+		style.border_color = accent.darkened(0.25)
+		style.bg_color = base.lerp(accent, 0.05)
 	return style
 
 
@@ -469,10 +501,10 @@ static func card_style(accent_key: String = "") -> StyleBox:
 ## data-driven accents that are not palette keys.
 static func card_style_accent(accent: Color) -> StyleBoxFlat:
 	var style: StyleBoxFlat = card_style() as StyleBoxFlat
-	var base: Color = color("bg_panel")
-	style.border_width_left = 8
-	style.border_color = accent.darkened(0.1)
-	style.bg_color = base.lerp(accent, 0.06)
+	var base: Color = color("bay").lerp(color("bg_panel"), 0.35)
+	style.border_width_left = 5
+	style.border_color = accent.darkened(0.25)
+	style.bg_color = base.lerp(accent, 0.05)
 	return style
 
 
@@ -490,10 +522,7 @@ static func chip_style(accent: Color, filled: bool = false) -> StyleBoxFlat:
 	style.border_width_right = 2
 	style.border_width_bottom = 2
 	style.border_color = accent.darkened(0.05)
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 3
-	style.corner_radius_bottom_right = 10
-	style.corner_radius_bottom_left = 3
+	style.set_corner_radius_all(2)
 	style.content_margin_left = 10
 	style.content_margin_right = 10
 	style.content_margin_top = 3
@@ -510,6 +539,39 @@ static func sheet_style() -> StyleBoxFlat:
 	style.corner_radius_top_left = 16
 	style.corner_radius_top_right = 16
 	return style
+
+
+## A printed docket lying on the desk, for the round-end surfaces. Warm off-white
+## rather than the panel greys, square corners and a drop shadow, so the bills and
+## the debrief read as paper the run put in front of you instead of another app
+## window floating over the room.
+static func docket_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.93, 0.91, 0.86)
+	style.border_width_left = 1
+	style.border_width_right = 1
+	style.border_width_top = 1
+	style.border_width_bottom = 1
+	style.border_color = Color(0.62, 0.59, 0.53)
+	style.corner_radius_top_left = 2
+	style.corner_radius_top_right = 2
+	style.corner_radius_bottom_left = 2
+	style.corner_radius_bottom_right = 2
+	style.shadow_color = Color(0, 0, 0, 0.55)
+	style.shadow_size = 18
+	style.shadow_offset = Vector2(0, 8)
+	return style
+
+
+## Ink on the docket, in the three weights the printed surfaces use.
+static func docket_ink(weight: String = "body") -> Color:
+	match weight:
+		"title":
+			return Color(0.09, 0.08, 0.07)
+		"muted":
+			return Color(0.36, 0.34, 0.30)
+		_:
+			return Color(0.16, 0.15, 0.13)
 
 
 static func nav_bar_style() -> StyleBoxFlat:
@@ -535,8 +597,8 @@ static func nav_tab_style(active: bool) -> StyleBoxFlat:
 		style.bg_color = Color(0, 0, 0, 0)
 	style.content_margin_left = SPACE_SM
 	style.content_margin_right = SPACE_SM
-	style.content_margin_top = 12
-	style.content_margin_bottom = 10
+	style.content_margin_top = 7
+	style.content_margin_bottom = 6
 	return style
 
 

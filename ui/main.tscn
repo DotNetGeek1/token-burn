@@ -2,7 +2,6 @@
 
 [ext_resource type="Script" path="res://ui/main.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://stat_chip" path="res://ui/common/stat_chip.tscn" id="2"]
-[ext_resource type="PackedScene" uid="uid://resource_bar" path="res://ui/common/resource_bar.tscn" id="3"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -21,7 +20,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="SceneBackdrop" type="TextureRect" parent="."]
+[node name="BoardArt" type="TextureRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -30,9 +29,9 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 expand_mode = 1
-stretch_mode = 6
+stretch_mode = 0
 
-[node name="SceneBackdropNext" type="TextureRect" parent="."]
+[node name="BoardArtNext" type="TextureRect" parent="."]
 modulate = Color(1, 1, 1, 0)
 layout_mode = 1
 anchors_preset = 15
@@ -42,7 +41,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 expand_mode = 1
-stretch_mode = 6
+stretch_mode = 0
 
 [node name="Scrim" type="ColorRect" parent="."]
 layout_mode = 1
@@ -53,102 +52,206 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="VBox" type="VBoxContainer" parent="."]
+[node name="PropLayer" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 0
+mouse_filter = 2
 
-[node name="StatusBar" type="PanelContainer" parent="VBox"]
-custom_minimum_size = Vector2(0, 140)
-layout_mode = 2
+[node name="WorkColumn" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
-[node name="Margin" type="MarginContainer" parent="VBox/StatusBar"]
+[node name="ContentContainer" type="Control" parent="WorkColumn"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TopHud" type="PanelContainer" parent="."]
+clip_contents = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 76.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="HudMargin" type="MarginContainer" parent="TopHud"]
 layout_mode = 2
+mouse_filter = 2
 theme_override_constants/margin_left = 18
 theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 18
 theme_override_constants/margin_bottom = 6
 
-[node name="StatusVBox" type="VBoxContainer" parent="VBox/StatusBar/Margin"]
+[node name="HudRow" type="HBoxContainer" parent="TopHud/HudMargin"]
 layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 14
+
+[node name="Wordmark" type="VBoxContainer" parent="TopHud/HudMargin/HudRow"]
+layout_mode = 2
+mouse_filter = 2
 theme_override_constants/separation = 0
 
-[node name="TopRow" type="HBoxContainer" parent="VBox/StatusBar/Margin/StatusVBox"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/separation = 12
-
-[node name="Logo" type="Label" parent="VBox/StatusBar/Margin/StatusVBox/TopRow"]
-custom_minimum_size = Vector2(0, 44)
+[node name="Logo" type="Label" parent="TopHud/HudMargin/HudRow/Wordmark"]
 layout_mode = 2
 theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
-theme_override_constants/outline_size = 10
-theme_override_font_sizes/font_size = 26
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 30
 text = "TOKEN BURN"
 vertical_alignment = 1
 
-[node name="StatsRow" type="HBoxContainer" parent="VBox/StatusBar/Margin/StatusVBox/TopRow"]
+[node name="Version" type="Label" parent="TopHud/HudMargin/HudRow/Wordmark"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 13
+text = "v0.7.0"
+
+[node name="StatsRow" type="HBoxContainer" parent="TopHud/HudMargin/HudRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 8
-alignment = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_constants/separation = 10
+alignment = 1
 
-[node name="CashChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+[node name="CashChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
 
-[node name="TokenChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+[node name="TokenChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
 
-[node name="RepChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+[node name="HeatChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
 
-[node name="RoundChip" parent="VBox/StatusBar/Margin/StatusVBox/TopRow/StatsRow" instance=ExtResource("2")]
+[node name="PowerChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
 
-[node name="AscensionRow" type="Button" parent="VBox/StatusBar/Margin/StatusVBox"]
-custom_minimum_size = Vector2(0, 30)
+[node name="RepChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
+
+[node name="RoundChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
+layout_mode = 2
+
+[node name="AscensionGoal" type="Button" parent="TopHud/HudMargin/HudRow"]
+custom_minimum_size = Vector2(268, 0)
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "The Angel Investor's terms for this run."
 flat = true
-alignment = 0
-text = "ASCENSION"
 
-[node name="AscensionBar" parent="VBox/StatusBar/Margin/StatusVBox" instance=ExtResource("3")]
-custom_minimum_size = Vector2(0, 26)
-layout_mode = 2
-visible = false
+[node name="GoalVBox" type="VBoxContainer" parent="TopHud/HudMargin/HudRow/AscensionGoal"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 1
 
-[node name="Body" type="HBoxContainer" parent="VBox"]
+[node name="GoalKicker" type="Label" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox"]
 layout_mode = 2
+theme_type_variation = &"SectionLabel"
+theme_override_font_sizes/font_size = 13
+text = "ASCENSION GOAL"
+
+[node name="GoalName" type="Label" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Ascension Contract"
+
+[node name="GoalRow" type="HBoxContainer" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="GoalBar" type="ProgressBar" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalRow"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+show_percentage = false
+
+[node name="GoalCount" type="Label" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalRow"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+theme_override_font_sizes/font_size = 13
+text = "0 / 0"
+
+[node name="SidePanel" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 0
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PanelBg" type="PanelContainer" parent="SidePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PanelRow" type="HBoxContainer" parent="SidePanel/PanelBg"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="PanelBody" type="Control" parent="SidePanel/PanelBg/PanelRow"]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
+
+[node name="IconRail" type="VBoxContainer" parent="SidePanel/PanelBg/PanelRow"]
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="BottomNav" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -78.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="NavHBox" type="HBoxContainer" parent="BottomNav"]
+layout_mode = 2
 theme_override_constants/separation = 0
 
-[node name="ContentContainer" type="Control" parent="VBox/Body"]
+[node name="Work" type="Button" parent="BottomNav/NavHBox"]
 layout_mode = 2
 size_flags_horizontal = 3
-
-[node name="BottomNav" type="PanelContainer" parent="VBox"]
-custom_minimum_size = Vector2(0, 208)
-layout_mode = 2
-
-[node name="NavHBox" type="HBoxContainer" parent="VBox/BottomNav"]
-layout_mode = 2
-theme_override_constants/separation = 0
-
-[node name="Work" type="Button" parent="VBox/BottomNav/NavHBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Work"
-text = "WORK"
+tooltip_text = "The desk"
+text = "BURN"
 flat = true
 icon_alignment = 1
 vertical_icon_alignment = 0
 expand_icon = true
 
-[node name="Jobs" type="Button" parent="VBox/BottomNav/NavHBox"]
+[node name="Jobs" type="Button" parent="BottomNav/NavHBox"]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Job board"
@@ -158,7 +261,7 @@ icon_alignment = 1
 vertical_icon_alignment = 0
 expand_icon = true
 
-[node name="Build" type="Button" parent="VBox/BottomNav/NavHBox"]
+[node name="Build" type="Button" parent="BottomNav/NavHBox"]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Build the pipeline"
@@ -168,7 +271,7 @@ icon_alignment = 1
 vertical_icon_alignment = 0
 expand_icon = true
 
-[node name="Market" type="Button" parent="VBox/BottomNav/NavHBox"]
+[node name="Market" type="Button" parent="BottomNav/NavHBox"]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Market"
@@ -178,9 +281,19 @@ icon_alignment = 1
 vertical_icon_alignment = 0
 expand_icon = true
 
-[node name="More" type="Button" parent="VBox/BottomNav/NavHBox"]
+[node name="Ascend" type="Button" parent="BottomNav/NavHBox"]
 layout_mode = 2
 size_flags_horizontal = 3
+tooltip_text = "The Ascension Contract"
+text = "ASCEND"
+flat = true
+icon_alignment = 1
+vertical_icon_alignment = 0
+expand_icon = true
+
+[node name="More" type="Button" parent="BottomNav/NavHBox"]
+custom_minimum_size = Vector2(92, 0)
+layout_mode = 2
 tooltip_text = "More"
 text = "MORE"
 flat = true

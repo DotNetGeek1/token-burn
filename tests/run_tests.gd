@@ -26,49 +26,50 @@ func _ready() -> void:
 	_run_legacy_tests()
 	_run_batch("random", 12)
 	# The builder plays the game the way the design assumes one is played: it
-	# buys cooling before the machine that needs it and commits to the boss once
-	# it can. Set in the bedroom, which is chapter one and therefore the campaign
-	# gate: if a build there cannot beat First Scale-Up, nobody ever reaches the
-	# garage and the campaign has no first step.
+	# buys cooling before the machine that needs it and takes the work it can
+	# actually deliver. Set in the bedroom, which is chapter one and therefore
+	# the campaign gate: if a build there cannot beat First Scale-Up, nobody ever
+	# reaches the garage and the campaign has no first step.
 	var bedroom: Dictionary = _run_batch("builder", 8, "bedroom")
 	_assert(
 		float(bedroom.get("ascended_rate", 0.0)) > 0.0,
-		"A building policy can beat the bedroom's Ascension Contract"
+		"A building policy can beat the bedroom's contract inside the year"
 	)
-	# The garage is the chapter after it. Its economy is a Task 8 balance
-	# question, so entering the endgame is asserted and finishing it reported.
+	# The garage is the chapter after it, played with the hardware the bedroom
+	# was won with, so the sweep starts it the way the campaign would.
 	var garage: Dictionary = _run_batch("builder", 8, "garage")
 	_assert(
-		float(garage.get("committed_rate", 0.0)) > 0.0,
-		"And can still qualify for and commit to the garage's"
+		float(garage.get("max_burn_ratio", 0.0)) > 0.5,
+		"And the garage's is within reach of the best run in the garage"
 	)
 	print("=".repeat(40))
 	print("Results: %d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(_failed)
 
 
-## One policy sweep, reported as an outcome histogram rather than a win rate:
-## "survived the calendar" is no longer an ending, so a single percentage can no
-## longer tell a run that ascended from one that merely failed to die.
+## One policy sweep, reported as an outcome histogram plus how far the sample got
+## against its contract: a win rate alone cannot tell a chapter that is priced
+## slightly out of reach from one that is priced absurdly out of reach.
 func _run_batch(policy: String, count: int, location: String = "bedroom") -> Dictionary:
 	var summary: Dictionary = BatchRunner.new().run(count, policy, location)
-	print("Batch [%s in %s] %d runs — ascended %.0f%%, qualified %.0f%%, committed %.0f%%, avg peak %s, avg final burn %s, outcomes: %s" % [
+	print("Batch [%s in %s] %d runs — ascended %.0f%%, expired %.0f%%, burn %.0f%% avg / %.0f%% best, avg peak %s, avg burned %s, outcomes: %s" % [
 		policy,
 		location,
 		count,
 		float(summary.get("ascended_rate", 0.0)) * 100.0,
-		float(summary.get("qualified_rate", 0.0)) * 100.0,
-		float(summary.get("committed_rate", 0.0)) * 100.0,
+		float(summary.get("expired_rate", 0.0)) * 100.0,
+		float(summary.get("avg_burn_ratio", 0.0)) * 100.0,
+		float(summary.get("max_burn_ratio", 0.0)) * 100.0,
 		NumberFormat.format_token_rate(float(summary.get("avg_peak_token_rate", 0.0))),
-		NumberFormat.format(float(summary.get("avg_final_burn_tokens", 0.0))),
+		NumberFormat.format(float(summary.get("avg_lifetime_tokens", 0.0))),
 		BatchRunner.describe_outcomes(summary),
 	])
 	_assert(
 		int(summary.get("invalid_number_count", 0)) == 0,
 		"Batch [%s] produced no NaN or infinite values" % policy
 	)
-	# A run that never terminates is the failure mode overtime could introduce,
-	# so it fails the suite rather than being averaged away.
+	# A run that never terminates is a real failure mode, so it fails the suite
+	# rather than being averaged away.
 	_assert(int(summary.get("stuck_count", 0)) == 0, "Batch [%s] left no run unresolved" % policy)
 	return summary
 

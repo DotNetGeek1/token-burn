@@ -1,13 +1,12 @@
 extends TestCase
 
-## The endgame layer: every location has exactly one boss contract. Qualification
-## gates the Final Burn, committing locks the run onto it, and every prompt is
-## measured against its requirements until it completes or fails.
+## The contract each location is played for. There is exactly one, it is live
+## from the first prompt of the run, and the year is its deadline.
 ##
-## Completing it wins the run and opens the next location. Failing it ends the
-## run. There is no ladder inside a run any more, and most of the tests below
-## exist to keep it that way — the bug they guard against is a run that survived
-## an ending in either direction.
+## Completing it wins the run and opens the next location. Reaching the end of
+## the year without it ends the run. Most of the tests below exist to keep those
+## two statements true — the bug they guard against is a run that survived an
+## ending in either direction.
 
 const SCRATCH_PROFILE := "user://profile_test_ascension.json"
 
@@ -18,28 +17,21 @@ func run() -> void:
 	var restore_path: String = MetaProgress.profile_path
 	var restore_enabled: bool = MetaProgress.enabled
 
-	_test_an_unqualified_build_has_no_boss_on_the_table()
-	_test_qualification_reports_every_unmet_condition()
-	_test_the_boss_offered_belongs_to_the_run_s_location()
-	_test_committing_locks_in_the_contract()
-	_test_completing_a_contract_meets_its_requirement()
-	_test_falling_short_of_the_deadline_fails_the_contract()
-	_test_the_year_running_out_does_not_end_the_run()
-	_test_overtime_costs_climb_every_round()
-	_test_committing_in_overtime_still_wins_the_run()
-	_test_overtime_still_ends_when_the_business_collapses()
-	_test_overtime_closes_out_an_operation_earning_millions()
-	_test_endless_stays_off_while_the_meta_layer_is_disabled()
-	_test_qualification_latches_once_cleared()
-	_test_beating_the_boss_wins_the_run()
-	_test_beating_the_boss_unlocks_the_next_location()
-	_test_a_failed_contract_ends_the_run()
+	_test_a_fresh_run_is_already_under_its_contract()
+	_test_the_contract_belongs_to_the_run_s_location()
+	_test_progress_counts_from_the_first_prompt()
+	_test_the_quality_bar_gates_completion()
+	_test_the_year_running_out_ends_the_run()
+	_test_a_finished_contract_beats_the_deadline_to_it()
+	_test_there_is_no_overtime_left_to_fall_into()
+	_test_beating_the_contract_wins_the_run()
+	_test_beating_the_contract_unlocks_the_next_location()
 	_test_no_ladder_state_is_left_in_the_run()
-	_test_replaying_a_completed_location_offers_its_boss_again()
+	_test_replaying_a_completed_location_sets_its_contract_again()
 	_test_a_won_run_can_carry_on_into_endless()
 	_test_run_score_reports_lifetime_tokens()
-	_test_ascension_state_survives_a_save_round_trip()
-	_test_a_save_mid_ladder_keeps_its_contract_and_sheds_the_rungs()
+	_test_contract_state_survives_a_save_round_trip()
+	_test_a_save_mid_final_burn_becomes_the_run_s_contract()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -59,75 +51,44 @@ func _sim() -> Node:
 	return sim
 
 
-## Clears the bars the run's own location asks for, without having to actually
-## buy every upgrade in the chapter.
-func _qualify(sim: Node) -> void:
-	_qualify_state(sim.run_state)
-
-
-func _qualify_state(run_state: RunState) -> void:
-	var thresholds: Dictionary = AscensionSystem.new().qualification_thresholds(
-		run_state, ContentDatabase
-	)
-	run_state.calendar["round"] = maxi(6, int(thresholds.get("earliest_round", 1)))
-	run_state.economy["last_round_costs"] = 100.0
-	run_state.economy["income"] = 500.0
-	run_state.statistics["peak_token_rate"] = float(
-		thresholds.get("min_peak_token_rate", 0.0)
-	) * 1.25 + 1.0
-
-
-## Puts a run in a location without playing the chapters below it.
+## Puts a run in a location without playing the chapters below it. The contract
+## follows the location, so it has to be re-activated afterwards.
 func _run_in(sim: Node, location: String) -> void:
 	sim.apply_run_location(sim.run_state, location)
+	AscensionSystem.new().activate(sim.run_state, ContentDatabase)
 
 
-func _boss_id(sim: Node) -> String:
-	return str(sim.ascension_boss_contract().get("id", ""))
+## Skips straight to "the burn requirement is met", which is what the prompt
+## evaluator actually checks.
+func _meet_requirement(sim: Node, contract_id: String) -> Dictionary:
+	var contract: Dictionary = ContentDatabase.get_ascension_contract(contract_id)
+	sim.run_state.statistics["lifetime_tokens"] = (
+		float(sim.run_state.ascension.get("baseline_tokens", 0.0))
+		+ float(contract.get("total_burn", 0.0)) + 1.0
+	)
+	sim.run_state.ascension["quality_sum"] = 100.0
+	sim.run_state.ascension["quality_count"] = 1
+	return contract
 
 
-func _test_an_unqualified_build_has_no_boss_on_the_table() -> void:
+## The redesign in one test: nothing is qualified for and nothing is opted into.
+func _test_a_fresh_run_is_already_under_its_contract() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5001)
-	assert_true(
-		sim.ascension_eligible_contracts().is_empty(),
-		"A fresh run with stock hardware has not qualified for anything yet"
-	)
-	assert_false(bool(sim.ascension_qualification().get("qualified", false)), "Qualification starts false")
+	assert_true(sim.ascension_active(), "A fresh run is already playing for its contract")
 	assert_eq(
-		_boss_id(sim), "ascension.first_scale_up",
-		"But the bedroom's boss is already named, so the goal is never invisible"
+		str(sim.run_state.ascension.get("contract_id", "")), "ascension.first_scale_up",
+		"Which is the bedroom's"
 	)
+	var progress: Dictionary = sim.ascension_progress()
+	assert_almost_eq(float(progress.get("tokens_burned", -1.0)), 0.0, 0.01, "Nothing burned yet")
+	assert_eq(int(progress.get("deadline_round", 0)), 12, "And the whole year to do it in")
+	assert_eq(int(progress.get("rounds_remaining", 0)), 12, "All of which is still ahead")
 	sim.free()
 
 
-## The checklist is the whole point of the overlay, so each bar has to report
-## itself rather than collapsing into one "not yet".
-func _test_qualification_reports_every_unmet_condition() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5002)
-	sim.run_state.calendar["round"] = 1
-	sim.run_state.economy["last_round_costs"] = 100.0
-	sim.run_state.economy["income"] = 10.0
-	sim.run_state.statistics["peak_token_rate"] = 0.0
-	var q: Dictionary = sim.ascension_qualification()
-	assert_false(bool(q.get("round_ok", true)), "Round one is too early")
-	assert_false(bool(q.get("peak_ok", true)), "A rig that has burned nothing has no peak rate")
-	assert_false(bool(q.get("income_ok", true)), "And income does not cover the costs")
-	var summary: Dictionary = sim.ascension_summary()
-	assert_eq(int(summary.get("requirements_met", -1)), 0, "So nothing on the checklist is met")
-	assert_eq(int(summary.get("requirements_total", 0)), 3, "Out of three bars")
-
-	_qualify(sim)
-	var later: Dictionary = sim.ascension_summary()
-	assert_eq(int(later.get("requirements_met", 0)), 3, "Clearing all three clears the checklist")
-	assert_true(bool(later.get("qualified", false)), "And the run qualifies")
-	sim.free()
-
-
-func _test_the_boss_offered_belongs_to_the_run_s_location() -> void:
+func _test_the_contract_belongs_to_the_run_s_location() -> void:
 	_fresh_profile()
 	for pair in [
 		["bedroom", "ascension.first_scale_up"],
@@ -141,244 +102,122 @@ func _test_the_boss_offered_belongs_to_the_run_s_location() -> void:
 		var sim: Node = _sim()
 		sim.start_run(5100)
 		_run_in(sim, str(pair[0]))
-		_qualify(sim)
-		var eligible: Array = sim.ascension_eligible_contracts()
-		assert_eq(eligible.size(), 1, "%s offers exactly one boss" % str(pair[0]))
-		assert_eq(str(eligible[0].get("id", "")), str(pair[1]), "And it is the one that chapter owns")
+		assert_eq(
+			str(sim.ascension_boss_contract().get("id", "")), str(pair[1]),
+			"%s is played for the contract that chapter owns" % str(pair[0])
+		)
+		assert_eq(
+			str(sim.run_state.ascension.get("contract_id", "")), str(pair[1]),
+			"And it is live from the start"
+		)
 		sim.free()
 
 
-func _test_committing_locks_in_the_contract() -> void:
+## Tokens burned in round one count. Under the old model they did not, because
+## the contract only started measuring once it had been committed to.
+func _test_progress_counts_from_the_first_prompt() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5002)
+	var contract: Dictionary = ContentDatabase.get_ascension_contract("ascension.first_scale_up")
+	var quarter: float = float(contract.get("total_burn", 0.0)) * 0.25
+	sim.run_state.statistics["lifetime_tokens"] = quarter
+	var result: Dictionary = AscensionSystem.new().evaluate_prompt(sim.run_state, ContentDatabase)
+	assert_eq(str(result.get("outcome", "x")), "", "A quarter of the way is not a finish")
+	assert_almost_eq(
+		float(result.get("tokens_burned", 0.0)), quarter, 1.0,
+		"But it is counted against the contract"
+	)
+	assert_almost_eq(
+		float(sim.ascension_progress().get("burn_ratio", 0.0)), 0.25, 0.01,
+		"And reported as a quarter done"
+	)
+	sim.free()
+
+
+func _test_the_quality_bar_gates_completion() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5003)
-	_qualify(sim)
-	assert_true(
-		sim.commit_ascension_contract("ascension.million_token_operator") == false,
-		"Another location's boss cannot be reached for"
-	)
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "The location's boss can be committed to")
-	assert_true(sim.ascension_active(), "The Final Burn is now underway")
-	assert_false(
-		sim.commit_ascension_contract("ascension.first_scale_up"),
-		"A second commitment cannot be made on top of the first"
-	)
-	sim.free()
-
-
-## Committing has to be earned: the overlay can be opened at any time, but the
-## button behind it only works once the bars are clear.
-func _test_completing_a_contract_meets_its_requirement() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5004)
-	assert_false(
-		sim.commit_ascension_contract("ascension.first_scale_up"),
-		"An unqualified build cannot commit"
-	)
-	_qualify(sim)
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed")
-	_meet_requirement(sim, "ascension.first_scale_up")
-
-	var result: Dictionary = AscensionSystem.new().evaluate_prompt(sim.run_state, ContentDatabase)
-	assert_eq(str(result.get("outcome", "")), "completed", "The contract completes once the burn and quality bars clear")
-	sim.free()
-
-
-## Skips straight to "the burn requirement is met", which is what the prompt
-## evaluator actually checks — the throughput and heat rolled up to now.
-func _meet_requirement(sim: Node, contract_id: String) -> Dictionary:
-	var contract: Dictionary = ContentDatabase.get_ascension_contract(contract_id)
-	sim.run_state.statistics["lifetime_tokens"] = (
-		float(sim.run_state.ascension.get("baseline_tokens", 0.0))
-		+ float(contract.get("total_burn", 0.0)) + 1.0
-	)
-	sim.run_state.ascension["quality_sum"] = 100.0
-	sim.run_state.ascension["quality_count"] = 1
-	sim.run_state.compute["prompt_rate"] = float(contract.get("min_prompt_rate", 0.0)) * 2.0
-	sim.run_state.compute["heat"] = 0.0
-	return contract
-
-
-func _test_falling_short_of_the_deadline_fails_the_contract() -> void:
-	_fresh_profile()
-	var ascension := AscensionSystem.new()
-	var run_state := RunState.new()
-	run_state.reset()
-	_qualify_state(run_state)
-	assert_true(ascension.commit(run_state, "ascension.first_scale_up", ContentDatabase), "Committed")
 	var contract: Dictionary = ContentDatabase.get_ascension_contract("ascension.first_scale_up")
-	var deadline: int = int(contract.get("deadline_prompts", 12))
-	run_state.compute["prompt_rate"] = float(contract.get("min_prompt_rate", 0.0)) * 2.0
-	var outcome: String = ""
-	for _i in range(deadline + 2):
-		var result: Dictionary = ascension.evaluate_prompt(run_state, ContentDatabase)
-		outcome = str(result.get("outcome", ""))
-		if outcome != "":
-			break
-	assert_eq(outcome, "failed", "Running out the clock without the burn requirement fails the contract")
+	sim.run_state.statistics["lifetime_tokens"] = float(contract.get("total_burn", 0.0)) + 1.0
+	var ascension := AscensionSystem.new()
+	# Everything shipped so far was under the bar, so the burn alone is not it.
+	sim.run_state.ascension["quality_sum"] = 1.0
+	sim.run_state.ascension["quality_count"] = 1
+	assert_eq(
+		str(ascension.evaluate_prompt(sim.run_state, ContentDatabase).get("outcome", "")), "",
+		"The burn target alone does not complete a contract with a quality bar"
+	)
+	sim.run_state.ascension["quality_sum"] = float(contract.get("quality_min", 0.0)) * 2.0
+	assert_eq(
+		str(ascension.evaluate_prompt(sim.run_state, ContentDatabase).get("outcome", "")), "completed",
+		"Clearing the bar on average completes it"
+	)
+	sim.free()
 
 
-## The reported bug: the player got past round twelve with no contract and the
-## game simply stopped, with nothing having said one was needed. The calendar is
-## no longer an ending — it hands the run to overtime instead.
-func _test_the_year_running_out_does_not_end_the_run() -> void:
+## The reported bug, now the rule: the year is the deadline and running it out
+## with the contract unfinished is how a run is lost.
+func _test_the_year_running_out_ends_the_run() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5005)
 	sim.run_state.economy["cash"] = 500000.0
 	sim.run_state.calendar["round"] = 12
-	var rent_before: float = float(sim.run_state.economy.get("round_rent", 0.0))
 	sim._end_round()
-	assert_true(sim.phase != sim.Phase.RUN_END, "Reaching the end of the year does not end the run")
-	assert_eq(str(sim.run_state.flags.get("outcome", "")), "", "Nothing has been decided yet")
-	assert_true(sim.in_overtime(), "The run is in overtime")
-	assert_eq(int(sim.run_state.statistics.get("overtime_rounds", 0)), 1, "One overtime round is on the clock")
-	assert_eq(int(sim.run_state.calendar.get("round", 0)), 13, "And play carries on into a thirteenth round")
-	assert_true(
-		float(sim.run_state.economy.get("round_rent", 0.0)) > rent_before,
-		"Overtime immediately costs more than the year did"
+	assert_eq(sim.phase, sim.Phase.RUN_END, "Reaching the end of the year ends the run")
+	assert_eq(
+		str(sim.run_state.flags.get("outcome", "")), "contract_expired",
+		"Named as the contract expiring rather than a generic collapse"
 	)
+	assert_false(bool(sim.run_state.flags.get("victory", false)), "As a loss")
 	assert_eq(MetaProgress.pending_picks(), 0, "Nothing is banked for outlasting the calendar")
+	assert_false(MetaProgress.is_location_unlocked("garage"), "And nothing is unlocked by running out")
 	sim.free()
 
 
-## Overtime has to be pressure, not a plateau, or a stalled run never resolves.
-func _test_overtime_costs_climb_every_round() -> void:
+## The deadline must not take a win back from a run that finished in time.
+func _test_a_finished_contract_beats_the_deadline_to_it() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5006)
+	sim.run_state.economy["cash"] = 500000.0
+	sim.run_state.calendar["round"] = 12
+	_meet_requirement(sim, "ascension.first_scale_up")
+	sim._finish_prompt({"ok": true, "messages": []})
+	assert_true(bool(sim.run_state.flags.get("victory", false)), "Finishing in the last round still wins")
+	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascended", "As an ascension")
+	sim.free()
+
+
+func _test_there_is_no_overtime_left_to_fall_into() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5011)
 	sim.run_state.economy["cash"] = 5000000.0
-	sim.run_state.calendar["round"] = 12
-	var rents: Array[float] = []
-	for _i in range(3):
-		sim._end_round()
-		if sim.phase == sim.Phase.RUN_END:
-			break
-		rents.append(float(sim.run_state.economy.get("round_rent", 0.0)))
-	assert_true(rents.size() >= 3, "Three overtime rounds are playable")
-	for i in range(1, rents.size()):
-		assert_true(rents[i] > rents[i - 1], "Rent climbs again on overtime round %d" % (i + 1))
-	sim.free()
-
-
-## Overtime is not a dead end: committing there still counts, and clearing the
-## boss in it wins the run rather than leaving it stranded.
-func _test_committing_in_overtime_still_wins_the_run() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5012)
-	sim.run_state.economy["cash"] = 500000.0
+	var rent_before: float = float(sim.run_state.economy.get("round_rent", 0.0))
 	sim.run_state.calendar["round"] = 12
 	sim._end_round()
-	assert_true(sim.in_overtime(), "In overtime")
-	_qualify(sim)
-	sim.run_state.calendar["round"] = 13
-	assert_true(
-		sim.commit_ascension_contract("ascension.first_scale_up"),
-		"A contract can still be committed to after the year has run out"
+	assert_almost_eq(
+		float(sim.run_state.economy.get("round_rent", 0.0)), rent_before, 0.01,
+		"The year closing does not escalate the rent — it ends the run instead"
 	)
-	_meet_requirement(sim, "ascension.first_scale_up")
-	sim._finish_prompt({"ok": true, "messages": []})
-	assert_eq(sim.phase, sim.Phase.RUN_END, "Finishing it in overtime still wins the run")
-	assert_true(bool(sim.run_state.flags.get("victory", false)), "As a victory")
+	assert_eq(sim.phase, sim.Phase.RUN_END, "And the run is over")
 	sim.free()
 
 
-## The other way out. Overtime must terminate on its own, or a run that never
-## reaches for a contract simply never finishes.
-func _test_overtime_still_ends_when_the_business_collapses() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5013)
-	sim.run_state.economy["cash"] = 500000.0
-	sim.run_state.calendar["round"] = 12
-	sim._end_round()
-	assert_true(sim.in_overtime(), "In overtime")
-	sim.run_state.economy["cash"] = -50000.0
-	sim._end_round()
-	assert_eq(sim.phase, sim.Phase.RUN_END, "Overtime ends the run when the bills finally win")
-	assert_false(bool(sim.run_state.flags.get("victory", false)), "And it ends as a loss, not an ending")
-	sim.free()
-
-
-## Escalating rent alone cannot close out a big operation: rent starts in the
-## hundreds and a late-game rig earns millions a round, so a multiplier on the
-## small number never catches up and overtime runs for ever. The levy is charged
-## against earnings for exactly this reason.
-func _test_overtime_closes_out_an_operation_earning_millions() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5015)
-	const EARNED_PER_ROUND := 1000000.0
-	sim.run_state.economy["cash"] = EARNED_PER_ROUND * 3.0
-	sim.run_state.calendar["round"] = 12
-	var rounds: int = 0
-	while sim.phase != sim.Phase.RUN_END and rounds < 40:
-		rounds += 1
-		# Stands in for a round's work: the money comes in, the bills follow.
-		sim.run_state.economy["cash"] = float(sim.run_state.economy.get("cash", 0.0)) + EARNED_PER_ROUND
-		sim.run_state.economy["income"] = float(sim.run_state.economy.get("income", 0.0)) + EARNED_PER_ROUND
-		sim._end_round()
-	assert_eq(sim.phase, sim.Phase.RUN_END, "Overtime ends a run earning millions a round, not just a poor one")
-	assert_false(bool(sim.run_state.flags.get("victory", false)), "And it ends as a loss")
-	assert_true(
-		int(sim.run_state.statistics.get("overtime_rounds", 0)) <= 12,
-		"Within a dozen overtime rounds rather than indefinitely (took %d)" % int(
-			sim.run_state.statistics.get("overtime_rounds", 0)
-		)
-	)
-	sim.free()
-
-
-## Endless mode is a profile unlock, and a run measured with the meta layer off
-## must not silently inherit it: doing so replaced overtime's hard deadline with
-## endless mode's gentle one and left batch runs that never terminated.
-func _test_endless_stays_off_while_the_meta_layer_is_disabled() -> void:
-	_fresh_profile()
-	MetaProgress.set_endless_enabled(true)
-	MetaProgress.enabled = false
-	assert_false(MetaProgress.endless_enabled(), "Endless reads as off with the meta layer disabled")
-	var sim: Node = _sim()
-	sim.start_run(5016)
-	sim.run_state.economy["cash"] = 500000.0
-	sim.run_state.calendar["round"] = 12
-	sim._end_round()
-	assert_true(sim.in_overtime(), "So the end of the year goes into overtime rather than endless mode")
-	sim.free()
-
-
-## The way into the endgame must not blink out again because one round's income
-## dipped under the bar.
-func _test_qualification_latches_once_cleared() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5014)
-	_qualify(sim)
-	assert_true(bool(sim.ascension_qualification().get("qualified", false)), "The build qualifies")
-	sim.run_state.economy["income"] = 0.0
-	var later: Dictionary = sim.ascension_qualification()
-	assert_false(bool(later.get("income_ok", true)), "A bad round is still reported as a bad round")
-	assert_true(bool(later.get("qualified", false)), "But qualification, once cleared, stays cleared")
-	assert_true(sim.ascension_eligible_contracts().size() > 0, "And the boss stays on the table")
-	sim.free()
-
-
-## The redesign in one test: there is no rung any more, so the first contract a
-## run completes is the last thing it does.
-func _test_beating_the_boss_wins_the_run() -> void:
+func _test_beating_the_contract_wins_the_run() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5020)
-	_qualify(sim)
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed to the bedroom's boss")
 	var contract: Dictionary = _meet_requirement(sim, "ascension.first_scale_up")
 	sim._finish_prompt({"ok": true, "messages": []})
 
-	assert_eq(sim.phase, sim.Phase.RUN_END, "Completing the boss ends the run")
+	assert_eq(sim.phase, sim.Phase.RUN_END, "Completing the contract ends the run")
 	assert_true(bool(sim.run_state.flags.get("victory", false)), "As a victory")
 	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascended", "Named as an ascension")
-	assert_false(sim.ascension_active(), "The Final Burn is over")
+	assert_false(sim.ascension_active(), "The contract is no longer running")
 	assert_eq(
 		MetaProgress.pending_picks(), int(contract.get("picks", 1)),
 		"And it banks its picks for the next run"
@@ -390,77 +229,86 @@ func _test_beating_the_boss_wins_the_run() -> void:
 	sim.free()
 
 
-func _test_beating_the_boss_unlocks_the_next_location() -> void:
+func _test_beating_the_contract_unlocks_the_next_location() -> void:
 	_fresh_profile()
 	assert_false(MetaProgress.is_location_unlocked("garage"), "The garage starts locked")
 	var sim: Node = _sim()
 	sim.start_run(5024)
-	_qualify(sim)
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed")
 	_meet_requirement(sim, "ascension.first_scale_up")
 	sim._finish_prompt({"ok": true, "messages": []})
 
 	assert_true("bedroom" in MetaProgress.completed_locations(), "The bedroom is behind the player")
 	assert_true(MetaProgress.is_location_unlocked("garage"), "And the garage is open")
 	assert_eq(sim.next_location_unlocked(), "garage", "Which the verdict screen can name")
+	assert_eq(
+		MetaProgress.selected_location(), "garage",
+		"The campaign moves forward on its own: the garage is now where runs start"
+	)
+	assert_false(
+		sim.continue_after_victory(),
+		"A mid-campaign win is a level-up, not the ending, so there is no endless tail"
+	)
 	sim.free()
 
-
-func _test_a_failed_contract_ends_the_run() -> void:
-	_fresh_profile()
-	var sim: Node = _sim()
-	sim.start_run(5025)
-	_qualify(sim)
-	assert_true(sim.commit_ascension_contract("ascension.first_scale_up"), "Committed")
-	var contract: Dictionary = ContentDatabase.get_ascension_contract("ascension.first_scale_up")
-	sim.run_state.statistics["hidden_bugs_shipped"] = int(contract.get("max_hidden_bugs", 0)) + 1
-	sim._finish_prompt({"ok": true, "messages": []})
-
-	assert_eq(sim.phase, sim.Phase.RUN_END, "Failing the contract ends the run")
-	assert_false(bool(sim.run_state.flags.get("victory", false)), "As a loss")
-	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascension_failed", "Named as the contract failing")
-	assert_false(MetaProgress.is_location_unlocked("garage"), "And nothing is unlocked by losing")
-	sim.free()
+	# Any way of starting the next run lands in the new chapter, already under
+	# the new chapter's contract.
+	var next_run: Node = _sim()
+	next_run.start_run(5028)
+	assert_eq(
+		str(next_run.run_state.build.get("dwelling", "")), "garage",
+		"The next run starts in the garage, not back in the bedroom"
+	)
+	assert_eq(
+		str(next_run.run_state.ascension.get("contract_id", "")), "ascension.million_token_operator",
+		"Under the garage's contract, stated before the first prompt"
+	)
+	next_run.free()
 
 
 func _test_no_ladder_state_is_left_in_the_run() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5026)
-	for stale in ["completed_ids", "highest_tier_completed", "pending_picks"]:
+	for stale in [
+		"completed_ids", "highest_tier_completed", "pending_picks",
+		"committed_round", "prompts_remaining", "violations",
+	]:
 		assert_false(
 			sim.run_state.ascension.has(stale),
-			"A run carries no ladder state: %s is gone" % stale
+			"A run carries no opt-in state: %s is gone" % stale
 		)
+	assert_false(sim.run_state.flags.has("overtime"), "And no overtime flag")
+	assert_false(sim.run_state.flags.has("ascension_qualified"), "And nothing to qualify for")
 	sim.free()
 
 
-## Replaying a chapter already beaten is allowed, and its boss is still the way
-## out of it — the campaign is the ladder, not the run.
-func _test_replaying_a_completed_location_offers_its_boss_again() -> void:
+## Replaying a chapter already beaten is allowed, and its contract is still the
+## way out of it — the campaign is the ladder, not the run.
+func _test_replaying_a_completed_location_sets_its_contract_again() -> void:
 	_fresh_profile()
 	MetaProgress.complete_location("bedroom")
 	var sim: Node = _sim()
 	sim.start_run(5027)
 	_run_in(sim, "bedroom")
-	_qualify(sim)
-	var eligible: Array = sim.ascension_eligible_contracts()
-	assert_eq(eligible.size(), 1, "The bedroom still has its boss")
-	assert_eq(str(eligible[0].get("id", "")), "ascension.first_scale_up", "And it is the same one")
+	assert_eq(
+		str(sim.run_state.ascension.get("contract_id", "")), "ascension.first_scale_up",
+		"The bedroom still plays for its own contract"
+	)
 	sim.free()
 
 
 ## Beating the game does not have to take the build away with it: the run carries
-## on, past the calendar, under costs that climb every round.
+## on, past the calendar, under costs that climb every round. Only the last
+## chapter offers this — everywhere else the continuation is the next location.
 func _test_a_won_run_can_carry_on_into_endless() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5023)
-	_run_in(sim, "private_power_grid")
-	_qualify(sim)
-	sim.run_state.economy["cash"] = 5000000.0
-	assert_true(sim.commit_ascension_contract("ascension.the_monopoly"), "Committed to a finale")
-	_meet_requirement(sim, "ascension.the_monopoly")
+	_run_in(sim, "moon_facility")
+	# Moon Facility rent is millions a round, so the tail needs a bankroll that
+	# can survive the bills long enough to watch them climb.
+	sim.run_state.economy["cash"] = 100000000.0
+	_meet_requirement(sim, "ascension.final_prompt")
 	sim._finish_prompt({"ok": true, "messages": []})
 	assert_eq(sim.phase, sim.Phase.RUN_END, "The run is won")
 
@@ -475,11 +323,11 @@ func _test_a_won_run_can_carry_on_into_endless() -> void:
 	assert_false(sim.continue_after_victory(), "There is only one ending to carry on from")
 
 	# Past the calendar a won run escalates like endless mode rather than being
-	# put back under overtime's levy, which exists to force a finish it has had.
+	# ended by a deadline it has already beaten.
 	sim.run_state.calendar["round"] = 12
 	var rent_before: float = float(sim.run_state.economy.get("round_rent", 0.0))
 	sim._end_round()
-	assert_false(sim.in_overtime(), "A won run is not hurried into overtime")
+	assert_true(sim.phase != sim.Phase.RUN_END, "A won run is not ended again by the calendar")
 	assert_true(
 		float(sim.run_state.economy.get("round_rent", 0.0)) > rent_before,
 		"But the bills still climb every round past the twelfth"
@@ -506,32 +354,29 @@ func _test_run_score_reports_lifetime_tokens() -> void:
 	)
 
 
-## A save mid Final Burn has to come back with the contract still committed,
-## not silently reset to "nothing underway".
-func _test_ascension_state_survives_a_save_round_trip() -> void:
+func _test_contract_state_survives_a_save_round_trip() -> void:
 	var ascension := AscensionSystem.new()
 	var run_state := RunState.new()
 	run_state.reset()
-	_qualify_state(run_state)
-	assert_true(ascension.commit(run_state, "ascension.first_scale_up", ContentDatabase), "Committed")
+	assert_true(ascension.activate(run_state, ContentDatabase), "The run is under its contract")
 	run_state.ascension["tokens_burned"] = 12345.0
-	run_state.ascension["violations"] = 2
 
 	var reloaded := RunState.new()
 	reloaded.from_dict(run_state.to_dict())
-	assert_eq(str(reloaded.ascension.get("status", "")), "committed", "Commitment survives a save")
+	assert_eq(str(reloaded.ascension.get("status", "")), "active", "Which survives a save")
 	assert_eq(str(reloaded.ascension.get("contract_id", "")), "ascension.first_scale_up", "So does which contract")
 	assert_almost_eq(float(reloaded.ascension.get("tokens_burned", 0.0)), 12345.0, 0.01, "So does progress")
-	assert_eq(int(reloaded.ascension.get("violations", 0)), 2, "So does the violation count")
+	assert_eq(int(reloaded.ascension.get("deadline_round", 0)), 12, "So does the deadline")
 
 
-## A save written part-way up the old ladder: the contract it was burning for is
-## now the run's boss, and the rungs it had climbed have nowhere to go.
-func _test_a_save_mid_ladder_keeps_its_contract_and_sheds_the_rungs() -> void:
+## A save written when a contract was something the player committed to part-way
+## through: the contract it was burning for is now simply the run's contract, and
+## the Final Burn's own bookkeeping has nowhere to go.
+func _test_a_save_mid_final_burn_becomes_the_run_s_contract() -> void:
 	var run_state := RunState.new()
 	run_state.reset()
 	run_state.from_dict({
-		"save_version": 10,
+		"save_version": 11,
 		"ascension": {
 			"status": "committed",
 			"contract_id": "ascension.first_scale_up",
@@ -542,16 +387,17 @@ func _test_a_save_mid_ladder_keeps_its_contract_and_sheds_the_rungs() -> void:
 			"violations": 1,
 			"quality_sum": 40.0,
 			"quality_count": 1,
-			"completed_ids": ["ascension.first_scale_up"],
-			"highest_tier_completed": 1,
-			"pending_picks": 2,
 		},
+		"flags": {"overtime": true, "ascension_qualified": true},
 	})
-	assert_eq(str(run_state.ascension.get("status", "")), "committed", "The contract stays committed")
+	assert_eq(str(run_state.ascension.get("status", "")), "active", "The contract carries on as the run's")
 	assert_eq(
 		str(run_state.ascension.get("contract_id", "")), "ascension.first_scale_up",
-		"And it is still the run's boss"
+		"And it is still the same one"
 	)
-	assert_eq(int(run_state.ascension.get("prompts_remaining", 0)), 8, "With its deadline where it was")
-	for stale in ["completed_ids", "highest_tier_completed", "pending_picks"]:
-		assert_false(run_state.ascension.has(stale), "The ladder field %s is gone" % stale)
+	assert_almost_eq(float(run_state.ascension.get("tokens_burned", 0.0)), 50.0, 0.01, "With its progress intact")
+	assert_eq(int(run_state.ascension.get("deadline_round", 0)), 12, "And the year as its deadline")
+	for stale in ["committed_round", "prompts_remaining", "violations"]:
+		assert_false(run_state.ascension.has(stale), "The Final Burn field %s is gone" % stale)
+	assert_false(run_state.flags.has("overtime"), "Overtime is gone with it")
+	assert_false(run_state.flags.has("ascension_qualified"), "As is qualification")

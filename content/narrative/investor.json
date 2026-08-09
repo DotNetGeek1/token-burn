@@ -1,0 +1,264 @@
+{
+  "investor": {
+    "id": "investor.corrigan",
+    "name": "Vince Corrigan",
+    "title": "Angel Investor",
+    "fund": "Corrigan Seed",
+    "sign_off": "Corrigan out."
+  },
+  "calls": {
+    "run_intro": {
+      "bedroom": [
+        {
+          "subject": "THE DEAL",
+          "lines": [
+            "Right. Here's the deal, and I'm only saying it once.",
+            "You think you can make money out of this vibe coding nonsense. Fine. Prove it. I've put a rig in your bedroom and my name on the lease.",
+            "{rounds} rounds. In that time you burn {burn} — that's {contract}, and it's the only thing I'm measuring. Miss the {rent} rent, or run this thing at a loss, and I take the hardware back and we never speak again.",
+            "We clear? Good. Get to it."
+          ]
+        }
+      ],
+      "garage": [
+        {
+          "subject": "THE GARAGE",
+          "lines": [
+            "New room, same me. Don't get comfortable.",
+            "You've got space and power now, which means you've got heat, which means you've got a brand new way to lose my money.",
+            "{rounds} rounds again, {burn} this time, and the rent is {rent}. The contract's bigger because you told me you were ready. I wrote that down.",
+            "Go on then."
+          ]
+        }
+      ],
+      "default": [
+        {
+          "subject": "THE DEAL",
+          "lines": [
+            "You've moved up. I've moved my expectations up with you, so don't celebrate.",
+            "{rounds} rounds to burn {burn}. Rent's {rent} and it doesn't wait. That's {contract}, and it's the whole arrangement.",
+            "Miss the burn or miss the rent and this stops being a conversation.",
+            "Get to it."
+          ]
+        }
+      ]
+    },
+    "terms": {
+      "default": [
+        {
+          "subject": "THE TERMS",
+          "lines": [
+            "You rang me to ask what you already agreed to. Marvellous.",
+            "{burn}. That's the number. You're {done} of the way there with {rounds_left} round(s) left, and the rent is {rent} every one of them.",
+            "That's it. That's the whole thing. Stop phoning me."
+          ]
+        }
+      ],
+      "behind": [
+        {
+          "subject": "THE TERMS",
+          "lines": [
+            "You're behind. {done} of {burn}, with {rounds_left} round(s) left. I can do that arithmetic and so can you.",
+            "Pay the rent every round. Don't burn the place down. Finish the contract before the year runs out.",
+            "Nothing about that changes because it's going badly."
+          ]
+        }
+      ],
+      "ahead": [
+        {
+          "subject": "THE TERMS",
+          "lines": [
+            "You're ahead of the number — {done} of {burn} with {rounds_left} round(s) still on the clock. Don't let it go to your head.",
+            "Same three things: rent paid, rig not on fire, contract done inside the year.",
+            "Carry on."
+          ]
+        }
+      ]
+    },
+    "round_debrief": {
+      "strong": [
+        {
+          "subject": "NOT BAD",
+          "lines": [
+            "Well. Look at you.",
+            "Clean delivery, clients happy, and the bank balance went the right way for once. I'd almost call that competent.",
+            "Do it again. Twice. Then I'll be impressed."
+          ]
+        },
+        {
+          "subject": "NOT BAD",
+          "lines": [
+            "That's the first round you've had where I didn't wince.",
+            "Keep the quality up. Clients pay for it, and reputation is the only thing in this business that compounds without a bill attached."
+          ]
+        }
+      ],
+      "good": [
+        {
+          "subject": "ACCEPTABLE",
+          "lines": [
+            "Delivered, paid, still trading. That's a round.",
+            "It's not a business yet. A business is when I stop having to check."
+          ]
+        }
+      ],
+      "poor": [
+        {
+          "subject": "SLOPPY",
+          "lines": [
+            "You shipped it, and they paid, and neither of you looked happy about it.",
+            "Under the quality bar means under the fee. You did the whole job for a discount you gave yourself."
+          ]
+        }
+      ],
+      "failed": [
+        {
+          "subject": "EXPLAIN THIS",
+          "lines": [
+            "Nothing landed. Nothing.",
+            "The rent doesn't care that you were busy. Take work you can actually finish, or take fewer contracts and finish them."
+          ]
+        }
+      ],
+      "rent_missed": [
+        {
+          "subject": "THE RENT",
+          "lines": [
+            "The landlord phoned me. Do you understand how little I want the landlord to phone me?",
+            "Miss it twice and you're out, and I don't mean out of the room. Fix this next round."
+          ]
+        }
+      ],
+      "near_fire": [
+        {
+          "subject": "THE SMELL",
+          "lines": [
+            "I'm told the rig was hot enough to be a fire, an insurance claim and a small news story.",
+            "Cool it, or buy something that cools it. A dead rig earns nothing, and I am not buying you a second one."
+          ]
+        }
+      ],
+      "behind": [
+        {
+          "subject": "THE NUMBER",
+          "lines": [
+            "Another round gone and the contract's barely moved. {done} of {burn}, {rounds_left} round(s) left.",
+            "I don't need you busy, I need you finished. Buy throughput or take bigger work, but do one of them."
+          ]
+        }
+      ],
+      "default": [
+        {
+          "subject": "ROUND CLOSED",
+          "lines": [
+            "Round's done. The numbers are what they are.",
+            "Next one."
+          ]
+        }
+      ]
+    },
+    "contract_halfway": {
+      "default": [
+        {
+          "subject": "HALFWAY",
+          "lines": [
+            "You're half way to the number. I'm noting it, not celebrating it.",
+            "The back half is the expensive one. Bills are bigger, contracts are bigger, and the year is a lot shorter than it was.",
+            "Keep going."
+          ]
+        }
+      ]
+    },
+    "contract_final_call": {
+      "default": [
+        {
+          "subject": "LAST CALL",
+          "lines": [
+            "{rounds_left} round(s). That's what's left of the year and of my interest, and you're {done} of the way to {burn}.",
+            "Whatever you were saving the money for, spend it. Whatever work you were being picky about, take it.",
+            "Finish the contract or don't bother ringing me."
+          ]
+        }
+      ]
+    },
+    "ascension_complete": {
+      "garage": [
+        {
+          "subject": "I'M IN",
+          "lines": [
+            "Well. You actually did it.",
+            "I've wired more money and taken a garage on a short lease. Room for real hardware, real power, and a genuinely upsetting electricity bill.",
+            "Don't make me regret this. I've made that face before."
+          ]
+        }
+      ],
+      "default": [
+        {
+          "subject": "I'M IN",
+          "lines": [
+            "Contract's closed. You hit the number.",
+            "I'm putting more in and moving you somewhere that can take the load. Bigger room, bigger bills, bigger contract waiting for you.",
+            "Enjoy the eleven minutes before I want something else."
+          ]
+        }
+      ]
+    },
+    "run_lost": {
+      "contract_expired": [
+        {
+          "subject": "THAT'S THAT",
+          "lines": [
+            "I said {rounds} rounds at the start, and here we are at the end of {rounds} rounds.",
+            "You got to {done} of {burn}. The contract isn't done, and that was the whole arrangement.",
+            "I'm out. Leave the keys."
+          ]
+        }
+      ],
+      "bankruptcy": [
+        {
+          "subject": "WE'RE DONE",
+          "lines": [
+            "You've run out of money. Not low. Out.",
+            "I've seen this film. I'm not staying for the end."
+          ]
+        }
+      ],
+      "eviction": [
+        {
+          "subject": "WE'RE DONE",
+          "lines": [
+            "Two rounds of unpaid rent and the landlord changed the locks.",
+            "You can't build a compute business on a pavement. Out."
+          ]
+        }
+      ],
+      "fire": [
+        {
+          "subject": "WE'RE DONE",
+          "lines": [
+            "It caught fire. The thing I bought you. Caught fire.",
+            "There's a word for running hardware past its limits with no cooling, and the word is 'briefly'."
+          ]
+        }
+      ],
+      "default": [
+        {
+          "subject": "WE'RE DONE",
+          "lines": [
+            "That's the run. It didn't work.",
+            "Go away, think about what the rig actually needed, and come back when you've had the idea."
+          ]
+        }
+      ]
+    },
+    "offer_patter": [
+      "Free. Genuinely free. I want you solvent more than I want the four hundred quid.",
+      "Take it. I've already put it in the spreadsheet as a win for me.",
+      "This cost me nothing and it'll cost you nothing, which is the only kind of generosity I trust.",
+      "Somebody owed me a favour. Now you owe me one. That's how this works.",
+      "Don't read too much into it. I do this for everyone in the portfolio, and the portfolio is currently you.",
+      "Yes it's free. No there isn't a catch. The catch is the twelve rounds, and you already agreed to that.",
+      "I'd explain what it does but you'll work it out faster than I'd say it.",
+      "Take the thing. Stop looking at me like that."
+    ]
+  }
+}

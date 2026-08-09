@@ -27,6 +27,21 @@ const SECTORS := {
 
 const DEFAULT_SECTOR := {"label": "Contract", "client": "Freelance Client", "color": "grey", "icon": "cash"}
 
+## Quality is tracked internally on a 0–150 scale, which reads as an arbitrary
+## number on a card. Everywhere the player sees it, it is divided down to marks
+## out of ten — both the work and the bar it is being judged against, so the two
+## figures stay comparable.
+const QUALITY_SCALE := 15.0
+
+
+static func quality_mark(quality: float) -> String:
+	return "%.1f" % (quality / QUALITY_SCALE)
+
+
+## "4.2 / 10 · bar 3.3", the whole judgement in one line.
+static func quality_against_bar(quality: float, threshold: float) -> String:
+	return "%s / 10 · bar %s" % [quality_mark(quality), quality_mark(threshold)]
+
 
 ## Sector identity for an offer: {label, client, color (Color), icon (Texture2D)}.
 static func sector(offer: Dictionary) -> Dictionary:

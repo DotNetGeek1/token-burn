@@ -20,9 +20,9 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 16
+theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 16
+theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 8
 
 [node name="VBox" type="VBoxContainer" parent="Margin"]
@@ -47,9 +47,9 @@ horizontal_scroll_mode = 0
 [node name="PerksGrid" type="GridContainer" parent="Margin/VBox/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/h_separation = 16
-theme_override_constants/v_separation = 16
-columns = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+columns = 1
 
 [node name="SynergiesPanel" type="VBoxContainer" parent="Margin/VBox"]
 layout_mode = 2

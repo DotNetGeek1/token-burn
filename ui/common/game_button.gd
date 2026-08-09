@@ -13,14 +13,16 @@ extends Button
 ## lines can be styled independently. That means the stylebox content margins no
 ## longer move the label on press, so the press dip is applied here instead.
 
-const PRESS_DIP := 5.0
-const ICON_SIZE := 56.0
+const PRESS_DIP := 4.0
+const ICON_SIZE := 34.0
 ## Function-row proportions: enough to read a legend, small enough that the keys
 ## which matter keep their rank on the deck. The height still bottoms out at the
 ## ordinary thumb target — ranking keys by size must not produce a key that is
-## awkward to hit, and the design viewport is 1080 wide, so these numbers land at
-## roughly half their value on a phone.
-const COMPACT_ICON_SIZE := 38.0
+## awkward to hit.
+const COMPACT_ICON_SIZE := 24.0
+## Widest a button may demand from its row on the strength of its own text. The
+## side panel is narrower than any label is long, so beyond this the text yields.
+const MAX_AUTO_WIDTH := 176.0
 
 ## Palette or semantic key used to tint the icon and the consequence line.
 @export var accent_key: String = "action":
@@ -73,6 +75,7 @@ var _sub_label: Label = null
 ## Height the scene asked for, kept so growing content can raise the button
 ## without a later shrink pinning it to whatever it grew to.
 var _authored_min_height: float = 0.0
+var _authored_min_width: float = 0.0
 
 
 func _ready() -> void:
@@ -87,6 +90,7 @@ func _ready() -> void:
 	_authored_min_height = (
 		custom_minimum_size.y if custom_minimum_size.y > 0.0 else float(default_height)
 	)
+	_authored_min_width = custom_minimum_size.x
 	_build()
 	button_down.connect(_on_button_down)
 	button_up.connect(_on_button_up)
@@ -236,8 +240,10 @@ func _sync_minimum_size() -> void:
 	if _content == null:
 		return
 	var content: Vector2 = _content.get_combined_minimum_size()
+	# Capped so a long headline asks for room it cannot have in the side panel;
+	# the labels clip instead of dragging the whole row past the panel edge.
 	custom_minimum_size = Vector2(
-		maxf(custom_minimum_size.x, content.x),
+		minf(maxf(_authored_min_width, content.x), MAX_AUTO_WIDTH),
 		maxf(_authored_min_height, content.y)
 	)
 

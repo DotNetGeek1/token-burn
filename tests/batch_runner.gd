@@ -8,10 +8,10 @@ extends RefCounted
 ## the endgame. What matters is the *shape* of the outcomes: how many ascended,
 ## how many collapsed, and how many never terminated at all.
 ##
-## Every location has one boss contract, so the endgame is reported in three
-## stages rather than one: how many qualified for it, how many committed, and how
-## many finished. A sample where nobody qualifies means the bars are wrong; one
-## where they commit but never finish means the contract itself is priced wrong.
+## Every location has one contract and it is live from the first prompt, so the
+## thing to read is how close the sample got: `avg_burn_ratio` is the share of
+## the contract an average run finished. A sample that lands well under 1.0 means
+## the contract is priced above what the chapter can build.
 
 ## A run that has not resolved in this many policy steps is stuck, not slow, and
 ## is reported as such rather than being quietly dropped from the sample.
@@ -41,10 +41,9 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 	var peak_token_rates: Array[float] = []
 	var peak_cash: Array[float] = []
 	var perk_counts: Dictionary = {}
-	var qualified_runs: int = 0
-	var committed_runs: int = 0
-	var overtime_runs: int = 0
-	var final_burn_tokens: Array[float] = []
+	var expired_runs: int = 0
+	var lifetime_tokens: Array[float] = []
+	var burn_ratios: Array[float] = []
 	invalid_number_count = 0
 	guard_limit_count = 0
 	# Balance numbers describe a first run from nothing, so unlocks stay out.
@@ -80,15 +79,15 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 			])
 		if sim.run_state.flags.get("victory", false):
 			wins += 1
-		if bool(sim.run_state.flags.get("ascension_qualified", false)):
-			qualified_runs += 1
-		if str(sim.run_state.ascension.get("contract_id", "")) != "":
-			committed_runs += 1
-			# How much a committed run actually managed to burn, which is the
-			# number a contract's `total_burn` has to be priced against.
-			final_burn_tokens.append(float(sim.run_state.ascension.get("tokens_burned", 0.0)))
-		if int(sim.run_state.statistics.get("overtime_rounds", 0)) > 0:
-			overtime_runs += 1
+		if outcome == "contract_expired":
+			expired_runs += 1
+		# What the run actually burned against what its contract asked for, which
+		# is the number `total_burn` has to be priced against.
+		var burned: float = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
+		lifetime_tokens.append(burned)
+		var target: float = float(sim.ascension_boss_contract().get("total_burn", 0.0))
+		if target > 0.0:
+			burn_ratios.append(burned / target)
 		peak_token_rates.append(float(sim.run_state.statistics.get("peak_token_rate", 0.0)))
 		peak_cash.append(float(sim.run_state.statistics.get("peak_cash", 0.0)))
 		for perk_id in sim.run_state.build.get("perks", []):
@@ -102,14 +101,14 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 		"location": location,
 		"win_rate": float(wins) / float(runs),
 		"ascended_rate": float(int(outcomes.get("ascended", 0))) / float(runs),
-		"qualified_rate": float(qualified_runs) / float(runs),
-		"committed_rate": float(committed_runs) / float(runs),
-		"overtime_rate": float(overtime_runs) / float(runs),
+		"expired_rate": float(expired_runs) / float(runs),
 		"stuck_count": stuck,
 		"outcomes": outcomes,
 		"avg_rounds": float(total_rounds) / float(runs),
 		"avg_peak_token_rate": _average(peak_token_rates),
-		"avg_final_burn_tokens": _average(final_burn_tokens),
+		"avg_lifetime_tokens": _average(lifetime_tokens),
+		"avg_burn_ratio": _average(burn_ratios),
+		"max_burn_ratio": _maximum(burn_ratios),
 		"avg_peak_cash": _average(peak_cash),
 		"invalid_number_count": invalid_number_count,
 		"guard_limit_count": guard_limit_count,
@@ -154,7 +153,6 @@ func _play_policy_step(sim: Node, policy: String) -> void:
 		sim.Phase.ROUND_PREP:
 			if policy == "builder":
 				_builder_shop(sim)
-				_builder_commit(sim)
 			if sim.run_state.has_queued_jobs():
 				_work_round(sim, policy)
 				return
@@ -352,22 +350,6 @@ func _recurring_headroom(sim: Node) -> float:
 	return maxf(100.0, float(sim.run_state.economy.get("income", 0.0)) * 0.25)
 
 
-## Commits as soon as anything is within reach, to the contract asking for the
-## least. The question this policy exists to answer is whether the endgame can
-## be finished at all, not how greedy a finish can be.
-func _builder_commit(sim: Node) -> void:
-	if sim.ascension_active():
-		return
-	var eligible: Array = sim.ascension_eligible_contracts()
-	if eligible.is_empty():
-		return
-	var pick: Dictionary = eligible[0]
-	for contract in eligible:
-		if float(contract.get("total_burn", 0.0)) < float(pick.get("total_burn", 0.0)):
-			pick = contract
-	sim.commit_ascension_contract(str(pick.get("id", "")))
-
-
 func _has_invalid_numbers(state: RunState) -> bool:
 	for section in [state.economy, state.compute, state.business, state.statistics]:
 		for value in section.values():
@@ -383,3 +365,12 @@ func _average(values: Array) -> float:
 	for v in values:
 		total += float(v)
 	return total / float(values.size())
+
+
+## The best run in the sample. A contract nobody averages but the best run
+## clears is priced as a stretch; one nothing comes near is priced wrong.
+func _maximum(values: Array) -> float:
+	var best: float = 0.0
+	for v in values:
+		best = maxf(best, float(v))
+	return best

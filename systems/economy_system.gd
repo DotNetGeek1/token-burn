@@ -62,18 +62,13 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
 	var cloud_bill: float = float(run_state.economy.get("cloud_liability", 0.0)) * float(tuning.get("cloud_cost_multiplier", 1.0))
 	var operating: float = float(run_state.economy.get("costs_this_round", 0.0))
-	# Overtime is billed as its own line rather than folded into rent, because it
-	# is charged against what the operation earns rather than the space it rents,
-	# and the player needs to see which of the two is drowning them.
-	var overtime_levy: float = float(run_state.economy.get("overtime_levy", 0.0))
-	var total: float = rent + recurring + cloud_bill + overtime_levy
+	var total: float = rent + recurring + cloud_bill
 	var bill_metadata: Dictionary = {
 		"round": int(run_state.calendar.get("round", 1)),
 		"prompts_used": maxi(0, int(run_state.calendar.get("prompt", 1)) - 1),
 		"rent": rent,
 		"recurring": recurring,
 		"cloud_bill": cloud_bill,
-		"overtime_levy": overtime_levy,
 		"operating": operating,
 		"bill_total": total,
 		"round_total": total + operating,

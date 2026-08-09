@@ -870,10 +870,11 @@ func _scale_job(
 	var actual_rate: float = maxf(1.0, float(run_state.compute.get("token_rate", baseline_rate)))
 	var player_rate: float = maxf(maxf(baseline_rate * 0.25, round_rate), actual_rate)
 
+	var curve_round: int = campaign_round(round_number, run_state, content_db)
 	var reward_mult: float = float(scaling.get("reward_scaling", {}).get("base_multiplier", 1.0))
-	reward_mult += float(scaling.get("reward_scaling", {}).get("per_round_growth", 0.12)) * (round_number - 1)
+	reward_mult += float(scaling.get("reward_scaling", {}).get("per_round_growth", 0.12)) * (curve_round - 1)
 	var token_mult: float = float(scaling.get("token_scaling", {}).get("base_multiplier", 1.0))
-	token_mult += float(scaling.get("token_scaling", {}).get("per_round_growth", 0.15)) * (round_number - 1)
+	token_mult += float(scaling.get("token_scaling", {}).get("per_round_growth", 0.15)) * (curve_round - 1)
 
 	var profile: Dictionary = content_db.balance.get("difficulty_profiles", {}).get("normal", {})
 	reward_mult *= float(profile.get("job_reward_multiplier", 1.0))
@@ -941,13 +942,16 @@ func _scale_job(
 	var creep_pcts: Array = scaling.get("scope_creep_pct_by_tier", [0.02, 0.03, 0.04, 0.05, 0.05, 0.05])
 	var scope_creep_pct: float = float(creep_pcts[mini(tier, creep_pcts.size() - 1)])
 
+	# What the contract asks for is what the contract asks for. This used to be
+	# capped at the tier's own baseline, so every tier-0 posting was judged at 50
+	# however demanding its brief said it was, and no build could miss the bar.
+	# The baseline now only stands in for a contract that authored no figure.
 	var quality_base: float = float(scaling.get("quality_scaling", {}).get("base_threshold", 50.0))
 	var quality_per_tier: float = float(scaling.get("quality_scaling", {}).get("per_tier_increase", 8.0))
-	var quality_threshold: float = clampf(
-		minf(float(job_def.quality_threshold), quality_base + tier * quality_per_tier),
-		35.0,
-		92.0
-	)
+	var authored: float = float(job_def.quality_threshold)
+	if authored <= 0.0:
+		authored = quality_base + tier * quality_per_tier
+	var quality_threshold: float = clampf(authored, 35.0, 92.0)
 
 	return {
 		"id": job_def.id,
@@ -1025,10 +1029,23 @@ func _job_tier(job_def: JobDefinition, content_db: Node) -> int:
 	return 5
 
 
+## Where this round sits on the campaign's curve rather than on its own
+## location's calendar. Every location restarts its year at round 1, so scaling
+## an offer off the bare round number priced a garage contract like a bedroom
+## one — the same fee against three and a half times the rent, with a carried
+## rig chewing through it in a prompt. The offset continues the curve instead,
+## so moving up is a bigger game and not merely a more expensive one.
+static func campaign_round(round_number: int, run_state: RunState, content_db: Node) -> int:
+	var offsets: Dictionary = content_db.balance.get("job_scaling", {}).get("location_round_offset", {})
+	var location: String = str(run_state.build.get("dwelling", "bedroom"))
+	return round_number + int(offsets.get(location, 0))
+
+
 func _player_max_job_tier(run_state: RunState, round_number: int, content_db: Node) -> int:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
 	var round_unlocks: Array = scaling.get("tier_unlock_by_round", [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
-	var tier_from_round: int = int(round_unlocks[mini(round_number - 1, round_unlocks.size() - 1)])
+	var curve_round: int = campaign_round(round_number, run_state, content_db)
+	var tier_from_round: int = int(round_unlocks[mini(curve_round - 1, round_unlocks.size() - 1)])
 
 	var tier_from_rate: int = 0
 	var rate: float = float(run_state.compute.get("token_rate", 1_000_000.0))

@@ -11,6 +11,7 @@ func run() -> void:
 	_test_market_purchase()
 	_test_mixed_job_finalization()
 	_test_multi_job_tick_counts_once()
+	_test_a_granted_module_does_not_replace_the_starters()
 
 
 func _make_sim() -> Node:
@@ -133,3 +134,20 @@ func _test_multi_job_tick_counts_once() -> void:
 	assert_eq(result.get("failed_count", -1), 1, "One job failed mid-tick")
 	assert_false(bool(result.get("all_resolved", true)), "The round is not resolved while a contract continues")
 	sim.free()
+
+
+## The reported bug: after a win, every workflow item disappeared and no new ones
+## ever arrived. A `starting_module` unlock writes its module into the build
+## before the board is sized, and the board used to read a non-empty list as
+## "starters already granted" — so the run got that one module and nothing else,
+## for ever.
+func _test_a_granted_module_does_not_replace_the_starters() -> void:
+	var state := RunState.new()
+	state.reset()
+	var granted: String = str(ContentDatabase.operations[0].id)
+	state.build["operations"] = [granted]
+	BoardSystem.new().ensure_board(state, ContentDatabase)
+	var owned: Array = Array(state.build.get("operations", []))
+	assert_true(granted in owned, "The granted module is still there")
+	for starter in ContentDatabase.starter_operations():
+		assert_true(str(starter) in owned, "And so is starter %s" % str(starter))

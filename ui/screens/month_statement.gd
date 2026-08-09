@@ -10,10 +10,15 @@ signal continue_pressed
 @onready var subtitle_label: Label = $Panel/Margin/VBox/Subtitle
 @onready var rows: VBoxContainer = $Panel/Margin/VBox/Scroll/Rows
 @onready var continue_button: GameButton = $Panel/Margin/VBox/ContinueButton
+@onready var _panel: PanelContainer = $Panel
+
+var _stat_grid: GridContainer = null
 
 
 func _ready() -> void:
 	continue_button.pressed.connect(_on_continue)
+	_panel.add_theme_stylebox_override("panel", UiThemeBuilder.docket_style())
+	subtitle_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("muted"))
 
 
 func show_statement(statement: Dictionary) -> void:
@@ -22,15 +27,20 @@ func show_statement(statement: Dictionary) -> void:
 	var paid: bool = bool(statement.get("paid_in_full", true))
 	if paid:
 		title_label.text = "ROUND %d BILLS PAID" % round_number
-		title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("success"))
+		title_label.add_theme_color_override(
+			"font_color", UiThemeBuilder.semantic("success").darkened(0.45)
+		)
 		subtitle_label.text = "Rent and running costs are settled. Here is where the money went."
 	else:
 		title_label.text = "BILLS UNPAID"
-		title_label.add_theme_color_override("font_color", UiThemeBuilder.color("red"))
+		title_label.add_theme_color_override(
+			"font_color", UiThemeBuilder.color("red").darkened(0.35)
+		)
 		subtitle_label.text = "You could not cover round %d. The shortfall became debt — miss twice in a row and you are evicted." % round_number
 
 	for child in rows.get_children():
 		child.queue_free()
+	_begin_stat_grid()
 
 	_add_row(
 		"Rent",
@@ -51,15 +61,8 @@ func show_statement(statement: Dictionary) -> void:
 			NumberFormat.format_cash(cloud_bill),
 			"Metered charges for rented capacity you burned this round."
 		)
-	var overtime_levy: float = float(statement.get("overtime_levy", 0.0))
-	if overtime_levy > 0.0:
-		_add_row(
-			"Overtime",
-			NumberFormat.format_cash(overtime_levy),
-			"The year is over and no Ascension Contract is finished. This is charged on what you earn and grows every round until one is."
-		)
 	# Only worth a subtotal once rent is not the whole bill.
-	if recurring > 0.0 or cloud_bill > 0.0 or overtime_levy > 0.0:
+	if recurring > 0.0 or cloud_bill > 0.0:
 		_add_row(
 			"Bills total",
 			NumberFormat.format_cash(float(statement.get("bill_total", 0.0))),
@@ -108,25 +111,39 @@ func show_statement(statement: Dictionary) -> void:
 		main.sync_overlay_input()
 
 
+func _begin_stat_grid() -> void:
+	_stat_grid = GridContainer.new()
+	_stat_grid.columns = 2
+	_stat_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stat_grid.add_theme_constant_override("h_separation", UiThemeBuilder.SPACE_LG)
+	_stat_grid.add_theme_constant_override("v_separation", UiThemeBuilder.SPACE_MD)
+	rows.add_child(_stat_grid)
+
+
 func _add_row(name_text: String, value_text: String, explanation: String) -> void:
 	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 2)
 	var line := HBoxContainer.new()
 	var name_label := Label.new()
 	name_label.text = name_text
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("title"))
 	line.add_child(name_label)
 	var value_label := Label.new()
 	value_label.text = value_text
 	value_label.theme_type_variation = &"AccentLabel"
+	value_label.add_theme_font_override("font", UiThemeBuilder.mono_font())
+	value_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink())
 	line.add_child(value_label)
 	box.add_child(line)
 	var explain := Label.new()
 	explain.text = explanation
 	explain.theme_type_variation = &"MutedLabel"
+	explain.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("muted"))
 	explain.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(explain)
-	rows.add_child(box)
+	(_stat_grid if _stat_grid != null else rows).add_child(box)
 
 
 func _on_continue() -> void:

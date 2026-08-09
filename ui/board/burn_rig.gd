@@ -20,27 +20,29 @@ const DEFAULT_STAGE := 1
 ## The bay takes every pixel the board can spare and the machine is scaled into it,
 ## so there is no empty band between the room and the desk. Only a floor is kept, so
 ## the shortest window still draws a rig rather than a sliver of one.
-const MIN_BAY_HEIGHT := 300.0
+const MIN_BAY_HEIGHT := 220.0
 
 ## Gap kept between an overlay instrument and the edge of the bay.
 const INSTRUMENT_PAD := 10.0
 
-## How much of the way to filling the bay the artwork actually travels. Close to all
-## the way: the bay is the scene now, so a machine that stops short of it leaves a
-## gap where the room used to be cropped out.
-const ART_ZOOM_BLEND := 0.94
+## How much of the way to filling the bay the artwork actually travels. None of it:
+## the desk behind the machine is now real artwork rather than a cropped-out void,
+## so there is nothing to hide by zooming in, and any zoom at all clips the lid of
+## the laptop and the instruments mounted above it.
+const ART_ZOOM_BLEND := 0.0
 
-## Empty band above the machine: the shelf the instruments are mounted on, and the
-## only place the smoke can rise into before the bay clips it. Tall enough to clear
-## the largest a dial ever gets, so no instrument ever lands on the machine.
-const HEADROOM := 190.0
+## Empty band above the machine: somewhere for the smoke to rise into before the
+## bay clips it. The instruments no longer need a shelf of their own — they hang in
+## the bay's top corners, on the wall the desk artwork actually draws, while the
+## machine sits centred between them.
+const HEADROOM := 48.0
 
 ## Height of the band that blends the room into the artwork's own dark field.
-const HORIZON_FADE := 150.0
+const HORIZON_FADE := 90.0
 
 ## How wide the console has to be before the instruments are drawn at full size, and
 ## how far they are allowed to shrink on a narrow one.
-const INSTRUMENT_FULL_WIDTH := 560.0
+const INSTRUMENT_FULL_WIDTH := 520.0
 const INSTRUMENT_MIN_SCALE := 0.62
 
 ## Columns the terminal is sized to fit. The monitor glass is a fixed fraction of
@@ -413,11 +415,9 @@ func _fit_terminal_type() -> void:
 	forecast_line.add_theme_font_size_override("font_size", maxi(body - 2, 12))
 
 
-## The instruments are mounted along the top of the bay: the heat dial in the left
-## corner, quality and deadline in the right. They used to stand on the floor beside
-## the machine, which put the three brightest things on the board in the same band
-## as the keys and left the shelf above the machine empty. On the shelf they read as
-## panel-mounted gear in the room, and the machine gets the floor to itself.
+## Quality and deadline are mounted in the top-right of the bay. Heat is not among
+## them: the room carries its own heat readout on the wall now, and a second dial
+## floating over the desk would be the same number twice in one glance.
 func _layout_instruments() -> void:
 	# Instruments shrink on a narrow window so they never eat the machine.
 	var scale: float = clampf(
@@ -425,20 +425,15 @@ func _layout_instruments() -> void:
 	)
 	# Both instruments are sized to their housing's aspect: the art is a photograph
 	# of a plate, and a plate stretched to a different shape stops reading as one.
-	var gauge := Vector2(164.0, 164.0) * scale
+	heat_gauge.visible = false
+
 	# `size` is clamped by the combined minimum, so the authored floor has to come
 	# down first or the instruments never shrink.
-	heat_gauge.custom_minimum_size = gauge
-	heat_gauge.size = gauge
-	heat_gauge.position = Vector2(INSTRUMENT_PAD, INSTRUMENT_PAD)
-
-	var meter := Vector2(112.0, 149.0) * scale
+	var meter := Vector2(76.0, 101.0) * scale
 	for instrument in [quality_meter, deadline_meter]:
 		instrument.custom_minimum_size = meter
 		instrument.size = meter
-	# Side by side and bottom-aligned with the dial, so the three of them share one
-	# shelf line rather than stepping down the corner.
-	var top: float = INSTRUMENT_PAD + gauge.y - meter.y
+	var top: float = INSTRUMENT_PAD
 	var right: float = stage.size.x - meter.x - INSTRUMENT_PAD
 	deadline_meter.position = Vector2(right, top)
 	quality_meter.position = Vector2(right - meter.x - INSTRUMENT_PAD, top)

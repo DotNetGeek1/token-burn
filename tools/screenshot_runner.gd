@@ -36,11 +36,18 @@ func _ready() -> void:
 	if tab == "session":
 		# Play one round end to end so the debrief screen shows. Burning is
 		# interactive, so this drives it synchronously rather than waiting on a
-		# player who is not here.
+		# player who is not here. Force the debrief forward and keep bills closed.
 		var offers: Array = Simulation.run_state.business.get("job_offers", [])
 		if not offers.is_empty():
 			Simulation.accept_job(str(offers[0].get("id", "")))
 			Simulation.start_work_sync()
+		for _f in range(5):
+			await get_tree().process_frame
+		main._bills_screen.hide()
+		main._angel_investors.hide_overlay()
+		var summary: Dictionary = Simulation.last_session_summary
+		if not summary.is_empty():
+			main._round_debrief.show_summary(summary)
 	elif tab == "statement":
 		# Every round ends in the bills now, so working one contract to
 		# resolution is all it takes to open the statement.
@@ -55,9 +62,9 @@ func _ready() -> void:
 		Simulation.decline_offers()
 	elif tab == "angel":
 		# Angels only call once the round's bills have cleared, so this works the
-		# round to resolution and clears the debrief. Burning is interactive, so
-		# this drives it synchronously rather than waiting on a player who is not
-		# here.
+		# round to resolution and clears debrief + bills. Burning is interactive,
+		# so this drives it synchronously rather than waiting on a player who is
+		# not here.
 		var offers: Array = Simulation.run_state.business.get("job_offers", [])
 		if not offers.is_empty():
 			Simulation.accept_job(str(offers[0].get("id", "")))
@@ -66,6 +73,11 @@ func _ready() -> void:
 			await get_tree().process_frame
 		main._round_debrief.hide()
 		main._on_debrief_continue()
+		for _f in range(3):
+			await get_tree().process_frame
+		if main._bills_screen.visible:
+			main._bills_screen.hide()
+			main._on_bills_continue()
 	elif tab == "debrief":
 		# Force a victory so the debrief has a pick to spend.
 		MetaProgress.reset_profile()

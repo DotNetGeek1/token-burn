@@ -41,7 +41,7 @@ text = ""
 
 [node name="ActionButton" type="Button" parent="SubRow"]
 visible = false
-custom_minimum_size = Vector2(140, 68)
+custom_minimum_size = Vector2(96, 44)
 layout_mode = 2
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")

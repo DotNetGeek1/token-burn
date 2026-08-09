@@ -176,8 +176,8 @@ func _test_angels_call_only_once_the_rent_has_cleared() -> void:
 			"An angel offers perks and modules, not purchases (%s)" % str(offer.get("type", ""))
 		)
 		assert_true(
-			str(offer.get("investor", {}).get("name", "")) != "",
-			"Every offer arrives with somebody's name on it"
+			not offer.has("investor"),
+			"Offers carry no persona of their own — the table belongs to the one investor"
 		)
 	paid.decline_offers()
 	assert_true(paid.phase == paid.Phase.ROUND_PREP, "Declining them opens the next round's prep")

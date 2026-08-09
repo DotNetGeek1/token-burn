@@ -110,6 +110,7 @@ func _refresh_list() -> void:
 	for child in content.get_children():
 		content.remove_child(child)
 		child.queue_free()
+	var columns: int = UiThemeBuilder.tile_columns(size.x)
 	for category in CATEGORY_ORDER:
 		if _filter != "all" and _filter != category:
 			continue
@@ -117,8 +118,16 @@ func _refresh_list() -> void:
 		if entries.is_empty():
 			continue
 		content.add_child(_section_label(category, entries))
+		var grid := GridContainer.new()
+		grid.columns = columns
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_theme_constant_override("h_separation", UiThemeBuilder.SPACE_SM)
+		grid.add_theme_constant_override("v_separation", UiThemeBuilder.SPACE_SM)
+		content.add_child(grid)
 		for achievement in entries:
-			content.add_child(_achievement_row(achievement))
+			var tile: Control = _achievement_row(achievement)
+			tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grid.add_child(tile)
 
 
 func _entries_in(category: String) -> Array:

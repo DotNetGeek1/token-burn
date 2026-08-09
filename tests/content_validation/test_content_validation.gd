@@ -147,32 +147,21 @@ func _cost_of_units(upgrade: UpgradeDefinition, units: int) -> float:
 ## an unfinishable chapter rather than a missing bonus.
 func _validate_ascension_contracts() -> void:
 	var contracts: Array = ContentDatabase.ascension_contracts
-	assert_true(contracts.size() > 0, "Content loads the Ascension Contract pool")
-	var thresholds: Dictionary = ContentDatabase.ascension_qualification
-	assert_true(
-		int(thresholds.get("earliest_round", 0)) < Simulation.ROUNDS_PER_RUN,
-		"Qualification opens before the year is out"
-	)
+	assert_true(contracts.size() > 0, "Content loads the contract pool")
 	var bosses: Dictionary = {}
 	for contract in contracts:
 		var id: String = str(contract.get("id", ""))
 		assert_true(id.begins_with("ascension."), "Contract id is namespaced: %s" % id)
 		assert_true(str(contract.get("name", "")) != "", "Contract %s is named" % id)
 		assert_true(float(contract.get("total_burn", 0.0)) > 0.0, "Contract %s asks for a burn" % id)
-		assert_true(int(contract.get("deadline_prompts", 0)) > 0, "Contract %s has a deadline" % id)
+		assert_true(int(contract.get("deadline_rounds", 0)) > 0, "Contract %s has a deadline" % id)
 		assert_true(int(contract.get("picks", 0)) > 0, "Contract %s pays out at least one pick" % id)
 		if bool(contract.get("alternate", false)):
 			continue
 		var location: String = str(contract.get("location", ""))
-		assert_true(location != "", "Primary contract %s names the location it is the boss of" % id)
-		assert_false(bosses.has(location), "%s has exactly one boss contract" % location)
+		assert_true(location != "", "Primary contract %s names the location it is played for" % id)
+		assert_false(bosses.has(location), "%s has exactly one contract" % location)
 		bosses[location] = id
-		var qualification: Dictionary = Dictionary(contract.get("qualification", thresholds))
-		assert_true(
-			int(qualification.get("earliest_round", thresholds.get("earliest_round", 1)))
-				< Simulation.ROUNDS_PER_RUN,
-			"%s opens before the year is out" % id
-		)
 	for location in MetaProgress.location_order():
 		assert_true(bosses.has(str(location)), "%s has a way out of it" % str(location))
 

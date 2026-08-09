@@ -8,7 +8,7 @@ const RiskQuips := preload("res://ui/common/risk_quips.gd")
 @onready var ascend_button: GameButton = $Margin/VBox/AscendButton
 @onready var risk_bar: ResourceBar = $Margin/VBox/RiskBar
 @onready var risk_label: Label = $Margin/VBox/RiskLabel
-@onready var offers_list: VBoxContainer = $Margin/VBox/Scroll/OffersList
+@onready var offers_list: GridContainer = $Margin/VBox/Scroll/OffersList
 @onready var empty_label: Label = $Margin/VBox/EmptyLabel
 
 var _detail_sheet: DetailSheet = null
@@ -25,7 +25,15 @@ func _ready() -> void:
 	EventBus.round_started.connect(refresh)
 	EventBus.job_accepted.connect(func(_id): refresh())
 	Simulation.work_session_finished.connect(func(_result): refresh())
+	resized.connect(_fit_columns)
+	_fit_columns()
 	refresh()
+
+
+## The board is a grid rather than a stack, so how many offers sit side by side
+## is decided by how much of the window the slab has taken.
+func _fit_columns() -> void:
+	offers_list.columns = UiThemeBuilder.tile_columns(size.x)
 
 
 func refresh() -> void:
@@ -33,11 +41,12 @@ func refresh() -> void:
 		Simulation.ensure_job_offers()
 	var state := Simulation.run_state
 	header.set_context("Demand %d" % int(state.business.get("demand", 0.0)))
+	var ad_spend: String = "Ads %s/day" % NumberFormat.format_cash(
+		float(state.business.get("advertising", 0.0))
+	)
+	var reputation: String = _reputation_line()
 	header.set_sub_line(
-		"Ad Spend: %s/day · %s" % [
-			NumberFormat.format_cash(float(state.business.get("advertising", 0.0))),
-			_reputation_line(),
-		],
+		ad_spend if reputation == "" else "%s · %s" % [ad_spend, reputation],
 		"EDIT"
 	)
 	for child in offers_list.get_children():
@@ -51,7 +60,7 @@ func refresh() -> void:
 	if in_upgrade:
 		empty_label.text = "Choose your upgrade first — new contracts appear after."
 	elif queued.size() > 0:
-		empty_label.text = "%d contract(s) taken for this round. Take more, or open WORK and press START WORK — the round runs until they all resolve." % queued.size()
+		empty_label.text = "%d contract(s) taken for this round. Take more, or open WORK and burn — the round runs until they all resolve." % queued.size()
 	elif offers.is_empty() and Simulation.is_work_running():
 		empty_label.text = "The round is under way. Open the WORK tab."
 	elif offers.is_empty():
@@ -59,10 +68,13 @@ func refresh() -> void:
 	else:
 		empty_label.visible = false
 
+	_fit_columns()
 	_refresh_ascend_button()
 	var round_costs: float = _round_costs()
 	for offer in offers:
-		offers_list.add_child(_build_offer_card(offer, queued, in_upgrade, round_costs))
+		var offer_card: GameCard = _build_offer_card(offer, queued, in_upgrade, round_costs)
+		offer_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		offers_list.add_child(offer_card)
 
 	for job in queued:
 		var card: GameCard = CARD_SCENE.instantiate()
@@ -72,6 +84,7 @@ func refresh() -> void:
 		card.set_kicker("Taken · %s" % identity["client"], identity["color"])
 		card.set_headline(NumberFormat.format_cash(float(job.get("reward", 0.0))), "money")
 		card.set_chips([{"text": "On this round's slate", "role": "success", "filled": true}])
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		offers_list.add_child(card)
 	UiTransition.stagger(offers_list)
 
@@ -121,7 +134,9 @@ func _offer_chips(offer: Dictionary, rules: Array) -> Array:
 		"icon": AssetCatalog.stat_icon("deadline"),
 	})
 	chips.append({
-		"text": "Quality %d" % int(offer.get("quality_threshold", 0.0)),
+		"text": "Quality %s/10" % JobPresentation.quality_mark(
+			float(offer.get("quality_threshold", 0.0))
+		),
 		"role": "energy",
 		"icon": AssetCatalog.stat_icon("quality"),
 	})
@@ -135,12 +150,32 @@ func _offer_chips(offer: Dictionary, rules: Array) -> Array:
 	return chips
 
 
+## What the bar is actually worth, read off the same curve the payout uses rather
+## than restated here, so the sentence cannot drift from the maths.
+func _quality_stakes(threshold: float) -> String:
+	if threshold <= 0.0:
+		return "This client is not marking the work."
+	var under: float = JobSystem.quality_payout_multiplier(threshold * 0.5, threshold)
+	var over: float = JobSystem.quality_payout_multiplier(threshold * 2.0, threshold)
+	return (
+		"Hit the bar and the fee is paid in full. Halfway to it pays %d%%, and work well over it pays up to %d%% — plus reputation, which opens bigger clients."
+		% [int(round(under * 100.0)), int(round(over * 100.0))]
+	)
+
+
 func _show_offer_detail(offer: Dictionary, can_accept: bool, round_costs: float) -> void:
 	var identity: Dictionary = JobPresentation.sector(offer)
 	var rows: Array = [
 		{"stat": "Reward", "value": NumberFormat.format_cash(float(offer.get("reward", 0.0))), "role": "money"},
 		{"stat": "Tokens", "value": NumberFormat.format(float(offer.get("token_requirement", 0.0))), "role": "compute"},
-		{"stat": "Quality target", "value": str(int(offer.get("quality_threshold", 0.0))), "role": "energy"},
+		{
+			"stat": "Quality target",
+			"value": "%s / 10" % JobPresentation.quality_mark(
+				float(offer.get("quality_threshold", 0.0))
+			),
+			"role": "energy",
+		},
+		{"text": _quality_stakes(float(offer.get("quality_threshold", 0.0)))},
 		{"stat": "Deadline", "value": "%d prompts" % int(offer.get("deadline_prompts", 0)), "role": "warning"},
 		{"stat": "Pays for", "value": "%.1f rounds of bills" % (float(offer.get("reward", 0.0)) / maxf(1.0, round_costs))},
 		{"text": "Deliver with prompts to spare and the client pays a premium on top of the fee."},
@@ -168,21 +203,24 @@ func _show_offer_detail(offer: Dictionary, can_accept: bool, round_costs: float)
 
 ## Reputation on the job board, said in terms of what it is for: the fee it adds
 ## to every offer, and the client tier the next few points would open.
+## What the reputation chip in the HUD cannot say: what the standing is currently
+## buying and what the next rung of it opens. The number itself is already up
+## there, so repeating it here only costs the panel a line it does not have.
 func _reputation_line() -> String:
 	var state := Simulation.run_state
 	var reputation: float = float(state.business.get("reputation", 0.0))
 	if reputation <= -3.0:
-		return "Reputation %d — below -5 the run is over" % int(reputation)
+		return "Below -5 the run is over"
+	var parts: PackedStringArray = []
 	var bonus: float = JobSystem.reputation_reward_multiplier(state, ContentDatabase) - 1.0
-	var line: String = "Reputation %d" % int(reputation)
 	if bonus > 0.005:
-		line += " (+%d%% fees)" % int(round(bonus * 100.0))
+		parts.append("+%d%% fees" % int(round(bonus * 100.0)))
 	var next_tier: Dictionary = JobSystem.next_reputation_tier(state, ContentDatabase)
 	if not next_tier.is_empty():
-		line += " · %d opens tier %d clients" % [
-			int(ceil(float(next_tier["reputation"]))), int(next_tier["tier"]),
-		]
-	return line
+		parts.append("tier %d at rep %d" % [
+			int(next_tier["tier"]), int(ceil(float(next_tier["reputation"]))),
+		])
+	return " · ".join(parts)
 
 
 ## What a round costs to run, which is what a fee is worth measuring against.
@@ -227,49 +265,26 @@ func _capacity_warnings(offer: Dictionary, queued: Array) -> Array:
 	return [{"text": "Queue at %.0f%% capacity" % (ratio * 100.0), "role": "warning"}]
 
 
-## Always on the board, because the endgame cannot be something the player only
-## discovers by accidentally qualifying for it. Before the bars are cleared it
-## is a progress readout; after, it is the way in. Once a contract is underway,
-## the burn board's own tracker takes over.
+## Always on the board: the contract is live from round one, so this is a running
+## progress readout rather than an entry point to anything. Tapping it opens the
+## full terms.
 func _refresh_ascend_button() -> void:
-	ascend_button.visible = true
 	var summary: Dictionary = Simulation.ascension_summary()
-	var boss: String = str(Dictionary(summary.get("contract", {})).get("name", "Ascension Contract"))
-	if Simulation.ascension_active():
-		ascend_button.set_lines("ASCENSION UNDERWAY", "%s · follow it on the burn board" % boss)
-		ascend_button.disabled = true
+	var contract: Dictionary = Dictionary(summary.get("contract", {}))
+	if contract.is_empty():
+		ascend_button.visible = false
 		return
+	ascend_button.visible = true
 	ascend_button.disabled = false
-	if Simulation.in_overtime():
-		ascend_button.set_lines(boss.to_upper(), "OVERTIME — the run only ends when this is done")
-		return
-	var qualification: Dictionary = Dictionary(summary.get("qualification", {}))
-	if bool(summary.get("qualified", false)):
-		ascend_button.set_lines(boss.to_upper(), "ASCENSION READY — commit when you are")
-		return
+	var progress: Dictionary = Dictionary(summary.get("progress", {}))
+	var rounds_left: int = int(progress.get("rounds_remaining", 0))
 	ascend_button.set_lines(
-		boss.to_upper(),
-		"%d/%d requirements · %s · %d round(s) left in the year" % [
-			int(summary.get("requirements_met", 0)),
-			int(summary.get("requirements_total", 0)),
-			_qualification_summary(qualification),
-			Simulation.rounds_remaining(),
+		str(contract.get("name", "The contract")).to_upper(),
+		"%.0f%% burned · %d round(s) left" % [
+			float(progress.get("burn_ratio", 0.0)) * 100.0, rounds_left,
 		]
 	)
-
-
-## The one bar furthest from being met, so the sub-line is a next step rather
-## than a list. The full checklist is in the overlay behind the button.
-func _qualification_summary(qualification: Dictionary) -> String:
-	if not bool(qualification.get("round_ok", true)):
-		return "Opens in round %d" % int(qualification.get("earliest_round", 1))
-	if not bool(qualification.get("peak_ok", true)):
-		return "Needs %s peak throughput" % NumberFormat.format_token_rate(
-			float(qualification.get("min_peak_token_rate", 0.0))
-		)
-	if not bool(qualification.get("income_ok", true)):
-		return "Needs income to cover the round's costs"
-	return "Not qualified yet"
+	ascend_button.accent_key = "danger" if rounds_left <= 3 else "perk"
 
 
 func _on_ascend_pressed() -> void:

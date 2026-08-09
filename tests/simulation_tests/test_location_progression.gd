@@ -19,6 +19,9 @@ func run() -> void:
 	_test_clearing_a_location_opens_the_next()
 	_test_an_old_profile_migrates_without_losing_anything()
 	_test_an_old_save_reopens_the_rung_it_was_on()
+	_test_the_rig_moves_into_the_next_location()
+	_test_a_replayed_chapter_gets_no_free_rig()
+	_test_each_location_stakes_the_run_for_its_own_rent()
 
 
 func _sim() -> Node:
@@ -229,5 +232,83 @@ func _test_an_old_save_reopens_the_rung_it_was_on() -> void:
 	)
 	reloaded.free()
 	SaveManager.delete_save()
+
+	_restore(restore)
+
+
+## The reported bug behind this: arriving in the garage on a second-hand laptop,
+## against a contract priced for the rig that beat the bedroom, is unwinnable.
+## The kit moves with the player; the money, modules and perks do not.
+func _test_the_rig_moves_into_the_next_location() -> void:
+	var restore: Dictionary = _with_scratch_profile()
+
+	var sim: Node = _sim()
+	sim.start_run(7110)
+	sim.run_state.economy["cash"] = 5000000.0
+	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "The bedroom run buys a desktop")
+	assert_true(sim.buy_upgrade("upgrade.portable_ac"), "And something to cool it")
+	# Winning the chapter is what pays for the move.
+	sim.run_state.statistics["lifetime_tokens"] = 1e18
+	sim.run_state.ascension["quality_sum"] = 100.0
+	sim.run_state.ascension["quality_count"] = 1
+	sim._finish_prompt({"ok": true, "messages": []})
+	assert_eq(MetaProgress.selected_location(), "garage", "Which opens the garage")
+	sim.free()
+
+	var next_run: Node = _sim()
+	next_run.start_run(7111)
+	var hardware: Array = Array(next_run.run_state.build.get("hardware", []))
+	assert_true("custom_desktop" in hardware, "The desktop came along")
+	assert_true("portable_ac" in hardware, "So did the cooling")
+	assert_true(
+		float(next_run.run_state.compute.get("cooling", 0.0))
+			> UpgradeSystem.location_cooling(next_run.run_state, ContentDatabase),
+		"And the carried cooling counts on top of what the garage cools on its own"
+	)
+	assert_true(
+		float(next_run.run_state.compute.get("local_capacity", 0.0)) > 0.0,
+		"The rig it arrives with actually produces"
+	)
+	assert_true(
+		float(next_run.run_state.economy.get("cash", 0.0)) < 5000000.0,
+		"But the bank balance does not come with it"
+	)
+	next_run.free()
+
+	_restore(restore)
+
+
+func _test_a_replayed_chapter_gets_no_free_rig() -> void:
+	var restore: Dictionary = _with_scratch_profile()
+
+	MetaProgress.carry_rig_forward("garage", ["gpu_rack"], {"upgrade.gpu_rack": 1})
+	MetaProgress.unlock_location("garage")
+	assert_true(MetaProgress.select_location("bedroom"), "The player goes back to the bedroom")
+	var replay: Node = _sim()
+	replay.start_run(7112)
+	assert_false(
+		"gpu_rack" in Array(replay.run_state.build.get("hardware", [])),
+		"Kit bought for the garage does not turn up in a bedroom replay"
+	)
+	replay.free()
+
+	_restore(restore)
+
+
+## A chapter whose rent is three times the last one's cannot be started on the
+## last one's float, so each location stakes the run for its own bills.
+func _test_each_location_stakes_the_run_for_its_own_rent() -> void:
+	var restore: Dictionary = _with_scratch_profile()
+
+	var sim: Node = _sim()
+	sim.start_run(7113)
+	for location in ["bedroom", "garage", "office_unit", "warehouse"]:
+		Simulation.apply_run_location(sim.run_state, location)
+		assert_true(
+			float(sim.run_state.economy.get("cash", 0.0))
+				> float(sim.run_state.economy.get("round_rent", 0.0)),
+			"%s starts with more than one round's rent in hand" % location
+		)
+	sim.free()
 
 	_restore(restore)

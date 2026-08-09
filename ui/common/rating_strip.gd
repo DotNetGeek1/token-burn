@@ -19,7 +19,8 @@ func _build(label_text: String, filled: int, accent: Color) -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var label := Label.new()
 	label.text = label_text.to_upper()
-	label.custom_minimum_size = Vector2(150, 0)
+	label.custom_minimum_size = Vector2(92, 0)
+	label.clip_text = true
 	label.theme_type_variation = &"SectionLabel"
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	add_child(label)

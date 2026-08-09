@@ -85,10 +85,16 @@ func ensure_board(run_state: RunState, content_db: Node) -> void:
 	board["slot_count"] = slot_count_value
 	run_state.build["board"] = board
 
+	# Starters are merged in rather than granted only to an empty list. A
+	# `starting_module` unlock writes its module in before this runs, and the
+	# old "skip if anything is owned" left that run with one module and no
+	# pipeline to put it in — the reported bug where the workflow items vanish
+	# and never come back.
 	var owned: Array = Array(run_state.build.get("operations", []))
-	if owned.is_empty():
-		owned = content_db.starter_operations()
-		run_state.build["operations"] = owned
+	for starter in content_db.starter_operations():
+		if not (starter in owned):
+			owned.append(starter)
+	run_state.build["operations"] = owned
 
 	_migrate_board_to_workflows(run_state)
 	_ensure_workflows(run_state, slot_count_value)

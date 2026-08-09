@@ -1,18 +1,22 @@
 extends Control
 
 ## The round's free draft. Usually that is the angel phase, once the bills have
-## cleared: somebody with more money than judgement offers the player something
-## for nothing. The same screen also presents an Ascension Reward — the payout for
-## climbing a rung of the ladder — which is wider, rarer, and worth as many picks
-## as the contract promised rather than closing on the first one. Everything here
-## is free either way; the Market tab is where things have prices.
+## cleared: the investor puts a few things on the table and expects to be thanked
+## for them. The same screen also presents a contract reward — the payout for
+## finishing a location — which is worth as many picks as the contract promised
+## rather than closing on the first one. Everything here is free either way; the
+## Market tab is where things have prices.
+##
+## There is only one man doing the offering, so the table is his: the cards carry
+## his patter rather than a different fictional fund on each one. On a landscape
+## panel the offers sit side by side as columns rather than stacked.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
 const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
 
 @onready var title_label: Label = $Panel/Margin/VBox/Title
 @onready var subtitle_label: Label = $Panel/Margin/VBox/Subtitle
-@onready var cards_list: VBoxContainer = $Panel/Margin/VBox/Scroll/CardsList
+@onready var cards_list: GridContainer = $Panel/Margin/VBox/Scroll/CardsList
 @onready var board_label: Label = $Panel/Margin/VBox/BoardLabel
 @onready var bills_label: Label = $Panel/Margin/VBox/BillsLabel
 @onready var decline_button: GameButton = $Panel/Margin/VBox/DeclineButton
@@ -42,24 +46,24 @@ func show_choices() -> void:
 	_refresh_heading()
 	_refresh_board_line()
 	_refresh_bills_line()
+	var offer_count: int = Simulation.pending_choices.size()
+	# Three offers across the landscape panel; fewer offers still fill the row.
+	cards_list.columns = clampi(maxi(1, offer_count), 1, 3)
+	var index: int = 0
 	for offer in Simulation.pending_choices:
 		var card: GameCard = CARD_SCENE.instantiate()
-		var investor: Dictionary = offer.get("investor", {})
+		var patter: String = InvestorVoice.offer_patter(index)
+		index += 1
 		var offer_type: String = str(offer.get("type", ""))
 		var offer_id: String = str(offer.get("id", ""))
 		card.setup(
 			str(offer.get("label", "Offer")),
-			_body_text(offer, investor),
+			_body_text(offer, patter),
 			"",
 			"TAKE IT",
 			_offer_icon(offer_type, offer_id)
 		)
 		card.set_headline("FREE", "success")
-		if not investor.is_empty():
-			card.set_kicker(
-				"%s · %s" % [str(investor.get("name", "")), str(investor.get("fund", ""))],
-				UiThemeBuilder.semantic("perk")
-			)
 		card.set_chips([{
 			"text": _kind_chip_text(offer_type),
 			"role": "perk",
@@ -68,10 +72,11 @@ func show_choices() -> void:
 		if offer_type == "operation":
 			card.set_warnings(_bench_warning())
 		card.set_action_style("perks", "perk", "BoostButton")
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.pressed.connect(_accept.bind(offer_type, offer_id))
 		# Taking a module or perk is a decision, so only TAKE IT commits to it.
 		# A tap on the card face reads the pitch in full instead.
-		card.body_pressed.connect(_show_offer_detail.bind(offer, investor))
+		card.body_pressed.connect(_show_offer_detail.bind(offer, patter))
 		cards_list.add_child(card)
 	if Simulation.pending_choices.is_empty():
 		visible = false
@@ -84,26 +89,26 @@ func show_choices() -> void:
 
 
 func _refresh_heading() -> void:
-	title_label.text = "THE ANGEL ROUND"
-	subtitle_label.text = "Nobody wants equity. Everybody wants to be in the story."
-	decline_button.set_lines("TAKE NOTHING", "Thank everyone and leave")
+	title_label.text = "HIS TABLE"
+	subtitle_label.text = "%s is feeling generous. Take one." % InvestorVoice.investor_name()
+	decline_button.set_lines("TAKE NOTHING", "Tell him you are fine")
 
 
 func _kind_chip_text(offer_type: String) -> String:
 	return "Free %s" % ("module" if offer_type == "operation" else "perk")
 
 
-func _show_offer_detail(offer: Dictionary, investor: Dictionary) -> void:
+func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 	var offer_type: String = str(offer.get("type", ""))
 	var offer_id: String = str(offer.get("id", ""))
 	var rows: Array = [
 		{"stat": "Cost", "value": "Free", "role": "success"},
 		{"text": str(offer.get("description", ""))},
 	]
-	if not investor.is_empty():
+	if patter != "":
 		rows.append({
-			"rule": str(investor.get("name", "")),
-			"text": "\"%s\"" % str(investor.get("patter", "")),
+			"rule": InvestorVoice.investor_name(),
+			"text": "\"%s\"" % patter,
 			"role": "perk",
 		})
 	for warning in _bench_warning():
@@ -121,11 +126,11 @@ func _show_offer_detail(offer: Dictionary, investor: Dictionary) -> void:
 	_detail_sheet.action_confirmed.connect(_accept.bind(offer_type, offer_id))
 
 
-func _body_text(offer: Dictionary, investor: Dictionary) -> String:
+func _body_text(offer: Dictionary, patter: String) -> String:
 	var description: String = str(offer.get("description", ""))
-	if investor.is_empty():
+	if patter == "":
 		return description
-	return "%s\n\n\"%s\"" % [description, str(investor.get("patter", ""))]
+	return "%s\n\n\"%s\"" % [description, patter]
 
 
 ## A module arriving on a full board is a decision, not a gift, and the screen
@@ -163,7 +168,7 @@ func hide_overlay() -> void:
 func _accept(offer_type: String, offer_id: String) -> void:
 	if not Simulation.accept_offer(offer_type, offer_id):
 		return
-	# An Ascension Reward can still owe the run picks, in which case the table
+	# A contract reward can still owe the run picks, in which case the table
 	# stays up minus what was just taken off it.
 	if Simulation.phase == Simulation.Phase.ANGEL_ROUND and not Simulation.pending_choices.is_empty():
 		show_choices()

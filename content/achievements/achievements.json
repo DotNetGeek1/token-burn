@@ -95,11 +95,14 @@
     "category": "milestone",
     "icon": "clock",
     "hidden": false,
-    "description": "Three rounds past the end of the year with no contract signed, paying a rent that goes up every time you look at it.",
-    "hint": "Survive three overtime rounds without an Ascension Contract.",
+    "description": "The contract came in on the last round of the year, with the investor already drafting the email.",
+    "hint": "Complete a contract in the final round of the year.",
     "condition": {
       "trigger": "tick",
-      "checks": [{"stat": "run.overtime_rounds", "op": ">=", "value": 3}]
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.round", "op": ">=", "value": 12}
+      ]
     },
     "reward": {"type": "unlock_module", "operation_id": "op.rubber_duck"}
   },

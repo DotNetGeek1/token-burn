@@ -5,9 +5,10 @@ extends Control
 ## not dollars banked. On a win this doubles as the pick screen: exactly one
 ## thing survives into the next attempt (more, for a higher Ascension tier).
 ##
-## Beating the game does not have to close the run down with it. A victory here is
-## also an offer: keep the build and carry it on into an endless tail, where the
-## bills climb every round and the only thing left to find out is how far it goes.
+## A win mid-campaign is a level-up, not the end of the game: the location is
+## complete, the next one is unlocked, and the new run starts there. Only the
+## last chapter's win is the ending proper, and only it offers the endless tail —
+## keep the build and carry it on while the bills climb every round.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
 
@@ -85,28 +86,41 @@ func _count_up_legacy(score: Dictionary) -> void:
 func _set_verdict(outcome: String, loss_reason: String, score: Dictionary) -> void:
 	match outcome:
 		"ascended":
-			title_label.text = "ASCENDED"
+			var next_location: String = Simulation.next_location_unlocked()
+			title_label.text = "ASCENDED" if next_location == "" else "LOCATION COMPLETE"
 			title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("success"))
 			var contract_name: String = str(score.get("contract_name", ""))
 			body_label.text = (
-				"%s: requirement met. The infrastructure holds, for now." % contract_name
-				if contract_name != "" else "The Ascension Contract is complete."
+				"%s: requirement met." % contract_name
+				if contract_name != "" else "The contract is complete."
 			)
 			body_label.text += " " + _campaign_progress_text()
-		"retired":
-			# Only reachable from a save written before overtime existed; the
-			# calendar no longer ends a run on its own.
-			title_label.text = "RETIRED"
-			title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("neutral"))
-			body_label.text = "The year ran out under the old rules, before an Ascension Contract was ever signed. The company retires quietly, comfortably, and without a legacy."
+		"contract_expired":
+			title_label.text = "TIME UP"
+			title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("failure"))
+			body_label.text = "The year ended with the contract unfinished. %s takes the hardware back." % (
+				InvestorVoice.investor_name()
+			)
+			body_label.text += " " + _contract_shortfall_text()
 		_:
 			title_label.text = "RUN ENDED"
 			title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("failure"))
 			body_label.text = loss_reason if loss_reason != "" else "The company collapsed."
-			# Overtime bills are what kill a run that never reached for a
-			# contract, so name the cause rather than leaving it as bad luck.
-			if bool(Simulation.run_state.flags.get("overtime", false)) and outcome != "ascension_failed":
-				body_label.text += " The year had already run out: overtime costs climb every round until an Ascension Contract is completed."
+
+
+## How close the run came, which is the only useful thing to say to somebody who
+## has just run out of year.
+func _contract_shortfall_text() -> String:
+	var progress: Dictionary = Simulation.ascension_progress()
+	if progress.is_empty():
+		progress = Dictionary(Simulation.ascension_summary().get("progress", {}))
+	var total: float = float(progress.get("total_burn", 0.0))
+	if total <= 0.0:
+		return ""
+	var burned: float = float(progress.get("tokens_burned", 0.0))
+	return "You burned %s of the %s he asked for — %.0f%% of the way there." % [
+		NumberFormat.format(burned), NumberFormat.format(total), (burned / total) * 100.0,
+	]
 
 
 ## A win is a chapter, not just a score: the location is behind the player and
@@ -118,15 +132,26 @@ func _campaign_progress_text() -> String:
 	)
 	var next_location: String = MetaProgress.location_name(Simulation.next_location_unlocked())
 	if next_location == "":
-		return "%s is behind you, and there is nowhere further up to go. The company does not have to stop here." % location
-	return "%s is behind you. %s is unlocked — a new run starts there." % [location, next_location]
+		return "%s is behind you, and there is nowhere further up to go. You have beaten the game — and the company does not have to stop here." % location
+	return "%s is behind you. %s took the meeting and bought you the %s — the new run starts there with the rig you built, against a bigger contract." % [
+		location, InvestorVoice.investor_name(), next_location
+	]
 
 
 func _fill_score_rows(score: Dictionary) -> void:
 	for child in score_list.get_children():
 		child.queue_free()
-	for row in RunScore.rows(score):
-		score_list.add_child(_stat_row(str(row.get("label", "")), str(row.get("value", ""))))
+	var rows: Array = RunScore.rows(score)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", UiThemeBuilder.SPACE_LG)
+	grid.add_theme_constant_override("v_separation", UiThemeBuilder.SPACE_SM)
+	score_list.add_child(grid)
+	for row in rows:
+		var cell: Control = _stat_row(str(row.get("label", "")), str(row.get("value", "")))
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(cell)
 
 
 func _stat_row(label_text: String, value_text: String) -> Control:
@@ -139,6 +164,7 @@ func _stat_row(label_text: String, value_text: String) -> Control:
 	row.add_child(name_label)
 	var value_label := Label.new()
 	value_label.text = value_text
+	value_label.add_theme_font_override("font", UiThemeBuilder.mono_font())
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(value_label)
 	return row
@@ -161,9 +187,10 @@ func _refresh_debrief() -> void:
 	debrief_scroll.visible = has_pick
 	restart_button.disabled = has_pick
 	menu_button.disabled = has_pick
-	# Carrying on is only on the table for the run that just won: the build has to
-	# still exist for there to be anything to carry.
-	continue_button.visible = _earned_this_run
+	# Carrying on into the endless tail is only on the table for the run that beat
+	# the last chapter: a mid-campaign win's continuation is the next location,
+	# and the build has to still exist for there to be anything to carry.
+	continue_button.visible = _earned_this_run and Simulation.next_location_unlocked() == ""
 	continue_button.disabled = has_pick
 	var pending: int = MetaProgress.pending_picks()
 	if has_pick:
@@ -172,7 +199,7 @@ func _refresh_debrief() -> void:
 			"%d rewards left to spend" % pending if pending > 1 else "One reward left to spend"
 		)
 	else:
-		restart_button.set_lines("NEW RUN", "Back to the bedroom")
+		restart_button.set_lines("NEW RUN", _new_run_subtitle())
 	# A verdict is a page of numbers and sits in a scrolling panel; make room
 	# for the debrief cards too when there is a pick to spend.
 	panel.anchor_top = 0.04
@@ -225,14 +252,21 @@ func _on_continue() -> void:
 	get_tree().call_group("main_ui", "refresh_all")
 
 
-## A new run after a win starts in the location the win opened, rather than
-## dropping the player back into the chapter they have just beaten.
+## Where the next run actually starts. The simulation already moved the campaign
+## selection forward when the location was completed, so this only has to say so:
+## after a win it names the newly opened chapter, after a loss the same one again.
+func _new_run_subtitle() -> String:
+	var location: String = MetaProgress.location_name(MetaProgress.selected_location())
+	if location == "":
+		return "Start again"
+	if _earned_this_run and Simulation.next_location_unlocked() != "":
+		return "Start in the %s" % location
+	return "Back to the %s" % location
+
+
 func _on_restart() -> void:
 	hide_overlay()
 	get_tree().call_group("flow_overlay", "hide_overlay")
-	var next_location: String = Simulation.next_location_unlocked()
-	if _earned_this_run and next_location != "":
-		MetaProgress.select_location(next_location)
 	Simulation.start_run()
 	get_tree().call_group("ui_refresh", "refresh")
 	get_tree().call_group("main_ui", "refresh_all")

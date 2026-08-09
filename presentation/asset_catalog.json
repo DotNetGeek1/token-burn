@@ -84,6 +84,30 @@
     "middle_management": "res://presentation/ui/icons/perks/founder_mode.svg",
     "pipeline_momentum": "res://presentation/ui/icons/perks/the_wrapper.svg"
   },
+  "board_scene": {
+    "art": {
+      "stage_01": "res://presentation/board/desk_stage_01.png",
+      "stage_02": "res://presentation/board/desk_stage_02.png",
+      "stage_03": "res://presentation/board/desk_stage_03.png",
+      "stage_04": "res://presentation/board/desk_stage_04.png",
+      "stage_05": "res://presentation/board/desk_stage_05.png"
+    },
+    "regions": {
+      "work_column": [0.12, 0.08, 0.56, 0.80],
+      "side_panel": [0.655, 0.0, 0.345, 1.0],
+      "bottom_nav": [0.0, 0.892, 0.655, 0.108]
+    },
+    "props": {
+      "plan_board": [0.018, 0.105, 0.105, 0.275],
+      "heat_readout": [0.028, 0.505, 0.072, 0.070],
+      "power_meter": [0.598, 0.228, 0.078, 0.072],
+      "phone": [0.665, 0.705, 0.115, 0.140]
+    }
+  },
+  "investor": {
+    "portrait": "res://presentation/investor/angel_portrait.png",
+    "phone_frame": "res://presentation/investor/phone_frame.png"
+  },
   "office_stages": {
     "stage_01": "res://presentation/office/stage_01.png",
     "stage_02": "res://presentation/office/stage_02.png",

@@ -11,11 +11,8 @@ var balance: Dictionary = {}
 var comparisons: Array = []
 var rarity_weights: Dictionary = {}
 var synergies: Array = []
-## Angel investor personas. Pure flavour: they front the free offers.
-var investors: Array = []
-## Ascension Contracts and the qualification thresholds that unlock them.
+## The contract each location is played for. Exactly one per location.
 var ascension_contracts: Array = []
-var ascension_qualification: Dictionary = {}
 var _ascension_contracts_by_id: Dictionary = {}
 ## Permanent awards. Plain dictionaries rather than Resources: nothing reads
 ## them in the hot path, and the gallery wants the raw copy verbatim.
@@ -40,9 +37,7 @@ func reload() -> void:
 	events.clear()
 	operations.clear()
 	synergies.clear()
-	investors.clear()
 	ascension_contracts.clear()
-	ascension_qualification.clear()
 	achievements.clear()
 	_achievements_by_id.clear()
 	_jobs_by_id.clear()
@@ -56,7 +51,6 @@ func reload() -> void:
 	_load_upgrades()
 	_load_events()
 	_load_operations()
-	_load_investors()
 	_load_ascension_contracts()
 	_load_achievements()
 	_load_balance()
@@ -415,34 +409,11 @@ func _validate_content() -> void:
 
 func _load_ascension_contracts() -> void:
 	var data: Dictionary = _load_json_dict("res://content/ascension/contracts.json")
-	ascension_qualification = Dictionary(data.get("qualification", {}))
 	for entry in Array(data.get("contracts", [])):
 		if not entry is Dictionary:
 			continue
 		ascension_contracts.append(entry)
 		_ascension_contracts_by_id[str(entry.get("id", ""))] = entry
-
-
-func _load_investors() -> void:
-	for entry in _load_json_array("res://content/meta/investors.json"):
-		if entry is Dictionary:
-			investors.append(entry)
-
-
-## One investor per offer, without repeats inside a round: the joke lands better
-## when three different people are each certain they are helping.
-func draw_investors(rng: DeterministicRng, count: int) -> Array:
-	if investors.is_empty():
-		return []
-	var pool: Array = investors.duplicate()
-	var picked: Array = []
-	while picked.size() < count:
-		if pool.is_empty():
-			pool = investors.duplicate()
-		var index: int = rng.next_int_range(0, pool.size() - 1)
-		picked.append(pool[index].duplicate(true))
-		pool.remove_at(index)
-	return picked
 
 
 func _load_json_array(path: String) -> Array:

@@ -15,9 +15,9 @@ enum Phase {
 	RUN_END,
 }
 
-## Rounds in the year. Reaching the end of it does not end the run: an
-## Ascension Contract does. Past this the run goes into overtime under
-## escalating bills until one is completed.
+## Rounds in the year. The location's contract is the win condition and this is
+## its deadline: finishing the contract wins the run, and reaching the end of
+## the year without it ends the run. There is no overtime.
 const ROUNDS_PER_RUN := 12
 
 ## Stands in for "this layout never delivers" when scoring pipelines.
@@ -165,7 +165,11 @@ func reset_run(p_seed: int = 0) -> void:
 	# Permanent unlocks land before the board is sized, so an unlocked slot is
 	# there to be filled rather than turning up a round late.
 	MetaProgress.apply_to_run(run_state)
+	_install_carried_rig()
 	_board_system.ensure_board(run_state, ContentDatabase)
+	# The location's contract is the run's win condition, not something taken on
+	# part-way through, so it is live before the first prompt is spent.
+	_ascension_system.activate(run_state, ContentDatabase)
 	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
 
 
@@ -185,7 +189,56 @@ func apply_run_location(state: RunState, location_id: String) -> void:
 	state.economy["round_rent"] = float(
 		stats.get("rent", state.economy.get("round_rent", 0.0))
 	) * rent_multiplier
+	# The stake the investor puts in when he buys the room. A chapter whose rent
+	# is three times the last one's cannot be started on the last one's float.
+	if stats.has("starting_cash"):
+		state.economy["cash"] = float(stats["starting_cash"]) * float(
+			state.economy.get("cash_multiplier", 1.0)
+		)
+	# A bigger room takes longer to cook. Heat is measured against this rather
+	# than a fixed hundred, so moving up buys headroom as well as floor space.
+	state.compute["heat_capacity"] = float(
+		stats.get("heat_capacity", state.compute.get("heat_capacity", 100.0))
+	)
 	state.compute["cooling"] = ComputeSystem.derive_cooling(state)
+	# The contract belongs to the location, so moving the run moves the contract
+	# with it. Nothing else can set it: a run measured against the chapter it is
+	# no longer in has no way to be won.
+	_ascension_system.activate(state, ContentDatabase)
+
+
+## Racks the kit the last chapter was beaten with. Machines go in before the
+## components that bolt to them, since a component with no host has nowhere to
+## live and would be dropped.
+##
+## Cash, modules and perks are deliberately not carried: the new chapter is a new
+## business in a new room, run on hardware the old one paid for.
+func _install_carried_rig() -> void:
+	var carried: Dictionary = MetaProgress.carried_rig(
+		str(run_state.build.get("dwelling", ""))
+	)
+	var levels: Dictionary = Dictionary(carried.get("upgrades", {}))
+	if levels.is_empty():
+		return
+	var machines: Array = []
+	var parts: Array = []
+	for upgrade_id in levels.keys():
+		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
+		if upgrade == null:
+			continue
+		if upgrade.category == "component":
+			parts.append(upgrade_id)
+		else:
+			machines.append(upgrade_id)
+	var installed: int = 0
+	for upgrade_id in machines + parts:
+		for _copy in range(maxi(1, int(levels[upgrade_id]))):
+			if _upgrade_system.install_carried(
+				run_state, str(upgrade_id), ContentDatabase, effect_resolver
+			):
+				installed += 1
+	if installed > 0:
+		round_log.append("Moved in with %d piece(s) of kit from the last place." % installed)
 
 
 func start_run(p_seed: int = 0) -> void:
@@ -272,13 +325,11 @@ func cost_forecast() -> Dictionary:
 	var cloud_per_prompt: float = float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) * cloud_multiplier
 	var operating_per_prompt: float = power_per_prompt + cloud_per_prompt
 	var operating_so_far: float = float(run_state.economy.get("costs_this_round", 0.0))
-	var overtime_levy: float = float(run_state.economy.get("overtime_levy", 0.0))
-	var fixed_due: float = rent + recurring + cloud_bill + overtime_levy
+	var fixed_due: float = rent + recurring + cloud_bill
 	return {
 		"rent": rent,
 		"recurring": recurring,
 		"cloud_bill": cloud_bill,
-		"overtime_levy": overtime_levy,
 		"power_per_prompt": power_per_prompt,
 		"cloud_per_prompt": cloud_per_prompt,
 		"operating_per_prompt": operating_per_prompt,
@@ -872,14 +923,6 @@ func infrastructure_tier() -> int:
 	return _ascension_system.infrastructure_tier(run_state, ContentDatabase)
 
 
-func ascension_qualification() -> Dictionary:
-	return _ascension_system.qualification(run_state, ContentDatabase)
-
-
-func ascension_eligible_contracts() -> Array:
-	return _ascension_system.eligible_contracts(run_state, ContentDatabase)
-
-
 func ascension_active() -> bool:
 	return _ascension_system.is_active(run_state)
 
@@ -892,27 +935,15 @@ func ascension_progress() -> Dictionary:
 	return _ascension_system.progress(run_state, ContentDatabase)
 
 
-## Where the run stands against the boss of the location it is being played in,
-## for the readouts that have to say so without re-deriving any of the rules.
+## Where the run stands against the contract of the location it is being played
+## in, for the readouts that have to say so without re-deriving any of the rules.
 func ascension_summary() -> Dictionary:
 	return _ascension_system.summary(run_state, ContentDatabase)
 
 
-## The one contract this run is playing for, whether or not it has qualified.
+## The contract this run is being played for.
 func ascension_boss_contract() -> Dictionary:
 	return _ascension_system.location_contract(run_state, ContentDatabase)
-
-
-## Commits the run to one Ascension Contract. From the next prompt on, every
-## batch burned counts toward it, whichever contract happens to be focused.
-func commit_ascension_contract(contract_id: String) -> bool:
-	if phase != Phase.ROUND_PREP and phase != Phase.ANGEL_ROUND:
-		return false
-	if not _ascension_system.commit(run_state, contract_id, ContentDatabase):
-		return false
-	round_log.append("Committed to %s. The Final Burn starts now." % contract_id)
-	_autosave()
-	return true
 
 
 ## The location's boss has cleared: the game is beaten. The run is not thrown away
@@ -936,9 +967,6 @@ func _reach_victory(contract: Dictionary) -> void:
 	if ending_unlock != "":
 		MetaProgress.grant_ending_unlock(ending_unlock)
 	_bank_run_legacy(true)
-	# Overtime was the pressure to reach this moment, and it has been reached.
-	run_state.flags["overtime"] = false
-	run_state.economy["overtime_levy"] = 0.0
 	_settling_victory = true
 	_end_session("ascended")
 	_settling_victory = false
@@ -957,6 +985,11 @@ func _reach_victory(contract: Dictionary) -> void:
 ## Beating the boss retires the chapter and opens the next one. Guarded once-only
 ## because `_end_run`'s "ascended" branch settles the same victory from the other
 ## direction, and a location must not be completed twice.
+##
+## The newly opened location is also selected here, at the moment it is earned,
+## rather than by whichever button happens to start the next run: every path to
+## a new run — the verdict screen, the title screen, a fresh boot — must land in
+## the next chapter, not back in the one just beaten.
 func _complete_run_location() -> void:
 	if bool(run_state.flags.get("location_completed", false)):
 		return
@@ -964,8 +997,19 @@ func _complete_run_location() -> void:
 	var location: String = str(run_state.build.get("dwelling", ""))
 	if location == "":
 		return
-	run_state.flags["next_location"] = MetaProgress.next_location_after(location)
+	var next_location: String = MetaProgress.next_location_after(location)
+	run_state.flags["next_location"] = next_location
 	MetaProgress.complete_location(location)
+	# The rig moves with the player. Without this the next chapter starts on a
+	# second-hand laptop against a target ten times the one just cleared, which
+	# is not a difficulty curve.
+	MetaProgress.carry_rig_forward(
+		next_location,
+		Array(run_state.build.get("hardware", [])),
+		UpgradeSystem.owned_upgrade_levels(run_state, ContentDatabase)
+	)
+	if next_location != "":
+		MetaProgress.select_location(next_location)
 
 
 ## The location this victory opened up, empty if the run was played in the last
@@ -983,8 +1027,14 @@ func is_settling_victory() -> bool:
 ## Carries a won run on rather than starting over. Everything the run owns stays
 ## put; from here the calendar is behind it and the costs climb every round, so
 ## the tail lasts exactly as long as the build can hold it up.
+##
+## Only the last chapter offers this. A mid-campaign win is a level-up — the next
+## location is the continuation, and an endless tail there would just be a bigger
+## bedroom. The tail exists for the run with nowhere further up to go.
 func continue_after_victory() -> bool:
 	if phase != Phase.RUN_END or not bool(run_state.flags.get("victory", false)):
+		return false
+	if next_location_unlocked() != "":
 		return false
 	run_state.flags["post_victory"] = true
 	run_state.flags["victory"] = false
@@ -1442,7 +1492,22 @@ func _build_session_summary(
 		"early_jobs": early_jobs,
 		"early_bonus_pct": early_bonus_total / float(early_jobs) if early_jobs > 0 else 0.0,
 		"stop_reason": reason,
+		"behind_on_contract": _behind_on_contract(),
 	}
+
+
+## Whether the contract is further behind than the year has left to give it. A
+## run three quarters through the calendar with a quarter of the burn done is
+## losing, however well the individual round went, and the debrief says so.
+func _behind_on_contract() -> bool:
+	var progress: Dictionary = ascension_progress()
+	if progress.is_empty():
+		return false
+	var deadline: int = maxi(1, int(progress.get("deadline_round", ROUNDS_PER_RUN)))
+	var elapsed: float = clampf(
+		float(int(run_state.calendar.get("round", 1))) / float(deadline), 0.0, 1.0
+	)
+	return elapsed >= 0.5 and float(progress.get("burn_ratio", 0.0)) < elapsed * 0.75
 
 
 ## Takes one of the angel's offers. Everything on the table is free, so the only
@@ -1639,14 +1704,9 @@ func _present_angel_offers() -> void:
 	if pending_choices.is_empty():
 		_after_angel_round()
 		return
-	# The persona is stored on the offer rather than picked by the screen, so the
-	# same seed always produces the same pitch and a reload does not recast it.
-	var investors: Array = ContentDatabase.draw_investors(
-		rng.derive("angel_investors"), pending_choices.size()
-	)
-	for index in range(pending_choices.size()):
-		if index < investors.size():
-			pending_choices[index]["investor"] = investors[index]
+	# No persona is attached to the offers any more: there is one investor in the
+	# game and the table is his, so the screen speaks for him rather than casting
+	# a different fictional fund onto every card.
 	run_state.flags["draft_kind"] = DRAFT_ANGEL
 	phase = Phase.ANGEL_ROUND
 
@@ -1689,20 +1749,23 @@ func _end_round() -> void:
 	if _progression_system.check_loss(run_state):
 		_end_run(false)
 		return
-	if int(run_state.calendar["round"]) >= ROUNDS_PER_RUN:
+	if int(run_state.calendar["round"]) >= _contract_deadline_round():
 		if in_post_victory() or MetaProgress.endless_enabled():
 			# Endless keeps going instead of stopping: the bills get harder every
 			# round past the twelfth, so staying alive is the challenge rather
 			# than survival being a foregone conclusion.
 			_escalate_endless_costs()
 		else:
-			# A run ends by completing an Ascension Contract, never by the
-			# calendar running out. Past the twelfth round the year goes into
-			# overtime: the same escalating bills as endless mode, charged until
-			# the player commits to a contract and finishes it — or the business
-			# collapses trying. Ascending ends the run the moment it happens,
-			# mid-round, well before this check is reached.
-			_enter_overtime()
+			# The terms were stated before the first prompt: the contract is done
+			# inside the year or it is not done at all. Completing it ends the run
+			# the moment it happens, mid-round, well before this check is reached.
+			_ascension_system.fail_on_deadline(run_state)
+			run_state.flags["loss_reason"] = "The year ran out with the contract unfinished."
+			round_log.append(
+				"The year is up and the contract is not complete. The investor is done with you."
+			)
+			_end_run(false, "contract_expired")
+			return
 	run_state.calendar["round"] = int(run_state.calendar["round"]) + 1
 	_achievement_system.evaluate_tick(run_state, ContentDatabase)
 	_begin_round()
@@ -1755,62 +1818,21 @@ func _escalate_endless_costs() -> void:
 	run_state.statistics["endless_rounds"] = int(run_state.statistics.get("endless_rounds", 0)) + 1
 
 
-## The twelfth round has closed and no Ascension Contract has been completed, so
-## the year runs on under escalating costs. There is no calendar exit from here:
-## the run ends by finishing a contract, or by the bills finally winning. Kept
-## separate from endless mode so the two can be told apart afterwards, and so a
-## first-time player is told what just happened rather than left to notice.
-## Overtime bites harder than Endless does. Endless is a victory lap the player
-## opted into and wants to last; overtime is a run that has missed its exit, and
-## it has to close itself out in a handful of rounds rather than grind on
-## forever. Contract fees grow about 12% a round, so anything gentler than this
-## is not a deadline at all.
-const OVERTIME_COST_ESCALATION := 1.35
-
-## Share of the last round's earnings the first overtime round takes, growing by
-## the escalation above every round after it. Escalating rent alone cannot end a
-## run: rent starts in the hundreds and a late-game operation earns millions, so
-## a multiplier on the small number never catches the big one and overtime runs
-## forever. Charging against earnings makes the deadline real at any scale —
-## about five rounds before the levy is taking more than the run can make.
-const OVERTIME_LEVY_SHARE := 0.4
-
-func _enter_overtime() -> void:
-	run_state.economy["round_rent"] = float(run_state.economy.get("round_rent", 400.0)) * OVERTIME_COST_ESCALATION
-	run_state.economy["power_base_cost_per_prompt"] = float(
-		run_state.economy.get("power_base_cost_per_prompt", 10.0)
-	) * OVERTIME_COST_ESCALATION
-	var rounds: int = int(run_state.statistics.get("overtime_rounds", 0)) + 1
-	run_state.statistics["overtime_rounds"] = rounds
-	# What the operation earned in the round that just closed, which is the only
-	# honest measure of how big it has become.
-	var income: float = float(run_state.economy.get("income", 0.0))
-	var earned: float = maxf(0.0, income - float(run_state.economy.get("overtime_income_mark", income)))
-	run_state.economy["overtime_income_mark"] = income
-	var base: float = maxf(earned, float(run_state.economy.get("last_round_costs", 0.0)))
-	run_state.economy["overtime_levy"] = base * OVERTIME_LEVY_SHARE * pow(
-		OVERTIME_COST_ESCALATION, float(rounds - 1)
-	)
-	if rounds <= 1:
-		run_state.flags["overtime"] = true
-		round_log.append(
-			"OVERTIME. The year is up and no Ascension Contract is complete. "
-			+ "Everything now costs more every round until one is."
-		)
-	else:
-		round_log.append("Overtime round %d: the bills climb again — %s of it overtime." % [
-			rounds, NumberFormat.format_cash(float(run_state.economy.get("overtime_levy", 0.0))),
-		])
+## The last round the contract can be finished in. A won run carrying on into
+## endless mode is past its deadline by definition, so the calendar length is
+## used there instead.
+func _contract_deadline_round() -> int:
+	var contract: Dictionary = _ascension_system.current_contract(run_state, ContentDatabase)
+	if contract.is_empty():
+		contract = _ascension_system.location_contract(run_state, ContentDatabase)
+	if contract.is_empty():
+		return ROUNDS_PER_RUN
+	return _ascension_system.deadline_round(contract)
 
 
-## Whether the run is past its twelfth round with no contract finished.
-func in_overtime() -> bool:
-	return bool(run_state.flags.get("overtime", false))
-
-
-## Rounds left before the year runs out, or 0 once overtime has started.
+## Rounds left before the contract's deadline, this round included.
 func rounds_remaining() -> int:
-	return maxi(0, ROUNDS_PER_RUN - int(run_state.calendar.get("round", 1)) + 1)
+	return maxi(0, _contract_deadline_round() - int(run_state.calendar.get("round", 1)) + 1)
 
 
 func _after_angel_round() -> void:

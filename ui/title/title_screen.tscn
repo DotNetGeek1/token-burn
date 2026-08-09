@@ -48,41 +48,41 @@ mouse_filter = 1
 [node name="Margin" type="MarginContainer" parent="Layout"]
 layout_mode = 1
 anchors_preset = 15
-anchor_right = 1.0
+anchor_right = 0.4
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 44
-theme_override_constants/margin_top = 56
-theme_override_constants/margin_right = 44
-theme_override_constants/margin_bottom = 40
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 18
 
 [node name="VBox" type="VBoxContainer" parent="Layout/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
 [node name="Wordmark" type="VBoxContainer" parent="Layout/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = -34
+theme_override_constants/separation = -16
 
 [node name="TokenLabel" type="Label" parent="Layout/Margin/VBox/Wordmark"]
 layout_mode = 2
 theme_type_variation = &"DisplayLabel"
-theme_override_constants/outline_size = 18
-theme_override_font_sizes/font_size = 148
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 68
 text = "TOKEN"
 
 [node name="BurnLabel" type="Label" parent="Layout/Margin/VBox/Wordmark"]
 layout_mode = 2
 theme_type_variation = &"DisplayLabel"
-theme_override_constants/outline_size = 18
-theme_override_font_sizes/font_size = 148
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 68
 text = "BURN"
 
 [node name="Tagline" type="Label" parent="Layout/Margin/VBox"]
 layout_mode = 2
 theme_type_variation = &"SectionLabel"
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 15
 text = "ROGUELITE · TYCOON · ENGINE BUILDER"
 autowrap_mode = 2
 
@@ -92,10 +92,10 @@ size_flags_vertical = 3
 
 [node name="Menu" type="VBoxContainer" parent="Layout/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 6
 
 [node name="ContinueButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-custom_minimum_size = Vector2(0, 132)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 theme_type_variation = &"PrimaryButton"
 script = ExtResource("2")
@@ -106,7 +106,7 @@ icon_key = "power"
 sound_cue = "accept"
 
 [node name="NewRunButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-custom_minimum_size = Vector2(0, 116)
+custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 theme_type_variation = &"BoostButton"
 script = ExtResource("2")
@@ -118,26 +118,31 @@ sound_cue = "accept"
 
 [node name="DifficultyRow" type="HBoxContainer" parent="Layout/Margin/VBox/Menu"]
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 8
 
 [node name="NormalButton" type="Button" parent="Layout/Margin/VBox/Menu/DifficultyRow"]
+custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"PrimaryButton"
 script = ExtResource("2")
+compact = true
 accent_key = "action"
 headline = "NORMAL"
 
 [node name="HardButton" type="Button" parent="Layout/Margin/VBox/Menu/DifficultyRow"]
+custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")
+compact = true
 accent_key = "neutral"
 headline = "HARD"
 
 [node name="EndlessButton" type="Button" parent="Layout/Margin/VBox/Menu"]
 visible = false
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")
@@ -146,6 +151,7 @@ headline = "ENDLESS MODE"
 sub_text = "OFF"
 
 [node name="LegacyButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")
@@ -155,6 +161,7 @@ sub_text = "Permanent unlocks and records"
 icon_key = "reputation"
 
 [node name="AchievementsButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")
@@ -165,6 +172,7 @@ icon_key = "quality"
 
 [node name="BurnLabButton" type="Button" parent="Layout/Margin/VBox/Menu"]
 visible = false
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")
@@ -174,17 +182,21 @@ sub_text = "Debug tooling"
 
 [node name="DeleteSaveButton" type="Button" parent="Layout/Margin/VBox/Menu"]
 visible = false
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 theme_type_variation = &"DangerButton"
 script = ExtResource("2")
+compact = true
 accent_key = "danger"
 headline = "DELETE SAVE"
 icon_key = "warning"
 
 [node name="QuitButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 theme_type_variation = &"DangerButton"
 script = ExtResource("2")
+compact = true
 accent_key = "danger"
 headline = "QUIT"
 

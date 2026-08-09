@@ -70,7 +70,7 @@ func _ready() -> void:
 ## behind the thumb instead of a black slab.
 func _mount_scrim() -> void:
 	_scrim = TextureRect.new()
-	_scrim.texture = UiFx.scrim(UiThemeBuilder.color("bay"), 1.0, 0.55, 0.0, 1.0)
+	_scrim.texture = UiFx.scrim(UiThemeBuilder.color("bay"), 1.0, 0.38, 0.0, 1.0)
 	_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_scrim.stretch_mode = TextureRect.STRETCH_SCALE
 	# The gradient is a tall thin strip, and a container that respected its size
@@ -148,8 +148,8 @@ func set_burning(burning: bool) -> void:
 class DeckLamp:
 	extends Control
 
-	const RADIUS := 7.0
-	const LEGEND_SIZE := 22
+	const RADIUS := 5.0
+	const LEGEND_SIZE := 15
 
 	var _label: String = ""
 	var _accent: Color = Color.WHITE
@@ -161,7 +161,7 @@ class DeckLamp:
 		_label = label
 		_accent = accent
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		custom_minimum_size = Vector2(112, 26)
+		custom_minimum_size = Vector2(78, 18)
 
 	func set_lit(on: bool) -> void:
 		_on = on

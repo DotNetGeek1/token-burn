@@ -67,6 +67,68 @@ static func office_stage(stage_index: int) -> Texture2D:
 	return get_texture("office_stages", key)
 
 
+## The desk the whole game is played on. Unlike the old office diorama this is
+## not a picture behind the UI: the HUD, the machine, the props and the side
+## panel are all positioned against regions authored alongside the artwork, so
+## a repainted desk moves the furniture with it.
+##
+## Falls back down the ladder rather than to nothing, so a run that has earned a
+## stage with no art yet still gets a desk.
+static func board_scene_art(stage_index: int) -> Texture2D:
+	_ensure_loaded()
+	var section: Variant = _data.get("board_scene")
+	if not section is Dictionary:
+		return null
+	var art: Variant = Dictionary(section).get("art")
+	if not art is Dictionary:
+		return null
+	for stage in range(clampi(stage_index, 1, 5), 0, -1):
+		var path: String = str(Dictionary(art).get("stage_%02d" % stage, ""))
+		if path.is_empty() or not ResourceLoader.exists(path):
+			continue
+		var loaded: Variant = load(path)
+		if loaded is Texture2D:
+			return loaded
+	return null
+
+
+## Where a named part of the shell sits on the desk, as a fraction of the
+## viewport. Returns an empty rect when the key is unknown, which callers read
+## as "this scene does not place that part" and fall back to their own layout.
+static func board_region(key: String) -> Rect2:
+	return _board_rect("regions", key)
+
+
+## Where a diegetic readout is painted onto the desk: the plan board on the
+## wall, the thermometer, the power meter, the phone.
+static func board_prop(key: String) -> Rect2:
+	return _board_rect("props", key)
+
+
+static func board_prop_keys() -> Array:
+	_ensure_loaded()
+	var section: Variant = _data.get("board_scene")
+	if not section is Dictionary:
+		return []
+	var props: Variant = Dictionary(section).get("props")
+	return Dictionary(props).keys() if props is Dictionary else []
+
+
+static func _board_rect(group: String, key: String) -> Rect2:
+	_ensure_loaded()
+	var section: Variant = _data.get("board_scene")
+	if not section is Dictionary:
+		return Rect2()
+	var group_data: Variant = Dictionary(section).get(group)
+	if not group_data is Dictionary or not Dictionary(group_data).has(key):
+		return Rect2()
+	return _rect_from(Array(Dictionary(group_data)[key]))
+
+
+static func investor_texture(key: String) -> Texture2D:
+	return get_texture("investor", key)
+
+
 ## Burn Board rig art: the workstation the player watches while a batch runs and
 ## the warning beacon that spins up when the rig is about to cook itself.
 static func rig_texture(key: String) -> Texture2D:

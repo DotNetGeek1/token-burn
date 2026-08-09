@@ -12,8 +12,15 @@ func process_prompt(run_state: RunState, subscriptions: Array, effect_resolver: 
 
 	var heat_gain: float = float(run_state.compute.get("power_draw", 0.0)) * gain_factor
 	var cooling: float = float(run_state.compute.get("cooling", 0.0))
-	run_state.compute["heat"] = clampf(float(run_state.compute.get("heat", 0.0)) + heat_gain - cooling * cooling_factor, 0.0, 200.0)
-	var heat_ratio: float = float(run_state.compute["heat"]) / maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
+	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
+	# Capped at twice the room's tolerance rather than a fixed number, so a
+	# location with more headroom does not silently lose it to the clamp.
+	run_state.compute["heat"] = clampf(
+		float(run_state.compute.get("heat", 0.0)) + heat_gain - cooling * cooling_factor,
+		0.0,
+		capacity * 2.0
+	)
+	var heat_ratio: float = float(run_state.compute["heat"]) / capacity
 	if heat_ratio >= throttle_ratio:
 		run_state.add_rate_modifier(throttle_mult, 1, "heat_throttle")
 		messages.append("Heat throttling engaged at %d%%." % int(heat_ratio * 100.0))

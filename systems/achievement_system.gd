@@ -130,7 +130,6 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.peak_token_rate": float(stats.get("peak_token_rate", 0.0)),
 		"run.peak_prompt_tokens": float(stats.get("peak_prompt_tokens", 0.0)),
 		"run.endless_rounds": int(stats.get("endless_rounds", 0)),
-		"run.overtime_rounds": int(stats.get("overtime_rounds", 0)),
 		"run.heat_ratio": float(run_state.compute.get("heat", 0.0)) / heat_capacity,
 		"run.max_heat_ratio": float(stats.get("max_heat_ratio", 0.0)),
 		"run.jobs_accepted": int(stats.get("jobs_accepted", 0)),

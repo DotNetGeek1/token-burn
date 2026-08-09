@@ -47,7 +47,7 @@ layout_mode = 2
 theme_type_variation = &"TitleLabel"
 theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
 theme_override_constants/outline_size = 10
-text = "No contracts queued"
+text = "Desk is idle"
 horizontal_alignment = 1
 
 [node name="StatusBody" type="Label" parent="Bottom/StatusPanel/Margin/StatusBox"]
@@ -56,7 +56,7 @@ theme_type_variation = &"MutedLabel"
 theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
 theme_override_constants/outline_size = 8
 autowrap_mode = 2
-text = "Pick up a contract from the job board to get started."
+text = "Take contracts from the job board. Accepting one opens the burn board."
 horizontal_alignment = 1
 
 [node name="InfoRow" type="HBoxContainer" parent="Bottom/StatusPanel/Margin/StatusBox"]
@@ -134,7 +134,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 4
 
 [node name="ChooseContractButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox"]
-custom_minimum_size = Vector2(0, 112)
+custom_minimum_size = Vector2(0, 96)
 layout_mode = 2
 theme_type_variation = &"PrimaryButton"
 script = ExtResource("3")
@@ -145,40 +145,40 @@ icon_key = "jobs"
 sound_cue = "accept"
 
 [node name="Actions" type="HBoxContainer" parent="Bottom/StatusPanel/Margin/StatusBox"]
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="StartWorkButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox/Actions"]
-custom_minimum_size = Vector2(0, 112)
+custom_minimum_size = Vector2(0, 96)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"PrimaryButton"
 script = ExtResource("3")
 accent_key = "action"
-headline = "START WORK"
+headline = "OPEN BOARD"
+sub_text = "Burn on the deck"
 icon_key = "power"
 sound_cue = "accept"
 
 [node name="BoostButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox/Actions"]
-custom_minimum_size = Vector2(150, 112)
+visible = false
+custom_minimum_size = Vector2(150, 96)
 layout_mode = 2
-tooltip_text = "Arm a boost for the session's first batch: +35% token rate, +12 heat."
 toggle_mode = true
 theme_type_variation = &"BoostButton"
 script = ExtResource("3")
 accent_key = "heat"
 headline = "BOOST"
-sub_text = "+35% / +12 heat"
 icon_key = "power"
 
 [node name="CloudButton" type="Button" parent="Bottom/StatusPanel/Margin/StatusBox/Actions"]
-custom_minimum_size = Vector2(150, 112)
+visible = false
+custom_minimum_size = Vector2(150, 96)
 layout_mode = 2
-tooltip_text = "Arm a cloud burst for the session's first batch: capacity rented for one round."
 toggle_mode = true
 theme_type_variation = &"SecondaryButton"
 script = ExtResource("3")
 accent_key = "compute"
 headline = "CLOUD"
-sub_text = "Rent capacity"
 icon_key = "cloud"

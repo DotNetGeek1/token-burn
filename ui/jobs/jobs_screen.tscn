@@ -21,27 +21,27 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 16
+theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 16
+theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 8
 
 [node name="VBox" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 10
 
 [node name="Header" parent="Margin/VBox" instance=ExtResource("2")]
 layout_mode = 2
 
 [node name="AscendButton" type="Button" parent="Margin/VBox"]
 visible = false
-custom_minimum_size = Vector2(0, 104)
+custom_minimum_size = Vector2(0, 70)
 layout_mode = 2
 theme_type_variation = &"BoostButton"
 script = ExtResource("4")
 accent_key = "perk"
-headline = "ASCENSION CONTRACT"
-sub_text = "The build has qualified"
+headline = "THE CONTRACT"
+sub_text = "Live from round one"
 icon_key = "reputation"
 sound_cue = "accept"
 
@@ -69,7 +69,8 @@ layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="OffersList" type="VBoxContainer" parent="Margin/VBox/Scroll"]
+[node name="OffersList" type="GridContainer" parent="Margin/VBox/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 24
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12

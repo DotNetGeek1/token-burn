@@ -56,7 +56,7 @@ theme_override_constants/separation = 6
 [node name="AscensionTitle" type="Label" parent="Panel/VBox/Strips/StripVBox/AscensionTracker/AscensionMargin/AscensionVBox"]
 layout_mode = 2
 theme_type_variation = &"SectionLabel"
-text = "FINAL BURN"
+text = "THE CONTRACT"
 
 [node name="AscensionBurnBar" parent="Panel/VBox/Strips/StripVBox/AscensionTracker/AscensionMargin/AscensionVBox" instance=ExtResource("2")]
 
@@ -77,13 +77,16 @@ theme_override_constants/separation = 12
 
 [node name="Machine" type="VBoxContainer" parent="Panel/VBox"]
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 0
 alignment = 2
 
 [node name="Rig" parent="Panel/VBox/Machine" instance=ExtResource("3")]
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="Deck" parent="Panel/VBox/Machine" instance=ExtResource("4")]
 layout_mode = 2
+size_flags_horizontal = 3

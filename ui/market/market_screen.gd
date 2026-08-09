@@ -21,6 +21,7 @@ func _ready() -> void:
 	_build_tabs()
 	EventBus.upgrade_purchased.connect(func(_id): refresh())
 	EventBus.run_started.connect(refresh)
+	resized.connect(_on_resized)
 	refresh()
 
 
@@ -43,6 +44,12 @@ func _on_tab_pressed(key: String) -> void:
 	refresh()
 
 
+func _on_resized() -> void:
+	for shelf in upgrades_list.get_children():
+		if shelf is GridContainer:
+			shelf.columns = UiThemeBuilder.tile_columns(size.x)
+
+
 func refresh() -> void:
 	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
 	header.set_context(NumberFormat.format_cash(cash), "money" if cash >= 0.0 else "danger")
@@ -60,8 +67,10 @@ func refresh() -> void:
 		if not shelves.has(key) or shelves[key].is_empty():
 			continue
 		upgrades_list.add_child(_section_label(key))
+		var shelf: GridContainer = _new_shelf()
+		upgrades_list.add_child(shelf)
 		for upgrade in shelves[key]:
-			upgrades_list.add_child(_build_upgrade_card(upgrade, key))
+			_add_tile(shelf, _build_upgrade_card(upgrade, key))
 		shown += shelves[key].size()
 	empty_label.visible = shown == 0
 	UiTransition.stagger(upgrades_list)
@@ -123,8 +132,26 @@ func _build_owned_section() -> void:
 	if inventory.is_empty():
 		return
 	upgrades_list.add_child(_section_label_text("INSTALLED", "hardware"))
+	var shelf: GridContainer = _new_shelf()
+	upgrades_list.add_child(shelf)
 	for row in inventory:
-		upgrades_list.add_child(_build_owned_card(row))
+		_add_tile(shelf, _build_owned_card(row))
+
+
+## A shelf lays its stock out across the counter rather than down it, so the
+## width the slide-over takes is spent on showing more of the range.
+func _new_shelf() -> GridContainer:
+	var shelf := GridContainer.new()
+	shelf.columns = UiThemeBuilder.tile_columns(size.x)
+	shelf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shelf.add_theme_constant_override("h_separation", 12)
+	shelf.add_theme_constant_override("v_separation", 12)
+	return shelf
+
+
+func _add_tile(shelf: GridContainer, card: GameCard) -> void:
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shelf.add_child(card)
 
 
 func _build_owned_card(row: Dictionary) -> GameCard:
@@ -352,14 +379,15 @@ func _show_upgrade_detail(upgrade: UpgradeDefinition, group_key: String, can_buy
 		_detail_sheet.action_confirmed.connect(_buy_upgrade.bind(upgrade.id, null))
 
 
-## The shop is the easiest place to spend rent money by accident, so what is
-## owed and when it lands sits directly under the title.
+## The shop is the easiest place to spend rent money by accident, so what is safe
+## to spend sits directly under the title. The balance itself is on the header and
+## in the HUD, and the bill it is measured against is on the round-end statement,
+## so only the figure neither of those places carries is printed here.
 func _refresh_bills_line() -> void:
 	var outlook: Dictionary = Simulation.bills_outlook()
-	var due: float = float(outlook.get("due", 0.0))
-	var line: String = "%s bills due at the end of this round · safe to spend %s" % [
-		NumberFormat.format_cash(due),
+	var line: String = "Safe to spend %s · %s due at round end" % [
 		NumberFormat.format_cash(float(outlook.get("spendable", 0.0))),
+		NumberFormat.format_cash(float(outlook.get("due", 0.0))),
 	]
 	# Machines are bought against floor space as much as against cash, so the
 	# Hardware counter says how much room is left before anything is priced.

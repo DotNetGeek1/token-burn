@@ -394,6 +394,45 @@ func complete_location(location_id: String) -> void:
 	profile_changed.emit()
 
 
+## The machines and components the player moves into the next location with.
+##
+## A location is a chapter rather than a fresh save, and its contract is priced
+## for a business that has already been running for a year. Arriving with the
+## starter laptop against a target ten times the last one is not a difficulty
+## curve, it is a wall — so the kit comes too. Cash, modules and perks still
+## reset: the new chapter is a new business in a new room, run on the hardware
+## the old one paid for.
+## Kit is tied to the one location it was moved into. Replaying a chapter already
+## beaten, or starting the campaign again from the bedroom, is a fresh business
+## and gets nothing — only the move the win actually paid for.
+func carried_rig(for_location: String) -> Dictionary:
+	_ensure_loaded()
+	var carried: Dictionary = Dictionary(_profile.get("carried_rig", _default_carried_rig()))
+	if str(carried.get("for_location", "")) != for_location or for_location == "":
+		return _default_carried_rig()
+	return {
+		"for_location": for_location,
+		"hardware": Array(carried.get("hardware", [])).duplicate(),
+		"upgrades": Dictionary(carried.get("upgrades", {})).duplicate(),
+	}
+
+
+## Records the rig a completed location was beaten with, against the location it
+## is moving into. `upgrade_levels` is a level count per upgrade id rather than a
+## flat list, because a repeatable component bought four times has to arrive as
+## four.
+func carry_rig_forward(for_location: String, hardware: Array, upgrade_levels: Dictionary) -> void:
+	if not enabled:
+		return
+	_ensure_loaded()
+	_profile["carried_rig"] = {
+		"for_location": for_location,
+		"hardware": hardware.duplicate(),
+		"upgrades": upgrade_levels.duplicate(),
+	}
+	_save()
+
+
 ## The rung above this one, or "" at the top of the campaign.
 func next_location_after(location_id: String) -> String:
 	var order: Array = location_order()
@@ -648,7 +687,12 @@ func _default_profile() -> Dictionary:
 		"difficulty": "normal",
 		"endless_enabled": false,
 		"locations": _default_locations(),
+		"carried_rig": _default_carried_rig(),
 	}
+
+
+func _default_carried_rig() -> Dictionary:
+	return {"for_location": "", "hardware": [], "upgrades": {}}
 
 
 func _ensure_loaded() -> void:
