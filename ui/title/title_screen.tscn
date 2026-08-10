@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://title_screen"]
+[gd_scene load_steps=4 format=3 uid="uid://title_screen"]
 
 [ext_resource type="Script" path="res://ui/title/title_screen.gd" id="1"]
 [ext_resource type="Script" path="res://ui/common/game_button.gd" id="2"]
+[ext_resource type="Script" path="res://ui/title/title_menu_tile.gd" id="3"]
 
 [node name="TitleScreen" type="Control"]
 layout_mode = 3
@@ -45,59 +46,70 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
 
-[node name="Margin" type="MarginContainer" parent="Layout"]
+[node name="LeftPanel" type="Control" parent="Layout"]
+layout_mode = 1
+anchor_right = 0.54
+anchor_bottom = 1.0
+grow_vertical = 2
+
+[node name="PanelVBox" type="VBoxContainer" parent="Layout/LeftPanel"]
 layout_mode = 1
 anchors_preset = 15
-anchor_right = 0.4
+anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 40
-theme_override_constants/margin_top = 20
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 18
+theme_override_constants/separation = 0
 
-[node name="VBox" type="VBoxContainer" parent="Layout/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="Wordmark" type="VBoxContainer" parent="Layout/Margin/VBox"]
-layout_mode = 2
-theme_override_constants/separation = -16
-
-[node name="TokenLabel" type="Label" parent="Layout/Margin/VBox/Wordmark"]
-layout_mode = 2
-theme_type_variation = &"DisplayLabel"
-theme_override_constants/outline_size = 10
-theme_override_font_sizes/font_size = 68
-text = "TOKEN"
-
-[node name="BurnLabel" type="Label" parent="Layout/Margin/VBox/Wordmark"]
-layout_mode = 2
-theme_type_variation = &"DisplayLabel"
-theme_override_constants/outline_size = 10
-theme_override_font_sizes/font_size = 68
-text = "BURN"
-
-[node name="Tagline" type="Label" parent="Layout/Margin/VBox"]
-layout_mode = 2
-theme_type_variation = &"SectionLabel"
-theme_override_font_sizes/font_size = 15
-text = "ROGUELITE · TYCOON · ENGINE BUILDER"
-autowrap_mode = 2
-
-[node name="Spacer" type="Control" parent="Layout/Margin/VBox"]
+[node name="TopSpacer" type="Control" parent="Layout/LeftPanel/PanelVBox"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Menu" type="VBoxContainer" parent="Layout/Margin/VBox"]
+[node name="Margin" type="MarginContainer" parent="Layout/LeftPanel/PanelVBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/margin_left = 36
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 0
 
-[node name="ContinueButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-custom_minimum_size = Vector2(0, 56)
+[node name="MenuColumn" type="VBoxContainer" parent="Layout/LeftPanel/PanelVBox/Margin"]
 layout_mode = 2
-theme_type_variation = &"PrimaryButton"
+theme_override_constants/separation = 14
+
+[node name="Wordmark" type="VBoxContainer" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
+layout_mode = 2
+theme_override_constants/separation = -14
+
+[node name="TokenLabel" type="Label" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/Wordmark"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 72
+text = "TOKEN"
+
+[node name="BurnLabel" type="Label" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/Wordmark"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 72
+text = "BURN"
+
+[node name="Tagline" type="Label" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+theme_override_font_sizes/font_size = 14
+text = "ROGUELITE · TYCOON · ENGINE BUILDER"
+
+[node name="PrimaryRow" type="HBoxContainer" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ContinueButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/PrimaryRow"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.65
+allow_wide = true
 script = ExtResource("2")
 accent_key = "action"
 headline = "CONTINUE"
@@ -105,10 +117,11 @@ sub_text = "Resume your run"
 icon_key = "power"
 sound_cue = "accept"
 
-[node name="NewRunButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-custom_minimum_size = Vector2(0, 52)
+[node name="NewRunButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/PrimaryRow"]
+custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
-theme_type_variation = &"BoostButton"
+size_flags_horizontal = 3
+allow_wide = true
 script = ExtResource("2")
 accent_key = "heat"
 headline = "NEW RUN"
@@ -116,92 +129,106 @@ sub_text = "Start again from the bedroom"
 icon_key = "heat"
 sound_cue = "accept"
 
-[node name="DifficultyRow" type="HBoxContainer" parent="Layout/Margin/VBox/Menu"]
+[node name="DifficultyRow" type="HBoxContainer" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 10
 
-[node name="NormalButton" type="Button" parent="Layout/Margin/VBox/Menu/DifficultyRow"]
-custom_minimum_size = Vector2(0, 46)
+[node name="NormalButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/DifficultyRow"]
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"PrimaryButton"
 script = ExtResource("2")
 compact = true
 accent_key = "action"
 headline = "NORMAL"
 
-[node name="HardButton" type="Button" parent="Layout/Margin/VBox/Menu/DifficultyRow"]
-custom_minimum_size = Vector2(0, 46)
+[node name="HardButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/DifficultyRow"]
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"SecondaryButton"
 script = ExtResource("2")
 compact = true
 accent_key = "neutral"
 headline = "HARD"
 
-[node name="EndlessButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-visible = false
-custom_minimum_size = Vector2(0, 48)
+[node name="FeatureGrid" type="GridContainer" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
 layout_mode = 2
-theme_type_variation = &"SecondaryButton"
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+columns = 3
+
+[node name="LegacyButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/FeatureGrid"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("3")
+accent_key = "perk"
+headline = "LEGACY"
+sub_text = "Permanent unlocks and records"
+icon_key = "reputation"
+
+[node name="AchievementsButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/FeatureGrid"]
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("3")
+accent_key = "energy"
+headline = "TROPHY CABINET"
+sub_text = "Achievements and modules"
+icon_key = "quality"
+
+[node name="BurnLabButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/FeatureGrid"]
+visible = false
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("3")
+accent_key = "lab"
+headline = "BURN LAB"
+sub_text = "Debug tooling"
+icon_key = "local"
+
+[node name="EndlessButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
+visible = false
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
 script = ExtResource("2")
+compact = true
 accent_key = "perk"
 headline = "ENDLESS MODE"
 sub_text = "OFF"
 
-[node name="LegacyButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-custom_minimum_size = Vector2(0, 48)
+[node name="UtilityRow" type="HBoxContainer" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
 layout_mode = 2
-theme_type_variation = &"SecondaryButton"
-script = ExtResource("2")
-accent_key = "perk"
-headline = "THE LEGACY"
-sub_text = "Permanent unlocks and records"
-icon_key = "reputation"
+theme_override_constants/separation = 10
 
-[node name="AchievementsButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-theme_type_variation = &"SecondaryButton"
-script = ExtResource("2")
-accent_key = "energy"
-headline = "THE TROPHY CABINET"
-sub_text = "Achievements and the modules they unlock"
-icon_key = "quality"
-
-[node name="BurnLabButton" type="Button" parent="Layout/Margin/VBox/Menu"]
+[node name="DeleteSaveButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/UtilityRow"]
 visible = false
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-theme_type_variation = &"SecondaryButton"
-script = ExtResource("2")
-accent_key = "neutral"
-headline = "BURN LAB"
-sub_text = "Debug tooling"
-
-[node name="DeleteSaveButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-visible = false
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-theme_type_variation = &"DangerButton"
+size_flags_horizontal = 3
 script = ExtResource("2")
 compact = true
 accent_key = "danger"
 headline = "DELETE SAVE"
 icon_key = "warning"
 
-[node name="QuitButton" type="Button" parent="Layout/Margin/VBox/Menu"]
-custom_minimum_size = Vector2(0, 40)
+[node name="QuitButton" type="Button" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn/UtilityRow"]
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-theme_type_variation = &"DangerButton"
+size_flags_horizontal = 3
 script = ExtResource("2")
 compact = true
-accent_key = "danger"
+accent_key = "neutral"
 headline = "QUIT"
+icon_key = "power"
 
-[node name="VersionLabel" type="Label" parent="Layout/Margin/VBox"]
+[node name="VersionLabel" type="Label" parent="Layout/LeftPanel/PanelVBox/Margin/MenuColumn"]
 layout_mode = 2
 theme_type_variation = &"MutedLabel"
+theme_override_font_sizes/font_size = 12
 text = "v0.1.0 · Early Access"
-horizontal_alignment = 1
+
+[node name="BottomSpacer" type="Control" parent="Layout/LeftPanel/PanelVBox"]
+layout_mode = 2
+size_flags_vertical = 3

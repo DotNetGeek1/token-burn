@@ -54,7 +54,7 @@ func _build(text: String, accent: Color, icon: Texture2D, filled: bool) -> void:
 	var label := Label.new()
 	label.text = text.to_upper()
 	label.add_theme_font_size_override("font_size", UiThemeBuilder.FONT_SMALL)
-	label.add_theme_color_override("font_color", accent.lightened(0.4))
+	label.add_theme_color_override("font_color", accent.lightened(0.3))
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	# Only long chips wrap: a short one keeps sizing to its text exactly, which is
 	# what makes a row of them read as tags rather than as boxes on a grid.

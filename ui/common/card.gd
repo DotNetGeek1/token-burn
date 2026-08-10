@@ -14,6 +14,7 @@ signal body_pressed
 var _button_connected: bool = false
 var _panel_connected: bool = false
 var _disabled: bool = false
+var _rail: Color = Color.TRANSPARENT
 var _tap := TapGesture.new()
 
 
@@ -50,7 +51,9 @@ func setup(
 
 	add_theme_stylebox_override("panel", UiThemeBuilder.card_style(accent_key))
 	if accent_key != "":
-		footer_label.add_theme_color_override("font_color", _accent_color(accent_key))
+		var accent: Color = _accent_color(accent_key)
+		footer_label.add_theme_color_override("font_color", accent)
+		_light_rail(accent)
 
 	if not _button_connected:
 		action_button.pressed.connect(func(): if not _disabled: pressed.emit())
@@ -75,7 +78,23 @@ func set_action_style(
 ## Colour identity for a data-driven category (job sector, upgrade group).
 func set_accent(accent: Color) -> void:
 	add_theme_stylebox_override("panel", UiThemeBuilder.card_style_accent(accent))
-	($Margin/VBox/HeaderRow/Icon as TextureRect).modulate = accent
+	($Margin/VBox/HeaderRow/Icon as TextureRect).modulate = accent.lightened(0.15)
+	_light_rail(accent)
+
+
+## The card's one lit edge. Painted rather than added as a child, because a
+## `PanelContainer` stretches its children to its full rect, and it cannot come
+## from the stylebox either: a stylebox has one border colour, so lighting the
+## left border lights all four sides with it.
+func _light_rail(accent: Color) -> void:
+	_rail = accent
+	queue_redraw()
+
+
+func _draw() -> void:
+	if _rail == Color.TRANSPARENT:
+		return
+	draw_rect(Rect2(0.0, 0.0, float(UiThemeBuilder.ACCENT_RAIL), size.y), _rail)
 
 
 ## Small uppercase line above the title: category and client.
@@ -139,7 +158,9 @@ func set_warnings(warnings: Array) -> void:
 
 func set_disabled(disabled: bool) -> void:
 	_disabled = disabled
-	modulate = Color(0.72, 0.72, 0.76, 1.0) if disabled else Color.WHITE
+	# Unpowered rather than washed out: the card keeps its contrast, it just stops
+	# being lit.
+	modulate = Color(0.66, 0.66, 0.66, 1.0) if disabled else Color.WHITE
 	var action_button: GameButton = $Margin/VBox/ActionButton
 	action_button.disabled = disabled
 
@@ -148,8 +169,8 @@ func set_disabled(disabled: bool) -> void:
 func play_press_feedback() -> void:
 	pivot_offset = size / 2.0
 	var tween: Tween = create_tween()
-	tween.tween_property(self, "scale", Vector2(0.96, 0.94), 0.08).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "scale", Vector2.ONE, 0.14).set_ease(Tween.EASE_IN)
+	tween.tween_property(self, "scale", Vector2(0.99, 0.985), 0.07).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "scale", Vector2.ONE, 0.09).set_ease(Tween.EASE_IN)
 
 
 func _build_chip(spec: Variant) -> Control:

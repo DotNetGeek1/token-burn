@@ -164,6 +164,19 @@ func _achievement_row(achievement: Dictionary) -> Control:
 	# does not own. The tap target is a flat button stretched over the top, which
 	# the panel sizes to the same rect for free.
 	var card := PanelContainer.new()
+	# The same card surface the catalogue screens use, so the cabinet reads as one
+	# bank of hardware. An earned award lights its rail; a locked one does not.
+	var accent: String = str(
+		CATEGORY_ACCENTS.get(str(achievement.get("category", "")), "energy")
+	)
+	card.add_theme_stylebox_override(
+		"panel",
+		(
+			UiThemeBuilder.card_style_accent(UiThemeBuilder.semantic(accent))
+			if earned
+			else UiThemeBuilder.card_style()
+		)
+	)
 	var margin := MarginContainer.new()
 	for side in ["left", "right"]:
 		margin.add_theme_constant_override("margin_%s" % side, UiThemeBuilder.SPACE_MD)

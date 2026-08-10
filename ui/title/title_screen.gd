@@ -14,22 +14,24 @@ const EMBER_COUNT := 26
 @onready var key_art: TextureRect = $KeyArt
 @onready var vignette: ColorRect = $Vignette
 @onready var embers: GPUParticles2D = $Embers
-@onready var token_label: Label = $Layout/Margin/VBox/Wordmark/TokenLabel
-@onready var burn_label: Label = $Layout/Margin/VBox/Wordmark/BurnLabel
-@onready var tagline: Label = $Layout/Margin/VBox/Tagline
-@onready var menu: VBoxContainer = $Layout/Margin/VBox/Menu
-@onready var continue_button: GameButton = $Layout/Margin/VBox/Menu/ContinueButton
-@onready var new_run_button: GameButton = $Layout/Margin/VBox/Menu/NewRunButton
-@onready var difficulty_row: HBoxContainer = $Layout/Margin/VBox/Menu/DifficultyRow
-@onready var normal_button: GameButton = $Layout/Margin/VBox/Menu/DifficultyRow/NormalButton
-@onready var hard_button: GameButton = $Layout/Margin/VBox/Menu/DifficultyRow/HardButton
-@onready var endless_button: GameButton = $Layout/Margin/VBox/Menu/EndlessButton
-@onready var legacy_button: GameButton = $Layout/Margin/VBox/Menu/LegacyButton
-@onready var achievements_button: GameButton = $Layout/Margin/VBox/Menu/AchievementsButton
-@onready var burn_lab_button: GameButton = $Layout/Margin/VBox/Menu/BurnLabButton
-@onready var delete_save_button: GameButton = $Layout/Margin/VBox/Menu/DeleteSaveButton
-@onready var quit_button: GameButton = $Layout/Margin/VBox/Menu/QuitButton
-@onready var version_label: Label = $Layout/Margin/VBox/VersionLabel
+@onready var token_label: Label = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/Wordmark/TokenLabel
+@onready var burn_label: Label = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/Wordmark/BurnLabel
+@onready var tagline: Label = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/Tagline
+@onready var primary_row: HBoxContainer = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/PrimaryRow
+@onready var continue_button: GameButton = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/PrimaryRow/ContinueButton
+@onready var new_run_button: GameButton = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/PrimaryRow/NewRunButton
+@onready var difficulty_row: HBoxContainer = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/DifficultyRow
+@onready var normal_button: GameButton = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/DifficultyRow/NormalButton
+@onready var hard_button: GameButton = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/DifficultyRow/HardButton
+@onready var feature_grid: GridContainer = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/FeatureGrid
+@onready var endless_button: GameButton = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/EndlessButton
+@onready var legacy_button: Button = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/FeatureGrid/LegacyButton
+@onready var achievements_button: Button = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/FeatureGrid/AchievementsButton
+@onready var burn_lab_button: Button = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/FeatureGrid/BurnLabButton
+@onready var utility_row: HBoxContainer = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/UtilityRow
+@onready var delete_save_button: GameButton = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/UtilityRow/DeleteSaveButton
+@onready var quit_button: GameButton = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/UtilityRow/QuitButton
+@onready var version_label: Label = $Layout/LeftPanel/PanelVBox/Margin/MenuColumn/VersionLabel
 
 var _detail_sheet: DetailSheet = null
 var _neon_tween: Tween = null
@@ -40,6 +42,7 @@ func _ready() -> void:
 	add_to_group("title_screen")
 	key_art.texture = AssetCatalog.title_art()
 	_style_chrome()
+	_style_menu()
 	_build_embers()
 	_detail_sheet = preload("res://ui/common/detail_sheet.tscn").instantiate()
 	add_child(_detail_sheet)
@@ -57,10 +60,8 @@ func _ready() -> void:
 
 
 func _style_chrome() -> void:
-	# The key art is bright at the top and dark at the bottom, so the menu gets a
-	# gradient scrim rather than a flat wash that would grey out the artwork.
 	var scrim := TextureRect.new()
-	scrim.texture = UiFx.scrim(UiThemeBuilder.color("bg"), 0.12, 0.94)
+	scrim.texture = UiFx.scrim(UiThemeBuilder.color("bg"), 0.08, 0.88)
 	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	scrim.stretch_mode = TextureRect.STRETCH_SCALE
@@ -69,8 +70,6 @@ func _style_chrome() -> void:
 
 	tagline.add_theme_color_override("font_color", UiThemeBuilder.color("grey").lightened(0.35))
 	version_label.add_theme_color_override("font_color", UiThemeBuilder.color("grey"))
-	# "TOKEN" stays cool and "BURN" burns, which is the whole pitch of the game in
-	# two words.
 	token_label.add_theme_color_override("font_color", UiThemeBuilder.color("white"))
 	burn_label.add_theme_color_override("font_color", UiThemeBuilder.color("red"))
 	for label: Label in [token_label, burn_label]:
@@ -81,8 +80,35 @@ func _style_chrome() -> void:
 	_animate_wordmark()
 
 
-## A slow pulse on the burning half of the wordmark, so the title screen is
-## never a still image.
+## Control modules rather than filled app buttons. Only the two run actions are
+## lit by default; everything below them waits for the pointer.
+func _style_menu() -> void:
+	for button in [continue_button, new_run_button]:
+		button.allow_wide = true
+	# CONTINUE is the powered cyan primary, NEW RUN the burn-orange second tier.
+	_style_module(continue_button, "action", true)
+	_style_module(new_run_button, "heat", true)
+	_style_module(normal_button, "action", false)
+	_style_module(hard_button, "neutral", false)
+	_style_module(endless_button, "perk", false)
+	_style_module(delete_save_button, "danger", false)
+	_style_module(quit_button, "neutral", false)
+	# The destructive key only turns threatening once the pointer reaches it.
+	delete_save_button.add_theme_color_override(
+		"font_hover_color", UiThemeBuilder.semantic("danger").lightened(0.75)
+	)
+
+
+func _style_module(button: GameButton, accent_key: String, filled: bool) -> void:
+	button.theme_type_variation = &"SecondaryButton"
+	button.accent_key = accent_key
+	var accent: Color = UiThemeBuilder.semantic(accent_key)
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		button.add_theme_stylebox_override(
+			state, UiThemeBuilder.module_style(accent, state, filled)
+		)
+
+
 func _animate_wordmark() -> void:
 	var red: Color = UiThemeBuilder.color("red")
 	var tween: Tween = create_tween().set_loops()
@@ -95,8 +121,6 @@ func _animate_wordmark() -> void:
 	burn_label.add_theme_color_override("font_outline_color", red.darkened(0.7))
 
 
-## The artwork's off-frame neon sign never sits still, so the vignette that
-## fakes its spill onto the UI shouldn't either.
 func _animate_neon() -> void:
 	var red: Color = UiThemeBuilder.color("red")
 	vignette.color = Color(red.r, red.g, red.b, 0.05)
@@ -149,19 +173,26 @@ func refresh() -> void:
 	var has_save: bool = SaveManager.has_save()
 	continue_button.visible = has_save
 	delete_save_button.visible = has_save
+	new_run_button.size_flags_stretch_ratio = 1.0 if has_save else 1.0
+	continue_button.size_flags_stretch_ratio = 1.65 if has_save else 0.0
 	if has_save:
 		continue_button.set_lines("CONTINUE", _save_summary())
 	burn_lab_button.visible = FeatureFlags.is_enabled("burn_lab_enabled")
+	feature_grid.columns = 3 if burn_lab_button.visible else 2
 	quit_button.visible = not OS.has_feature("web")
 	_refresh_difficulty()
 	_refresh_endless()
-	achievements_button.set_lines(
-		"THE TROPHY CABINET",
-		"%d / %d earned" % [MetaProgress.achievement_count(), ContentDatabase.achievements.size()]
-	)
+	var earned_text := "%d / %d earned" % [
+		MetaProgress.achievement_count(), ContentDatabase.achievements.size(),
+	]
+	if legacy_button.has_method("set_lines"):
+		legacy_button.set_lines("LEGACY", "Permanent unlocks and records")
+	if achievements_button.has_method("set_lines"):
+		achievements_button.set_lines("TROPHY CABINET", earned_text)
+	if burn_lab_button.has_method("set_lines"):
+		burn_lab_button.set_lines("BURN LAB", "Debug tooling")
 
 
-## A save file is only worth resuming if the player can tell where they left off.
 func _save_summary() -> String:
 	var payload: Dictionary = SaveManager.load_run()
 	var run_state: Variant = payload.get("run_state")
@@ -170,8 +201,6 @@ func _save_summary() -> String:
 	var calendar: Variant = Dictionary(run_state).get("calendar")
 	if not calendar is Dictionary:
 		return "Resume your run"
-	# An unmigrated save still calls the round a month and the prompt a round, so
-	# both vocabularies are read here rather than migrating just to draw a label.
 	var data: Dictionary = Dictionary(calendar)
 	if data.has("month"):
 		return "Round %d · Prompt %d" % [
@@ -184,10 +213,17 @@ func _save_summary() -> String:
 	]
 
 
+## A latched hardware selector rather than two buttons: the chosen side shows a
+## lit indicator and a powered surface, the other reads as an open contact.
 func _refresh_difficulty() -> void:
 	var current: String = MetaProgress.difficulty()
-	_set_toggle_state(normal_button, current == "normal", "action")
-	_set_toggle_state(hard_button, current == "hard", "danger")
+	_latch(normal_button, "NORMAL", "action", current == "normal")
+	_latch(hard_button, "HARD", "danger", current == "hard")
+
+
+func _latch(button: GameButton, label: String, accent_key: String, on: bool) -> void:
+	button.headline = "%s  %s" % ["\u25cf" if on else "\u25cb", label]
+	_style_module(button, accent_key if on else "neutral", on)
 
 
 func _refresh_endless() -> void:
@@ -196,16 +232,11 @@ func _refresh_endless() -> void:
 	if not unlocked:
 		return
 	var on: bool = MetaProgress.endless_enabled()
-	endless_button.set_lines("ENDLESS MODE", "ON" if on else "OFF")
-	_set_toggle_state(endless_button, on, "perk")
+	endless_button.set_lines(
+		"%s  ENDLESS MODE" % ("\u25cf" if on else "\u25cb"), "ON" if on else "OFF"
+	)
+	_style_module(endless_button, "perk", on)
 
-
-func _set_toggle_state(button: GameButton, selected: bool, accent: String) -> void:
-	button.theme_type_variation = &"PrimaryButton" if selected else &"SecondaryButton"
-	button.accent_key = accent if selected else "neutral"
-
-
-# --- Actions -----------------------------------------------------------------
 
 func _on_continue() -> void:
 	if Simulation.load_saved_run():
@@ -240,7 +271,6 @@ func _on_burn_lab() -> void:
 	get_tree().call_group("main_ui", "open_burn_lab")
 
 
-## Throwing away a run is the one destructive button on the screen, so it asks.
 func _on_delete_save() -> void:
 	_detail_sheet.show_detail(
 		"Delete your save?",
@@ -265,8 +295,6 @@ func _on_quit() -> void:
 	get_tree().quit()
 
 
-## Hands the screen over to the run with a short fade, so booting into the game
-## does not feel like a hard cut.
 func _leave() -> void:
 	start_requested.emit()
 	var tween: Tween = create_tween()
@@ -278,7 +306,6 @@ func _leave() -> void:
 	)
 
 
-## Reopening from the run's More tab, so the embers and fade have to reset.
 func open() -> void:
 	visible = true
 	modulate.a = 0.0

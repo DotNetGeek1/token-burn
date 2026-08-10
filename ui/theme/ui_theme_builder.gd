@@ -50,10 +50,10 @@ const MIN_TILE_WIDTH := 300.0
 ## Beyond this a tile stops being a tile and starts being a banner.
 const MAX_TILE_COLUMNS := 3
 
-const CORNER_RADIUS := 10
+const CORNER_RADIUS := 6
 # Cards and keys are cut from the machine's case, so they barely round at all.
 const CARD_CORNER := 3
-const KEY_CORNER := 4
+const KEY_CORNER := 3
 # 64 design units on a 1280-wide landscape panel is ~48dp on a handset held
 # sideways, which is the minimum comfortable thumb target.
 const TOUCH_TARGET := 64
@@ -68,11 +68,21 @@ const BODY_FONT_PATH := "res://presentation/fonts/Inter-Variable.ttf"
 const MONO_FONT_PATH := "res://presentation/fonts/ShareTechMono-Regular.ttf"
 const HEADER_SCALE := 1.2
 
-# Depth of the bottom bevel that makes buttons read as physical keycaps.
-const BUTTON_BEVEL := 6
-## Vertical padding inside an action button. Landscape has half the height to
-## spend, so caps are shallower than they were in portrait.
-const BUTTON_PAD_V := 9
+## Buttons are flat control modules cut from the case, not keycaps: a hairline
+## border, an illuminated left rail, and a one-pixel press. The old six-pixel
+## bottom bevel is kept at zero so scenes that still reserve room for it lay out
+## unchanged.
+const BUTTON_BEVEL := 0
+## Vertical padding inside a control module.
+const BUTTON_PAD_V := 12
+## Horizontal padding inside a control module.
+const BUTTON_PAD_H := 16
+## Hairline edge. Colour, not weight, is what carries state.
+const MODULE_BORDER := 1
+## The one industrial motif: an illuminated rail down the left edge.
+const ACCENT_RAIL := 3
+## How far a module sinks under the thumb.
+const PRESS_TRAVEL := 1
 
 ## Colour semantics. Every screen should ask for a role rather than a colour so
 ## green keeps meaning money and cyan keeps meaning "this is the thing to tap".
@@ -87,8 +97,29 @@ const SEMANTIC_ROLES := {
 	"failure": "red",
 	"perk": "purple",
 	"energy": "yellow",
+	"lab": "teal",
 	"neutral": "grey",
 }
+
+## Bright variant used for hover, so an accent can power up without changing hue.
+const BRIGHT_VARIANTS := {
+	"blue": "blue_bright",
+	"orange": "orange_bright",
+	"red": "red_bright",
+	"green": "green_bright",
+}
+
+## Surface tiers, straight from the button style guide.
+const SURFACE := "#0d1013"
+const SURFACE_HOVER := "#14181b"
+const SURFACE_PRESSED := "#090b0d"
+const SURFACE_DISABLED := "#0a0c0e"
+const BORDER_IDLE := "#343a40"
+const BORDER_HOVER := "#596168"
+const BORDER_DISABLED := "#24282c"
+const TEXT_PRIMARY := "#e1e1df"
+const TEXT_SECONDARY := "#7e858a"
+const TEXT_DISABLED := "#4e5459"
 
 
 static var _header_font: Font = null
@@ -172,6 +203,18 @@ static func semantic(role: String) -> Color:
 	return color(str(SEMANTIC_ROLES.get(role, role)))
 
 
+## Powered-up version of a semantic role, for hover and focus.
+static func semantic_bright(role: String) -> Color:
+	var hue: String = str(SEMANTIC_ROLES.get(role, role))
+	if BRIGHT_VARIANTS.has(hue):
+		return color(str(BRIGHT_VARIANTS[hue]))
+	return color(hue).lightened(0.2)
+
+
+static func brighten(accent: Color) -> Color:
+	return accent.lightened(0.22)
+
+
 static func build() -> Theme:
 	var theme: Theme = Theme.new()
 	var panel: Color = color("bg_panel")
@@ -203,10 +246,11 @@ static func build() -> Theme:
 	theme.set_stylebox("normal", "Button", flat_button(panel, blue, false))
 	theme.set_stylebox("hover", "Button", flat_button(panel, blue, true))
 	theme.set_stylebox("pressed", "Button", flat_button_pressed(panel, blue))
-	theme.set_stylebox("disabled", "Button", flat_button(panel, grey, false, 0.45))
-	theme.set_stylebox("focus", "Button", flat_button(panel, blue, false))
-	theme.set_color("font_outline_color", "Button", Color(0, 0, 0, 0.7))
-	theme.set_constant("outline_size", "Button", 4)
+	theme.set_stylebox("disabled", "Button", disabled_button_style())
+	theme.set_stylebox("focus", "Button", module_style(blue, "focus", false))
+	theme.set_color("font_disabled_color", "Button", Color(TEXT_DISABLED))
+	theme.set_color("font_outline_color", "Button", Color(0, 0, 0, 0.6))
+	theme.set_constant("outline_size", "Button", 2)
 
 	theme.set_stylebox("panel", "PanelContainer", panel_style(panel, stroke))
 	theme.set_stylebox("background", "ProgressBar", progress_bg())
@@ -228,8 +272,8 @@ static func build() -> Theme:
 	# catalogue grey these read as disabled rather than secondary.
 	# Kickers and figures are machine output, so they take the terminal face the
 	# rig's own readouts use rather than the poster face used for titles.
-	_add_mono_label_variation(theme, "SectionLabel", grey.lightened(0.3), FONT_SMALL)
-	_add_label_variation(theme, "MutedLabel", grey.lightened(0.45), FONT_MUTED)
+	_add_mono_label_variation(theme, "SectionLabel", Color(TEXT_SECONDARY), FONT_SMALL)
+	_add_label_variation(theme, "MutedLabel", Color(TEXT_SECONDARY), FONT_MUTED)
 	_add_label_variation(theme, "AccentLabel", blue, FONT_BODY)
 	_add_mono_label_variation(theme, "MoneyLabel", green, FONT_BODY)
 	_add_label_variation(theme, "WarningLabel", orange, FONT_MUTED)
@@ -305,158 +349,137 @@ static func _add_button_variation(theme: Theme, variation: String, accent: Color
 	theme.set_stylebox("pressed", variation, pressed_button_style(accent, filled))
 	theme.set_stylebox("disabled", variation, disabled_button_style())
 	theme.set_stylebox("focus", variation, action_button_style(accent, false, filled))
-	theme.set_color("font_color", variation, color("white"))
-	theme.set_color("font_hover_color", variation, accent.lightened(0.45))
-	theme.set_color("font_pressed_color", variation, color("white"))
-	theme.set_color("font_disabled_color", variation, color("grey"))
-	theme.set_color("font_outline_color", variation, Color(0, 0, 0, 0.75))
-	theme.set_constant("outline_size", variation, 4)
+	theme.set_color("font_color", variation, Color(TEXT_PRIMARY))
+	theme.set_color("font_hover_color", variation, Color(TEXT_PRIMARY))
+	theme.set_color("font_pressed_color", variation, Color(TEXT_PRIMARY))
+	theme.set_color("font_disabled_color", variation, Color(TEXT_DISABLED))
+	theme.set_color("font_outline_color", variation, Color(0, 0, 0, 0.6))
+	theme.set_constant("outline_size", variation, 2)
 	theme.set_constant("h_separation", variation, SPACE_MD)
-	theme.set_constant("icon_max_width", variation, 52)
-	theme.set_color("icon_normal_color", variation, Color.WHITE)
-	theme.set_color("icon_disabled_color", variation, Color(1, 1, 1, 0.35))
+	theme.set_constant("icon_max_width", variation, 40)
+	# The icon is where a secondary control shows its semantic colour, since the
+	# surface itself stays hardware dark.
+	theme.set_color("icon_normal_color", variation, accent.lightened(0.15))
+	theme.set_color("icon_hover_color", variation, brighten(accent))
+	theme.set_color("icon_disabled_color", variation, Color(TEXT_DISABLED))
 
 
-## Heavy game action button. Every button in the game is now the same object the
-## burn deck's keys are: a cap cut from the case, squared off, lit by its own
-## legend rather than by a halo around it. The neon bloom and the big clipped
-## corner made these look like an app's call-to-action floating over the art.
-static func action_button_style(accent: Color, bright: bool, filled: bool = true) -> StyleBoxFlat:
+## The one control surface every button in the game is cut from: a dark module
+## with a hairline edge and a 3px illuminated rail down its left side. State is
+## carried by how brightly the rail and the edge are lit, never by flooding the
+## whole control with its accent — 90% dark hardware, 10% illumination.
+##
+## `state` is one of "normal", "hover", "pressed", "focus" or "disabled".
+## `filled` marks the controls high enough in the hierarchy to earn a faint
+## accent wash and a trace of glow behind them.
+static func module_style(
+	accent: Color, state: String = "normal", filled: bool = true
+) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	var base: Color = color("bay").lightened(0.1)
-	var mix: float = 0.32 if filled else 0.12
-	if bright:
-		mix += 0.16
-	style.bg_color = base.lerp(accent, mix)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = BUTTON_BEVEL
-	style.border_color = accent.darkened(0.05 if bright else 0.22)
+	var surface: Color = Color(SURFACE)
+	# A stylebox carries one border colour for all four edges, so the rail and the
+	# hairline are the same hue and the rail reads only through its extra width.
+	# Filled modules light that hue; unfilled ones let it fall back to hardware
+	# grey until the pointer arrives.
+	var edge: Color = accent.darkened(0.32) if filled else Color(BORDER_IDLE)
+	# A filled module tints its surface toward the accent just enough to read as
+	# powered from across the screen.
+	var wash: float = 0.07 if filled else 0.0
+	match state:
+		"hover":
+			surface = Color(SURFACE_HOVER)
+			edge = brighten(accent)
+			wash += 0.05
+		"pressed":
+			surface = Color(SURFACE_PRESSED)
+			edge = accent.darkened(0.35)
+		"focus":
+			edge = accent
+		"disabled":
+			surface = Color(SURFACE_DISABLED)
+			edge = Color(BORDER_DISABLED)
+			wash = 0.0
+	style.bg_color = surface.lerp(accent, wash)
+	style.border_width_top = MODULE_BORDER
+	style.border_width_right = MODULE_BORDER
+	style.border_width_bottom = MODULE_BORDER
+	style.border_width_left = ACCENT_RAIL
+	style.border_color = edge
 	style.set_corner_radius_all(KEY_CORNER)
-	style.content_margin_left = SPACE_LG
-	style.content_margin_right = SPACE_LG
+	style.content_margin_left = BUTTON_PAD_H
+	style.content_margin_right = BUTTON_PAD_H
 	style.content_margin_top = BUTTON_PAD_V
 	style.content_margin_bottom = BUTTON_PAD_V
-	# Just enough spill to look powered, not enough to look like a neon sign.
-	style.shadow_color = Color(accent.r, accent.g, accent.b, 0.2 if bright else 0.1)
-	style.shadow_size = 5 if filled else 3
-	style.shadow_offset = Vector2(0, 2)
+	if state == "pressed":
+		style.content_margin_top = BUTTON_PAD_V + PRESS_TRAVEL
+		style.content_margin_bottom = BUTTON_PAD_V - PRESS_TRAVEL
+	# Restrained spill, 5-12% opacity, only on the controls that matter.
+	if filled and state != "disabled" and state != "pressed":
+		style.shadow_color = Color(
+			accent.r, accent.g, accent.b, 0.12 if state == "hover" else 0.07
+		)
+		style.shadow_size = 4
+		style.shadow_offset = Vector2.ZERO
 	return style
 
 
-## Keycap on the burn board. The app-wide action style carries an accent glow and a
-## big clipped corner, which reads as a floating call to action; a key on a machine
-## is a small-radius cap cut from the case, lit only by its own legend. Same bottom
-## bevel, so the press travel is unchanged.
-##
-## `state` is one of "normal", "hover", "pressed" or "disabled".
+## Named after the rail colour rather than the border, for controls that want the
+## rail lit while the surrounding edge stays neutral hardware grey.
+static func rail_style(accent: Color, state: String = "normal") -> StyleBoxFlat:
+	return module_style(accent, state, false)
+
+
+## App-wide action button. Kept as a thin wrapper so the many call sites that
+## already ask for it need no change.
+static func action_button_style(accent: Color, bright: bool, filled: bool = true) -> StyleBoxFlat:
+	return module_style(accent, "hover" if bright else "normal", filled)
+
+
+## Burn-board keys are the same control module as every other button; only their
+## padding is tighter, because a deck packs a lot of them into one plate.
 static func deck_key_style(
 	accent: Color, filled: bool = true, state: String = "normal"
 ) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	# Mixed from the deck plate rather than from the panel colour, so a cap looks
-	# cut from the same case as the board it is mounted in.
-	var base: Color = color("bay").lightened(0.14)
-	var mix: float = 0.32 if filled else 0.12
-	var edge: Color = accent.darkened(0.15)
-	match state:
-		"hover":
-			mix += 0.14
-			edge = accent
-		"pressed":
-			mix += 0.2
-			edge = accent.darkened(0.3)
-		"disabled":
-			mix = 0.02
-			edge = color("stroke_dim")
-	style.bg_color = base.lerp(accent, mix)
-	style.border_width_left = 2
-	style.border_width_right = 2
-	style.border_width_top = 2
-	style.border_width_bottom = BUTTON_BEVEL
-	style.border_color = edge
-	style.set_corner_radius_all(6)
-	style.content_margin_left = SPACE_SM
+	var style: StyleBoxFlat = module_style(accent, state, filled)
+	style.content_margin_left = SPACE_MD
 	style.content_margin_right = SPACE_SM
-	style.content_margin_top = 7
-	style.content_margin_bottom = 7
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
 	if state == "pressed":
-		# The cap is driven into the tray: the bevel moves to the top edge and the
-		# content goes down with it.
-		style.border_width_top = BUTTON_BEVEL
-		style.border_width_bottom = 2
-		style.content_margin_top = 7 + BUTTON_BEVEL - 2
-		style.content_margin_bottom = 7 - (BUTTON_BEVEL - 2)
+		style.content_margin_top = 8 + PRESS_TRAVEL
+		style.content_margin_bottom = 8 - PRESS_TRAVEL
 	return style
 
 
-## Pressed state loses the bevel and pushes its content down, so the cap looks
-## driven into the board under the thumb.
 static func pressed_button_style(accent: Color, filled: bool = true) -> StyleBoxFlat:
-	var style: StyleBoxFlat = action_button_style(accent, true, filled)
-	style.border_width_bottom = 3
-	style.border_width_top = BUTTON_BEVEL
-	style.border_color = accent.darkened(0.25)
-	style.bg_color = style.bg_color.darkened(0.12)
-	style.content_margin_top = BUTTON_PAD_V + BUTTON_BEVEL - 3
-	style.content_margin_bottom = BUTTON_PAD_V - (BUTTON_BEVEL - 3)
-	style.shadow_size = 0
-	return style
+	return module_style(accent, "pressed", filled)
 
 
 static func disabled_button_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	var base: Color = color("bg")
-	style.bg_color = Color(base.r, base.g, base.b, 0.55)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 4
-	style.border_color = color("stroke_dim")
-	style.set_corner_radius_all(KEY_CORNER)
-	style.content_margin_left = SPACE_LG
-	style.content_margin_right = SPACE_LG
-	style.content_margin_top = BUTTON_PAD_V
-	style.content_margin_bottom = BUTTON_PAD_V
+	return module_style(Color(BORDER_DISABLED), "disabled", false)
+
+
+static func flat_button(_bg: Color, border: Color, bright: bool, alpha: float = 1.0) -> StyleBoxFlat:
+	var style: StyleBoxFlat = module_style(border, "hover" if bright else "normal", false)
+	if alpha < 1.0:
+		style.bg_color = Color(style.bg_color.r, style.bg_color.g, style.bg_color.b, alpha)
 	return style
 
 
-static func flat_button(bg: Color, border: Color, bright: bool, alpha: float = 1.0) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(bg.r, bg.g, bg.b, alpha)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 5
-	style.border_color = border if bright else border.darkened(0.35)
-	style.set_corner_radius_all(KEY_CORNER)
-	style.content_margin_left = 11
-	style.content_margin_right = 11
-	style.content_margin_top = 7
-	style.content_margin_bottom = 7
-	return style
-
-
-static func flat_button_pressed(bg: Color, border: Color) -> StyleBoxFlat:
-	var style: StyleBoxFlat = flat_button(bg, border, true)
-	style.border_width_bottom = 2
-	style.border_width_top = 5
-	style.content_margin_top = 10
-	style.content_margin_bottom = 4
-	return style
+static func flat_button_pressed(_bg: Color, border: Color) -> StyleBoxFlat:
+	return module_style(border, "pressed", false)
 
 
 ## Tier 1 surface: large translucent game panel floating over the diorama.
 static func panel_style(bg: Color, border: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(bg.r, bg.g, bg.b, 0.9)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
+	style.bg_color = Color(bg.r, bg.g, bg.b, 0.94)
+	style.border_width_left = MODULE_BORDER
+	style.border_width_top = MODULE_BORDER
+	style.border_width_right = MODULE_BORDER
+	style.border_width_bottom = MODULE_BORDER
 	style.border_color = border
-	style.set_corner_radius_all(CORNER_RADIUS)
+	style.set_corner_radius_all(CARD_CORNER)
 	return style
 
 
@@ -478,34 +501,49 @@ static func info_strip_style() -> StyleBoxFlat:
 ## 20px rounding and coloured lift read as a phone app pasted over the art.
 static func card_style(accent_key: String = "") -> StyleBox:
 	var style := StyleBoxFlat.new()
-	var base: Color = color("bay").lerp(color("bg_panel"), 0.35)
-	style.bg_color = Color(base.r, base.g, base.b, 0.96)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 3
-	style.border_color = color("stroke_dim").lightened(0.16)
+	style.bg_color = Color(SURFACE)
+	style.border_width_left = MODULE_BORDER
+	style.border_width_top = MODULE_BORDER
+	style.border_width_right = MODULE_BORDER
+	style.border_width_bottom = MODULE_BORDER
+	style.border_color = Color(BORDER_IDLE)
 	style.set_corner_radius_all(CARD_CORNER)
-	style.shadow_color = Color(0, 0, 0, 0.5)
-	style.shadow_size = 5
+	style.shadow_color = Color(0, 0, 0, 0.45)
+	style.shadow_size = 4
 	style.shadow_offset = Vector2(0, 2)
 	if accent_key != "":
 		var accent: Color = AssetCatalog.rarity_color(accent_key) if _is_rarity(accent_key) else color(accent_key)
-		style.border_width_left = 5
-		style.border_color = accent.darkened(0.25)
-		style.bg_color = base.lerp(accent, 0.05)
+		return _apply_card_rail(style, accent)
 	return style
 
 
 ## Same card surface but given an explicit colour, for job sectors and other
 ## data-driven accents that are not palette keys.
 static func card_style_accent(accent: Color) -> StyleBoxFlat:
-	var style: StyleBoxFlat = card_style() as StyleBoxFlat
-	var base: Color = color("bay").lerp(color("bg_panel"), 0.35)
-	style.border_width_left = 5
-	style.border_color = accent.darkened(0.25)
-	style.bg_color = base.lerp(accent, 0.05)
+	return _apply_card_rail(card_style() as StyleBoxFlat, accent)
+
+
+## A card's outline stays neutral hardware grey; its category colour arrives as a
+## rail down the left edge, drawn by `GameCard` as its own node because a
+## stylebox carries only one border colour and lighting all four sides turned a
+## grid of cards into a paint chart.
+static func _apply_card_rail(style: StyleBoxFlat, accent: Color) -> StyleBoxFlat:
+	style.border_width_left = ACCENT_RAIL
+	style.border_color = Color(BORDER_IDLE)
+	style.bg_color = Color(SURFACE).lerp(accent, 0.03)
 	return style
+
+
+## The illuminated left rail, as a node, for surfaces that want it lit brighter
+## than their own border.
+static func build_accent_rail(accent: Color) -> ColorRect:
+	var rail := ColorRect.new()
+	rail.name = "AccentRail"
+	rail.color = accent
+	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rail.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	rail.offset_right = float(ACCENT_RAIL)
+	return rail
 
 
 static func _is_rarity(key: String) -> bool:
@@ -515,13 +553,16 @@ static func _is_rarity(key: String) -> bool:
 ## Compact high-contrast chip used for tags, difficulty and warnings.
 static func chip_style(accent: Color, filled: bool = false) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	var base: Color = color("bg")
-	style.bg_color = base.lerp(accent, 0.3 if filled else 0.14)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = accent.darkened(0.05)
+	var base: Color = Color(SURFACE_PRESSED)
+	style.bg_color = base.lerp(accent, 0.11 if filled else 0.05)
+	style.border_width_left = MODULE_BORDER
+	style.border_width_top = MODULE_BORDER
+	style.border_width_right = MODULE_BORDER
+	style.border_width_bottom = MODULE_BORDER
+	# Only a chip that is calling for attention outlines itself in its colour; the
+	# rest sit in hardware grey and let the text carry the meaning, so a card with
+	# six facts on it does not read as six warnings.
+	style.border_color = accent.darkened(0.45) if filled else Color(BORDER_IDLE)
 	style.set_corner_radius_all(2)
 	style.content_margin_left = 10
 	style.content_margin_right = 10
@@ -534,10 +575,10 @@ static func sheet_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	var base: Color = color("bg_panel")
 	style.bg_color = Color(base.r, base.g, base.b, 0.98)
-	style.border_width_top = 2
-	style.border_color = color("stroke_dim").lightened(0.1)
-	style.corner_radius_top_left = 16
-	style.corner_radius_top_right = 16
+	style.border_width_top = MODULE_BORDER
+	style.border_color = color("stroke_dim")
+	style.corner_radius_top_left = CARD_CORNER
+	style.corner_radius_top_right = CARD_CORNER
 	return style
 
 
@@ -576,10 +617,10 @@ static func docket_ink(weight: String = "body") -> Color:
 
 static func nav_bar_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	var base: Color = color("bg").darkened(0.2)
-	style.bg_color = Color(base.r, base.g, base.b, 0.92)
-	style.border_width_top = 2
-	style.border_color = color("stroke_dim").lightened(0.15)
+	var base: Color = Color(SURFACE_PRESSED)
+	style.bg_color = Color(base.r, base.g, base.b, 0.94)
+	style.border_width_top = MODULE_BORDER
+	style.border_color = color("stroke_dim")
 	return style
 
 
@@ -589,9 +630,9 @@ static func nav_tab_style(active: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	var accent: Color = semantic("action")
 	if active:
-		var base: Color = color("bg_panel")
-		style.bg_color = base.lerp(accent, 0.22)
-		style.border_width_top = 5
+		var base: Color = Color(SURFACE_HOVER)
+		style.bg_color = base.lerp(accent, 0.08)
+		style.border_width_top = 2
 		style.border_color = accent
 	else:
 		style.bg_color = Color(0, 0, 0, 0)
@@ -610,14 +651,14 @@ static func progress_bg() -> StyleBoxFlat:
 	style.border_width_right = 1
 	style.border_width_bottom = 1
 	style.border_color = color("stroke_dim")
-	style.set_corner_radius_all(8)
+	style.set_corner_radius_all(2)
 	return style
 
 
 static func progress_fill(fill_color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill_color
-	style.set_corner_radius_all(7)
+	style.set_corner_radius_all(1)
 	return style
 
 

@@ -101,7 +101,7 @@ func _face_style() -> StyleBoxFlat:
 	style.border_width_right = 1
 	style.border_width_bottom = 1
 	style.border_color = UiThemeBuilder.color("stroke_dim")
-	style.set_corner_radius_all(4)
+	style.set_corner_radius_all(UiThemeBuilder.CARD_CORNER)
 	return style
 
 

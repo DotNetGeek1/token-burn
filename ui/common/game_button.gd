@@ -13,16 +13,20 @@ extends Button
 ## lines can be styled independently. That means the stylebox content margins no
 ## longer move the label on press, so the press dip is applied here instead.
 
-const PRESS_DIP := 4.0
-const ICON_SIZE := 34.0
+const PRESS_DIP := 1.0
+const ICON_SIZE := 24.0
 ## Function-row proportions: enough to read a legend, small enough that the keys
 ## which matter keep their rank on the deck. The height still bottoms out at the
 ## ordinary thumb target — ranking keys by size must not produce a key that is
 ## awkward to hit.
-const COMPACT_ICON_SIZE := 24.0
+const COMPACT_ICON_SIZE := 22.0
 ## Widest a button may demand from its row on the strength of its own text. The
 ## side panel is narrower than any label is long, so beyond this the text yields.
+## Title-screen keys opt out via `allow_wide`.
 const MAX_AUTO_WIDTH := 176.0
+
+## Title and other full-width menus skip the side-panel width cap.
+@export var allow_wide: bool = false
 
 ## Palette or semantic key used to tint the icon and the consequence line.
 @export var accent_key: String = "action":
@@ -67,6 +71,7 @@ const MAX_AUTO_WIDTH := 176.0
 		compact = value
 		_apply_compact()
 
+var _rail: ColorRect = null
 var _content: MarginContainer = null
 var _row: HBoxContainer = null
 var _icon_rect: TextureRect = null
@@ -100,6 +105,12 @@ func _ready() -> void:
 func _build() -> void:
 	if _content != null:
 		return
+	# The one industrial motif: an illuminated rail down the left edge. It is a
+	# node rather than part of the stylebox because a stylebox has a single border
+	# colour, so a lit left border would light all four sides with it.
+	_rail = UiThemeBuilder.build_accent_rail(UiThemeBuilder.semantic(accent_key))
+	add_child(_rail, false, Node.INTERNAL_MODE_FRONT)
+
 	_content = MarginContainer.new()
 	_content.name = "Content"
 	_content.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -108,7 +119,6 @@ func _build() -> void:
 
 	_row = HBoxContainer.new()
 	_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_content.add_child(_row)
 
 	_icon_rect = TextureRect.new()
@@ -130,7 +140,6 @@ func _build() -> void:
 
 	_headline_label = Label.new()
 	_headline_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_headline_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# A keycap is sized by the layout, not by its legend. Without this the label
 	# reports its full single-line width as a minimum, a row of keys sums those
 	# minimums past the viewport, and the whole screen is clipped at both edges.
@@ -138,8 +147,9 @@ func _build() -> void:
 	# it collapses the legend to one letter per line.
 	_headline_label.clip_text = true
 	_headline_label.text = headline
-	_headline_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
-	_headline_label.add_theme_constant_override("outline_size", 6)
+	_headline_label.add_theme_color_override("font_color", Color(UiThemeBuilder.TEXT_PRIMARY))
+	_headline_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	_headline_label.add_theme_constant_override("outline_size", 2)
 	var header: Font = UiThemeBuilder.header_font()
 	if header != null:
 		_headline_label.add_theme_font_override("font", header)
@@ -147,11 +157,10 @@ func _build() -> void:
 
 	_sub_label = Label.new()
 	_sub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_sub_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_sub_label.clip_text = true
-	_sub_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	_sub_label.add_theme_constant_override("outline_size", 5)
+	_sub_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	_sub_label.add_theme_constant_override("outline_size", 2)
 	_sub_label.visible = false
 	stack.add_child(_sub_label)
 
@@ -178,14 +187,27 @@ func _apply_compact() -> void:
 	_sub_label.add_theme_font_size_override(
 		"font_size", UiThemeBuilder.FONT_SMALL - (4 if compact else 2)
 	)
-	var side: int = UiThemeBuilder.SPACE_SM if compact else UiThemeBuilder.SPACE_MD
-	var top: int = 4 if compact else 10
+	# A function-row key is too small to hang a left-aligned legend off, so it
+	# keeps its centred label; everything at menu size reads as a control module
+	# with the content stacked against the accent rail.
+	var align: int = (
+		HORIZONTAL_ALIGNMENT_CENTER if compact else HORIZONTAL_ALIGNMENT_LEFT
+	)
+	_headline_label.horizontal_alignment = align
+	_sub_label.horizontal_alignment = align
+	_row.alignment = (
+		BoxContainer.ALIGNMENT_CENTER if compact else BoxContainer.ALIGNMENT_BEGIN
+	)
+	var side: int = (
+		UiThemeBuilder.SPACE_SM if compact else UiThemeBuilder.BUTTON_PAD_H
+	)
+	var top: int = 4 if compact else UiThemeBuilder.BUTTON_PAD_V
 	_content.add_theme_constant_override("margin_left", side)
 	_content.add_theme_constant_override("margin_right", side)
 	_content.add_theme_constant_override("margin_top", top)
-	_content.add_theme_constant_override("margin_bottom", top + UiThemeBuilder.BUTTON_BEVEL)
+	_content.add_theme_constant_override("margin_bottom", top)
 	_row.add_theme_constant_override(
-		"separation", UiThemeBuilder.SPACE_SM if compact else UiThemeBuilder.SPACE_MD
+		"separation", UiThemeBuilder.SPACE_SM if compact else 10
 	)
 	_sync_minimum_size()
 
@@ -229,8 +251,14 @@ func _apply_accent() -> void:
 	if _icon_rect == null:
 		return
 	var accent: Color = UiThemeBuilder.semantic(accent_key)
-	_icon_rect.modulate = accent.lightened(0.25)
-	_sub_label.add_theme_color_override("font_color", accent.lightened(0.4))
+	if _rail != null:
+		_rail.color = accent
+	_icon_rect.modulate = accent.lightened(0.35)
+	# The icon and the rail carry the accent; the consequence line stays
+	# secondary text so a screen of buttons does not read as a paint chart.
+	_sub_label.add_theme_color_override(
+		"font_color", Color(UiThemeBuilder.TEXT_SECONDARY)
+	)
 
 
 ## `Button` computes its minimum size in C++ from its own text and icon, both of
@@ -242,10 +270,10 @@ func _sync_minimum_size() -> void:
 	var content: Vector2 = _content.get_combined_minimum_size()
 	# Capped so a long headline asks for room it cannot have in the side panel;
 	# the labels clip instead of dragging the whole row past the panel edge.
-	custom_minimum_size = Vector2(
-		minf(maxf(_authored_min_width, content.x), MAX_AUTO_WIDTH),
-		maxf(_authored_min_height, content.y)
-	)
+	var width: float = maxf(_authored_min_width, content.x)
+	if not allow_wide:
+		width = minf(width, MAX_AUTO_WIDTH)
+	custom_minimum_size = Vector2(width, maxf(_authored_min_height, content.y))
 
 
 func _notification(what: int) -> void:
@@ -261,24 +289,16 @@ func _on_button_down() -> void:
 func _on_button_up() -> void:
 	if _content == null:
 		return
-	# Springs back rather than snapping, which is what makes the cap feel like it
-	# has travel.
+	# Snaps back inside the 90ms release window the style guide asks for; the
+	# longer spring read as a floaty app animation rather than a switch.
 	_content.position.y = PRESS_DIP
 	var tween: Tween = create_tween()
-	tween.tween_property(_content, "position:y", 0.0, 0.12).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_content, "position:y", 0.0, 0.09).set_ease(Tween.EASE_OUT)
 
 
 func _on_pressed() -> void:
 	if sound_cue != "":
 		UiSound.play(sound_cue)
-	# A short overshoot on the whole cap, so a tap registers even when the
-	# consequence of it lands a frame later.
-	pivot_offset = size * 0.5
-	scale = Vector2(0.97, 0.97)
-	var tween: Tween = create_tween()
-	tween.tween_property(self, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(
-		Tween.EASE_OUT
-	)
 
 
 ## Godot dims the built-in label for a disabled button, but our content lives in
@@ -286,4 +306,6 @@ func _on_pressed() -> void:
 func _draw() -> void:
 	if _content == null:
 		return
-	_content.modulate.a = 0.4 if disabled else 1.0
+	# Unpowered rather than transparent: dropping the alpha far enough to read as
+	# disabled also dropped the legend below the contrast the text needs.
+	_content.modulate = Color(0.62, 0.62, 0.62) if disabled else Color.WHITE

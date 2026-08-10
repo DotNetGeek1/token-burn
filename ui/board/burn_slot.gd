@@ -166,7 +166,7 @@ func set_combos(combos: Array, parameters: Dictionary = {}) -> void:
 func set_selected(value: bool) -> void:
 	_selected = value
 	if _selected:
-		_apply_style(UiThemeBuilder.semantic("action"), 1.0, 4)
+		_apply_style(UiThemeBuilder.semantic("action"), 1.0, 2)
 
 
 ## Marks the stage the batch is currently passing through.
@@ -190,19 +190,18 @@ func pulse(bugs: int, intensity: float, duration: float) -> void:
 	tween.tween_callback(func() -> void: _packet.visible = false)
 
 
-func _apply_style(border: Color, alpha: float, border_width: int = 2) -> void:
+func _apply_style(border: Color, alpha: float, border_width: int = UiThemeBuilder.MODULE_BORDER) -> void:
 	var style := StyleBoxFlat.new()
-	var base: Color = UiThemeBuilder.color("bg_panel")
-	style.bg_color = Color(base.r, base.g, base.b, 0.9 * alpha)
-	style.border_width_left = border_width
+	var base: Color = Color(UiThemeBuilder.SURFACE)
+	style.bg_color = Color(base.r, base.g, base.b, 0.94 * alpha)
+	# A slot is a socket milled into the plate: the accent runs down its left edge
+	# like every other control, and the rest is a hairline.
+	style.border_width_left = UiThemeBuilder.ACCENT_RAIL
 	style.border_width_top = border_width
 	style.border_width_right = border_width
 	style.border_width_bottom = border_width
 	style.border_color = border
-	style.corner_radius_top_left = 18
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_right = 18
-	style.corner_radius_bottom_left = 4
+	style.set_corner_radius_all(UiThemeBuilder.CARD_CORNER)
 	add_theme_stylebox_override("panel", style)
 
 

@@ -209,8 +209,8 @@ func _side_panel_style() -> StyleBoxFlat:
 	# screens, and at the old 0.93 the desk's own readouts showed through the
 	# job tiles behind it.
 	style.bg_color = Color(base.r, base.g, base.b, 0.99)
-	style.border_width_left = 2
-	style.border_color = UiThemeBuilder.color("stroke_dim").lightened(0.2)
+	style.border_width_left = UiThemeBuilder.MODULE_BORDER
+	style.border_color = UiThemeBuilder.color("stroke_dim")
 	return style
 
 
@@ -224,8 +224,8 @@ func _style_ascension_goal() -> void:
 		"fill", UiThemeBuilder.progress_fill(UiThemeBuilder.semantic("perk"))
 	)
 	for label: Label in [goal_kicker, goal_name, goal_count]:
-		label.add_theme_color_override("font_outline_color", Color(0.02, 0.02, 0.05, 1))
-		label.add_theme_constant_override("outline_size", 6)
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+		label.add_theme_constant_override("outline_size", 2)
 
 
 # --- Desk layout -------------------------------------------------------------
@@ -753,11 +753,19 @@ func _update_nav_highlight() -> void:
 			child.modulate = Color.WHITE
 			child.add_theme_color_override(
 				"icon_normal_color",
-				Color.WHITE if active else Color(0.6, 0.6, 0.68)
+				(
+					UiThemeBuilder.semantic("action")
+					if active
+					else Color(UiThemeBuilder.TEXT_SECONDARY)
+				)
 			)
 			child.add_theme_color_override(
 				"font_color",
-				UiThemeBuilder.color("blue") if active else Color(0.92, 0.92, 0.95)
+				(
+					Color(UiThemeBuilder.TEXT_PRIMARY)
+					if active
+					else Color(UiThemeBuilder.TEXT_SECONDARY)
+				)
 			)
 			child.add_theme_stylebox_override("normal", UiThemeBuilder.nav_tab_style(active))
 			child.add_theme_stylebox_override("hover", UiThemeBuilder.nav_tab_style(active))
