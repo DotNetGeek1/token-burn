@@ -1,96 +1,247 @@
 extends Control
 
-const CARD_SCENE := preload("res://ui/common/card.tscn")
-const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
+## The market as a stock listing on the terminal: two counters selected by number
+## key, the shelves printed as sections of one table, and the pane underneath
+## saying what a line does and what is stopping it being bought.
+##
+## Everything the card grid used to show is still here — the same shelves, the
+## same blockers, the same purchase and sale calls — but the player reads down a
+## price list instead of across a shop front.
 
-@onready var header: ScreenHeader = $Margin/VBox/Header
-@onready var tab_row: HBoxContainer = $Margin/VBox/TabRow
-@onready var empty_label: Label = $Margin/VBox/EmptyLabel
-@onready var upgrades_list: VBoxContainer = $Margin/VBox/Scroll/UpgradesList
+@onready var frame: ConsoleFrame = $Margin/Frame
 
-var _detail_sheet: DetailSheet = null
+var _tab_row: HBoxContainer = null
+var _tabs: Dictionary = {}
+var _bills_line: Label = null
+var _table: ConsoleTable = null
+var _detail: ConsoleDetail = null
 var _active_tab: String = "hardware"
-var _tab_buttons: Dictionary = {}
+var _selected: String = ""
+var _rows: Dictionary = {}
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
-	header.setup("Market")
-	_detail_sheet = DETAIL_SHEET.instantiate()
-	add_child(_detail_sheet)
-	_build_tabs()
+	frame.setup("Market")
+	_build_console()
 	EventBus.upgrade_purchased.connect(func(_id): refresh())
 	EventBus.run_started.connect(refresh)
-	resized.connect(_on_resized)
 	refresh()
 
 
-func _build_tabs() -> void:
+func _build_console() -> void:
+	var content: VBoxContainer = frame.content()
+
+	_tab_row = HBoxContainer.new()
+	_tab_row.add_theme_constant_override("separation", 6)
+	content.add_child(_tab_row)
+	var index: int = 1
 	for tab in UpgradePresentation.TABS:
 		var key: String = str(tab["key"])
-		var button := GameButton.new()
-		button.compact = true
+		var button := ConsoleMenuRow.new()
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.index_label = str(index)
+		button.headline = str(tab["label"])
 		button.pressed.connect(_on_tab_pressed.bind(key))
-		tab_row.add_child(button)
-		button.set_lines(str(tab["label"]))
-		_tab_buttons[key] = button
+		_tab_row.add_child(button)
+		button.set_metrics(ConsoleStyle.FONT_SMALL, ConsoleTable.ROW_HEIGHT, ConsoleTable.PAD_H)
+		_tabs[key] = button
+		index += 1
+
+	_bills_line = ConsoleStyle.paragraph("", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
+	content.add_child(_bills_line)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+
+	_table = ConsoleTable.new()
+	_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_table.row_selected.connect(_on_row_selected)
+	scroll.add_child(_table)
+	_table.set_columns([
+		{"label": "item", "weight": 2.0},
+		{"label": "type", "weight": 1.0},
+		{"label": "effect", "weight": 2.4},
+		{"label": "cost", "weight": 1.0, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"label": "status", "weight": 1.1},
+	])
+
+	_detail = ConsoleDetail.new()
+	_detail.size_flags_vertical = Control.SIZE_SHRINK_END
+	_detail.action_pressed.connect(_on_detail_action)
+	content.add_child(_detail)
+	_detail.clear("SELECT AN ITEM")
+
+
+## The counters answer to the number keys, the way the title menu does.
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	var slot: int = event.keycode - KEY_1
+	if slot < 0 or slot >= UpgradePresentation.TABS.size():
+		return
+	_on_tab_pressed(str(UpgradePresentation.TABS[slot]["key"]))
+	get_viewport().set_input_as_handled()
 
 
 func _on_tab_pressed(key: String) -> void:
 	if _active_tab == key:
 		return
 	_active_tab = key
+	_selected = ""
 	refresh()
-
-
-func _on_resized() -> void:
-	for shelf in upgrades_list.get_children():
-		if shelf is GridContainer:
-			shelf.columns = UiThemeBuilder.tile_columns(size.x)
 
 
 func refresh() -> void:
 	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
-	header.set_context(NumberFormat.format_cash(cash), "money" if cash >= 0.0 else "danger")
+	frame.set_context(
+		"WALLET %s" % NumberFormat.format_cash(cash),
+		ConsoleStyle.PHOSPHOR if cash >= 0.0 else ConsoleStyle.DANGER
+	)
 	_refresh_bills_line()
-	for child in upgrades_list.get_children():
-		child.queue_free()
+	_rows.clear()
+	_table.clear()
+
 	var shelves: Dictionary = _shelves()
 	_refresh_tabs(shelves)
 	var shown: int = 0
 	if _active_tab == "hardware":
-		_build_owned_section()
+		shown += _add_installed_section()
 	for key in UpgradePresentation.GROUP_ORDER:
 		if UpgradePresentation.tab_for_group(key) != _active_tab:
 			continue
 		if not shelves.has(key) or shelves[key].is_empty():
 			continue
-		upgrades_list.add_child(_section_label(key))
-		var shelf: GridContainer = _new_shelf()
-		upgrades_list.add_child(shelf)
+		_table.add_note("── %s ──" % UpgradePresentation.group_label(key).to_upper())
 		for upgrade in shelves[key]:
-			_add_tile(shelf, _build_upgrade_card(upgrade, key))
+			_add_upgrade_row(upgrade)
 		shown += shelves[key].size()
-	empty_label.visible = shown == 0
-	UiTransition.stagger(upgrades_list)
+	if shown == 0:
+		_table.add_note("SHELF CLEARED — NEW STOCK ARRIVES AS YOU PROGRESS")
+
+	if _selected == "" or not _table.select_meta(_selected):
+		_detail.clear("SELECT AN ITEM")
 
 
-## The counter the player is standing at is the loud one; the others carry their
-## remaining stock so an empty shelf does not need visiting to find that out.
+## The counter the player is standing at is lit; the other carries its remaining
+## stock so an empty shelf does not need visiting to find that out.
 func _refresh_tabs(shelves: Dictionary) -> void:
 	for tab in UpgradePresentation.TABS:
 		var key: String = str(tab["key"])
-		var button: GameButton = _tab_buttons.get(key, null)
-		if button == null:
+		var row: ConsoleMenuRow = _tabs.get(key, null)
+		if row == null:
 			continue
 		var count: int = 0
 		for group_key in Array(tab["groups"]):
 			count += Array(shelves.get(group_key, [])).size()
-		var active: bool = key == _active_tab
-		button.theme_type_variation = &"PrimaryButton" if active else &"SecondaryButton"
-		button.accent_key = "action" if active else "neutral"
-		button.set_lines(str(tab["label"]), "%d" % count)
+		row.value_text = "%d" % count
+		row.set_selected(key == _active_tab)
+
+
+# --- Rows --------------------------------------------------------------------
+
+func _add_upgrade_row(upgrade: UpgradeDefinition) -> void:
+	var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
+	var cost: float = UpgradeSystem.purchase_cost(upgrade, level)
+	var can_buy: bool = Simulation.can_buy_upgrade(upgrade.id)
+	var affordable: bool = float(Simulation.run_state.economy.get("cash", 0.0)) >= cost
+	var meta: String = "buy:%s" % upgrade.id
+	_rows[meta] = upgrade
+	var status: String = "OPEN" if can_buy else _blocked_status(upgrade, affordable)
+	_table.add_row([
+		_row_title(upgrade, level),
+		{
+			"text": UpgradePresentation.group_label(
+				UpgradePresentation.group_key(upgrade)
+			).to_upper(),
+			"color": ConsoleStyle.PHOSPHOR_DIM,
+		},
+		{"text": UpgradePresentation.effect_line(upgrade), "color": ConsoleStyle.PHOSPHOR_DIM},
+		{
+			"text": NumberFormat.format_cash(cost),
+			"color": ConsoleStyle.PHOSPHOR if affordable else ConsoleStyle.DANGER,
+		},
+		{
+			"text": status,
+			"color": ConsoleStyle.PHOSPHOR if can_buy else ConsoleStyle.PHOSPHOR_DIM,
+		},
+	], meta)
+
+
+## What is already installed, above the stock, because floor space is the binding
+## constraint on the Hardware counter and the way past it is often to sell
+## something rather than to move somewhere bigger.
+func _add_installed_section() -> int:
+	var inventory: Array = UpgradePresentation.installed_inventory()
+	if inventory.is_empty():
+		return 0
+	_table.add_note("── INSTALLED ──")
+	for row in inventory:
+		var key: String = str(row.get("key", ""))
+		var meta: String = "sell:%s" % key
+		_rows[meta] = row
+		var can_sell: bool = Simulation.can_sell_hardware(key)
+		var count: int = int(row.get("count", 1))
+		_table.add_row([
+			str(row.get("name", key)),
+			{
+				"text": "COMPONENT" if bool(row.get("component", false)) else "HARDWARE",
+				"color": ConsoleStyle.PHOSPHOR_DIM,
+			},
+			{"text": _installed_effect(row), "color": ConsoleStyle.PHOSPHOR_DIM},
+			{
+				"text": NumberFormat.format_cash(float(row.get("refund", 0.0))),
+				"color": ConsoleStyle.PHOSPHOR if can_sell else ConsoleStyle.PHOSPHOR_DIM,
+			},
+			{
+				"text": "OWNED x%d" % count,
+				"color": ConsoleStyle.PHOSPHOR_DIM,
+			},
+		], meta)
+	return inventory.size()
+
+
+func _installed_effect(row: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	var token_line: String = UpgradePresentation.token_rate_text(float(row.get("token_rate", 0.0)))
+	if token_line != "":
+		parts.append(token_line)
+	if float(row.get("power_draw", 0.0)) > 0.0:
+		parts.append("%dW draw" % int(row["power_draw"]))
+	if bool(row.get("component", false)):
+		parts.append("fitted inside, no floor space")
+	else:
+		var count: int = int(row.get("count", 1))
+		parts.append("1 floor slot" if count == 1 else "%d floor slots" % count)
+	return " · ".join(parts)
+
+
+## Machines are counted rather than levelled: a second desktop is another box on
+## the floor, not the same box upgraded.
+func _row_title(upgrade: UpgradeDefinition, level: int) -> String:
+	if level <= 0:
+		return upgrade.name
+	if upgrade.category == "hardware" or upgrade.category == "component":
+		return "%s ×%d" % [upgrade.name, level]
+	return "%s Lv%d" % [upgrade.name, level]
+
+
+## Which wall the player hit, said in the status column so a locked line explains
+## itself without being opened.
+func _blocked_status(upgrade: UpgradeDefinition, affordable: bool) -> String:
+	if UpgradePresentation.prerequisite_text(upgrade) != "":
+		return "LOCKED"
+	if UpgradePresentation.hardware_space_full(upgrade):
+		return "NO FLOOR SPACE"
+	if UpgradePresentation.component_capacity_reached(upgrade):
+		return "ALL FITTED"
+	if not affordable:
+		return "TOO DEAR"
+	return "BLOCKED"
 
 
 ## Stock the run could still be shown. Items whose unlock has not happened yet
@@ -124,288 +275,163 @@ func _shelves() -> Dictionary:
 	return shelves
 
 
-## What is already installed, above the stock, because floor space is the binding
-## constraint on the Hardware counter and the way past it is often to sell
-## something rather than to move somewhere bigger.
-func _build_owned_section() -> void:
-	var inventory: Array = UpgradePresentation.installed_inventory()
-	if inventory.is_empty():
-		return
-	upgrades_list.add_child(_section_label_text("INSTALLED", "hardware"))
-	var shelf: GridContainer = _new_shelf()
-	upgrades_list.add_child(shelf)
-	for row in inventory:
-		_add_tile(shelf, _build_owned_card(row))
-
-
-## A shelf lays its stock out across the counter rather than down it, so the
-## width the slide-over takes is spent on showing more of the range.
-func _new_shelf() -> GridContainer:
-	var shelf := GridContainer.new()
-	shelf.columns = UiThemeBuilder.tile_columns(size.x)
-	shelf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shelf.add_theme_constant_override("h_separation", 12)
-	shelf.add_theme_constant_override("v_separation", 12)
-	return shelf
-
-
-func _add_tile(shelf: GridContainer, card: GameCard) -> void:
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shelf.add_child(card)
-
-
-func _build_owned_card(row: Dictionary) -> GameCard:
-	var card: GameCard = CARD_SCENE.instantiate()
-	var key: String = str(row.get("key", ""))
-	var count: int = int(row.get("count", 1))
-	var refund: float = float(row.get("refund", 0.0))
-	var can_sell: bool = Simulation.can_sell_hardware(key)
-	var parts: PackedStringArray = []
-	var token_line: String = UpgradePresentation.token_rate_text(float(row.get("token_rate", 0.0)))
-	if token_line != "":
-		parts.append(token_line)
-	if float(row.get("power_draw", 0.0)) > 0.0:
-		parts.append("%dW draw" % int(row["power_draw"]))
-	var is_component: bool = bool(row.get("component", false))
-	if is_component:
-		parts.append("fitted inside, no floor space")
-	else:
-		parts.append("1 floor slot" if count == 1 else "%d floor slots" % count)
-	var title: String = str(row.get("name", key))
-	if count > 1:
-		title = "%s ×%d" % [title, count]
-	var action: String = "KEEPING IT"
-	if can_sell:
-		action = "SELL %s" % NumberFormat.format_cash(refund)
-	card.setup(title, " · ".join(parts), "", action, AssetCatalog.category_icon("hardware"))
-	card.set_accent(UpgradePresentation.group_color("component" if is_component else "hardware"))
-	card.set_kicker("Installed", UiThemeBuilder.semantic("success"))
-	card.set_disabled(not can_sell)
-	var reason: String = Simulation.hardware_sale_reason(key)
-	if not can_sell and reason != "":
-		# Neutral rather than a warning: nothing is wrong, this unit simply is
-		# not going anywhere.
-		card.set_warnings([{"text": reason, "role": "neutral"}])
-	if can_sell:
-		card.set_action_style("cash", "money", "MoneyButton")
-		card.pressed.connect(_sell_hardware.bind(key, card))
-	else:
-		card.set_action_style("warning", "neutral", "SecondaryButton")
-	return card
-
-
-func _sell_hardware(hardware_key: String, card: GameCard) -> void:
-	UiSound.play("buy")
-	if card != null:
-		card.play_press_feedback()
-		await get_tree().create_timer(0.1).timeout
-	if Simulation.sell_hardware(hardware_key):
-		refresh()
-		get_tree().call_group("ui_refresh", "refresh")
-
-
 func _card_cost(upgrade: UpgradeDefinition) -> float:
 	return UpgradeSystem.purchase_cost(
 		upgrade, UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
 	)
 
 
-func _section_label(group_key: String) -> Label:
-	return _section_label_text(UpgradePresentation.group_label(group_key).to_upper(), group_key)
+# --- Detail pane -------------------------------------------------------------
+
+func _on_row_selected(meta: Variant) -> void:
+	_selected = str(meta) if meta != null else ""
+	if _selected.begins_with("sell:"):
+		_show_installed_detail(_rows.get(_selected, {}))
+	elif _selected.begins_with("buy:"):
+		_show_upgrade_detail(_rows.get(_selected, null))
+	else:
+		_detail.clear("SELECT AN ITEM")
 
 
-func _section_label_text(text: String, group_key: String) -> Label:
-	var section := Label.new()
-	section.text = text
-	section.theme_type_variation = &"SectionLabel"
-	section.add_theme_color_override("font_color", UpgradePresentation.group_color(group_key))
-	section.add_theme_constant_override("outline_size", 8)
-	section.add_theme_color_override("font_outline_color", UiThemeBuilder.color("bg"))
-	return section
+func _show_installed_detail(row: Dictionary) -> void:
+	if row.is_empty():
+		_detail.clear("SELECT AN ITEM")
+		return
+	var key: String = str(row.get("key", ""))
+	var can_sell: bool = Simulation.can_sell_hardware(key)
+	var lines: Array = [
+		{"stat": "Owned", "value": "×%d" % int(row.get("count", 1))},
+		{"stat": "Sells for", "value": NumberFormat.format_cash(float(row.get("refund", 0.0)))},
+		{"text": _installed_effect(row)},
+	]
+	if not can_sell:
+		var reason: String = Simulation.hardware_sale_reason(key)
+		if reason != "":
+			lines.append({"text": reason})
+	_detail.show_detail(
+		str(row.get("name", key)).to_upper(),
+		lines,
+		"[ ENTER ] SELL FOR %s" % NumberFormat.format_cash(float(row.get("refund", 0.0)))
+			if can_sell else "[ -- ] KEEPING IT",
+		can_sell
+	)
 
 
-## Compact upgrade card: name, price, one line of consequence, and — when it is
-## out of reach — why. The full description lives in the detail sheet.
-func _build_upgrade_card(upgrade: UpgradeDefinition, group_key: String) -> GameCard:
-	var card: GameCard = CARD_SCENE.instantiate()
+func _show_upgrade_detail(upgrade: UpgradeDefinition) -> void:
+	if upgrade == null:
+		_detail.clear("SELECT AN ITEM")
+		return
 	var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
 	var cost: float = UpgradeSystem.purchase_cost(upgrade, level)
 	var can_buy: bool = Simulation.can_buy_upgrade(upgrade.id)
-	var affordable: bool = float(Simulation.run_state.economy.get("cash", 0.0)) >= cost
-	var blockers: Array = UpgradePresentation.blockers(upgrade, affordable)
-	var action_text: String = "BUY" if can_buy else _blocked_action_text(upgrade, affordable)
-	var title: String = _card_title(upgrade, level)
-	card.setup(
-		title,
-		UpgradePresentation.effect_line(upgrade),
-		"",
-		action_text,
-		AssetCatalog.category_icon(upgrade.category)
-	)
-	card.set_accent(UpgradePresentation.group_color(group_key))
-	card.set_headline(NumberFormat.format_cash(cost), "money" if affordable else "danger")
-	card.set_warnings(blockers + _bill_warnings(upgrade, can_buy))
-	card.set_disabled(not can_buy)
-	card.body_pressed.connect(_show_upgrade_detail.bind(upgrade, group_key, can_buy))
-	if can_buy:
-		card.pressed.connect(_buy_upgrade.bind(upgrade.id, card))
-	# Spending money is a money action, so this button stays green while the
-	# neutral "tap to compare" interactions elsewhere are cyan.
-	if can_buy:
-		card.set_action_style("cash", "money", "MoneyButton")
-	else:
-		card.set_action_style("warning", "neutral", "SecondaryButton")
-	return card
-
-
-## Machines are counted rather than levelled: a second desktop is another box on
-## the floor, not the same box upgraded. Everything else still reads as a level.
-func _card_title(upgrade: UpgradeDefinition, level: int) -> String:
-	if level <= 0:
-		return upgrade.name
-	if upgrade.category == "hardware" or upgrade.category == "component":
-		return "%s · owned ×%d" % [upgrade.name, level]
-	return "%s · Lv %d" % [upgrade.name, level]
-
-
-## The button says which wall the player hit, so a locked card does not need
-## the chips underneath it to explain why it will not press.
-func _blocked_action_text(upgrade: UpgradeDefinition, affordable: bool) -> String:
-	if UpgradePresentation.prerequisite_text(upgrade) != "":
-		return "LOCKED"
-	if UpgradePresentation.hardware_space_full(upgrade):
-		return "NO SPACE"
-	if UpgradePresentation.component_capacity_reached(upgrade):
-		return "ALL FITTED"
-	if not affordable:
-		return "CAN'T AFFORD"
-	return "NOT NOW"
-
-
-func _bill_warnings(upgrade: UpgradeDefinition, can_buy: bool) -> Array:
-	# Only worth saying on something the player could actually click.
-	if not can_buy:
-		return []
-	var cost: float = UpgradeSystem.purchase_cost(
-		upgrade,
-		UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-	)
-	var outlook: Dictionary = Simulation.bills_outlook()
-	var left: float = float(outlook.get("cash", 0.0)) - cost
-	var due: float = float(outlook.get("due", 0.0))
-	if left >= due:
-		return []
-	return [{
-		"text": "%s short of rent" % NumberFormat.format_cash(due - left),
-		"role": "danger",
-	}]
-
-
-func _show_upgrade_detail(upgrade: UpgradeDefinition, group_key: String, can_buy: bool) -> void:
-	var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-	var cost: float = UpgradeSystem.purchase_cost(upgrade, level)
-	var rows: Array = [
-		{"stat": "Cost", "value": NumberFormat.format_cash(cost), "role": "money"},
-	]
+	var lines: Array = [{"stat": "Cost", "value": NumberFormat.format_cash(cost)}]
 	if level > 0:
 		var counted: bool = upgrade.category == "hardware" or upgrade.category == "component"
-		rows.insert(0, {"stat": "Owned" if counted else "Level", "value": str(level)})
+		lines.insert(0, {"stat": "Owned" if counted else "Level", "value": str(level)})
 	if upgrade.recurring_cost_delta > 0.0:
-		rows.append({
+		lines.append({
 			"stat": "Adds to bills",
 			"value": "%s / round" % NumberFormat.format_cash(upgrade.recurring_cost_delta),
-			"role": "warning",
+			"color": ConsoleStyle.WARNING,
 		})
-	rows.append({"text": upgrade.description})
-	rows.append({"stat": "Effect", "value": ""})
-	rows.append({"text": UpgradePresentation.effect_line(upgrade)})
+	lines.append({"text": upgrade.description})
+	lines.append({"text": UpgradePresentation.effect_line(upgrade)})
+	lines.append_array(_blocker_lines(upgrade, cost, can_buy))
+	if upgrade.repeatable and level > 0:
+		lines.append({
+			"text": "Each one after the first costs %d%% more than the last." % int(
+				round((upgrade.cost_growth - 1.0) * 100.0)
+			),
+		})
+	_detail.show_detail(
+		upgrade.name.to_upper(),
+		lines,
+		"[ ENTER ] BUY FOR %s" % NumberFormat.format_cash(cost) if can_buy else "[ -- ] UNAVAILABLE",
+		can_buy
+	)
+
+
+func _blocker_lines(upgrade: UpgradeDefinition, cost: float, can_buy: bool) -> Array:
+	var lines: Array = []
 	var cooling: Dictionary = UpgradePresentation.cooling_shortfall(upgrade)
 	if not cooling.is_empty():
-		rows.append({
-			"rule": "Cooling %d / %d" % [int(cooling["have"]), int(cooling["need"])],
-			"text": "Running this adds %.0f heat per prompt. Buy cooling or a bigger space first, or the run overheats." % float(cooling["heat_per_prompt"]),
-			"role": "heat",
+		lines.append({
+			"warn": "Cooling %d / %d — running this adds %.0f heat per prompt. Buy cooling or a bigger space first." % [
+				int(cooling["have"]), int(cooling["need"]), float(cooling["heat_per_prompt"]),
+			],
 		})
 	var prerequisite: String = UpgradePresentation.prerequisite_text(upgrade)
 	if prerequisite != "":
 		var reason: String = "Take the step before it first."
 		if upgrade.requires_dwelling != "":
 			reason = "This belongs to a later chapter than the one this run is in."
-		rows.append({
-			"rule": prerequisite,
-			"text": reason,
-			"role": "warning",
-		})
+		lines.append({"warn": "%s — %s" % [prerequisite, reason]})
 	if UpgradePresentation.hardware_space_full(upgrade):
 		var space: Dictionary = UpgradePresentation.hardware_space()
-		rows.append({
-			"rule": "No hardware space",
-			"text": "The %s holds %d machines and all %d are running. Sell something before buying another." % [
-				space.get("dwelling", ""),
-				int(space.get("total", 0)),
-				int(space.get("used", 0)),
+		lines.append({
+			"warn": "The %s holds %d machines and all %d are running. Sell something first." % [
+				space.get("dwelling", ""), int(space.get("total", 0)), int(space.get("used", 0)),
 			],
-			"role": "danger",
 		})
 	if UpgradePresentation.component_capacity_reached(upgrade):
-		rows.append({
-			"rule": "Every machine already has one",
-			"text": "One fits per %s you own. Buy another machine and there will be somewhere to put this." % UpgradePresentation.hardware_name(upgrade.requires_hardware),
-			"role": "warning",
-		})
-	if upgrade.repeatable and level > 0:
-		rows.append({
-			"text": "Each one after the first costs %d%% more than the last." % int(round((upgrade.cost_growth - 1.0) * 100.0)),
+		lines.append({
+			"warn": "One fits per %s you own. Buy another machine and there will be somewhere to put this." % UpgradePresentation.hardware_name(upgrade.requires_hardware),
 		})
 	if not can_buy:
 		var shortfall: float = cost - float(Simulation.run_state.economy.get("cash", 0.0))
 		if shortfall > 0.0:
-			rows.append({
-				"rule": "Need %s more" % NumberFormat.format_cash(shortfall),
-				"text": "Finish a contract or take a better paying one.",
-				"role": "danger",
+			lines.append({
+				"warn": "Need %s more. Finish a contract or take a better paying one." % NumberFormat.format_cash(shortfall),
 			})
-	_detail_sheet.show_detail(
-		upgrade.name,
-		UpgradePresentation.group_label(group_key),
-		rows,
-		[],
-		"BUY" if can_buy else "",
-		UpgradePresentation.group_color(group_key)
-	)
-	for connection in _detail_sheet.action_confirmed.get_connections():
-		_detail_sheet.action_confirmed.disconnect(connection["callable"])
-	if can_buy:
-		_detail_sheet.action_confirmed.connect(_buy_upgrade.bind(upgrade.id, null))
+	elif _rent_shortfall(cost) > 0.0:
+		lines.append({
+			"warn": "%s short of rent if you buy this." % NumberFormat.format_cash(_rent_shortfall(cost)),
+		})
+	return lines
+
+
+func _rent_shortfall(cost: float) -> float:
+	var outlook: Dictionary = Simulation.bills_outlook()
+	var left: float = float(outlook.get("cash", 0.0)) - cost
+	return maxf(0.0, float(outlook.get("due", 0.0)) - left)
 
 
 ## The shop is the easiest place to spend rent money by accident, so what is safe
-## to spend sits directly under the title. The balance itself is on the header and
-## in the HUD, and the bill it is measured against is on the round-end statement,
-## so only the figure neither of those places carries is printed here.
+## to spend sits under the counters.
 func _refresh_bills_line() -> void:
 	var outlook: Dictionary = Simulation.bills_outlook()
-	var line: String = "Safe to spend %s · %s due at round end" % [
+	var line: String = "SAFE TO SPEND %s · %s DUE AT ROUND END" % [
 		NumberFormat.format_cash(float(outlook.get("spendable", 0.0))),
 		NumberFormat.format_cash(float(outlook.get("due", 0.0))),
 	]
-	# Machines are bought against floor space as much as against cash, so the
-	# Hardware counter says how much room is left before anything is priced.
 	if _active_tab == "hardware":
 		var space: Dictionary = UpgradePresentation.hardware_space()
-		line += "\n%s: %d of %d hardware slots used" % [
-			space.get("dwelling", ""),
+		line += " · %s: %d/%d HARDWARE SLOTS USED" % [
+			str(space.get("dwelling", "")).to_upper(),
 			int(space.get("used", 0)),
 			int(space.get("total", 0)),
 		]
-	header.set_sub_line(line)
+	_bills_line.text = line
 
 
-func _buy_upgrade(upgrade_id: String, card: GameCard) -> void:
+# --- Actions -----------------------------------------------------------------
+
+func _on_detail_action() -> void:
+	if _selected.begins_with("buy:"):
+		_buy_upgrade(_selected.trim_prefix("buy:"))
+	elif _selected.begins_with("sell:"):
+		_sell_hardware(_selected.trim_prefix("sell:"))
+
+
+func _buy_upgrade(upgrade_id: String) -> void:
 	UiSound.play("buy")
-	if card != null:
-		card.play_press_feedback()
-		await get_tree().create_timer(0.1).timeout
 	if Simulation.buy_upgrade(upgrade_id):
+		refresh()
+		get_tree().call_group("ui_refresh", "refresh")
+
+
+func _sell_hardware(hardware_key: String) -> void:
+	UiSound.play("buy")
+	if Simulation.sell_hardware(hardware_key):
 		refresh()
 		get_tree().call_group("ui_refresh", "refresh")

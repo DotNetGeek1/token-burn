@@ -9,11 +9,11 @@ extends Button
 ## inverts to a solid phosphor bar with black text — the way a selected line looks
 ## on a real console, and the only affordance the screen needs.
 
-## Phosphor green the whole terminal is drawn in. Kept here rather than in the
-## theme because this screen is diegetic and deliberately ignores the app palette.
-const PHOSPHOR := Color(0.42, 0.92, 0.60)
-const PHOSPHOR_DIM := Color(0.30, 0.62, 0.44)
-const INK := Color(0.03, 0.07, 0.06)
+## Re-exported so callers that already speak in row terms do not have to reach
+## past it; the palette itself lives in ConsoleStyle.
+const PHOSPHOR := ConsoleStyle.PHOSPHOR
+const PHOSPHOR_DIM := ConsoleStyle.PHOSPHOR_DIM
+const INK := ConsoleStyle.INK
 
 const ROW_HEIGHT := 24
 const PAD_H := 8
@@ -46,6 +46,7 @@ var _headline: Label = null
 var _value: Label = null
 var _revealed: int = -1
 var _font_size: int = UiThemeBuilder.FONT_SMALL
+var _selected: bool = false
 
 
 func _ready() -> void:
@@ -62,7 +63,7 @@ func _ready() -> void:
 
 
 func accent() -> Color:
-	return Color(0.86, 0.34, 0.40) if destructive else PHOSPHOR
+	return ConsoleStyle.DANGER if destructive else PHOSPHOR
 
 
 func _build() -> void:
@@ -133,6 +134,14 @@ func _apply_text() -> void:
 	set_reveal(_revealed)
 
 
+## Used where a row is a persistent choice — a market counter, say — rather than
+## a one-shot action: the chosen line stays inverted after the pointer leaves.
+func set_selected(selected: bool) -> void:
+	_selected = selected
+	_apply_palette()
+	_sync_ink()
+
+
 func _apply_palette() -> void:
 	if _index == null:
 		return
@@ -141,25 +150,14 @@ func _apply_palette() -> void:
 	_headline.add_theme_color_override("font_color", lit)
 	_value.add_theme_color_override("font_color", PHOSPHOR_DIM)
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-		add_theme_stylebox_override(state, _surface(state, lit))
+		var box_state: String = "hover" if _selected and state == "normal" else state
+		add_theme_stylebox_override(state, _surface(box_state, lit))
 
 
 ## Inverse video for hover, press and focus; the idle line is bare text with no
 ## container at all, so the menu reads as printed output rather than as widgets.
 func _surface(state: String, lit: Color) -> StyleBox:
-	var box := StyleBoxFlat.new()
-	box.corner_radius_top_left = 0
-	box.corner_radius_top_right = 0
-	box.corner_radius_bottom_left = 0
-	box.corner_radius_bottom_right = 0
-	match state:
-		"hover", "focus":
-			box.bg_color = Color(lit.r, lit.g, lit.b, 0.82)
-		"pressed":
-			box.bg_color = lit
-		_:
-			box.bg_color = Color(lit.r, lit.g, lit.b, 0.0)
-	return box
+	return ConsoleStyle.row_box(state, lit)
 
 
 func _notification(what: int) -> void:
@@ -174,7 +172,7 @@ func _notification(what: int) -> void:
 func _sync_ink() -> void:
 	if _index == null:
 		return
-	var inverted: bool = is_hovered() or has_focus()
+	var inverted: bool = _selected or is_hovered() or has_focus()
 	var lit: Color = accent()
 	_index.add_theme_color_override("font_color", INK if inverted else PHOSPHOR_DIM)
 	_headline.add_theme_color_override("font_color", INK if inverted else lit)

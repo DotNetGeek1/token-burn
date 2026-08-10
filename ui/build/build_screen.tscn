@@ -1,8 +1,7 @@
-[gd_scene load_steps=4 format=3 uid="uid://build_screen_full"]
+[gd_scene load_steps=3 format=3 uid="uid://build_screen_full"]
 
 [ext_resource type="Script" path="res://ui/build/build_screen.gd" id="1"]
-[ext_resource type="PackedScene" uid="uid://stat_row" path="res://ui/common/stat_row.tscn" id="2"]
-[ext_resource type="PackedScene" uid="uid://screen_header" path="res://ui/common/screen_header.tscn" id="3"]
+[ext_resource type="Script" path="res://ui/common/console_frame.gd" id="2"]
 
 [node name="BuildScreen" type="Control"]
 layout_mode = 3
@@ -20,56 +19,11 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 8
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
 
-[node name="VBox" type="VBoxContainer" parent="Margin"]
+[node name="Frame" type="PanelContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Header" parent="Margin/VBox" instance=ExtResource("3")]
-layout_mode = 2
-
-[node name="EmptyLabel" type="Label" parent="Margin/VBox"]
-visible = false
-layout_mode = 2
-theme_type_variation = &"MutedLabel"
-autowrap_mode = 2
-text = "No perks yet. Complete contracts and choose perks to build your engine."
-
-[node name="Scroll" type="ScrollContainer" parent="Margin/VBox"]
-layout_mode = 2
-size_flags_vertical = 3
-horizontal_scroll_mode = 0
-
-[node name="PerksGrid" type="GridContainer" parent="Margin/VBox/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/h_separation = 10
-theme_override_constants/v_separation = 10
-columns = 1
-
-[node name="SynergiesPanel" type="VBoxContainer" parent="Margin/VBox"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="SynergiesHeader" type="Label" parent="Margin/VBox/SynergiesPanel"]
-layout_mode = 2
-theme_type_variation = &"SectionLabel"
-text = "CURRENT SYNERGIES"
-
-[node name="SynergiesList" type="VBoxContainer" parent="Margin/VBox/SynergiesPanel"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="Footer" type="VBoxContainer" parent="Margin/VBox"]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="TokenRateRow" parent="Margin/VBox/Footer" instance=ExtResource("2")]
-layout_mode = 2
-
-[node name="CloudRow" parent="Margin/VBox/Footer" instance=ExtResource("2")]
-layout_mode = 2
+script = ExtResource("2")

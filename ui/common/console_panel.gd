@@ -15,7 +15,7 @@ const SPARK_SAMPLES := 32
 class Sparkline:
 	extends Control
 
-	var color: Color = ConsoleMenuRow.PHOSPHOR
+	var color: Color = ConsoleStyle.PHOSPHOR
 	var samples: PackedFloat32Array = PackedFloat32Array()
 
 	func _draw() -> void:
@@ -110,13 +110,13 @@ func _build() -> void:
 	_margin.add_child(box)
 	_box = box
 
-	_kicker = _line(9, ConsoleMenuRow.PHOSPHOR_DIM)
+	_kicker = _line(9, ConsoleStyle.PHOSPHOR_DIM)
 	box.add_child(_kicker)
 
-	_value = _line(18, ConsoleMenuRow.PHOSPHOR)
+	_value = _line(18, ConsoleStyle.PHOSPHOR)
 	box.add_child(_value)
 
-	_caption = _line(8, ConsoleMenuRow.PHOSPHOR_DIM)
+	_caption = _line(8, ConsoleStyle.PHOSPHOR_DIM)
 	_caption.visible = false
 	box.add_child(_caption)
 
@@ -140,9 +140,4 @@ func _line(font_size: int, color: Color) -> Label:
 
 
 func _style() -> void:
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0.42, 0.92, 0.60, 0.04)
-	box.border_color = Color(0.42, 0.92, 0.60, 0.28)
-	box.set_border_width_all(1)
-	box.set_corner_radius_all(0)
-	add_theme_stylebox_override("panel", box)
+	add_theme_stylebox_override("panel", ConsoleStyle.frame_box())

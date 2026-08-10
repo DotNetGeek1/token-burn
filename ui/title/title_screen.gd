@@ -20,8 +20,8 @@ signal start_requested
 ## works on during a run are the same piece of hardware.
 const CRT_SHADER := preload("res://ui/board/crt_screen.gdshader")
 
-const PHOSPHOR := ConsoleMenuRow.PHOSPHOR
-const PHOSPHOR_DIM := ConsoleMenuRow.PHOSPHOR_DIM
+const PHOSPHOR := ConsoleStyle.PHOSPHOR
+const PHOSPHOR_DIM := ConsoleStyle.PHOSPHOR_DIM
 
 ## The laptop the run starts on. Same artwork the board puts on the desk, so the
 ## machine on the title is the machine the player is about to use.

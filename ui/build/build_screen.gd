@@ -1,123 +1,159 @@
 extends Control
 
-const CARD_SCENE := preload("res://ui/common/card.tscn")
-const BOTTOM_SHEET := preload("res://ui/common/bottom_sheet.tscn")
+## The run's engine, listed the way the machine holds it: the perks in the build
+## as a table, the combinations it has recognised printed underneath, and the two
+## numbers the whole thing exists to move as readouts along the bottom.
+
 const PERK_SLOT_LIMIT := 5
 
-@onready var header: ScreenHeader = $Margin/VBox/Header
-@onready var empty_label: Label = $Margin/VBox/EmptyLabel
-@onready var synergies_list: VBoxContainer = $Margin/VBox/SynergiesPanel/SynergiesList
-@onready var perks_list: GridContainer = $Margin/VBox/Scroll/PerksGrid
-@onready var token_rate_row: StatRow = $Margin/VBox/Footer/TokenRateRow
-@onready var cloud_row: StatRow = $Margin/VBox/Footer/CloudRow
+@onready var frame: ConsoleFrame = $Margin/Frame
 
-var _sheet: BottomSheet = null
+var _table: ConsoleTable = null
+var _detail: ConsoleDetail = null
+var _synergies: VBoxContainer = null
+var _readouts: HBoxContainer = null
+var _token_panel: ConsolePanel = null
+var _cloud_panel: ConsolePanel = null
+var _selected: String = ""
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
-	header.setup("Your Build")
-	_setup_bottom_sheet()
+	frame.setup("Your Build")
+	_build_console()
 	EventBus.perk_acquired.connect(func(_id): refresh())
 	EventBus.run_started.connect(refresh)
-	resized.connect(func() -> void:
-		perks_list.columns = UiThemeBuilder.tile_columns(size.x)
-	)
 	refresh()
+
+
+func _build_console() -> void:
+	var content: VBoxContainer = frame.content()
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 8)
+	scroll.add_child(column)
+
+	_table = ConsoleTable.new()
+	_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_table.row_selected.connect(_on_row_selected)
+	column.add_child(_table)
+	_table.set_columns([
+		{"label": "id", "weight": 0.5},
+		{"label": "perk", "weight": 1.8},
+		{"label": "rarity", "weight": 0.9},
+		{"label": "effect", "weight": 3.0},
+	])
+
+	_synergies = VBoxContainer.new()
+	_synergies.add_theme_constant_override("separation", 2)
+	column.add_child(_synergies)
+
+	_detail = ConsoleDetail.new()
+	_detail.size_flags_vertical = Control.SIZE_SHRINK_END
+	content.add_child(_detail)
+	_detail.clear("SELECT A PERK")
+
+	_readouts = HBoxContainer.new()
+	_readouts.add_theme_constant_override("separation", 8)
+	content.add_child(_readouts)
+
+	_token_panel = ConsolePanel.new()
+	_token_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_readouts.add_child(_token_panel)
+	_token_panel.setup("TOKEN RATE")
+
+	_cloud_panel = ConsolePanel.new()
+	_cloud_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_readouts.add_child(_cloud_panel)
+	_cloud_panel.setup("CLOUD LIABILITY")
 
 
 func refresh() -> void:
 	var perks: Array = Simulation.run_state.build.get("perks", [])
-	header.set_context("%d / %d" % [perks.size(), PERK_SLOT_LIMIT])
-	empty_label.visible = perks.is_empty()
-	_refresh_perk_grid(perks)
+	frame.set_context("PERKS %d / %d" % [perks.size(), PERK_SLOT_LIMIT])
+	_refresh_perks(perks)
 	_refresh_synergies()
-	_refresh_stats()
+	_refresh_readouts()
+	if _selected == "" or not _table.select_meta(_selected):
+		_detail.clear("SELECT A PERK")
 
 
-func _refresh_perk_grid(perks: Array) -> void:
-	perks_list.columns = UiThemeBuilder.tile_columns(size.x)
-	for child in perks_list.get_children():
-		child.queue_free()
+func _refresh_perks(perks: Array) -> void:
+	_table.clear()
+	if perks.is_empty():
+		_table.add_note("NO PERKS INSTALLED — FINISH CONTRACTS AND PICK ONE")
+		return
+	var index: int = 1
 	for perk_id in perks:
 		var perk: PerkDefinition = ContentDatabase.get_perk(str(perk_id))
 		if perk == null:
 			continue
-		var desc: String = Simulation.get_perk_description(str(perk_id))
-		var card: GameCard = CARD_SCENE.instantiate()
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.custom_minimum_size = Vector2(0, 96)
-		card.setup(
+		_table.add_row([
+			"[%02d]" % index,
 			perk.name,
-			_short_perk_text(desc),
-			"",
-			"",
-			AssetCatalog.perk_icon(str(perk_id)),
-			perk.rarity
-		)
-		card.set_chips([{
-			"text": perk.rarity,
-			"accent": AssetCatalog.rarity_color(perk.rarity),
-			"filled": true,
-		}])
-		card.pressed.connect(_show_perk.bind(perk, desc))
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		perks_list.add_child(card)
-	UiTransition.stagger(perks_list)
+			{"text": perk.rarity.to_upper(), "color": AssetCatalog.rarity_color(perk.rarity)},
+			{
+				"text": Simulation.get_perk_description(str(perk_id)),
+				"color": ConsoleStyle.PHOSPHOR_DIM,
+			},
+		], str(perk_id))
+		index += 1
 
 
+## Recognised combinations, printed rather than boxed: they are something the
+## machine noticed about the build, not another thing to press.
 func _refresh_synergies() -> void:
-	for child in synergies_list.get_children():
+	for child in _synergies.get_children():
+		_synergies.remove_child(child)
 		child.queue_free()
 	var entries: Array[Dictionary] = _active_synergy_entries()
+	_synergies.add_child(
+		ConsoleStyle.label("SYNERGIES", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
+	)
 	if entries.is_empty():
-		var none_label := Label.new()
-		none_label.text = "None recognised yet"
-		none_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		none_label.theme_type_variation = &"MutedLabel"
-		synergies_list.add_child(none_label)
+		_synergies.add_child(
+			ConsoleStyle.label("NONE RECOGNISED YET", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
+		)
 		return
 	for entry in entries:
-		var name_label := Label.new()
-		name_label.text = "⚡ %s" % str(entry.get("name", "Synergy"))
-		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		name_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("energy"))
-		synergies_list.add_child(name_label)
-		var combo_label := Label.new()
-		combo_label.text = str(entry.get("perks", ""))
-		combo_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		combo_label.theme_type_variation = &"MutedLabel"
-		synergies_list.add_child(combo_label)
+		_synergies.add_child(ConsoleStyle.paragraph(
+			"+ %s — %s" % [str(entry.get("name", "Synergy")).to_upper(), str(entry.get("perks", ""))],
+			ConsoleStyle.FONT_SMALL,
+			ConsoleStyle.PHOSPHOR
+		))
 
 
-func _refresh_stats() -> void:
-	var multiplier: float = _token_rate_multiplier()
-	token_rate_row.setup("Token rate", "×%.1f" % multiplier, "tokens")
-	cloud_row.setup(
-		"Cloud liability",
-		NumberFormat.format_cash(float(Simulation.run_state.economy.get("cloud_liability", 0.0))),
-		"cloud"
+func _refresh_readouts() -> void:
+	_token_panel.set_readout("×%.1f" % _token_rate_multiplier(), "against raw hardware")
+	_cloud_panel.set_readout(
+		NumberFormat.format_cash(
+			float(Simulation.run_state.economy.get("cloud_liability", 0.0))
+		),
+		"owed at round end"
 	)
 
 
-func _show_perk(perk: PerkDefinition, desc: String) -> void:
-	var body_parts: PackedStringArray = []
-	body_parts.append(desc)
-	body_parts.append("")
-	body_parts.append("Rarity: %s" % perk.rarity.capitalize())
+func _on_row_selected(meta: Variant) -> void:
+	_selected = str(meta) if meta != null else ""
+	var perk: PerkDefinition = ContentDatabase.get_perk(_selected)
+	if perk == null:
+		_detail.clear("SELECT A PERK")
+		return
+	var lines: Array = [
+		{"text": Simulation.get_perk_description(_selected)},
+		{"stat": "Rarity", "value": perk.rarity.capitalize()},
+	]
 	if perk.tags.size() > 0:
-		body_parts.append("Tags: %s" % ", ".join(perk.tags))
-	if not perk.parameters.is_empty():
-		body_parts.append("")
-		body_parts.append("Parameters:")
-		for key in perk.parameters.keys():
-			body_parts.append("  • %s: %s" % [key, str(perk.parameters[key])])
-	_sheet.show_content(perk.name, "\n".join(body_parts))
-
-
-func _setup_bottom_sheet() -> void:
-	_sheet = BOTTOM_SHEET.instantiate()
-	add_child(_sheet)
+		lines.append({"stat": "Tags", "value": ", ".join(perk.tags)})
+	for key in perk.parameters.keys():
+		lines.append({"stat": str(key), "value": str(perk.parameters[key])})
+	_detail.show_detail(perk.name.to_upper(), lines)
 
 
 func _active_synergy_entries() -> Array[Dictionary]:
@@ -163,9 +199,3 @@ func _hardware_token_rate() -> float:
 		var hw: Dictionary = curves.get(str(hardware_id), {})
 		total += float(hw.get("token_rate", 0.0))
 	return total
-
-
-func _short_perk_text(desc: String) -> String:
-	if desc.length() <= 72:
-		return desc
-	return desc.substr(0, 69) + "..."

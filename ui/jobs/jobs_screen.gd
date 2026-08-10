@@ -1,153 +1,289 @@
 extends Control
 
-const CARD_SCENE := preload("res://ui/common/card.tscn")
-const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
+## The job board as the machine prints it: a table of contracts on the wire, and
+## a pane underneath expanding whichever one is selected.
+##
+## The data is exactly what the card grid used to show — the same offers, the
+## same ratings, the same accept call — but read as terminal output, so taking a
+## contract is a line on a console rather than a tile on a shop front.
+
 const RiskQuips := preload("res://ui/common/risk_quips.gd")
 
-@onready var header: ScreenHeader = $Margin/VBox/Header
-@onready var ascend_button: GameButton = $Margin/VBox/AscendButton
-@onready var risk_bar: ResourceBar = $Margin/VBox/RiskBar
-@onready var risk_label: Label = $Margin/VBox/RiskLabel
-@onready var offers_list: GridContainer = $Margin/VBox/Scroll/OffersList
-@onready var empty_label: Label = $Margin/VBox/EmptyLabel
+@onready var frame: ConsoleFrame = $Margin/Frame
 
-var _detail_sheet: DetailSheet = null
+var _ascend_row: ConsoleMenuRow = null
+var _status: VBoxContainer = null
+var _risk_line: Label = null
+var _risk_warning: Label = null
+var _table: ConsoleTable = null
+var _detail: ConsoleDetail = null
+var _offers: Dictionary = {}
+var _selected_id: String = ""
+var _round_cost_cache: float = 1.0
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
-	header.setup("Job Board")
-	header.action_pressed.connect(_on_edit_ad_spend)
-	ascend_button.pressed.connect(_on_ascend_pressed)
-	_detail_sheet = DETAIL_SHEET.instantiate()
-	add_child(_detail_sheet)
+	frame.setup("Job Board")
+	_build_console()
 	EventBus.run_started.connect(refresh)
 	EventBus.round_started.connect(refresh)
 	EventBus.job_accepted.connect(func(_id): refresh())
 	Simulation.work_session_finished.connect(func(_result): refresh())
-	resized.connect(_fit_columns)
-	_fit_columns()
 	refresh()
 
 
-## The board is a grid rather than a stack, so how many offers sit side by side
-## is decided by how much of the window the slab has taken.
-func _fit_columns() -> void:
-	offers_list.columns = UiThemeBuilder.tile_columns(size.x)
+func _build_console() -> void:
+	var content: VBoxContainer = frame.content()
+
+	_ascend_row = ConsoleMenuRow.new()
+	_ascend_row.index_label = "A"
+	_ascend_row.visible = false
+	_ascend_row.pressed.connect(_on_ascend_pressed)
+	content.add_child(_ascend_row)
+	_ascend_row.set_metrics(ConsoleStyle.FONT_SMALL, ConsoleTable.ROW_HEIGHT, ConsoleTable.PAD_H)
+
+	_status = VBoxContainer.new()
+	_status.add_theme_constant_override("separation", 2)
+	content.add_child(_status)
+
+	_risk_line = ConsoleStyle.label("", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
+	_status.add_child(_risk_line)
+	_risk_warning = ConsoleStyle.paragraph("", ConsoleStyle.FONT_TINY, ConsoleStyle.DANGER)
+	_status.add_child(_risk_warning)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+
+	_table = ConsoleTable.new()
+	_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_table.row_selected.connect(_on_row_selected)
+	scroll.add_child(_table)
+	_table.set_columns([
+		{"label": "id", "weight": 0.5},
+		{"label": "client", "weight": 1.2},
+		{"label": "contract", "weight": 2.6},
+		{"label": "pmt", "weight": 0.6, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"label": "qual", "weight": 0.6, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"label": "pay", "weight": 0.9, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"label": "risk", "weight": 0.8},
+		{"label": "tok", "weight": 0.8},
+		{"label": "status", "weight": 1.0},
+	])
+
+	_detail = ConsoleDetail.new()
+	_detail.size_flags_vertical = Control.SIZE_SHRINK_END
+	_detail.action_pressed.connect(_on_detail_action)
+	content.add_child(_detail)
+	_detail.clear("SELECT A CONTRACT")
 
 
 func refresh() -> void:
 	if Simulation.phase == Simulation.Phase.ROUND_PREP:
 		Simulation.ensure_job_offers()
 	var state := Simulation.run_state
-	header.set_context("Demand %d" % int(state.business.get("demand", 0.0)))
-	var ad_spend: String = "Ads %s/day" % NumberFormat.format_cash(
-		float(state.business.get("advertising", 0.0))
-	)
-	var reputation: String = _reputation_line()
-	header.set_sub_line(
-		ad_spend if reputation == "" else "%s · %s" % [ad_spend, reputation],
-		"EDIT"
-	)
-	for child in offers_list.get_children():
-		child.queue_free()
+	frame.set_context("DEMAND %d" % int(state.business.get("demand", 0.0)))
+	_round_cost_cache = _round_costs()
 
 	var offers: Array = state.business.get("job_offers", [])
 	var queued: Array = state.business.get("job_queue", [])
-	_refresh_risk(queued)
+	_offers.clear()
+	_table.clear()
+	_refresh_ascend_row()
+	_refresh_status(offers, queued)
+
 	var in_upgrade: bool = Simulation.phase == Simulation.Phase.ANGEL_ROUND
-	empty_label.visible = true
-	if in_upgrade:
-		empty_label.text = "Choose your upgrade first — new contracts appear after."
-	elif queued.size() > 0:
-		empty_label.text = "%d contract(s) taken for this round. Take more, or open WORK and burn — the round runs until they all resolve." % queued.size()
-	elif offers.is_empty() and Simulation.is_work_running():
-		empty_label.text = "The round is under way. Open the WORK tab."
-	elif offers.is_empty():
-		empty_label.text = "No contracts available. Finish this round or increase demand."
-	else:
-		empty_label.visible = false
-
-	_fit_columns()
-	_refresh_ascend_button()
-	var round_costs: float = _round_costs()
+	var index: int = 1
 	for offer in offers:
-		var offer_card: GameCard = _build_offer_card(offer, queued, in_upgrade, round_costs)
-		offer_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		offers_list.add_child(offer_card)
-
+		_add_offer_row(offer, index, in_upgrade)
+		index += 1
 	for job in queued:
-		var card: GameCard = CARD_SCENE.instantiate()
-		var identity: Dictionary = JobPresentation.sector(job)
-		card.setup(str(job.get("name", "Job")), "", "", "", identity["icon"])
-		card.set_accent(identity["color"])
-		card.set_kicker("Taken · %s" % identity["client"], identity["color"])
-		card.set_headline(NumberFormat.format_cash(float(job.get("reward", 0.0))), "money")
-		card.set_chips([{"text": "On this round's slate", "role": "success", "filled": true}])
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		offers_list.add_child(card)
-	UiTransition.stagger(offers_list)
+		_add_queued_row(job, index)
+		index += 1
+	if offers.is_empty() and queued.is_empty():
+		_table.add_note(_empty_line(in_upgrade))
+
+	# A refresh redraws every row, so the pane keeps its subject rather than
+	# emptying itself under the player's hand.
+	if _selected_id == "" or not _table.select_meta(_selected_id):
+		_detail.clear("SELECT A CONTRACT")
 
 
-## The card face carries four things only: who it is for, what it pays, how long
-## it runs, and the one rule that will surprise the player. The rest is a tap
-## away in the detail sheet.
-func _build_offer_card(offer: Dictionary, queued: Array, in_upgrade: bool, round_costs: float) -> GameCard:
-	var card: GameCard = CARD_SCENE.instantiate()
+func _add_offer_row(offer: Dictionary, index: int, in_upgrade: bool) -> void:
+	var id: String = str(offer.get("id", ""))
+	_offers[id] = offer
 	var identity: Dictionary = JobPresentation.sector(offer)
-	var rules: Array = JobPresentation.rules(offer)
-	var can_accept: bool = Simulation.phase == Simulation.Phase.ROUND_PREP and not Simulation.is_work_running()
-	var at_capacity: bool = can_accept and not Simulation.can_accept_offer(str(offer.get("id", "")))
-	if at_capacity:
-		can_accept = false
-	var action_label: String = "UPGRADE FIRST" if in_upgrade else ("ACCEPT CONTRACT" if can_accept else ("AT CAPACITY" if at_capacity else "BUSY"))
-
-	card.setup(str(offer.get("name", "Job")), "", "", action_label, identity["icon"])
-	card.set_accent(identity["color"])
-	card.set_kicker("%s · %s" % [identity["label"], identity["client"]], identity["color"])
-	card.set_headline(NumberFormat.format_cash(float(offer.get("reward", 0.0))), "money")
-	card.set_chips(_offer_chips(offer, rules))
-	card.set_ratings([
-		{"label": "Pay", "filled": JobPresentation.pay_rating(offer, round_costs), "role": "money"},
-		{"label": "Risk", "filled": JobPresentation.risk_rating(offer), "role": "danger"},
-		{"label": "Tokens", "filled": JobPresentation.token_rating(offer), "role": "compute"},
-	])
-	card.set_warnings(_capacity_warnings(offer, queued))
-	card.set_disabled(not can_accept)
-	if can_accept:
-		card.set_action_style("ship_it", "action")
-	else:
-		card.set_action_style("warning", "neutral", "SecondaryButton")
-	card.body_pressed.connect(_show_offer_detail.bind(offer, can_accept, round_costs))
-	if can_accept:
-		card.pressed.connect(_accept_job.bind(str(offer.get("id", "")), card))
-	return card
+	var status: String = "OPEN"
+	if in_upgrade:
+		status = "UPGRADE"
+	elif not _can_accept(id):
+		status = "AT CAPACITY" if Simulation.phase == Simulation.Phase.ROUND_PREP else "BUSY"
+	_table.add_row([
+		"[%02d]" % index,
+		{"text": str(identity["client"]).to_upper(), "color": ConsoleStyle.PHOSPHOR_DIM},
+		str(offer.get("name", "Job")),
+		"%d" % int(offer.get("deadline_prompts", 0)),
+		JobPresentation.quality_mark(float(offer.get("quality_threshold", 0.0))),
+		{
+			"text": NumberFormat.format_cash(float(offer.get("reward", 0.0))),
+			"color": ConsoleStyle.PHOSPHOR,
+		},
+		{"dots": JobPresentation.risk_rating(offer), "color": ConsoleStyle.DANGER},
+		{"dots": JobPresentation.token_rating(offer), "color": ConsoleStyle.PHOSPHOR},
+		{
+			"text": status,
+			"color": ConsoleStyle.PHOSPHOR if status == "OPEN" else ConsoleStyle.PHOSPHOR_DIM,
+		},
+	], id)
 
 
-func _offer_chips(offer: Dictionary, rules: Array) -> Array:
-	var chips: Array = []
-	if "urgent" in offer.get("tags", []):
-		chips.append({"text": "Urgent", "role": "danger", "filled": true})
-	chips.append({
-		"text": "%d prompts" % int(offer.get("deadline_prompts", 0)),
-		"role": "warning",
-		"icon": AssetCatalog.stat_icon("deadline"),
-	})
-	chips.append({
-		"text": "Quality %s/10" % JobPresentation.quality_mark(
-			float(offer.get("quality_threshold", 0.0))
-		),
-		"role": "energy",
-		"icon": AssetCatalog.stat_icon("quality"),
-	})
-	# What the contract wants from the workflow it is given. Loud on purpose:
-	# choosing or building the right pipeline for it is the decision the offer
-	# is really asking the player to make.
-	for demand in JobPresentation.demands(offer):
-		chips.append({"text": str(demand["rule"]), "role": "danger", "filled": true})
-	if not rules.is_empty():
-		chips.append({"text": str(rules[0]["rule"]), "role": "perk", "filled": true})
-	return chips
+## Contracts already on the slate stay listed so the board shows the whole round,
+## but they are dim and carry no action.
+func _add_queued_row(job: Dictionary, index: int) -> void:
+	var identity: Dictionary = JobPresentation.sector(job)
+	_table.add_row([
+		"[%02d]" % index,
+		{"text": str(identity["client"]).to_upper(), "color": ConsoleStyle.PHOSPHOR_DIM},
+		{"text": str(job.get("name", "Job")), "color": ConsoleStyle.PHOSPHOR_DIM},
+		"%d" % int(job.get("deadline_prompts", 0)),
+		JobPresentation.quality_mark(float(job.get("quality_threshold", 0.0))),
+		{
+			"text": NumberFormat.format_cash(float(job.get("reward", 0.0))),
+			"color": ConsoleStyle.PHOSPHOR_DIM,
+		},
+		{"dots": JobPresentation.risk_rating(job), "color": ConsoleStyle.PHOSPHOR_DIM},
+		{"dots": JobPresentation.token_rating(job), "color": ConsoleStyle.PHOSPHOR_DIM},
+		{"text": "TAKEN", "color": ConsoleStyle.PHOSPHOR_DIM},
+	], null)
+
+
+func _can_accept(offer_id: String) -> bool:
+	if Simulation.phase != Simulation.Phase.ROUND_PREP:
+		return false
+	if Simulation.is_work_running():
+		return false
+	return Simulation.can_accept_offer(offer_id)
+
+
+func _empty_line(in_upgrade: bool) -> String:
+	if in_upgrade:
+		return "AWAITING UPGRADE — CONTRACTS RESUME AFTER"
+	if Simulation.is_work_running():
+		return "ROUND UNDER WAY — OPEN THE WORK TAB"
+	return "NO CONTRACTS ON THE WIRE — FINISH THE ROUND OR RAISE DEMAND"
+
+
+# --- Status lines ------------------------------------------------------------
+
+func _refresh_status(offers: Array, queued: Array) -> void:
+	var state := Simulation.run_state
+	var parts: PackedStringArray = [
+		"ADS %s/DAY" % NumberFormat.format_cash(float(state.business.get("advertising", 0.0))),
+	]
+	var reputation: String = _reputation_line()
+	if reputation != "":
+		parts.append(reputation.to_upper())
+	if not queued.is_empty():
+		parts.append("%d ON THE SLATE" % queued.size())
+	elif not offers.is_empty():
+		parts.append("%d ON THE WIRE" % offers.size())
+	_risk_line.text = " · ".join(parts)
+
+	var warning: String = ""
+	var info: Dictionary = Simulation.queue_load_info()
+	var deadline: int = int(info.get("deadline_prompts", 0))
+	if not queued.is_empty() and deadline > 0:
+		var ratio: float = float(info.get("ratio", 0.0))
+		_risk_line.text += " · LOAD %.1f/%d PROMPTS · %s" % [
+			float(info.get("prompts_needed", 0.0)), deadline, RiskQuips.severity(ratio).to_upper(),
+		]
+		warning = RiskQuips.warning(ratio, int(info.get("jobs", 0)))
+	_risk_warning.text = warning.to_upper()
+	_risk_warning.visible = warning != ""
+
+
+## Always on the board: the ascension contract is live from round one, so this is
+## a running readout rather than an entry point to anything.
+func _refresh_ascend_row() -> void:
+	var summary: Dictionary = Simulation.ascension_summary()
+	var contract: Dictionary = Dictionary(summary.get("contract", {}))
+	if contract.is_empty():
+		_ascend_row.visible = false
+		return
+	var progress: Dictionary = Dictionary(summary.get("progress", {}))
+	var rounds_left: int = int(progress.get("rounds_remaining", 0))
+	_ascend_row.visible = true
+	_ascend_row.headline = str(contract.get("name", "The contract")).to_upper()
+	_ascend_row.value_text = "%.0f%% BURNED · %d ROUND(S) LEFT" % [
+		float(progress.get("burn_ratio", 0.0)) * 100.0, rounds_left,
+	]
+	_ascend_row.destructive = rounds_left <= 3
+
+
+# --- Detail pane -------------------------------------------------------------
+
+func _on_row_selected(meta: Variant) -> void:
+	if meta == null:
+		_selected_id = ""
+		_detail.clear("CONTRACT ALREADY TAKEN")
+		return
+	_selected_id = str(meta)
+	var offer: Dictionary = _offers.get(_selected_id, {})
+	if offer.is_empty():
+		_detail.clear("SELECT A CONTRACT")
+		return
+	var can_accept: bool = _can_accept(_selected_id)
+	var identity: Dictionary = JobPresentation.sector(offer)
+	_detail.show_detail(
+		"%s — %s" % [str(identity["client"]).to_upper(), str(offer.get("name", "Job")).to_upper()],
+		_detail_lines(offer),
+		"[ ENTER ] ACCEPT CONTRACT" if can_accept else _blocked_action(),
+		can_accept
+	)
+
+
+func _blocked_action() -> String:
+	if Simulation.phase == Simulation.Phase.ANGEL_ROUND:
+		return "[ -- ] CHOOSE YOUR UPGRADE FIRST"
+	if Simulation.is_work_running():
+		return "[ -- ] ROUND IN PROGRESS"
+	return "[ -- ] AT CAPACITY"
+
+
+func _detail_lines(offer: Dictionary) -> Array:
+	var lines: Array = [
+		{
+			"stat": "Reward",
+			"value": NumberFormat.format_cash(float(offer.get("reward", 0.0))),
+		},
+		{"stat": "Tokens", "value": NumberFormat.format(float(offer.get("token_requirement", 0.0)))},
+		{
+			"stat": "Quality target",
+			"value": "%s / 10" % JobPresentation.quality_mark(
+				float(offer.get("quality_threshold", 0.0))
+			),
+		},
+		{"stat": "Deadline", "value": "%d prompts" % int(offer.get("deadline_prompts", 0))},
+		{
+			"stat": "Pays for",
+			"value": "%.1f rounds of bills" % (
+				float(offer.get("reward", 0.0)) / maxf(1.0, _round_cost_cache)
+			),
+		},
+		{"text": _quality_stakes(float(offer.get("quality_threshold", 0.0)))},
+	]
+	if str(offer.get("description", "")) != "":
+		lines.append({"text": str(offer.get("description", ""))})
+	var demands: Array = JobPresentation.demands(offer)
+	if not demands.is_empty():
+		lines.append({"text": "This contract expects certain things from the workflow you put it through. Ignore them and it will cost you."})
+		lines.append_array(demands)
+	lines.append_array(JobPresentation.rules(offer))
+	for warning in _capacity_warnings(offer):
+		lines.append({"warn": warning})
+	return lines
 
 
 ## What the bar is actually worth, read off the same curve the payout uses rather
@@ -163,49 +299,21 @@ func _quality_stakes(threshold: float) -> String:
 	)
 
 
-func _show_offer_detail(offer: Dictionary, can_accept: bool, round_costs: float) -> void:
-	var identity: Dictionary = JobPresentation.sector(offer)
-	var rows: Array = [
-		{"stat": "Reward", "value": NumberFormat.format_cash(float(offer.get("reward", 0.0))), "role": "money"},
-		{"stat": "Tokens", "value": NumberFormat.format(float(offer.get("token_requirement", 0.0))), "role": "compute"},
-		{
-			"stat": "Quality target",
-			"value": "%s / 10" % JobPresentation.quality_mark(
-				float(offer.get("quality_threshold", 0.0))
-			),
-			"role": "energy",
-		},
-		{"text": _quality_stakes(float(offer.get("quality_threshold", 0.0)))},
-		{"stat": "Deadline", "value": "%d prompts" % int(offer.get("deadline_prompts", 0)), "role": "warning"},
-		{"stat": "Pays for", "value": "%.1f rounds of bills" % (float(offer.get("reward", 0.0)) / maxf(1.0, round_costs))},
-		{"text": "Deliver with prompts to spare and the client pays a premium on top of the fee."},
-	]
-	if str(offer.get("description", "")) != "":
-		rows.append({"text": str(offer.get("description", ""))})
-	var demands: Array = JobPresentation.demands(offer)
-	if not demands.is_empty():
-		rows.append({"text": "This contract expects certain things from the workflow you put it through. Ignore them and it will cost you."})
-		rows.append_array(demands)
-	rows.append_array(JobPresentation.rules(offer))
-	_detail_sheet.show_detail(
-		str(offer.get("name", "Job")),
-		"%s contract · %s" % [str(identity["label"]), str(identity["client"])],
-		rows,
-		[{"text": str(identity["label"]), "accent": identity["color"]}],
-		"ACCEPT CONTRACT" if can_accept else "",
-		identity["color"]
-	)
-	for connection in _detail_sheet.action_confirmed.get_connections():
-		_detail_sheet.action_confirmed.disconnect(connection["callable"])
-	if can_accept:
-		_detail_sheet.action_confirmed.connect(_accept_job.bind(str(offer.get("id", "")), null))
+## Warns when taking this contract on top of the queue would outrun throughput.
+func _capacity_warnings(offer: Dictionary) -> Array:
+	if Array(Simulation.run_state.business.get("job_queue", [])).is_empty():
+		return []
+	var info: Dictionary = Simulation.queue_load_info(offer)
+	var ratio: float = float(info.get("ratio", 0.0))
+	if ratio <= 1.0:
+		return []
+	if ratio > float(info.get("cap", 2.0)):
+		return ["Queue full — this will not fit in the round"]
+	return ["Queue at %.0f%% capacity" % (ratio * 100.0)]
 
 
-## Reputation on the job board, said in terms of what it is for: the fee it adds
-## to every offer, and the client tier the next few points would open.
-## What the reputation chip in the HUD cannot say: what the standing is currently
-## buying and what the next rung of it opens. The number itself is already up
-## there, so repeating it here only costs the panel a line it does not have.
+## Reputation said in terms of what it is for: the fee it adds to every offer,
+## and the client tier the next few points would open.
 func _reputation_line() -> String:
 	var state := Simulation.run_state
 	var reputation: float = float(state.business.get("reputation", 0.0))
@@ -229,81 +337,32 @@ func _round_costs() -> float:
 	return maxf(1.0, float(costs.get("fixed_due", 0.0)))
 
 
-func _refresh_risk(queued: Array) -> void:
-	var info: Dictionary = Simulation.queue_load_info()
-	var deadline: int = int(info.get("deadline_prompts", 0))
-	if queued.is_empty() or deadline <= 0:
-		risk_bar.visible = false
-		risk_label.visible = false
+# --- Actions -----------------------------------------------------------------
+
+func _on_detail_action() -> void:
+	if _selected_id == "":
 		return
-	var ratio: float = float(info.get("ratio", 0.0))
-	var prompts_needed: float = float(info.get("prompts_needed", 0.0))
-	risk_bar.visible = true
-	risk_bar.setup(
-		"Round load · %s" % RiskQuips.severity(ratio),
-		minf(prompts_needed, float(deadline)),
-		float(deadline),
-		"",
-		"%.1f of %d prompts needed" % [prompts_needed, deadline]
-	)
-	risk_bar.set_fill_color(UiThemeBuilder.color(RiskQuips.color_key(ratio)))
-	var warning: String = RiskQuips.warning(ratio, int(info.get("jobs", 0)))
-	risk_label.text = warning
-	risk_label.visible = warning != ""
+	_accept_job(_selected_id)
 
 
-## Warns when taking this contract on top of the queue would outrun throughput.
-func _capacity_warnings(offer: Dictionary, queued: Array) -> Array:
-	if queued.is_empty():
-		return []
-	var info: Dictionary = Simulation.queue_load_info(offer)
-	var ratio: float = float(info.get("ratio", 0.0))
-	if ratio <= 1.0:
-		return []
-	if ratio > float(info.get("cap", 2.0)):
-		return [{"text": "Queue full", "role": "danger"}]
-	return [{"text": "Queue at %.0f%% capacity" % (ratio * 100.0), "role": "warning"}]
-
-
-## Always on the board: the contract is live from round one, so this is a running
-## progress readout rather than an entry point to anything. Tapping it opens the
-## full terms.
-func _refresh_ascend_button() -> void:
-	var summary: Dictionary = Simulation.ascension_summary()
-	var contract: Dictionary = Dictionary(summary.get("contract", {}))
-	if contract.is_empty():
-		ascend_button.visible = false
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not is_visible_in_tree() or _selected_id == "":
 		return
-	ascend_button.visible = true
-	ascend_button.disabled = false
-	var progress: Dictionary = Dictionary(summary.get("progress", {}))
-	var rounds_left: int = int(progress.get("rounds_remaining", 0))
-	ascend_button.set_lines(
-		str(contract.get("name", "The contract")).to_upper(),
-		"%.0f%% burned · %d round(s) left" % [
-			float(progress.get("burn_ratio", 0.0)) * 100.0, rounds_left,
-		]
-	)
-	ascend_button.accent_key = "danger" if rounds_left <= 3 else "perk"
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
+			if _can_accept(_selected_id):
+				_accept_job(_selected_id)
+				get_viewport().set_input_as_handled()
+
+
+func _accept_job(job_id: String) -> void:
+	UiSound.play("accept")
+	if Simulation.accept_job(job_id):
+		_selected_id = ""
+		get_tree().call_group("main_ui", "switch_tab", "work")
+		get_tree().call_group("ui_refresh", "refresh")
+		get_tree().call_group("main_ui", "refresh_all")
 
 
 func _on_ascend_pressed() -> void:
 	get_tree().call_group("main_ui", "open_ascension_select")
-
-
-func _on_edit_ad_spend() -> void:
-	# Ad spend comes from advertising upgrades; take the player there.
-	get_tree().call_group("main_ui", "switch_tab", "market")
-
-
-func _accept_job(job_id: String, card: GameCard) -> void:
-	# The card compresses under the finger before the screen changes, so the
-	# contract visibly leaves the board rather than the list just redrawing.
-	UiSound.play("accept")
-	if card != null:
-		card.play_press_feedback()
-		await get_tree().create_timer(0.12).timeout
-	if Simulation.accept_job(job_id):
-		get_tree().call_group("main_ui", "switch_tab", "work")
-		get_tree().call_group("ui_refresh", "refresh")
-		get_tree().call_group("main_ui", "refresh_all")
