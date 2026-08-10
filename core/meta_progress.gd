@@ -3,12 +3,14 @@ extends Node
 ## Cross-run progression. Everything else in the game is scoped to a single run
 ## and thrown away; this is the one file that remembers.
 ##
-## A victory banks one pick. Spending that pick buys a permanent unlock from
-## content/meta/unlocks.json, which is applied to every run from then on.
+## Only beating the campaign's final Ascension Contract banks picks. Spending a
+## pick buys a permanent unlock from content/meta/unlocks.json, which is applied
+## to every run from then on. Mid-campaign angel goals are chapter breaks inside
+## a run, not sources of permanent power.
 
 const DEFAULT_PROFILE_PATH := "user://profile.json"
 const CATALOG_PATH := "res://content/meta/unlocks.json"
-const PROFILE_VERSION := 3
+const PROFILE_VERSION := 4
 
 ## Where a run that has unlocked nothing takes place. The campaign always has at
 ## least this rung, so no profile can ever end up with nowhere to play.
@@ -97,14 +99,18 @@ func is_available(unlock_id: String) -> bool:
 		return BoardSystem.DEFAULT_SLOT_COUNT + owned < BoardSystem.MAX_SLOT_COUNT
 	if str(unlock.get("kind", "")) == "workflow_slot":
 		return BoardSystem.DEFAULT_WORKFLOW_CAPACITY + owned < BoardSystem.MAX_WORKFLOW_COUNT
+	# A tiered ladder runs out when its last rung is owned.
+	if str(unlock.get("kind", "")) == "starting_hardware":
+		return owned < Array(unlock.get("ladder", [])).size()
 	return true
 
 
-## Three unlocks to choose between, drawn deterministically from the run's seed
-## so a debrief cannot be rerolled by leaving and coming back. Reward-only
-## unlocks (granted automatically by a specific Ascension ending) never show
-## up here — the debrief is for picks, not for prizes already handed out.
-func draw_choices(rng: DeterministicRng, count: int = 3) -> Array:
+## Every unlock a banked pick could buy right now. Picks are rare — one batch
+## per completion of the whole campaign — so the player chooses freely between
+## all the areas rather than being dealt a random hand. Reward-only unlocks
+## (granted automatically by a specific Ascension ending) never show up here —
+## picks are choices, not prizes already handed out.
+func available_choices() -> Array:
 	_ensure_loaded()
 	var pool: Array = []
 	for unlock in _catalog:
@@ -112,19 +118,12 @@ func draw_choices(rng: DeterministicRng, count: int = 3) -> Array:
 			continue
 		if is_available(str(unlock.get("id", ""))):
 			pool.append(unlock.duplicate(true))
-	if pool.size() <= count:
-		return pool
-	var picked: Array = []
-	while picked.size() < count and not pool.is_empty():
-		var index: int = rng.next_int_range(0, pool.size() - 1)
-		picked.append(pool[index])
-		pool.remove_at(index)
-	return picked
+	return pool
 
 
-## Banks `picks` unlock picks for completing an Ascension Contract. Higher-tier
-## contracts bank more picks, which is the entire reward for reaching for one
-## instead of just outlasting the year.
+## Banks `picks` unlock picks for completing the campaign's final Ascension
+## Contract. Only the summit pays permanence: a chapter goal cleared on the way
+## up is progress inside the run, not a source of unlocks.
 func bank_victory(picks: int = 1) -> void:
 	if not enabled:
 		return
@@ -328,7 +327,9 @@ func completed_locations() -> Array:
 	return Array(_locations().get("completed", [])).duplicate()
 
 
-## Where the next run will take place.
+## Where the next run will take place. A fresh run is a fresh game — it starts
+## at the bottom of the campaign and climbs the chapters in-run — so nothing
+## moves this forward automatically any more; it exists for replays and tests.
 func selected_location() -> String:
 	if not enabled:
 		return DEFAULT_LOCATION
@@ -394,43 +395,24 @@ func complete_location(location_id: String) -> void:
 	profile_changed.emit()
 
 
-## The machines and components the player moves into the next location with.
-##
-## A location is a chapter rather than a fresh save, and its contract is priced
-## for a business that has already been running for a year. Arriving with the
-## starter laptop against a target ten times the last one is not a difficulty
-## curve, it is a wall — so the kit comes too. Cash, modules and perks still
-## reset: the new chapter is a new business in a new room, run on the hardware
-## the old one paid for.
-## Kit is tied to the one location it was moved into. Replaying a chapter already
-## beaten, or starting the campaign again from the bedroom, is a fresh business
-## and gets nothing — only the move the win actually paid for.
-func carried_rig(for_location: String) -> Dictionary:
-	_ensure_loaded()
-	var carried: Dictionary = Dictionary(_profile.get("carried_rig", _default_carried_rig()))
-	if str(carried.get("for_location", "")) != for_location or for_location == "":
-		return _default_carried_rig()
-	return {
-		"for_location": for_location,
-		"hardware": Array(carried.get("hardware", [])).duplicate(),
-		"upgrades": Dictionary(carried.get("upgrades", {})).duplicate(),
-	}
-
-
-## Records the rig a completed location was beaten with, against the location it
-## is moving into. `upgrade_levels` is a level count per upgrade id rather than a
-## flat list, because a repeatable component bought four times has to arrive as
-## four.
-func carry_rig_forward(for_location: String, hardware: Array, upgrade_levels: Dictionary) -> void:
+## The machines a fresh run starts with, earned one rung at a time through the
+## "starting_hardware" unlock ladder: the first pick is the desktop, the next is
+## the GPU rack, and so on. This is the only kit that crosses runs — everything
+## a run bought dies with the run, exactly like a fresh game from the start.
+func starting_rig() -> Array:
 	if not enabled:
-		return
+		return []
 	_ensure_loaded()
-	_profile["carried_rig"] = {
-		"for_location": for_location,
-		"hardware": hardware.duplicate(),
-		"upgrades": upgrade_levels.duplicate(),
-	}
-	_save()
+	var earned: Array = []
+	var unlocks: Dictionary = _profile.get("unlocks", {})
+	for unlock_id in unlocks.keys():
+		var unlock: Dictionary = _catalog_by_id.get(unlock_id, {})
+		if str(unlock.get("kind", "")) != "starting_hardware":
+			continue
+		var ladder: Array = Array(unlock.get("ladder", []))
+		for i in range(mini(int(unlocks[unlock_id]), ladder.size())):
+			earned.append(str(ladder[i]))
+	return earned
 
 
 ## The rung above this one, or "" at the top of the campaign.
@@ -639,6 +621,10 @@ func _apply_one(run_state: RunState, unlock: Dictionary) -> void:
 			if unlock_id != "" and not (unlock_id in flags):
 				flags.append(unlock_id)
 				run_state.build["meta_unlocks"] = flags
+		"starting_hardware":
+			# Installed by the Simulation via the upgrade pipeline, which owns
+			# hardware slots, recurring bills and effects. Nothing to do here.
+			pass
 
 
 ## Marks the cloud account as owned without charging for it. The upgrade is the
@@ -649,6 +635,7 @@ func _grant_cloud_account(run_state: RunState) -> void:
 	if not (Simulation.CLOUD_ACCOUNT_UPGRADE in owned):
 		owned.append(Simulation.CLOUD_ACCOUNT_UPGRADE)
 		run_state.build["upgrades"] = owned
+		UpgradeSystem.record_free_grant(run_state, Simulation.CLOUD_ACCOUNT_UPGRADE)
 	run_state.build["cloud_tier"] = Simulation.CLOUD_ACCOUNT_UPGRADE
 
 
@@ -687,12 +674,7 @@ func _default_profile() -> Dictionary:
 		"difficulty": "normal",
 		"endless_enabled": false,
 		"locations": _default_locations(),
-		"carried_rig": _default_carried_rig(),
 	}
-
-
-func _default_carried_rig() -> Dictionary:
-	return {"for_location": "", "hardware": [], "upgrades": {}}
 
 
 func _ensure_loaded() -> void:
@@ -808,6 +790,14 @@ func _migrate_profile(from_version: int) -> void:
 			Array(locations.get("unlocked", [DEFAULT_LOCATION]))
 		)
 		_profile["locations"] = locations
+	if from_version < 4:
+		# Chapter wins used to move the campaign selection forward so the next
+		# fresh run resumed in the next location. A fresh run is now a fresh
+		# game from the bottom — chapters are climbed inside a run — so any
+		# selection an older profile advanced points back at the start.
+		var selection: Dictionary = _locations()
+		selection["selected"] = DEFAULT_LOCATION
+		_profile["locations"] = selection
 	_save()
 
 

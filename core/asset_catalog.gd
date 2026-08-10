@@ -334,6 +334,8 @@ static func unlock_icon(kind: String) -> Texture2D:
 			return nav_icon("board")
 		"starting_module":
 			return get_texture("category_icons", "local")
+		"starting_hardware":
+			return get_texture("category_icons", "local")
 		"cooling":
 			return stat_icon("power")
 		"starting_cash":

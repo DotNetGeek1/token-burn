@@ -1,8 +1,9 @@
 extends TestCase
 
 ## Meta-progression is the only state that outlives a run, so these cover what a
-## player is promised across runs: a win banks exactly one pick, spending it
-## changes the next run, the slot cap holds, and the profile survives a restart.
+## player is promised across runs: only beating the whole campaign banks picks,
+## spending one changes every future run, the slot cap holds, and the profile
+## survives a restart.
 ##
 ## Every test here runs against a scratch profile. The suite must never touch the
 ## profile the developer is playing.
@@ -17,7 +18,7 @@ func run() -> void:
 	var restore_enabled: bool = MetaProgress.enabled
 	MetaProgress.enabled = true
 
-	_test_a_victory_banks_one_pick()
+	_test_only_beating_the_campaign_banks_picks()
 	_test_a_loss_banks_nothing()
 	_test_an_extra_slot_widens_the_next_run()
 	_test_the_slot_cap_holds()
@@ -46,30 +47,48 @@ func _sim() -> Node:
 	return sim
 
 
-func _test_a_victory_banks_one_pick() -> void:
+## Permanence is the reward for finishing the whole campaign. A chapter goal
+## cleared on the way up banks nothing; the summit banks its contract's picks,
+## and the debrief lays out every area still open to spend them on.
+func _test_only_beating_the_campaign_banks_picks() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(9001)
 	sim._end_run(true)
-	assert_eq(MetaProgress.victories(), 1, "Surviving the year counts as a victory")
-	assert_eq(MetaProgress.pending_picks(), 1, "A victory banks exactly one pick")
-
-	var choices: Array = sim.debrief_choices()
-	assert_eq(choices.size(), 3, "The debrief offers three unlocks")
-	var repeated: Array = sim.debrief_choices()
-	assert_eq(
-		str(choices[0].get("id", "")),
-		str(repeated[0].get("id", "")),
-		"Reopening the debrief shows the same three, not a reroll"
-	)
-
-	assert_true(sim.spend_debrief_pick(str(choices[0].get("id", ""))), "The pick can be spent")
-	assert_eq(MetaProgress.pending_picks(), 0, "And it is spent only once")
-	assert_false(
-		sim.spend_debrief_pick(str(choices[1].get("id", ""))),
-		"A second unlock cannot be taken on one victory"
-	)
+	assert_eq(MetaProgress.victories(), 0, "A chapter win is not the end of the game")
+	assert_eq(MetaProgress.pending_picks(), 0, "So it banks nothing permanent")
+	assert_true(sim.debrief_choices().is_empty(), "And there is nothing to spend")
 	sim.free()
+
+	_fresh_profile()
+	var summit: Node = _sim()
+	summit.start_run(9001)
+	summit.apply_run_location(summit.run_state, "moon_facility")
+	var picks: int = maxi(1, int(summit.ascension_boss_contract().get("picks", 1)))
+	summit._end_run(true)
+	assert_eq(MetaProgress.victories(), 1, "Beating the last chapter is the victory")
+	assert_eq(MetaProgress.pending_picks(), picks, "And it banks the summit contract's picks")
+
+	var choices: Array = summit.debrief_choices()
+	var ids: Array = []
+	for choice in choices:
+		ids.append(str(choice.get("id", "")))
+	assert_true(choices.size() >= 5, "The debrief lays out every area still open")
+	assert_true("unlock.starting_rig" in ids, "Including the permanent rig ladder")
+	assert_true("unlock.parallel_lane" in ids, "And permanent workflow space")
+	assert_false(
+		"unlock.rule_bug_market" in ids,
+		"Prizes tied to specific endings are not for sale"
+	)
+
+	assert_true(summit.spend_debrief_pick(str(choices[0].get("id", ""))), "A pick can be spent")
+	assert_eq(MetaProgress.pending_picks(), picks - 1, "One pick buys one unlock")
+	MetaProgress._profile["pending_picks"] = 0
+	assert_false(
+		summit.spend_debrief_pick(str(choices[1].get("id", ""))),
+		"An empty bank buys nothing"
+	)
+	summit.free()
 
 
 func _test_a_loss_banks_nothing() -> void:

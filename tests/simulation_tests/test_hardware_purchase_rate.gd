@@ -88,7 +88,7 @@ func _test_effect_line_shows_effective_rate_when_modified() -> void:
 	var gpu_rack: UpgradeDefinition = ContentDatabase.get_upgrade("upgrade.gpu_rack")
 	var line: String = UpgradePresentation.effect_line(gpu_rack)
 	assert_true(
-		line.contains("(41.0M/s now)"),
+		line.contains("(41.0M/prompt now)"),
 		"Market line shows the effective contribution when modifiers are active (%s)" % line
 	)
 	Simulation.autosave_enabled = prior_autosave

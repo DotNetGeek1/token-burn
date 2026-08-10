@@ -7,7 +7,7 @@
     "weight": 1.2,
     "conditions": [],
     "effects": [
-      {"operation": "multiply", "target": "economy.cloud_liability", "value": 1.5}
+      {"operation": "multiply", "target": "economy.cloud_surcharge_liability", "value": 1.5}
     ]
   },
   {
@@ -91,7 +91,7 @@
     "trigger_event": "round.ended",
     "weight": 1.1,
     "conditions": [
-      {"left": "economy.cloud_liability", "operator": ">", "right": 0}
+      {"left": "economy.cloud_surcharge_liability", "operator": ">", "right": 0}
     ],
     "effects": [
       {"operation": "defer_cost", "target": "economy.cash", "value": 220}

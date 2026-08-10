@@ -31,14 +31,14 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 		var heat_ratio: float = float(run_state.compute.get("heat", 0.0)) / maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 		if heat_ratio > 0.6:
 			base_rate *= 1.0 + (heat_ratio - 0.6) * 0.5
-	effect_resolver.begin_action("compute.recalculate")
-	var mod_ctx := ModifierContext.new("compute.recalculate", run_state)
-	mod_ctx.rng = rng.derive("compute.recalculate")
+	effect_resolver.begin_action(EventBus.EVENT_COMPUTE_RECALCULATE)
+	var mod_ctx := ModifierContext.new(EventBus.EVENT_COMPUTE_RECALCULATE, run_state)
+	mod_ctx.rng = rng.derive(EventBus.EVENT_COMPUTE_RECALCULATE)
 	mod_ctx.set_value("compute.token_rate", base_rate)
 	mod_ctx.set_value("compute.efficiency", base_efficiency)
 	mod_ctx.set_value("compute.local_capacity", hardware_rate)
 	mod_ctx.set_value("compute.cooling", base_cooling)
-	effect_resolver.dispatch("compute.recalculate", mod_ctx, subscriptions)
+	effect_resolver.dispatch(EventBus.EVENT_COMPUTE_RECALCULATE, mod_ctx, subscriptions)
 	var efficiency: float = float(mod_ctx.get_value("compute.efficiency", base_efficiency))
 	run_state.compute["efficiency"] = efficiency
 	run_state.compute["token_rate"] = float(mod_ctx.get_value("compute.token_rate", base_rate)) * efficiency

@@ -60,7 +60,7 @@ func _evaluate(trigger: String, context: Dictionary, content_db: Node) -> Array[
 		# So an award for collecting awards can be earned by the one that
 		# completes the set rather than by the run after it.
 		context["meta.achievements"] = MetaProgress.achievement_count()
-		EventBus.emit_event("achievement.unlocked", {"achievement_id": id})
+		EventBus.emit_event(EventBus.EVENT_ACHIEVEMENT_UNLOCKED, {"achievement_id": id})
 	return earned
 
 

@@ -30,6 +30,7 @@ func run() -> void:
 	_test_a_contract_takes_a_handful_of_burns()
 	_test_shipping_early_pays_less()
 	_test_boost_reaches_the_batch_it_was_armed_for()
+	_test_a_queued_boost_reaches_the_rounds_first_prompt()
 	_test_cloud_burst_is_only_rented()
 	_test_heat_throttle_reaches_the_next_prompt()
 	_test_a_run_opens_with_a_full_working_pipeline()
@@ -318,12 +319,14 @@ func _test_cooling_modules_take_heat_off_the_rig() -> void:
 	)
 
 	var job_system := JobSystem.new()
+	var heat_system := HeatSystem.new()
+	var economy_system := EconomySystem.new()
 	harness.state.compute["heat"] = 40.0
 	harness.state.business["active_jobs"] = [harness.job]
 	var messages: Array[String] = []
 	job_system._apply_burn(
-		harness.state, harness.job, result, harness.rng, messages, false,
-		harness.resolver, []
+		harness.state, harness.job, result, harness.rng, messages, ResolveMode.PREVIEW,
+		heat_system, economy_system, harness.resolver, []
 	)
 	assert_true(
 		float(harness.state.compute.get("heat", 0.0)) < 40.0,
@@ -332,8 +335,8 @@ func _test_cooling_modules_take_heat_off_the_rig() -> void:
 
 	harness.state.compute["heat"] = 2.0
 	job_system._apply_burn(
-		harness.state, harness.job, result, harness.rng, messages, false,
-		harness.resolver, []
+		harness.state, harness.job, result, harness.rng, messages, ResolveMode.PREVIEW,
+		heat_system, economy_system, harness.resolver, []
 	)
 	assert_true(
 		float(harness.state.compute.get("heat", 0.0)) >= 0.0,
@@ -529,6 +532,27 @@ func _test_boost_reaches_the_batch_it_was_armed_for() -> void:
 
 	sim.burn_batch()
 	assert_false(sim.boost_engaged(), "And it is spent once the batch has run")
+	sim.free()
+
+
+## The first BURN of a round is what opens the session, so the only way to
+## boost the first prompt is to arm it beforehand. The queued surge must be
+## live when that first batch resolves, not aged out by the session opening.
+func _test_a_queued_boost_reaches_the_rounds_first_prompt() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(2304)
+	var offers: Array = sim.run_state.business.get("job_offers", [])
+	sim.accept_job(str(offers[0].get("id", "")))
+	sim.set_queued_boost(true)
+	assert_true(sim.queued_boost, "BOOST can be armed before the session opens")
+	sim.start_work()
+	assert_true(
+		sim.boost_engaged(),
+		"Opening the session fires the queued boost, in time for the first prompt"
+	)
+	sim.burn_batch()
+	assert_false(sim.boost_engaged(), "And it is spent with that first batch")
 	sim.free()
 
 

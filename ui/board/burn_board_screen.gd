@@ -109,6 +109,11 @@ func refresh() -> void:
 		return
 	var job: Dictionary = Simulation.focused_job()
 	var working: bool = Simulation.phase == Simulation.Phase.IN_ROUND
+	# Before the first BURN opens the session an accepted contract is only
+	# queued, so the machine used to sit on "idle" as if nothing was selected.
+	# Show what is about to be worked instead.
+	if job.is_empty() and not working:
+		job = Simulation.queued_job_preview()
 
 	_refresh_stage()
 	_refresh_ascension_tracker()
@@ -314,6 +319,8 @@ func _refresh_terminal(job: Dictionary, working: bool) -> void:
 			],
 			"grey"
 		)
+		if not working:
+			rig.push_line("press BURN to start the round", "grey")
 	rig.flush_lines()
 	# The banner wiped the screen, so the listing and the verdict have to print
 	# again underneath it, and the log resumes from here rather than replaying the
@@ -381,14 +388,19 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 
 	# Both surges last exactly one batch. The deck's lamps carry that, which frees
 	# each key's sub-line to keep saying what the surge costs.
-	var boosted: bool = Simulation.boost_engaged()
-	boost_key.disabled = not working or boosted
+	# A surge pressed before the session opens is queued and fires the moment
+	# the first BURN starts the round — the first prompt was otherwise the one
+	# prompt that could never be boosted. Queued counts as engaged here so the
+	# lamp and the key both say it is armed.
+	var armable: bool = working or Simulation.can_start_work()
+	var boosted: bool = Simulation.boost_engaged() or Simulation.queued_boost
+	boost_key.disabled = not armable or boosted
 	boost_key.theme_type_variation = &"BoostButton" if boosted else &"SecondaryButton"
-	var clouded: bool = Simulation.cloud_engaged()
+	var clouded: bool = Simulation.cloud_engaged() or Simulation.queued_cloud
 	var cloud_owned: bool = Simulation.cloud_enabled()
 	var can_afford_cloud: bool = Simulation.can_afford_cloud_burst()
 	cloud_key.visible = FeatureFlags.is_enabled("cloud_compute_enabled")
-	cloud_key.disabled = not working or clouded or not cloud_owned or not can_afford_cloud
+	cloud_key.disabled = not armable or clouded or not cloud_owned or not can_afford_cloud
 	cloud_key.set_lines(
 		"CLOUD BURST",
 		NumberFormat.format_cash(Simulation.cloud_burst_cost()) if cloud_owned else "NO ACCOUNT"
@@ -584,6 +596,9 @@ func _on_job_details() -> void:
 	if _burning:
 		return
 	var job: Dictionary = Simulation.focused_job()
+	if job.is_empty():
+		# The brief is readable before the session opens too.
+		job = Simulation.queued_job_preview()
 	if job.is_empty():
 		return
 	var identity: Dictionary = JobPresentation.sector(job)
@@ -789,12 +804,22 @@ func _on_boost() -> void:
 		return
 	if Simulation.boost():
 		refresh()
+		return
+	# The session has not opened yet — queue it, so the first prompt gets the
+	# surge the moment BURN starts the round.
+	if Simulation.can_start_work() and not Simulation.queued_boost:
+		Simulation.set_queued_boost(true)
+		refresh()
 
 
 func _on_cloud() -> void:
 	if _burning:
 		return
 	if Simulation.cloud_burst():
+		refresh()
+		return
+	if Simulation.can_start_work() and Simulation.cloud_enabled() and not Simulation.queued_cloud:
+		Simulation.set_queued_cloud(true)
 		refresh()
 
 

@@ -55,7 +55,7 @@ func _test_cloud_needs_an_account() -> void:
 	assert_false(sim.cloud_enabled(), "A run does not begin with a cloud provider")
 	sim.set_queued_cloud(true)
 	assert_false(sim.queued_cloud, "So a burst cannot be armed before work starts")
-	assert_false(sim._apply_cloud_burst(), "And firing one outright does nothing")
+	assert_false(sim.debug_apply_cloud_burst(), "And firing one outright does nothing")
 
 	sim.run_state.build["upgrades"].append(Simulation.CLOUD_ACCOUNT_UPGRADE)
 	assert_true(sim.cloud_enabled(), "Opening an account enables the cloud")
@@ -63,7 +63,7 @@ func _test_cloud_needs_an_account() -> void:
 	assert_true(sim.queued_cloud, "And the burst can be armed")
 
 	sim.run_state.economy["cash"] = 100000.0
-	assert_true(sim._apply_cloud_burst(), "A burst fires once there is somebody to bill")
+	assert_true(sim.debug_apply_cloud_burst(), "A burst fires once there is somebody to bill")
 	assert_true(sim.cloud_engaged(), "And the rented capacity is live for the round")
 	sim.free()
 

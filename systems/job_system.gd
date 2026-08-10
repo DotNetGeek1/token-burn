@@ -1,8 +1,6 @@
 class_name JobSystem
 extends RefCounted
 
-const DEFAULT_TICK_SECONDS: float = 1.0
-
 
 func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Node, tuning: Dictionary) -> void:
 	var count: int = clampi(int(run_state.business.get("demand", 3.0)), 1, 5)
@@ -111,10 +109,13 @@ func _refresh_focus(run_state: RunState) -> void:
 	run_state.business["focused_job_id"] = ""
 
 
+## A deadline of N prompts means N actions remain. Once `prompts_remaining`
+## reaches zero the job has had its last action and, if it is not done, it has
+## missed its deadline — so zero is terminal, not one more free prompt.
 func _is_in_progress(job: Dictionary) -> bool:
 	if float(job.get("tokens_remaining", 0.0)) <= 0.0:
 		return false
-	return int(job.get("prompts_remaining", 0)) >= 0
+	return int(job.get("prompts_remaining", 0)) > 0
 
 
 ## The contracts one prompt advances. One machine works one contract, so the
@@ -160,11 +161,11 @@ func prepare_batch(
 	compute_system.recalculate(run_state, effect_resolver, subscriptions, rng)
 	var sustained_rate: float = float(run_state.compute.get("token_rate", 0.0))
 	var token_rate: float = sustained_rate * float(tuning.get("token_multiplier", 1.0))
-	effect_resolver.begin_action("prompt.started")
-	var mod_ctx := ModifierContext.new("prompt.started", run_state)
-	mod_ctx.rng = rng.derive("prompt.started")
+	effect_resolver.begin_action(EventBus.EVENT_PROMPT_STARTED)
+	var mod_ctx := ModifierContext.new(EventBus.EVENT_PROMPT_STARTED, run_state)
+	mod_ctx.rng = rng.derive(EventBus.EVENT_PROMPT_STARTED)
 	mod_ctx.set_value("compute.token_rate", token_rate)
-	effect_resolver.dispatch("prompt.started", mod_ctx, subscriptions)
+	effect_resolver.dispatch(EventBus.EVENT_PROMPT_STARTED, mod_ctx, subscriptions)
 	token_rate = float(mod_ctx.get_value("compute.token_rate", token_rate))
 	var scaling: Dictionary = ContentDatabase.balance.get("job_scaling", {})
 	var burst_cap: float = float(scaling.get("max_burst_multiplier", 8.0))
@@ -213,7 +214,7 @@ func run_burn(
 	economy_system: EconomySystem,
 	board_system: BoardSystem,
 	stage_limit: int = -1,
-	emit_events: bool = true
+	mode: int = ResolveMode.COMMIT
 ) -> Dictionary:
 	var active_jobs: Array = run_state.business.get("active_jobs", [])
 	if active_jobs.is_empty():
@@ -224,14 +225,19 @@ func run_burn(
 
 	var messages: Array[String] = []
 	var batch: float = prepare_batch(run_state, rng, effect_resolver, subscriptions, tuning, compute_system)
-	if emit_events:
-		EventBus.emit_event("tokens.generated", {"amount": batch})
+	if mode == ResolveMode.COMMIT:
+		EventBus.emit_event(EventBus.EVENT_TOKENS_GENERATED, {"amount": batch})
 
 	# The batch is the rig's output, not each contract's, so parallel lanes share
 	# it. Two machines finish two contracts in the time one machine finishes one.
 	var share: float = batch / float(lanes.size())
 	var primary: Dictionary = {}
 	var lane_reports: Array = []
+	# Snapshot before resolving so a completion can be told apart from a job
+	# that was already done: scope creep further down can even un-finish one.
+	var was_complete_before: Dictionary = {}
+	for job in lanes:
+		was_complete_before[str(job.get("id", ""))] = float(job.get("tokens_remaining", 0.0)) <= 0.0
 	for job in lanes:
 		var lane_rng: DeterministicRng = rng.derive("lane.%s" % str(job.get("id", "")))
 		var lane_burn: Dictionary = board_system.resolve_burn(
@@ -243,9 +249,12 @@ func run_burn(
 			if primary.is_empty():
 				return {"ok": false, "reason": str(lane_burn.get("reason", "The pipeline produced nothing."))}
 			continue
-		_apply_burn(run_state, job, lane_burn, rng, messages, emit_events, effect_resolver, subscriptions)
+		_apply_burn(
+			run_state, job, lane_burn, rng, messages, mode, heat_system, economy_system,
+			effect_resolver, subscriptions
+		)
 		_roll_job_risks(
-			run_state, job, lane_rng, messages, float(lane_burn.get("bug_chance_mult", 1.0))
+			run_state, job, lane_rng, messages, float(lane_burn.get("bug_chance_mult", 1.0)), mode
 		)
 		if primary.is_empty():
 			primary = lane_burn
@@ -262,13 +271,24 @@ func run_burn(
 		messages.append("Ran %d contracts in parallel — the batch was split %d ways." % [
 			lane_reports.size(), lane_reports.size()
 		])
+	# A contract is complete the moment its tokens run out — the only real
+	# transition worth telling anyone about. `end_prompt`'s own bookkeeping
+	# runs afterwards and never itself produces this transition, so it cannot
+	# be told apart from a job that had already finished a prompt earlier.
+	if mode == ResolveMode.COMMIT:
+		for job in lanes:
+			var job_id: String = str(job.get("id", ""))
+			if was_complete_before.get(job_id, false):
+				continue
+			if float(job.get("tokens_remaining", 0.0)) <= 0.0:
+				EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job_id})
 	primary = primary.duplicate(true)
 	primary["lanes"] = lane_reports
 	primary["lane_count"] = lane_reports.size()
 
 	var prompt_result: Dictionary = end_prompt(
 		run_state, subscriptions, effect_resolver, rng, tuning,
-		compute_system, heat_system, economy_system, messages
+		compute_system, heat_system, economy_system, messages, mode
 	)
 	prompt_result["burn"] = primary
 	return prompt_result
@@ -284,7 +304,8 @@ func run_cooling_prompt(
 	tuning: Dictionary,
 	compute_system: ComputeSystem,
 	heat_system: HeatSystem,
-	economy_system: EconomySystem
+	economy_system: EconomySystem,
+	mode: int = ResolveMode.COMMIT
 ) -> Dictionary:
 	if run_state.business.get("active_jobs", []).is_empty():
 		return {"ok": false, "reason": "No active jobs"}
@@ -294,11 +315,11 @@ func run_cooling_prompt(
 	var vented: float = float(run_state.compute.get("heat", 0.0)) * clampf(
 		float(heat_cfg.get("vent_ratio", 0.45)), 0.0, 1.0
 	)
-	run_state.compute["heat"] = maxf(0.0, float(run_state.compute.get("heat", 0.0)) - vented)
+	heat_system.add_heat(run_state, -vented)
 	messages.append("Vented %d heat. The fans have earned their keep." % int(round(vented)))
 	var result: Dictionary = end_prompt(
 		run_state, subscriptions, effect_resolver, rng, tuning,
-		compute_system, heat_system, economy_system, messages
+		compute_system, heat_system, economy_system, messages, mode
 	)
 	result["vented"] = vented
 	return result
@@ -360,7 +381,9 @@ func _apply_burn(
 	burn: Dictionary,
 	rng: DeterministicRng,
 	messages: Array[String],
-	emit_events: bool,
+	mode: int,
+	heat_system: HeatSystem,
+	economy_system: EconomySystem,
 	effect_resolver: EffectResolver = null,
 	subscriptions: Array = []
 ) -> void:
@@ -373,8 +396,8 @@ func _apply_burn(
 	run_state.statistics["peak_prompt_tokens"] = maxf(
 		float(run_state.statistics.get("peak_prompt_tokens", 0.0)), tokens_burned
 	)
-	if emit_events:
-		EventBus.emit_event("tokens.consumed", {"amount": tokens_burned})
+	if mode == ResolveMode.COMMIT:
+		EventBus.emit_event(EventBus.EVENT_TOKENS_CONSUMED, {"amount": tokens_burned})
 
 	# Shipped work is worth something even from a pipeline that generates no
 	# quality of its own, so a throughput build lands short of the bar rather
@@ -394,15 +417,15 @@ func _apply_burn(
 		mod_ctx.set_value("job.quality", float(job["quality"]))
 		effect_resolver.dispatch("quality.calculated", mod_ctx, subscriptions)
 		job["quality"] = clampf(float(mod_ctx.get_value("job.quality", job["quality"])), 0.0, 150.0)
-	if emit_events:
-		EventBus.emit_event("quality.calculated", {"value": job["quality"]})
+	if mode == ResolveMode.COMMIT:
+		EventBus.emit_event(EventBus.EVENT_QUALITY_CALCULATED, {"value": job["quality"]})
 
 	job["known_bugs"] = maxi(0, int(burn.get("known_bugs", 0)))
 	job["hidden_bugs"] = maxi(0, int(burn.get("hidden_bugs", 0)))
 	job["bugs_this_job"] = int(job["known_bugs"]) + int(job["hidden_bugs"])
 	if int(burn.get("bugs_added", 0)) > 0 or int(burn.get("hidden_added", 0)) > 0:
-		if emit_events:
-			EventBus.emit_event("bug.generated")
+		if mode == ResolveMode.COMMIT:
+			EventBus.emit_event(EventBus.EVENT_BUG_GENERATED)
 	if int(burn.get("revealed", 0)) > 0:
 		messages.append("Tests surfaced %d hidden bug(s)." % int(burn.get("revealed", 0)))
 	if int(burn.get("fixed", 0)) > 0:
@@ -413,12 +436,10 @@ func _apply_burn(
 		job["token_requirement"] = requirement + scope_tokens
 		job["tokens_remaining"] = float(job.get("tokens_remaining", 0.0)) + scope_tokens
 
-	run_state.compute["heat"] = clampf(
-		float(run_state.compute.get("heat", 0.0)) + float(burn.get("heat", 0.0)), 0.0, 200.0
-	)
+	heat_system.add_heat(run_state, float(burn.get("heat", 0.0)))
 	var cost: float = float(burn.get("cost", 0.0))
 	if cost > 0.0:
-		run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) - cost
+		economy_system.debit(run_state, cost, "pipeline_cost", {"job_id": job.get("id", "")})
 		run_state.economy["costs_this_round"] = float(run_state.economy.get("costs_this_round", 0.0)) + cost
 
 	for message in burn.get("messages", []):
@@ -437,7 +458,8 @@ func _roll_job_risks(
 	job: Dictionary,
 	rng: DeterministicRng,
 	messages: Array[String],
-	bug_chance_mult: float = 1.0
+	bug_chance_mult: float = 1.0,
+	mode: int = ResolveMode.COMMIT
 ) -> void:
 	if not _is_in_progress(job):
 		return
@@ -453,7 +475,8 @@ func _roll_job_risks(
 	if rng.next_float() < float(job.get("bug_chance", 0.12)) * maxf(0.0, bug_chance_mult):
 		job["hidden_bugs"] = int(job.get("hidden_bugs", 0)) + 1
 		job["bugs_this_job"] = int(job.get("known_bugs", 0)) + int(job["hidden_bugs"])
-		EventBus.emit_event("bug.generated")
+		if mode == ResolveMode.COMMIT:
+			EventBus.emit_event(EventBus.EVENT_BUG_GENERATED)
 
 	_roll_feature_creep(job, rng, messages)
 
@@ -492,7 +515,8 @@ func end_prompt(
 	compute_system: ComputeSystem,
 	heat_system: HeatSystem,
 	economy_system: EconomySystem,
-	messages: Array[String]
+	messages: Array[String],
+	mode: int = ResolveMode.COMMIT
 ) -> Dictionary:
 	var active_jobs: Array = run_state.business.get("active_jobs", [])
 	for job in active_jobs:
@@ -500,25 +524,27 @@ func end_prompt(
 			continue
 		if float(job.get("tokens_remaining", 0.0)) <= 0.0:
 			continue
-		if int(job.get("prompts_remaining", 0)) < 0:
+		# A deadline already at zero has had its last action: it failed the
+		# prompt that took it there and does not get another free one.
+		if int(job.get("prompts_remaining", 0)) <= 0:
 			continue
 		job["prompts_remaining"] = int(job.get("prompts_remaining", 1)) - 1
 		job["time_remaining_ratio"] = maxf(
 			0.0, float(job.get("prompts_remaining", 0)) / maxf(1.0, float(job.get("deadline_prompts", 4)))
 		)
-		if float(job.get("tokens_remaining", 0.0)) <= 0.0:
-			EventBus.emit_event("job.completed", {"job_id": job.get("id", "")})
-		elif int(job.get("prompts_remaining", 0)) < 0:
+		if int(job.get("prompts_remaining", 0)) <= 0:
 			messages.append("%s: deadline missed." % job.get("name", "Job"))
 
 	run_state.business["active_jobs"] = active_jobs
 	run_state.business["active_job"] = active_jobs[0] if active_jobs.size() == 1 else {}
 
-	# Expire this prompt's temporary boosts before heat is processed, so a
-	# throttle raised here still applies to the prompt it is warning about.
+	# Expire this prompt's temporary boosts before heat is processed. The
+	# batch this prompt burned has already been resolved by this point, so a
+	# throttle raised by the heat this same batch generated cannot reach back
+	# and slow it down — it only applies to the prompt that follows.
 	run_state.tick_rate_modifiers()
 	run_state.tick_cloud_burst()
-	messages.append_array(heat_system.process_prompt(run_state, subscriptions, effect_resolver, rng))
+	messages.append_array(heat_system.process_prompt(run_state, subscriptions, effect_resolver, rng, mode))
 	# Heat may have added a throttle modifier; recalculate so the HUD's sustained
 	# rate matches what the next prompt will actually use.
 	compute_system.recalculate(run_state, effect_resolver, subscriptions, rng)
@@ -533,7 +559,7 @@ func end_prompt(
 	for job in active_jobs:
 		if float(job.get("tokens_remaining", 0.0)) <= 0.0:
 			completed_count += 1
-		elif int(job.get("prompts_remaining", 0)) < 0:
+		elif int(job.get("prompts_remaining", 0)) <= 0:
 			failed_count += 1
 
 	return {
@@ -559,7 +585,7 @@ func ship_focused_job(run_state: RunState) -> Dictionary:
 	job["shipped_progress"] = clampf(1.0 - remaining / requirement, 0.0, 1.0)
 	job["shipped_unfinished"] = remaining > 0.0
 	job["tokens_remaining"] = 0.0
-	EventBus.emit_event("job.completed", {"job_id": job.get("id", "")})
+	EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job.get("id", "")})
 	_refresh_focus(run_state)
 	return {"ok": true, "progress": float(job["shipped_progress"]), "job": job}
 
@@ -657,7 +683,7 @@ func _calculate_reward(
 	mod_ctx.set_value("job.reward", reward)
 	effect_resolver.dispatch("reward.calculated", mod_ctx, subscriptions)
 	reward = float(mod_ctx.get_value("job.reward", reward))
-	reward *= _delivery_penalty(run_state, job, rng, messages)
+	reward *= _delivery_penalty(run_state, job, rng, messages, economy_system)
 	var quality: float = float(job.get("quality", 0.0))
 	var threshold: float = float(job.get("quality_threshold", 0.0))
 	var quality_multiplier: float = quality_payout_multiplier(quality, threshold)
@@ -724,7 +750,8 @@ func _delivery_penalty(
 	run_state: RunState,
 	job: Dictionary,
 	rng: DeterministicRng,
-	messages: Array[String]
+	messages: Array[String],
+	economy_system: EconomySystem = null
 ) -> float:
 	var multiplier: float = 1.0
 	var job_name: String = str(job.get("name", "Job"))
@@ -762,7 +789,10 @@ func _delivery_penalty(
 		# Rule-changer: a shadow market pays for defects nobody has found yet.
 		if "unlock.rule_bug_market" in Array(run_state.build.get("meta_unlocks", [])):
 			var bounty: float = 40.0 * float(shipped_undetected)
-			run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + bounty
+			if economy_system != null:
+				economy_system.credit(run_state, bounty, "bug_market_bounty:%s" % job.get("id", ""))
+			else:
+				run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + bounty
 			messages.append("%s: sold %d undetected bug(s) to the bug market for %s." % [
 				job_name, shipped_undetected, NumberFormat.format_cash(bounty)
 			])
@@ -796,6 +826,13 @@ func _prepare_job(offer: Dictionary, run_state: RunState, content_db: Node) -> D
 	if str(job.get("workflow_id", "")) == "":
 		job["workflow_id"] = default_workflow_id(run_state)
 	return job
+
+
+## A queued offer as it will look once `begin_work_session` prepares it, for
+## screens that show the contract before the session opens. Pure: the offer in
+## the queue is not touched — `_prepare_job` works on a deep copy.
+func prepare_offer_preview(offer: Dictionary, run_state: RunState, content_db: Node) -> Dictionary:
+	return _prepare_job(offer, run_state, content_db)
 
 
 ## The pipeline a contract is worked through until the player says otherwise.
@@ -876,7 +913,10 @@ func _scale_job(
 	var token_mult: float = float(scaling.get("token_scaling", {}).get("base_multiplier", 1.0))
 	token_mult += float(scaling.get("token_scaling", {}).get("per_round_growth", 0.15)) * (curve_round - 1)
 
-	var profile: Dictionary = content_db.balance.get("difficulty_profiles", {}).get("normal", {})
+	var difficulty_id: String = str(run_state.flags.get("difficulty", "normal"))
+	var profile: Dictionary = content_db.balance.get("difficulty_profiles", {}).get(
+		difficulty_id, content_db.balance.get("difficulty_profiles", {}).get("normal", {})
+	)
 	reward_mult *= float(profile.get("job_reward_multiplier", 1.0))
 	token_mult *= float(profile.get("token_requirement_multiplier", 1.0))
 	# Compute Ages scale both sides together: a later age is a bigger game,
@@ -929,7 +969,12 @@ func _scale_job(
 	# the multiplier is on the metered costs — so one contract roughly breaks
 	# even and filling the round is what makes it profitable.
 	var round_rent: float = float(run_state.economy.get("round_rent", 400.0))
-	var min_reward: float = power_per_prompt * ceil(effective_work_prompts) * float(
+	# Metered cloud cost is real per-prompt spend too, so a cloud-heavy build's
+	# contracts must be able to cover it — not just the power they draw.
+	var cloud_per_prompt: float = float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) * float(
+		tuning.get("cloud_cost_multiplier", 1.0)
+	)
+	var min_reward: float = (power_per_prompt + cloud_per_prompt) * ceil(effective_work_prompts) * float(
 		scaling.get("min_reward_cost_multiplier", 3.0)
 	) + round_rent
 	# Snapped so varied offers still advertise tidy figures.

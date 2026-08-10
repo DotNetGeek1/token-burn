@@ -26,6 +26,7 @@ func run() -> void:
 	_test_there_is_no_overtime_left_to_fall_into()
 	_test_beating_the_contract_wins_the_run()
 	_test_beating_the_contract_unlocks_the_next_location()
+	_test_advancing_to_the_next_chapter_carries_the_whole_business()
 	_test_no_ladder_state_is_left_in_the_run()
 	_test_replaying_a_completed_location_sets_its_contract_again()
 	_test_a_won_run_can_carry_on_into_endless()
@@ -165,7 +166,7 @@ func _test_the_year_running_out_ends_the_run() -> void:
 	sim.start_run(5005)
 	sim.run_state.economy["cash"] = 500000.0
 	sim.run_state.calendar["round"] = 12
-	sim._end_round()
+	sim.debug_end_round()
 	assert_eq(sim.phase, sim.Phase.RUN_END, "Reaching the end of the year ends the run")
 	assert_eq(
 		str(sim.run_state.flags.get("outcome", "")), "contract_expired",
@@ -185,7 +186,7 @@ func _test_a_finished_contract_beats_the_deadline_to_it() -> void:
 	sim.run_state.economy["cash"] = 500000.0
 	sim.run_state.calendar["round"] = 12
 	_meet_requirement(sim, "ascension.first_scale_up")
-	sim._finish_prompt({"ok": true, "messages": []})
+	sim.debug_finish_prompt({"ok": true, "messages": []})
 	assert_true(bool(sim.run_state.flags.get("victory", false)), "Finishing in the last round still wins")
 	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascended", "As an ascension")
 	sim.free()
@@ -198,7 +199,7 @@ func _test_there_is_no_overtime_left_to_fall_into() -> void:
 	sim.run_state.economy["cash"] = 5000000.0
 	var rent_before: float = float(sim.run_state.economy.get("round_rent", 0.0))
 	sim.run_state.calendar["round"] = 12
-	sim._end_round()
+	sim.debug_end_round()
 	assert_almost_eq(
 		float(sim.run_state.economy.get("round_rent", 0.0)), rent_before, 0.01,
 		"The year closing does not escalate the rent — it ends the run instead"
@@ -212,15 +213,16 @@ func _test_beating_the_contract_wins_the_run() -> void:
 	var sim: Node = _sim()
 	sim.start_run(5020)
 	var contract: Dictionary = _meet_requirement(sim, "ascension.first_scale_up")
-	sim._finish_prompt({"ok": true, "messages": []})
+	sim.debug_finish_prompt({"ok": true, "messages": []})
 
 	assert_eq(sim.phase, sim.Phase.RUN_END, "Completing the contract ends the run")
 	assert_true(bool(sim.run_state.flags.get("victory", false)), "As a victory")
 	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascended", "Named as an ascension")
 	assert_false(sim.ascension_active(), "The contract is no longer running")
+	assert_true(int(contract.get("picks", 0)) > 0, "The contract names a pick reward")
 	assert_eq(
-		MetaProgress.pending_picks(), int(contract.get("picks", 1)),
-		"And it banks its picks for the next run"
+		MetaProgress.pending_picks(), 0,
+		"But a chapter goal banks nothing permanent — only the final goal pays picks"
 	)
 	assert_eq(
 		MetaProgress.ascension_completions("ascension.first_scale_up"), 1,
@@ -235,14 +237,14 @@ func _test_beating_the_contract_unlocks_the_next_location() -> void:
 	var sim: Node = _sim()
 	sim.start_run(5024)
 	_meet_requirement(sim, "ascension.first_scale_up")
-	sim._finish_prompt({"ok": true, "messages": []})
+	sim.debug_finish_prompt({"ok": true, "messages": []})
 
 	assert_true("bedroom" in MetaProgress.completed_locations(), "The bedroom is behind the player")
 	assert_true(MetaProgress.is_location_unlocked("garage"), "And the garage is open")
 	assert_eq(sim.next_location_unlocked(), "garage", "Which the verdict screen can name")
 	assert_eq(
-		MetaProgress.selected_location(), "garage",
-		"The campaign moves forward on its own: the garage is now where runs start"
+		MetaProgress.selected_location(), "bedroom",
+		"The campaign selection stays put: the win continues in-run, not in the profile"
 	)
 	assert_false(
 		sim.continue_after_victory(),
@@ -250,19 +252,99 @@ func _test_beating_the_contract_unlocks_the_next_location() -> void:
 	)
 	sim.free()
 
-	# Any way of starting the next run lands in the new chapter, already under
-	# the new chapter's contract.
+	# The garage is this run's continuation, through advance_to_next_chapter.
+	# A run started fresh is a fresh game and goes back to the start.
 	var next_run: Node = _sim()
 	next_run.start_run(5028)
 	assert_eq(
-		str(next_run.run_state.build.get("dwelling", "")), "garage",
-		"The next run starts in the garage, not back in the bedroom"
+		str(next_run.run_state.build.get("dwelling", "")), "bedroom",
+		"A fresh run starts back in the bedroom"
 	)
 	assert_eq(
-		str(next_run.run_state.ascension.get("contract_id", "")), "ascension.million_token_operator",
-		"Under the garage's contract, stated before the first prompt"
+		str(next_run.run_state.ascension.get("contract_id", "")), "ascension.first_scale_up",
+		"Under the bedroom's contract, stated before the first prompt"
 	)
 	next_run.free()
+
+
+## The angel's goal is the end of a chapter, not the end of the game. Advancing
+## continues the same business in the next room: cash, perks, modules, upgrades
+## and reputation all carry — only the contract it is measured against grows.
+func _test_advancing_to_the_next_chapter_carries_the_whole_business() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5030)
+	sim.run_state.economy["cash"] = 987654.0
+	sim.run_state.business["reputation"] = 17.0
+	sim.run_state.build["perks"] = ["perk.test_marker"]
+	sim.run_state.build["operations"] = [{"id": "op.test_marker"}]
+	_meet_requirement(sim, "ascension.first_scale_up")
+	sim.debug_finish_prompt({"ok": true, "messages": []})
+	assert_eq(sim.phase, sim.Phase.RUN_END, "The chapter's contract is complete")
+
+	var hardware_before: Array = Array(sim.run_state.build.get("hardware", [])).duplicate()
+	var lifetime_before: float = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
+	# Sampled after the victory settled its bills: what the company actually
+	# holds walking out of the bedroom is what must walk into the garage.
+	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
+	assert_true(sim.advance_to_next_chapter(), "And the company moves up a chapter")
+	assert_eq(str(sim.run_state.build.get("dwelling", "")), "garage", "Into the garage")
+	assert_true(
+		sim.phase == sim.Phase.ROUND_PREP or sim.phase == sim.Phase.ANGEL_ROUND,
+		"Back in play — round prep, or the draft the winning round earned"
+	)
+	assert_eq(int(sim.run_state.calendar.get("round", 0)), 1, "With a fresh year on the new contract")
+	assert_true(
+		float(sim.run_state.economy.get("cash", 0.0)) >= cash_before,
+		"Cash carries forward (the stake is a floor, not a replacement)"
+	)
+	assert_almost_eq(
+		float(sim.run_state.business.get("reputation", 0.0)), 17.0, 0.01,
+		"Reputation carries"
+	)
+	assert_true("perk.test_marker" in Array(sim.run_state.build.get("perks", [])), "Perks carry")
+	assert_eq(
+		Array(sim.run_state.build.get("operations", [])).size(), 1,
+		"Modules carry"
+	)
+	assert_eq(
+		Array(sim.run_state.build.get("hardware", [])), hardware_before,
+		"The rig carries as-is"
+	)
+	assert_almost_eq(
+		float(sim.run_state.statistics.get("lifetime_tokens", 0.0)), lifetime_before, 0.01,
+		"Lifetime burn is not reset"
+	)
+	assert_true(sim.ascension_active(), "The next chapter's contract is live immediately")
+	assert_eq(
+		str(sim.run_state.ascension.get("contract_id", "")), "ascension.million_token_operator",
+		"And it is the garage's bigger one"
+	)
+	assert_almost_eq(
+		float(sim.ascension_progress().get("tokens_burned", -1.0)), 0.0, 1.0,
+		"Measured from zero: the old chapter's burn does not pre-pay the new target"
+	)
+	assert_false(
+		sim.advance_to_next_chapter(),
+		"Advancing is a one-shot on the win, not something a live run can repeat"
+	)
+	sim.free()
+
+	# The final chapter has nowhere further to move; its continuation is the
+	# endless tail, and advancing must refuse rather than wrap around.
+	var summit: Node = _sim()
+	summit.start_run(5031)
+	_run_in(summit, "moon_facility")
+	summit.run_state.economy["cash"] = 100000000.0
+	var final_contract: Dictionary = _meet_requirement(summit, "ascension.final_prompt")
+	summit.debug_finish_prompt({"ok": true, "messages": []})
+	assert_eq(summit.phase, summit.Phase.RUN_END, "The last contract is complete")
+	assert_false(summit.advance_to_next_chapter(), "There is no chapter above the summit")
+	assert_eq(
+		MetaProgress.pending_picks(), int(final_contract.get("picks", 0)),
+		"Beating the game is what banks the permanent picks"
+	)
+	summit.free()
 
 
 func _test_no_ladder_state_is_left_in_the_run() -> void:
@@ -309,7 +391,7 @@ func _test_a_won_run_can_carry_on_into_endless() -> void:
 	# can survive the bills long enough to watch them climb.
 	sim.run_state.economy["cash"] = 100000000.0
 	_meet_requirement(sim, "ascension.final_prompt")
-	sim._finish_prompt({"ok": true, "messages": []})
+	sim.debug_finish_prompt({"ok": true, "messages": []})
 	assert_eq(sim.phase, sim.Phase.RUN_END, "The run is won")
 
 	var tokens_before: float = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
@@ -326,7 +408,7 @@ func _test_a_won_run_can_carry_on_into_endless() -> void:
 	# ended by a deadline it has already beaten.
 	sim.run_state.calendar["round"] = 12
 	var rent_before: float = float(sim.run_state.economy.get("round_rent", 0.0))
-	sim._end_round()
+	sim.debug_end_round()
 	assert_true(sim.phase != sim.Phase.RUN_END, "A won run is not ended again by the calendar")
 	assert_true(
 		float(sim.run_state.economy.get("round_rent", 0.0)) > rent_before,

@@ -5,11 +5,25 @@ const LEDGER_TYPE_CREDIT := "credit"
 const LEDGER_TYPE_DEBIT := "debit"
 
 
+## Every primitive here takes a non-negative, finite amount: `debit` and
+## `credit` are which direction cash moves, not a signed delta, and letting a
+## negative slip through would let a "cost" top up the till or a "purchase"
+## pay the player to buy something. NaN/inf are rejected for the same reason —
+## once one lands in `cash` every comparison against it starts lying.
+static func _is_valid_amount(amount: float) -> bool:
+	return is_finite(amount) and amount >= 0.0
+
+
 func can_afford(run_state: RunState, amount: float) -> bool:
+	if not _is_valid_amount(amount):
+		return false
 	return float(run_state.economy.get("cash", 0.0)) >= amount
 
 
 func credit(run_state: RunState, amount: float, reason: String, metadata: Dictionary = {}) -> void:
+	if not _is_valid_amount(amount):
+		push_error("EconomySystem.credit: rejected invalid amount %s (%s)" % [amount, reason])
+		return
 	if amount == 0.0:
 		return
 	var cash: float = float(run_state.economy.get("cash", 0.0)) + amount
@@ -18,6 +32,9 @@ func credit(run_state: RunState, amount: float, reason: String, metadata: Dictio
 
 
 func debit(run_state: RunState, amount: float, reason: String, metadata: Dictionary = {}) -> void:
+	if not _is_valid_amount(amount):
+		push_error("EconomySystem.debit: rejected invalid amount %s (%s)" % [amount, reason])
+		return
 	if amount == 0.0:
 		return
 	var cash: float = float(run_state.economy.get("cash", 0.0)) - amount
@@ -26,10 +43,28 @@ func debit(run_state: RunState, amount: float, reason: String, metadata: Diction
 
 
 func purchase(run_state: RunState, cost: float, reason: String) -> bool:
+	if not _is_valid_amount(cost):
+		push_error("EconomySystem.purchase: rejected invalid cost %s (%s)" % [cost, reason])
+		return false
 	if not can_afford(run_state, cost):
 		return false
 	debit(run_state, cost, reason)
 	return true
+
+
+## The debt side of an effect that lets a run spend cash it does not have.
+## Kept separate from `debit`/`credit` since borrowing does not move cash by
+## itself — the effect that calls this also credits the amount to whatever it
+## borrowed into — but the debt it creates is exactly as real as any other
+## ledgered liability, so it gets the same validation and the same ledger.
+static func record_debt(run_state: RunState, amount: float, reason: String) -> void:
+	if not _is_valid_amount(amount):
+		push_error("EconomySystem.record_debt: rejected invalid amount %s (%s)" % [amount, reason])
+		return
+	if amount == 0.0:
+		return
+	run_state.economy["debt"] = float(run_state.economy.get("debt", 0.0)) + amount
+	_append_ledger_entry(run_state, "borrow", amount, reason, float(run_state.economy.get("cash", 0.0)))
 
 
 ## Metered costs land per prompt, so a long round genuinely costs more to run
@@ -46,7 +81,11 @@ func accrue_prompt_costs(run_state: RunState, tuning: Dictionary) -> void:
 	# Running total for the round, so the player can watch the burn build up
 	# before the bills land.
 	run_state.economy["costs_this_round"] = float(run_state.economy.get("costs_this_round", 0.0)) + total
-	run_state.economy["cloud_liability"] = float(run_state.economy.get("cloud_liability", 0.0)) + cloud_cost * 0.25
+	# The multiplier is already folded into `cloud_cost` above — applying it
+	# again at round-end billing double-charged every cloud-heavy build.
+	run_state.economy["cloud_surcharge_liability"] = (
+		float(run_state.economy.get("cloud_surcharge_liability", 0.0)) + cloud_cost * 0.25
+	)
 
 
 ## Charges rent and the other end-of-round bills, and returns the statement so
@@ -60,7 +99,9 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 		add_income(run_state, passive, tuning)
 	var rent: float = float(run_state.economy.get("round_rent", 400.0))
 	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
-	var cloud_bill: float = float(run_state.economy.get("cloud_liability", 0.0)) * float(tuning.get("cloud_cost_multiplier", 1.0))
+	# `cloud_surcharge_liability` already carries the multiplier from accrual
+	# — billed at face value here, exactly once.
+	var cloud_bill: float = float(run_state.economy.get("cloud_surcharge_liability", 0.0))
 	var operating: float = float(run_state.economy.get("costs_this_round", 0.0))
 	var total: float = rent + recurring + cloud_bill
 	var bill_metadata: Dictionary = {
@@ -73,7 +114,7 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 		"bill_total": total,
 		"round_total": total + operating,
 	}
-	EventBus.emit_event("bill.due", {"bill_type": "round", "amount": total})
+	EventBus.emit_event(EventBus.EVENT_BILL_DUE, {"bill_type": "round", "amount": total})
 	var cash: float = float(run_state.economy.get("cash", 0.0))
 	if cash >= total:
 		bill_metadata["paid_in_full"] = true
@@ -90,7 +131,9 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 		run_state.economy["debt"] = float(run_state.economy.get("debt", 0.0)) + debt_added
 		run_state.economy["cash"] = 0.0
 		run_state.economy["rent_unpaid_streak"] = int(run_state.economy.get("rent_unpaid_streak", 0)) + 1
-	run_state.economy["cloud_liability"] = maxf(0.0, float(run_state.economy.get("cloud_liability", 0.0)) * 0.5)
+	run_state.economy["cloud_surcharge_liability"] = maxf(
+		0.0, float(run_state.economy.get("cloud_surcharge_liability", 0.0)) * 0.5
+	)
 	run_state.economy["last_round_costs"] = total + operating
 	bill_metadata["cash_after"] = float(run_state.economy.get("cash", 0.0))
 	bill_metadata["debt"] = float(run_state.economy.get("debt", 0.0))
@@ -151,7 +194,7 @@ func _apply_pending_bill(run_state: RunState, bill: Dictionary) -> void:
 		)
 
 
-func _append_ledger_entry(
+static func _append_ledger_entry(
 	run_state: RunState,
 	entry_type: String,
 	amount: float,
@@ -172,6 +215,6 @@ func _append_ledger_entry(
 	run_state.economy["ledger"].append(entry)
 
 
-func _ensure_ledger(run_state: RunState) -> void:
+static func _ensure_ledger(run_state: RunState) -> void:
 	if not run_state.economy.has("ledger") or not run_state.economy["ledger"] is Array:
 		run_state.economy["ledger"] = []

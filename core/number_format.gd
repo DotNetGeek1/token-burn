@@ -19,8 +19,11 @@ static func format_tokens(value: float) -> String:
 	return "%s tokens" % format(value)
 
 
+## Tokens burned by one batch — a prompt, not a second. There is no clock
+## behind it: throughput is measured in prompts because that is the unit the
+## deadline, the deck and the RNG all use.
 static func format_token_rate(value: float) -> String:
-	return "%s/s" % format(value)
+	return "%s/prompt" % format(value)
 
 
 static func format_cash(value: float) -> String:

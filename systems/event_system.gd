@@ -13,7 +13,7 @@ func maybe_trigger(
 		return null
 	var pool: Array = []
 	for event in content_db.events:
-		if event.trigger_event != "round.ended":
+		if event.trigger_event != EventBus.EVENT_ROUND_ENDED:
 			continue
 		var eval_ctx: Dictionary = {"run_state": run_state.to_dict()}
 		var all_pass := true

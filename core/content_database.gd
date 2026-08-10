@@ -303,7 +303,7 @@ func _load_events() -> void:
 		event.id = str(entry.get("id", ""))
 		event.name = str(entry.get("name", ""))
 		event.description = str(entry.get("description", ""))
-		event.trigger_event = str(entry.get("trigger_event", "round.ended"))
+		event.trigger_event = str(entry.get("trigger_event", EventBus.EVENT_ROUND_ENDED))
 		event.weight = float(entry.get("weight", 1.0))
 		event.conditions = Array(entry.get("conditions", []), TYPE_DICTIONARY, "", null)
 		var effects: Array[EffectDefinition] = []
@@ -360,51 +360,184 @@ func _load_balance() -> void:
 	synergies = _load_json_array("res://content/balance/synergies.json")
 
 
+## Operation names the effect resolver actually understands (see the `match`
+## in `EffectResolver._apply_effect_dict`). Content authoring a typo'd op name
+## must fail here, at load time, rather than silently doing nothing at the
+## table where nobody is watching for it.
+const KNOWN_EFFECT_OPERATIONS := [
+	"add", "multiply", "set", "cap_min", "cap_max", "convert", "copy",
+	"discount", "defer_cost", "borrow", "trigger", "spawn", "remove",
+	"reroll", "repeat",
+]
+## Category enums recognised by `Simulation`/`UpgradeSystem` when installing
+## an upgrade. Anything else is a typo that would silently fail to install.
+const KNOWN_UPGRADE_CATEGORIES := ["hardware", "component", "dwelling", "cloud", "advertising"]
+## Prefixes an effect target may use without resolving against `RunState`:
+## `job.`/`batch.`/`stage.` are per-resolution scratch values (see
+## `ModifierContext` and `BoardSystem`'s per-stage batch dictionary),
+## `build.`/`business.` accept new keys by design (`EffectResolver._finalize_to_run_state`).
+const DYNAMIC_TARGET_PREFIXES := ["job.", "batch.", "stage.", "build.", "business."]
+
+
 func _validate_content() -> void:
+	for message in collect_validation_errors():
+		push_error("ContentDatabase: %s" % message)
+
+
+## Pure pass over the loaded content, returning every problem found rather
+## than pushing errors directly — a compiler's diagnostics list, testable
+## with synthetic content without needing to intercept `push_error`.
+func collect_validation_errors() -> Array[String]:
+	var errors: Array[String] = []
 	var hardware_curves: Dictionary = balance.get("hardware_curves", {})
 	var dwelling_costs: Dictionary = balance.get("dwelling_costs", {})
+	var known_paths: Dictionary = _known_run_state_paths()
+	var seen_ids: Dictionary = {}
+
 	for upgrade in upgrades:
+		_check_unique_id(errors, seen_ids, "upgrade", upgrade.id)
+		if not KNOWN_UPGRADE_CATEGORIES.has(upgrade.category):
+			errors.append("upgrade '%s' has unknown category '%s'" % [upgrade.id, upgrade.category])
+		if upgrade.cost < 0.0:
+			errors.append("upgrade '%s' has negative cost %s" % [upgrade.id, upgrade.cost])
+		if upgrade.repeatable and upgrade.cost_growth <= 0.0:
+			errors.append("upgrade '%s' is repeatable with non-positive cost_growth %s" % [upgrade.id, upgrade.cost_growth])
+		if upgrade.max_level < 0:
+			errors.append("upgrade '%s' has negative max_level %s" % [upgrade.id, upgrade.max_level])
 		if upgrade.category == "hardware" and upgrade.hardware_key != "":
 			if not hardware_curves.has(upgrade.hardware_key):
-				push_error("ContentDatabase: upgrade '%s' references missing hardware_key '%s'" % [upgrade.id, upgrade.hardware_key])
+				errors.append("upgrade '%s' references missing hardware_key '%s'" % [upgrade.id, upgrade.hardware_key])
 		if upgrade.category == "component":
 			if not hardware_curves.has(upgrade.component_key):
-				push_error("ContentDatabase: upgrade '%s' references missing component_key '%s'" % [upgrade.id, upgrade.component_key])
+				errors.append("upgrade '%s' references missing component_key '%s'" % [upgrade.id, upgrade.component_key])
 			if not hardware_curves.has(upgrade.requires_hardware):
-				push_error("ContentDatabase: upgrade '%s' fits missing host hardware '%s'" % [upgrade.id, upgrade.requires_hardware])
+				errors.append("upgrade '%s' fits missing host hardware '%s'" % [upgrade.id, upgrade.requires_hardware])
 		if upgrade.category == "dwelling" and upgrade.dwelling_key != "":
 			if not dwelling_costs.has(upgrade.dwelling_key):
-				push_error("ContentDatabase: upgrade '%s' references missing dwelling_key '%s'" % [upgrade.id, upgrade.dwelling_key])
+				errors.append("upgrade '%s' references missing dwelling_key '%s'" % [upgrade.id, upgrade.dwelling_key])
 		if upgrade.requires_dwelling != "" and not dwelling_costs.has(upgrade.requires_dwelling):
-			push_error("ContentDatabase: upgrade '%s' requires missing dwelling '%s'" % [upgrade.id, upgrade.requires_dwelling])
+			errors.append("upgrade '%s' requires missing dwelling '%s'" % [upgrade.id, upgrade.requires_dwelling])
 		if upgrade.requires_upgrade != "" and not _upgrades_by_id.has(upgrade.requires_upgrade):
-			push_error("ContentDatabase: upgrade '%s' requires missing upgrade '%s'" % [upgrade.id, upgrade.requires_upgrade])
+			errors.append("upgrade '%s' requires missing upgrade '%s'" % [upgrade.id, upgrade.requires_upgrade])
+		for effect in upgrade.effects:
+			_validate_effect(errors, known_paths, "upgrade '%s'" % upgrade.id, effect.operation, effect.target)
+
+	for perk in perks:
+		_check_unique_id(errors, seen_ids, "perk", perk.id)
+		for sub in perk.subscriptions:
+			if sub is Dictionary:
+				_validate_effect_list(errors, known_paths, "perk '%s'" % perk.id, Array(sub.get("effects", [])))
+
+	for event in events:
+		_check_unique_id(errors, seen_ids, "event", event.id)
+		for effect in event.effects:
+			_validate_effect(errors, known_paths, "event '%s'" % event.id, effect.operation, effect.target)
+
 	for operation in operations:
+		_check_unique_id(errors, seen_ids, "operation", operation.id)
 		if operation.unlock_achievement != "" and not _achievements_by_id.has(operation.unlock_achievement):
-			push_error("ContentDatabase: operation '%s' is gated behind missing achievement '%s'" % [
+			errors.append("operation '%s' is gated behind missing achievement '%s'" % [
 				operation.id, operation.unlock_achievement,
 			])
 		for partner_id in operation.combo_partners():
 			if not _operations_by_id.has(partner_id):
-				push_error("ContentDatabase: operation '%s' declares a combo with missing module '%s'" % [
+				errors.append("operation '%s' declares a combo with missing module '%s'" % [
 					operation.id, partner_id,
 				])
 	var demands: Dictionary = balance.get("job_demands", {})
 	for job in jobs:
+		_check_unique_id(errors, seen_ids, "job", job.id)
+		if job.revision_risk < 0.0 or job.revision_risk > 1.0:
+			errors.append("job '%s' has revision_risk %s outside [0,1]" % [job.id, job.revision_risk])
 		for demand_id in job.demands:
 			if not demands.has(str(demand_id)):
-				push_error("ContentDatabase: job '%s' asks for missing demand '%s'" % [
+				errors.append("job '%s' asks for missing demand '%s'" % [
 					job.id, str(demand_id),
 				])
+		for rule in job.board_rules:
+			if rule is Dictionary and not rule.has("type"):
+				errors.append("job '%s' has a board rule with no 'type'" % job.id)
 	for achievement in achievements:
 		var reward: Dictionary = Dictionary(achievement.get("reward", {}))
 		if str(reward.get("type", "none")) != "unlock_module":
 			continue
 		var operation_id: String = str(reward.get("operation_id", ""))
 		if not _operations_by_id.has(operation_id):
-			push_error("ContentDatabase: achievement '%s' unlocks missing module '%s'" % [
+			errors.append("achievement '%s' unlocks missing module '%s'" % [
 				str(achievement.get("id", "")), operation_id,
 			])
+	_validate_ascension_contracts(errors)
+	return errors
+
+
+## One authoritative record of every place an upgrade/perk/event effect can
+## legally write. Anything outside this plus `DYNAMIC_TARGET_PREFIXES` is a
+## target that would silently no-op against a `RunState` that never had it.
+func _known_run_state_paths() -> Dictionary:
+	var state := RunState.new()
+	var sections: Dictionary = state.to_dict()
+	var paths: Dictionary = {}
+	for section in sections.keys():
+		var value: Variant = sections[section]
+		if value is Dictionary:
+			for key in value.keys():
+				paths["%s.%s" % [section, key]] = true
+	for derived in EffectResolver.DERIVED_PATHS:
+		paths[derived] = true
+	return paths
+
+
+func _validate_effect_list(errors: Array[String], known_paths: Dictionary, context: String, effects: Array) -> void:
+	for effect in effects:
+		if not effect is Dictionary:
+			continue
+		_validate_effect(
+			errors, known_paths, context, str(effect.get("operation", "add")), str(effect.get("target", ""))
+		)
+		_validate_effect_list(errors, known_paths, context, Array(effect.get("effects", [])))
+
+
+func _validate_effect(errors: Array[String], known_paths: Dictionary, context: String, operation: String, target: String) -> void:
+	if not KNOWN_EFFECT_OPERATIONS.has(operation.to_lower()):
+		errors.append("%s has unknown effect operation '%s'" % [context, operation])
+	if target == "" or operation.to_lower() == "convert":
+		return
+	for prefix in DYNAMIC_TARGET_PREFIXES:
+		if target.begins_with(prefix):
+			return
+	if not known_paths.has(target):
+		errors.append("%s targets unknown path '%s'" % [context, target])
+
+
+func _check_unique_id(errors: Array[String], seen_ids: Dictionary, kind: String, id: String) -> void:
+	var key: String = "%s:%s" % [kind, id]
+	if seen_ids.has(key):
+		errors.append("duplicate %s id '%s'" % [kind, id])
+	seen_ids[key] = true
+
+
+## Every campaign location the player can actually reach must have exactly
+## one contract to play it for; a location with none is unplayable, and one
+## with two makes ascension evaluate against whichever loaded last.
+func _validate_ascension_contracts(errors: Array[String]) -> void:
+	var counts: Dictionary = {}
+	for contract in ascension_contracts:
+		if bool(contract.get("alternate", false)):
+			continue
+		var location_id: String = str(contract.get("location", ""))
+		if location_id == "":
+			errors.append("ascension contract '%s' has no location" % str(contract.get("id", "")))
+			continue
+		counts[location_id] = int(counts.get(location_id, 0)) + 1
+	for location_id in counts.keys():
+		if int(counts[location_id]) > 1:
+			errors.append("location '%s' has %d non-alternate ascension contracts, expected 1" % [
+				location_id, counts[location_id],
+			])
+	var dwelling_costs: Dictionary = balance.get("dwelling_costs", {})
+	for location_id in dwelling_costs.keys():
+		if int(counts.get(location_id, 0)) == 0:
+			errors.append("campaign location '%s' has no ascension contract" % location_id)
 
 
 func _load_ascension_contracts() -> void:
@@ -416,21 +549,35 @@ func _load_ascension_contracts() -> void:
 		_ascension_contracts_by_id[str(entry.get("id", ""))] = entry
 
 
-func _load_json_array(path: String) -> Array:
+## Content is authored, not generated: a malformed file is a mistake that
+## should fail a dev build loudly, with the file and line to go fix, rather
+## than silently falling back to an empty list that only shows up later as
+## missing jobs or a broken draft.
+func _parse_json_file(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
 		push_warning("ContentDatabase: missing %s" % path)
-		return []
+		return null
 	var file := FileAccess.open(path, FileAccess.READ)
-	var parsed = JSON.parse_string(file.get_as_text())
+	if file == null:
+		push_error("ContentDatabase: could not open %s" % path)
+		return null
+	var text: String = file.get_as_text()
 	file.close()
+	var parser := JSON.new()
+	var err: Error = parser.parse(text)
+	if err != OK:
+		push_error("ContentDatabase: failed to parse %s at line %d: %s" % [
+			path, parser.get_error_line(), parser.get_error_message()
+		])
+		return null
+	return parser.get_data()
+
+
+func _load_json_array(path: String) -> Array:
+	var parsed: Variant = _parse_json_file(path)
 	return parsed if parsed is Array else []
 
 
 func _load_json_dict(path: String) -> Dictionary:
-	if not FileAccess.file_exists(path):
-		push_warning("ContentDatabase: missing %s" % path)
-		return {}
-	var file := FileAccess.open(path, FileAccess.READ)
-	var parsed = JSON.parse_string(file.get_as_text())
-	file.close()
+	var parsed: Variant = _parse_json_file(path)
 	return parsed if parsed is Dictionary else {}

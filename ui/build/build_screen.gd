@@ -133,7 +133,7 @@ func _refresh_readouts() -> void:
 	_token_panel.set_readout("×%.1f" % _token_rate_multiplier(), "against raw hardware")
 	_cloud_panel.set_readout(
 		NumberFormat.format_cash(
-			float(Simulation.run_state.economy.get("cloud_liability", 0.0))
+			float(Simulation.run_state.economy.get("cloud_surcharge_liability", 0.0))
 		),
 		"owed at round end"
 	)

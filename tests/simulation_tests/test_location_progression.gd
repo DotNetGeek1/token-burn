@@ -19,8 +19,8 @@ func run() -> void:
 	_test_clearing_a_location_opens_the_next()
 	_test_an_old_profile_migrates_without_losing_anything()
 	_test_an_old_save_reopens_the_rung_it_was_on()
-	_test_the_rig_moves_into_the_next_location()
-	_test_a_replayed_chapter_gets_no_free_rig()
+	_test_a_new_run_after_a_win_starts_fresh_in_the_bedroom()
+	_test_the_permanent_rig_arrives_on_every_fresh_run()
 	_test_each_location_stakes_the_run_for_its_own_rent()
 
 
@@ -236,61 +236,89 @@ func _test_an_old_save_reopens_the_rung_it_was_on() -> void:
 	_restore(restore)
 
 
-## The reported bug behind this: arriving in the garage on a second-hand laptop,
-## against a contract priced for the rig that beat the bedroom, is unwinnable.
-## The kit moves with the player; the money, modules and perks do not.
-func _test_the_rig_moves_into_the_next_location() -> void:
+## A "New Run" is a fresh game from the start. A chapter win continues in place
+## through `advance_to_next_chapter`; nothing a finished run bought — kit, cash,
+## modules — follows into a run started fresh, and the campaign selection stays
+## at the bottom rather than moving to the location the win opened.
+func _test_a_new_run_after_a_win_starts_fresh_in_the_bedroom() -> void:
 	var restore: Dictionary = _with_scratch_profile()
 
 	var sim: Node = _sim()
 	sim.start_run(7110)
 	sim.run_state.economy["cash"] = 5000000.0
 	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "The bedroom run buys a desktop")
-	assert_true(sim.buy_upgrade("upgrade.portable_ac"), "And something to cool it")
-	# Winning the chapter is what pays for the move.
+	# Winning the chapter opens the garage for the run that won it.
 	sim.run_state.statistics["lifetime_tokens"] = 1e18
 	sim.run_state.ascension["quality_sum"] = 100.0
 	sim.run_state.ascension["quality_count"] = 1
 	sim._finish_prompt({"ok": true, "messages": []})
-	assert_eq(MetaProgress.selected_location(), "garage", "Which opens the garage")
+	assert_true("garage" in MetaProgress.unlocked_locations(), "The win records the garage as earned")
+	assert_eq(
+		MetaProgress.selected_location(), "bedroom",
+		"But a fresh run still starts at the bottom of the campaign"
+	)
+	assert_eq(MetaProgress.pending_picks(), 0, "And a chapter win banks nothing permanent")
 	sim.free()
 
 	var next_run: Node = _sim()
 	next_run.start_run(7111)
-	var hardware: Array = Array(next_run.run_state.build.get("hardware", []))
-	assert_true("custom_desktop" in hardware, "The desktop came along")
-	assert_true("portable_ac" in hardware, "So did the cooling")
-	assert_true(
-		float(next_run.run_state.compute.get("cooling", 0.0))
-			> UpgradeSystem.location_cooling(next_run.run_state, ContentDatabase),
-		"And the carried cooling counts on top of what the garage cools on its own"
+	assert_eq(
+		str(next_run.run_state.build.get("dwelling", "")), "bedroom",
+		"A new run is a new game, from the bedroom"
 	)
-	assert_true(
-		float(next_run.run_state.compute.get("local_capacity", 0.0)) > 0.0,
-		"The rig it arrives with actually produces"
+	assert_false(
+		"custom_desktop" in Array(next_run.run_state.build.get("hardware", [])),
+		"Nothing the old run bought comes along"
 	)
 	assert_true(
 		float(next_run.run_state.economy.get("cash", 0.0)) < 5000000.0,
-		"But the bank balance does not come with it"
+		"And neither does its bank balance"
 	)
 	next_run.free()
 
 	_restore(restore)
 
 
-func _test_a_replayed_chapter_gets_no_free_rig() -> void:
+## The one way hardware crosses runs: the permanent starting-rig ladder, bought
+## with picks earned by beating the whole campaign. Each pick racks the next
+## rung on every fresh run — as far as the room's floor allows — and a rung the
+## bedroom had no space for arrives with the first bigger room.
+func _test_the_permanent_rig_arrives_on_every_fresh_run() -> void:
 	var restore: Dictionary = _with_scratch_profile()
 
-	MetaProgress.carry_rig_forward("garage", ["gpu_rack"], {"upgrade.gpu_rack": 1})
-	MetaProgress.unlock_location("garage")
-	assert_true(MetaProgress.select_location("bedroom"), "The player goes back to the bedroom")
-	var replay: Node = _sim()
-	replay.start_run(7112)
+	MetaProgress.bank_victory(2)
+	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "The first pick buys the desktop")
+	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "The second buys the GPU rack")
+
+	var sim: Node = _sim()
+	sim.start_run(7112)
+	var hardware: Array = Array(sim.run_state.build.get("hardware", []))
+	assert_true("custom_desktop" in hardware, "The desktop is racked from round one")
 	assert_false(
-		"gpu_rack" in Array(replay.run_state.build.get("hardware", [])),
-		"Kit bought for the garage does not turn up in a bedroom replay"
+		"gpu_rack" in hardware,
+		"The bedroom's floor is full, so the rack waits for a bigger room"
 	)
-	replay.free()
+
+	# Winning the chapter and moving up racks the rung that did not fit.
+	sim.run_state.economy["cash"] = 5000000.0
+	sim.run_state.statistics["lifetime_tokens"] = 1e18
+	sim.run_state.ascension["quality_sum"] = 100.0
+	sim.run_state.ascension["quality_count"] = 1
+	sim._finish_prompt({"ok": true, "messages": []})
+	assert_true(sim.advance_to_next_chapter(), "The win moves the company into the garage")
+	assert_true(
+		"gpu_rack" in Array(sim.run_state.build.get("hardware", [])),
+		"Where the earned GPU rack is finally racked"
+	)
+	sim.free()
+
+	# The ladder has a top: once every rung is owned it stops being offered.
+	MetaProgress.bank_victory(1)
+	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "The third pick buys the cluster")
+	assert_false(
+		MetaProgress.is_available("unlock.starting_rig"),
+		"And there is no fourth rung to sell"
+	)
 
 	_restore(restore)
 

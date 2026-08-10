@@ -267,6 +267,10 @@ func _apply_effect_dict(
 				mod_ctx, effect, eval_ctx, event_name, chain_id, subscriptions, source_id, phase
 			)
 		_:
+			# A typo'd operation name silently doing nothing looks exactly like a
+			# balance change that quietly never applied — authored content must
+			# fail loudly here, not ship a perk or upgrade that does nothing.
+			push_error("EffectResolver: unknown effect operation '%s' on target '%s'" % [operation, target])
 			result = current
 
 	if target != "" and operation not in ["spawn", "remove", "reroll", "repeat", "convert"]:
@@ -345,8 +349,7 @@ func _apply_borrow(
 ) -> Variant:
 	var result: float = _as_float(current) + amount
 	if mod_ctx.run_state != null:
-		var debt: float = _as_float(mod_ctx.run_state.economy.get("debt", 0.0))
-		mod_ctx.run_state.economy["debt"] = debt + amount
+		EconomySystem.record_debt(mod_ctx.run_state, amount, "effect.borrow:%s" % target)
 		metadata["debt_added"] = amount
 	return result
 

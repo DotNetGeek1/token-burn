@@ -2,13 +2,16 @@ extends Control
 
 ## End of run. The debrief is the whole point of the endgame rewrite: cash was
 ## always the means, so the run's legacy is reported here as tokens burned,
-## not dollars banked. On a win this doubles as the pick screen: exactly one
-## thing survives into the next attempt (more, for a higher Ascension tier).
+## not dollars banked.
 ##
 ## A win mid-campaign is a level-up, not the end of the game: the location is
-## complete, the next one is unlocked, and the new run starts there. Only the
-## last chapter's win is the ending proper, and only it offers the endless tail —
-## keep the build and carry it on while the bills climb every round.
+## complete, the next one is unlocked, and the company moves there with
+## everything it owns — cash, perks, modules and rig alike. It pays nothing
+## permanent. Only the last chapter's win is the ending proper: it banks the
+## picks this screen doubles as the spend screen for — choose which area to
+## boost permanently — and only it offers the endless tail. A fresh run after
+## any of this starts back in the bedroom, carrying the permanent unlocks and
+## nothing else.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
 
@@ -133,7 +136,7 @@ func _campaign_progress_text() -> String:
 	var next_location: String = MetaProgress.location_name(Simulation.next_location_unlocked())
 	if next_location == "":
 		return "%s is behind you, and there is nowhere further up to go. You have beaten the game — and the company does not have to stop here." % location
-	return "%s is behind you. %s took the meeting and bought you the %s — the new run starts there with the rig you built, against a bigger contract." % [
+	return "%s is behind you. %s took the meeting and bought you the %s — the company moves there with everything it owns, against a bigger contract." % [
 		location, InvestorVoice.investor_name(), next_location
 	]
 
@@ -198,6 +201,8 @@ func _refresh_debrief() -> void:
 			"CHOOSE WHAT YOU KEEP",
 			"%d rewards left to spend" % pending if pending > 1 else "One reward left to spend"
 		)
+	elif _chapter_ahead():
+		restart_button.set_lines("NEXT CHAPTER", _new_run_subtitle())
 	else:
 		restart_button.set_lines("NEW RUN", _new_run_subtitle())
 	# A verdict is a page of numbers and sits in a scrolling panel; make room
@@ -252,22 +257,32 @@ func _on_continue() -> void:
 	get_tree().call_group("main_ui", "refresh_all")
 
 
-## Where the next run actually starts. The simulation already moved the campaign
-## selection forward when the location was completed, so this only has to say so:
-## after a win it names the newly opened chapter, after a loss the same one again.
+## Whether this win opened a next chapter the current company can move into.
+func _chapter_ahead() -> bool:
+	return _earned_this_run and Simulation.next_location_unlocked() != ""
+
+
+## What the main button leads to. After a mid-campaign win it is the move into
+## the newly opened chapter; otherwise it is a fresh game from the bottom of
+## the campaign, carrying only the permanent unlocks.
 func _new_run_subtitle() -> String:
+	if _chapter_ahead():
+		return "Move into the %s with everything you own" % MetaProgress.location_name(
+			Simulation.next_location_unlocked()
+		)
 	var location: String = MetaProgress.location_name(MetaProgress.selected_location())
 	if location == "":
 		return "Start again"
-	if _earned_this_run and Simulation.next_location_unlocked() != "":
-		return "Start in the %s" % location
-	return "Back to the %s" % location
+	return "Start again from the %s" % location
 
 
 func _on_restart() -> void:
 	hide_overlay()
 	get_tree().call_group("flow_overlay", "hide_overlay")
-	Simulation.start_run()
+	# A mid-campaign win continues as the same business in the next location;
+	# only a loss (or the final chapter) starts over.
+	if not Simulation.advance_to_next_chapter():
+		Simulation.start_run()
 	get_tree().call_group("ui_refresh", "refresh")
 	get_tree().call_group("main_ui", "refresh_all")
 

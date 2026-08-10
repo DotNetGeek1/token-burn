@@ -82,6 +82,81 @@ func _ready() -> void:
 	pass
 
 
+# --- Test seams --------------------------------------------------------------
+# Deliberate public surface onto internals that tests otherwise have to reach
+# into by underscore-prefixed name. Kept together and named `debug_*`/system
+# accessors so a future split of this file (RunLifecycle/WorkSession/
+# SimulationPreview/MarketService) only has to move what is behind them,
+# rather than hunt down every test that poked a private field directly.
+
+func compute_system() -> ComputeSystem:
+	return _compute_system
+
+
+func heat_system() -> HeatSystem:
+	return _heat_system
+
+
+func economy_system() -> EconomySystem:
+	return _economy_system
+
+
+func job_system() -> JobSystem:
+	return _job_system
+
+
+func debug_collect_subscriptions() -> Array:
+	return _collect_subscriptions()
+
+
+func debug_invalidate_subscriptions() -> void:
+	_invalidate_subscriptions()
+
+
+func debug_finish_prompt(result: Dictionary) -> void:
+	_finish_prompt(result)
+
+
+func debug_end_session(reason: String) -> void:
+	_end_session(reason)
+
+
+func debug_end_round() -> void:
+	_end_round()
+
+
+func debug_end_run(victory: bool, outcome: String = "") -> void:
+	_end_run(victory, outcome)
+
+
+func debug_settle_reputation(completed: Array, failed: Array) -> float:
+	return _settle_reputation(completed, failed)
+
+
+func debug_apply_cloud_burst() -> bool:
+	return _apply_cloud_burst()
+
+
+func debug_present_angel_offers() -> void:
+	_present_angel_offers()
+
+
+func debug_expire_status_effects() -> void:
+	_expire_status_effects()
+
+
+func debug_set_work_running(value: bool) -> void:
+	_work_running = value
+
+
+func debug_set_round_end_pending(value: bool) -> void:
+	_round_end_pending = value
+
+
+func debug_round_end_pending() -> bool:
+	return _round_end_pending
+
+
 func ensure_job_board() -> void:
 	repair_after_load()
 
@@ -144,6 +219,11 @@ func reset_run(p_seed: int = 0) -> void:
 	var difficulty_profiles: Dictionary = ContentDatabase.balance.get("difficulty_profiles", {})
 	var profile: Dictionary = difficulty_profiles.get(difficulty_id, difficulty_profiles.get("normal", {}))
 	run_state.reset(profile)
+	# Contract scaling reads this back rather than the profile dictionary
+	# directly, so the difficulty a run started on cannot drift once it is
+	# under way — and so an offer scaled mid-run still asks the questions the
+	# player actually agreed to.
+	run_state.flags["difficulty"] = difficulty_id
 	effect_resolver.clear_trace()
 	effect_resolver.clear_guard()
 	phase = Phase.IDLE
@@ -165,7 +245,7 @@ func reset_run(p_seed: int = 0) -> void:
 	# Permanent unlocks land before the board is sized, so an unlocked slot is
 	# there to be filled rather than turning up a round late.
 	MetaProgress.apply_to_run(run_state)
-	_install_carried_rig()
+	_install_permanent_rig()
 	_board_system.ensure_board(run_state, ContentDatabase)
 	# The location's contract is the run's win condition, not something taken on
 	# part-way through, so it is live before the first prompt is spent.
@@ -207,44 +287,35 @@ func apply_run_location(state: RunState, location_id: String) -> void:
 	_ascension_system.activate(state, ContentDatabase)
 
 
-## Racks the kit the last chapter was beaten with. Machines go in before the
-## components that bolt to them, since a component with no host has nowhere to
-## live and would be dropped.
+## Racks the machines earned through the permanent starting-rig unlock ladder.
+## A fresh run is otherwise a fresh game from the start — nothing a previous run
+## bought arrives — so this is the one place hardware crosses runs, and only
+## because a pick was spent on it after beating the whole campaign.
 ##
-## Cash, modules and perks are deliberately not carried: the new chapter is a new
-## business in a new room, run on hardware the old one paid for.
-func _install_carried_rig() -> void:
-	var carried: Dictionary = MetaProgress.carried_rig(
-		str(run_state.build.get("dwelling", ""))
-	)
-	var levels: Dictionary = Dictionary(carried.get("upgrades", {}))
-	if levels.is_empty():
-		return
-	var machines: Array = []
-	var parts: Array = []
-	for upgrade_id in levels.keys():
+## Free of charge but not of floor space: a small room racks what fits, and the
+## call from `advance_to_next_chapter` racks the rest once a bigger room opens.
+## That second call is why a rung already standing is skipped rather than
+## installed again.
+func _install_permanent_rig() -> void:
+	var installed: int = 0
+	for upgrade_id in MetaProgress.starting_rig():
 		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
 		if upgrade == null:
 			continue
-		if upgrade.category == "component":
-			parts.append(upgrade_id)
-		else:
-			machines.append(upgrade_id)
-	var installed: int = 0
-	for upgrade_id in machines + parts:
-		for _copy in range(maxi(1, int(levels[upgrade_id]))):
-			if _upgrade_system.install_carried(
-				run_state, str(upgrade_id), ContentDatabase, effect_resolver
-			):
-				installed += 1
+		if UpgradeSystem.installed_key(upgrade) in Array(run_state.build.get("hardware", [])):
+			continue
+		if _upgrade_system.install_carried(
+			run_state, str(upgrade_id), ContentDatabase, effect_resolver
+		):
+			installed += 1
 	if installed > 0:
-		round_log.append("Moved in with %d piece(s) of kit from the last place." % installed)
+		round_log.append("Your permanent rig is already racked: %d machine(s)." % installed)
 
 
 func start_run(p_seed: int = 0) -> void:
 	reset_run(p_seed)
 	phase = Phase.ROUND_PREP
-	EventBus.emit_event("run.started")
+	EventBus.emit_event(EventBus.EVENT_RUN_STARTED)
 	_begin_round()
 
 
@@ -252,7 +323,7 @@ func start_run(p_seed: int = 0) -> void:
 ## Market open. Nothing carries over from the last round except what the player
 ## owns, because a round only ends once its contracts have all resolved.
 func _begin_round() -> void:
-	EventBus.emit_event("round.started")
+	EventBus.emit_event(EventBus.EVENT_ROUND_STARTED)
 	run_state.calendar["prompt"] = 1
 	run_state.business["job_board_seq"] = 0
 	run_state.economy["costs_this_round"] = 0.0
@@ -275,7 +346,7 @@ func accept_job(job_id: String) -> bool:
 	if not _job_system.accept_job(run_state, job_id):
 		return false
 	run_state.statistics["jobs_accepted"] = int(run_state.statistics.get("jobs_accepted", 0)) + 1
-	EventBus.emit_event("job.accepted", {"job_id": job_id})
+	EventBus.emit_event(EventBus.EVENT_JOB_ACCEPTED, {"job_id": job_id})
 	_autosave()
 	return true
 
@@ -320,7 +391,8 @@ func cost_forecast() -> Dictionary:
 	var cloud_multiplier: float = float(tuning.get("cloud_cost_multiplier", 1.0))
 	var rent: float = float(run_state.economy.get("round_rent", 0.0))
 	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
-	var cloud_bill: float = float(run_state.economy.get("cloud_liability", 0.0)) * cloud_multiplier
+	# Already carries the multiplier from accrual; billed at face value.
+	var cloud_bill: float = float(run_state.economy.get("cloud_surcharge_liability", 0.0))
 	var power_per_prompt: float = float(run_state.economy.get("power_cost_per_prompt", 0.0))
 	var cloud_per_prompt: float = float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) * cloud_multiplier
 	var operating_per_prompt: float = power_per_prompt + cloud_per_prompt
@@ -539,7 +611,7 @@ func start_work() -> void:
 	_fire_queued_options()
 	_follow_focused_workflow()
 	for job in run_state.business.get("active_jobs", []):
-		EventBus.emit_event("job.started", {"job_id": job.get("id", "")})
+		EventBus.emit_event(EventBus.EVENT_JOB_STARTED, {"job_id": job.get("id", "")})
 	work_tick_completed.emit()
 	_autosave()
 
@@ -568,7 +640,7 @@ func start_work_sync() -> Dictionary:
 	phase = Phase.IN_ROUND
 	_fire_queued_options()
 	for job in run_state.business.get("active_jobs", []):
-		EventBus.emit_event("job.started", {"job_id": job.get("id", "")})
+		EventBus.emit_event(EventBus.EVENT_JOB_STARTED, {"job_id": job.get("id", "")})
 	# Nobody is here to arrange the board, so the auto-drive does it: without this
 	# the bench would fill up with modules that never reach the pipeline.
 	auto_arrange_board()
@@ -622,7 +694,7 @@ func preview_burn(stage_limit: int = -1) -> Dictionary:
 		_economy_system,
 		_board_system,
 		stage_limit,
-		false
+		ResolveMode.PREVIEW
 	)
 	var burn: Dictionary = result.get("burn", {"ok": false, "reason": "The pipeline is empty."})
 	if burn.get("ok", false):
@@ -650,7 +722,8 @@ func preview_cool() -> Dictionary:
 		tuning,
 		_compute_system,
 		_heat_system,
-		_economy_system
+		_economy_system,
+		ResolveMode.PREVIEW
 	)
 	if not result.get("ok", false):
 		return result
@@ -679,9 +752,12 @@ func burn_batch(stage_limit: int = -1) -> Dictionary:
 		_board_system,
 		stage_limit
 	)
-	_work_tick += 1
 	if not result.get("ok", false):
 		return result
+	# Only a committed action spends a prompt's worth of RNG. A refusal that
+	# touched nothing must not shift the seed the next attempt rolls against —
+	# otherwise a failed action rerolls a deterministic outcome for free.
+	_work_tick += 1
 	var burn: Dictionary = result.get("burn", {})
 	burn_resolved.emit(burn)
 	_finish_prompt(result)
@@ -702,9 +778,9 @@ func cool_hardware() -> Dictionary:
 		_heat_system,
 		_economy_system
 	)
-	_work_tick += 1
 	if not result.get("ok", false):
 		return result
+	_work_tick += 1
 	_finish_prompt(result)
 	return result
 
@@ -758,6 +834,20 @@ func _follow_focused_workflow() -> void:
 
 func focused_job() -> Dictionary:
 	return _job_system.focused_job(run_state)
+
+
+## The contract the machine will boot with when the first BURN opens the
+## session: the head of the accepted queue, prepared exactly as `start_work`
+## will prepare it. Display only — nothing in the queue is mutated. Empty when
+## nothing has been accepted, or once the session is running and `focused_job`
+## is the real answer.
+func queued_job_preview() -> Dictionary:
+	if _work_running:
+		return {}
+	var queue: Array = run_state.business.get("job_queue", [])
+	if queue.is_empty() or not queue[0] is Dictionary:
+		return {}
+	return _job_system.prepare_offer_preview(queue[0], run_state, ContentDatabase)
 
 
 func can_burn() -> bool:
@@ -892,10 +982,11 @@ func _layout_score(job: Dictionary) -> float:
 		))
 	burns = minf(maxf(1.0, burns), MAX_ESTIMATED_BURNS)
 
-	# Heat the fans cannot shed has to be vented, and venting spends prompts.
-	var net_heat: float = maxf(
-		0.0, float(preview.get("heat", 0.0)) - float(run_state.compute.get("cooling", 0.0))
-	)
+	# `total_heat` is the authoritative figure the burn would actually put on
+	# the bar — ambient gain and cooling already netted against each other by
+	# HeatSystem — rather than the stage's own heat re-derived by hand against
+	# a cooling factor this scorer used to ignore entirely.
+	var net_heat: float = maxf(0.0, float(preview.get("total_heat", 0.0)))
 	var prompts: float = burns * (
 		1.0 + net_heat / maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 	)
@@ -907,9 +998,11 @@ func _layout_score(job: Dictionary) -> float:
 	fee *= maxf(0.3, 1.0 - 0.08 * known)
 	fee *= maxf(0.25, 1.0 - 0.06 * hidden)
 
-	var outgoings: float = burns * (
-		float(preview.get("cost", 0.0)) + float(run_state.economy.get("power_cost_per_prompt", 0.0))
-	)
+	# Metered running costs, not just power: a cloud-heavy layout's per-prompt
+	# bill is what `cost_forecast` already tracks for the bills screen, so the
+	# same figure — power and cloud metering both — is what should be scored.
+	var operating_per_prompt: float = float(cost_forecast().get("operating_per_prompt", 0.0))
+	var outgoings: float = burns * (float(preview.get("cost", 0.0)) + operating_per_prompt)
 	return (fee - outgoings) / prompts
 
 
@@ -958,14 +1051,18 @@ func _reach_victory(contract: Dictionary) -> void:
 	run_state.flags["ascension_tier"] = int(contract.get("tier", 1))
 	round_log.append("%s is complete. You have ascended." % str(contract.get("name", "The contract")))
 	MetaProgress.record_best_score(RunScore.compute(run_state, ContentDatabase))
-	MetaProgress.bank_victory(maxi(1, int(contract.get("picks", 1))))
 	MetaProgress.record_ascension(str(contract.get("id", "")))
 	_complete_run_location()
-	if bool(contract.get("unlocks_age", false)):
-		MetaProgress.advance_age(Ages.max_age_index())
-	var ending_unlock: String = str(contract.get("ending_unlock", ""))
-	if ending_unlock != "":
-		MetaProgress.grant_ending_unlock(ending_unlock)
+	# Permanence is the reward for finishing the whole campaign. A chapter goal
+	# cleared on the way up is a level-up inside the run — it banks no picks,
+	# advances no age and hands over no rule unlocks; only the summit pays.
+	if _run_is_final_chapter():
+		MetaProgress.bank_victory(maxi(1, int(contract.get("picks", 1))))
+		if bool(contract.get("unlocks_age", false)):
+			MetaProgress.advance_age(Ages.max_age_index())
+		var ending_unlock: String = str(contract.get("ending_unlock", ""))
+		if ending_unlock != "":
+			MetaProgress.grant_ending_unlock(ending_unlock)
 	_bank_run_legacy(true)
 	_settling_victory = true
 	_end_session("ascended")
@@ -978,7 +1075,7 @@ func _reach_victory(contract: Dictionary) -> void:
 		Phase.ANGEL_ROUND if not pending_choices.is_empty() else Phase.ROUND_PREP
 	)
 	phase = Phase.RUN_END
-	EventBus.emit_event("run.ended", {"victory": true})
+	EventBus.emit_event(EventBus.EVENT_RUN_ENDED, {"victory": true})
 	_autosave()
 
 
@@ -986,10 +1083,9 @@ func _reach_victory(contract: Dictionary) -> void:
 ## because `_end_run`'s "ascended" branch settles the same victory from the other
 ## direction, and a location must not be completed twice.
 ##
-## The newly opened location is also selected here, at the moment it is earned,
-## rather than by whichever button happens to start the next run: every path to
-## a new run — the verdict screen, the title screen, a fresh boot — must land in
-## the next chapter, not back in the one just beaten.
+## The profile records the clear, but the campaign selection stays put: the win
+## continues in place through `advance_to_next_chapter`, and a run started fresh
+## afterwards is a fresh game from the bedroom, not a resume.
 func _complete_run_location() -> void:
 	if bool(run_state.flags.get("location_completed", false)):
 		return
@@ -997,19 +1093,15 @@ func _complete_run_location() -> void:
 	var location: String = str(run_state.build.get("dwelling", ""))
 	if location == "":
 		return
-	var next_location: String = MetaProgress.next_location_after(location)
-	run_state.flags["next_location"] = next_location
+	run_state.flags["next_location"] = MetaProgress.next_location_after(location)
 	MetaProgress.complete_location(location)
-	# The rig moves with the player. Without this the next chapter starts on a
-	# second-hand laptop against a target ten times the one just cleared, which
-	# is not a difficulty curve.
-	MetaProgress.carry_rig_forward(
-		next_location,
-		Array(run_state.build.get("hardware", [])),
-		UpgradeSystem.owned_upgrade_levels(run_state, ContentDatabase)
-	)
-	if next_location != "":
-		MetaProgress.select_location(next_location)
+
+
+## Whether the run is being played in the campaign's last location — the only
+## place a victory is the end of the game rather than of a chapter, and so the
+## only place permanent rewards are paid out.
+func _run_is_final_chapter() -> bool:
+	return MetaProgress.next_location_after(str(run_state.build.get("dwelling", ""))) == ""
 
 
 ## The location this victory opened up, empty if the run was played in the last
@@ -1054,6 +1146,49 @@ func continue_after_victory() -> bool:
 ## Whether the run has already beaten a Tier 3 contract and chosen to carry on.
 func in_post_victory() -> bool:
 	return bool(run_state.flags.get("post_victory", false))
+
+
+## Moves a mid-campaign win into the next chapter as the same business. The
+## angel's goal is the end of a chapter, not the end of the game: cash, perks,
+## modules, workflows, upgrades and reputation all carry forward — what changes
+## is the room, the rent, and the contract the run is measured against, which
+## is the next location's bigger one. Only the last chapter has no next room;
+## its continuation is `continue_after_victory`.
+func advance_to_next_chapter() -> bool:
+	if phase != Phase.RUN_END or not bool(run_state.flags.get("victory", false)):
+		return false
+	var next_location: String = next_location_unlocked()
+	if next_location == "":
+		return false
+	run_state.flags["victory"] = false
+	run_state.flags["outcome"] = ""
+	run_state.flags["location_completed"] = false
+	run_state.flags["next_location"] = ""
+	run_state.flags["post_victory_phase"] = ""
+	# The investor's stake pays for the room, but the company keeps its own
+	# float: the stake is a floor under the new rent, not a replacement for
+	# what the last chapter earned.
+	var cash_carried: float = float(run_state.economy.get("cash", 0.0))
+	apply_run_location(run_state, next_location)
+	run_state.economy["cash"] = maxf(cash_carried, float(run_state.economy.get("cash", 0.0)))
+	# A permanent rig rung the old room had no floor for is racked now that
+	# there is a room that fits it.
+	_install_permanent_rig()
+	# A new room starts cold, and the new chapter starts its year at round one.
+	run_state.compute["heat"] = 0.0
+	run_state.flags["fire_risk"] = false
+	run_state.calendar["round"] = 1
+	round_log.append(
+		"Moved into the %s. Everything comes with you — the contract is bigger."
+		% MetaProgress.location_name(next_location)
+	)
+	_begin_round()
+	# A draft pick earned on the winning round is still on the table; the new
+	# chapter opens once it has been taken, exactly as a round boundary would.
+	if not pending_choices.is_empty():
+		phase = Phase.ANGEL_ROUND
+	_autosave()
+	return true
 
 
 # --- Workflows ----------------------------------------------------------
@@ -1157,6 +1292,23 @@ func _burn_rng() -> DeterministicRng:
 	return DeterministicRng.new(absi(stream_seed) | 1)
 
 
+## Folds any job that finished this prompt into the contract's quality average,
+## exactly once each. Called both mid-session (so the ordinary evaluate/expire
+## path always sees settled quality) and again from `_end_session` for jobs
+## shipped or abandoned without going through `_finish_prompt` — the guard
+## flag is what keeps a job from being counted by both.
+func _record_completed_quality(run_state: RunState) -> void:
+	for job in run_state.business.get("active_jobs", []):
+		if not job is Dictionary:
+			continue
+		if float(job.get("tokens_remaining", 0.0)) > 0.0:
+			continue
+		if bool(job.get("_ascension_quality_recorded", false)):
+			continue
+		_ascension_system.record_job_quality(run_state, float(job.get("quality", 0.0)))
+		job["_ascension_quality_recorded"] = true
+
+
 ## Bookkeeping shared by every action that consumes a prompt.
 func _finish_prompt(result: Dictionary) -> void:
 	for message in result.get("messages", []):
@@ -1166,11 +1318,18 @@ func _finish_prompt(result: Dictionary) -> void:
 	work_tick_completed.emit()
 	if _progression_system.check_loss(run_state):
 		_work_running = false
-		round_log.append("Hardware fire — the run is over.")
+		round_log.append(
+			"%s — the run is over." % str(run_state.flags.get("loss_reason", "Run collapsed"))
+		)
 		_end_run(false)
 		work_session_finished.emit({"phase": phase, "summary": last_session_summary})
 		return
 	if _ascension_system.is_active(run_state):
+		# A job's quality has to be settled against the contract's average
+		# before the contract is judged, not after: judging first and
+		# recording second is how a losing final job can win on last round's
+		# quality, and a winning one can be refused for it.
+		_record_completed_quality(run_state)
 		var ascension_result: Dictionary = _ascension_system.evaluate_prompt(run_state, ContentDatabase)
 		for message in ascension_result.get("messages", []):
 			round_log.append(str(message))
@@ -1200,7 +1359,7 @@ func _settle_if_resolved() -> void:
 	for job in run_state.business.get("active_jobs", []):
 		if not job is Dictionary:
 			continue
-		if float(job.get("tokens_remaining", 0.0)) > 0.0 and int(job.get("prompts_remaining", 0)) >= 0:
+		if float(job.get("tokens_remaining", 0.0)) > 0.0 and int(job.get("prompts_remaining", 0)) > 0:
 			work_tick_completed.emit()
 			_autosave()
 			return
@@ -1258,8 +1417,9 @@ func _end_session(reason: String) -> void:
 			failed.append(job)
 
 	if _ascension_system.is_active(run_state):
-		for job in completed:
-			_ascension_system.record_job_quality(run_state, float(job.get("quality", 0.0)))
+		# Covers jobs settled by ship/abandon, which never pass through
+		# `_finish_prompt`. Jobs already recorded there are skipped.
+		_record_completed_quality(run_state)
 
 	var messages: Array[String] = []
 	var reward: float = 0.0
@@ -1285,7 +1445,7 @@ func _end_session(reason: String) -> void:
 	_build_session_summary(completed, failed, reward, reason)
 
 	for job in failed:
-		EventBus.emit_event("job.failed", {"job_id": job.get("id", "")})
+		EventBus.emit_event(EventBus.EVENT_JOB_FAILED, {"job_id": job.get("id", "")})
 	run_state.statistics["completed_jobs"] = int(run_state.statistics.get("completed_jobs", 0)) + completed.size()
 	run_state.statistics["failed_jobs"] = int(run_state.statistics.get("failed_jobs", 0)) + failed.size()
 	_achievement_system.evaluate_tick(run_state, ContentDatabase)
@@ -1301,7 +1461,7 @@ func _end_session(reason: String) -> void:
 		_end_run(false)
 		return
 
-	EventBus.emit_event("reward.calculated", {"amount": reward})
+	EventBus.emit_event(EventBus.EVENT_REWARD_CALCULATED, {"amount": reward})
 	# Bills settle before the shop opens. Spending money that rent already has a
 	# claim on is how a player gets evicted holding a new GPU.
 	_round_end_pending = false
@@ -1404,7 +1564,7 @@ func _apply_boost() -> void:
 	if boost_engaged():
 		return
 	run_state.add_rate_modifier(1.35, 1, "boost")
-	run_state.compute["heat"] = float(run_state.compute["heat"]) + 12.0
+	_heat_system.add_heat(run_state, 12.0)
 	round_log.append("BOOST engaged: +35% token rate, +12 heat.")
 
 
@@ -1547,7 +1707,7 @@ func _accept_perk(perk_id: String) -> bool:
 		run_state.statistics.get("angel_offers_taken", 0)
 	) + 1
 	_invalidate_subscriptions()
-	EventBus.emit_event("perk.acquired", {"perk_id": perk_id})
+	EventBus.emit_event(EventBus.EVENT_PERK_ACQUIRED, {"perk_id": perk_id})
 	_dispatch_perk_acquired(perk_id)
 	# A perk may have widened the board, so the slot array is resized before
 	# anything tries to place a module in the slot it just gained.
@@ -1571,7 +1731,7 @@ func _accept_operation(operation_id: String) -> bool:
 	run_state.statistics["modules_drafted"] = int(
 		run_state.statistics.get("modules_drafted", 0)
 	) + 1
-	EventBus.emit_event("operation.acquired", {"operation_id": operation_id})
+	EventBus.emit_event(EventBus.EVENT_OPERATION_ACQUIRED, {"operation_id": operation_id})
 	_achievement_system.evaluate_tick(run_state, ContentDatabase)
 	_spend_draft_pick("operation", operation_id)
 	return true
@@ -1597,62 +1757,36 @@ func _dispatch_perk_acquired(perk_id: String) -> void:
 	effect_resolver.dispatch("perk.acquired", mod_ctx, subs)
 
 
+## Market operations (buying, selling, and the "is the counter open" gate
+## they share) are pulled out into `MarketService`; these stay as the public
+## facade every screen already calls.
+
 func can_buy_upgrade(upgrade_id: String) -> bool:
-	if not market_open():
-		return false
-	return _upgrade_system.can_purchase(run_state, upgrade_id, ContentDatabase)
+	return MarketService.can_buy_upgrade(self, upgrade_id)
 
 
 func buy_upgrade(upgrade_id: String) -> bool:
-	if not market_open():
-		return false
-	if not _upgrade_system.purchase(run_state, upgrade_id, ContentDatabase, effect_resolver, _economy_system):
-		return false
-	# An upgrade may have widened the board, which only takes effect once the
-	# slot array is resized to match.
-	_board_system.ensure_board(run_state, ContentDatabase)
-	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
-	EventBus.emit_event("upgrade.purchased", {"upgrade_id": upgrade_id})
-	# Shopping past the angels closes their draft.
-	if phase == Phase.ANGEL_ROUND:
-		_after_angel_round()
-	_autosave()
-	return true
+	return MarketService.buy_upgrade(self, upgrade_id)
 
 
-## Selling happens at the same counter as buying, so it is allowed in exactly the
-## phases the Market is open in.
 func market_open() -> bool:
-	return phase == Phase.ANGEL_ROUND or phase == Phase.ROUND_END or phase == Phase.ROUND_PREP
+	return MarketService.market_open(self)
 
 
 func hardware_sale_reason(hardware_key: String) -> String:
-	if not market_open():
-		return "The Market is closed once a round is under way. Shop between rounds."
-	return UpgradeSystem.sell_reason(run_state, hardware_key, ContentDatabase)
+	return MarketService.hardware_sale_reason(self, hardware_key)
 
 
 func hardware_sale_refund(hardware_key: String) -> float:
-	return UpgradeSystem.sell_refund(run_state, hardware_key, ContentDatabase)
+	return MarketService.hardware_sale_refund(self, hardware_key)
 
 
 func can_sell_hardware(hardware_key: String) -> bool:
-	return hardware_sale_reason(hardware_key) == ""
+	return MarketService.can_sell_hardware(self, hardware_key)
 
 
-## Decommissions one unit of owned kit, freeing its floor slot and refunding
-## part of what the most recent copy cost.
 func sell_hardware(hardware_key: String) -> bool:
-	if not market_open():
-		return false
-	if not _upgrade_system.sell(run_state, hardware_key, ContentDatabase, _economy_system):
-		return false
-	run_state.statistics["hardware_sold"] = int(run_state.statistics.get("hardware_sold", 0)) + 1
-	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
-	EventBus.emit_event("hardware.sold", {"hardware_key": hardware_key})
-	_achievement_system.evaluate_tick(run_state, ContentDatabase)
-	_autosave()
-	return true
+	return MarketService.sell_hardware(self, hardware_key)
 
 
 func set_tuning(key: String, value: float) -> void:
@@ -1872,22 +2006,24 @@ func _end_run(victory: bool, outcome: String = "") -> void:
 	match outcome:
 		"ascended":
 			var contract: Dictionary = _ascension_system.current_contract(run_state, ContentDatabase)
-			var picks: int = maxi(1, int(contract.get("picks", 1)))
 			run_state.flags["ascension_tier"] = int(contract.get("tier", 1))
-			MetaProgress.bank_victory(picks)
 			MetaProgress.record_ascension(str(contract.get("id", "")))
 			_complete_run_location()
-			if bool(contract.get("unlocks_age", false)):
-				MetaProgress.advance_age(Ages.max_age_index())
-			var ending_unlock: String = str(contract.get("ending_unlock", ""))
-			if ending_unlock != "":
-				MetaProgress.grant_ending_unlock(ending_unlock)
+			# Same rule as `_reach_victory`: only finishing the campaign's last
+			# chapter pays out anything permanent.
+			if _run_is_final_chapter():
+				MetaProgress.bank_victory(maxi(1, int(contract.get("picks", 1))))
+				if bool(contract.get("unlocks_age", false)):
+					MetaProgress.advance_age(Ages.max_age_index())
+				var ending_unlock: String = str(contract.get("ending_unlock", ""))
+				if ending_unlock != "":
+					MetaProgress.grant_ending_unlock(ending_unlock)
 		"retired":
 			MetaProgress.record_retirement()
 		_:
 			pass
 	_bank_run_legacy(victory)
-	EventBus.emit_event("run.ended", {"victory": victory})
+	EventBus.emit_event(EventBus.EVENT_RUN_ENDED, {"victory": victory})
 	_autosave()
 
 
@@ -1908,18 +2044,14 @@ func _bank_run_legacy(victory: bool) -> void:
 	)
 
 
-## The permanent unlocks on offer after a victory. Seeded from the run and the
-## number of victories rather than a live stream, so the debrief shows the same
-## three every time the screen redraws.
-func debrief_choices(count: int = 3) -> Array:
+## The permanent unlocks on offer after beating the campaign. Picks are rare —
+## one batch per completion — so the debrief lays out every area still open
+## (rig, cooling, cloud, cash, workflows, board width) and the player chooses
+## which to boost permanently, rather than being dealt three at random.
+func debrief_choices() -> Array:
 	if MetaProgress.pending_picks() <= 0:
 		return []
-	var stream := DeterministicRng.new()
-	var stream_seed: int = absi(
-		int(hash("debrief.%d.%d" % [run_seed, MetaProgress.victories()]))
-	) & 0x7FFFFFFF
-	stream.set_seed(maxi(1, stream_seed))
-	return MetaProgress.draw_choices(stream, count)
+	return MetaProgress.available_choices()
 
 
 func spend_debrief_pick(unlock_id: String) -> bool:

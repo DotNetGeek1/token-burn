@@ -118,6 +118,79 @@ func _validate_every_machine_can_be_cooled() -> void:
 		)
 
 
+## Validation is only useful if it stays quiet on the content the game
+## actually ships — a check that also flags real content is one nobody can
+## leave switched on.
+func _test_shipped_content_passes_validation() -> void:
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	assert_true(errors.is_empty(), "Shipped content passes validation: %s" % str(errors))
+
+
+## Corrupts the loaded catalogue in memory just long enough to prove the
+## compiler-style checks actually catch the mistakes they claim to, then
+## reloads real content so every later suite still sees the shipped game.
+func _test_validation_catches_synthetic_bad_content() -> void:
+	var bad_upgrade := UpgradeDefinition.new()
+	bad_upgrade.id = ContentDatabase.upgrades[0].id if not ContentDatabase.upgrades.is_empty() else "upgrade.duplicate_probe"
+	bad_upgrade.category = "not_a_real_category"
+	bad_upgrade.cost = -50.0
+	bad_upgrade.repeatable = true
+	bad_upgrade.cost_growth = 0.0
+	bad_upgrade.max_level = -1
+	var bad_effect := EffectDefinition.new()
+	bad_effect.operation = "explode"
+	bad_effect.target = "economy.does_not_exist"
+	bad_upgrade.effects = [bad_effect]
+	ContentDatabase.upgrades.append(bad_upgrade)
+
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.upgrades.pop_back()
+
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("duplicate upgrade id")),
+		"Validation catches a duplicate upgrade id"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown category")),
+		"Validation catches an unknown upgrade category"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("negative cost")),
+		"Validation catches a negative cost"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("non-positive cost_growth")),
+		"Validation catches a repeatable upgrade with no cost growth"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("negative max_level")),
+		"Validation catches a negative max_level"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown effect operation 'explode'")),
+		"Validation catches an unknown effect operation"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown path 'economy.does_not_exist'")),
+		"Validation catches an effect targeting a path RunState doesn't have"
+	)
+
+	var clean_errors: Array[String] = ContentDatabase.collect_validation_errors()
+	assert_true(clean_errors.is_empty(), "Removing the synthetic upgrade restores a clean validation pass")
+
+
+## A typo'd operation must not silently no-op when it is actually resolved,
+## matching the load-time check above with the runtime path it guards.
+func _test_effect_resolver_errors_on_unknown_operation() -> void:
+	var state := RunState.new()
+	var resolver := EffectResolver.new()
+	resolver.apply_effects(state, [{"operation": "not_a_real_op", "target": "economy.cash", "value": 5.0}])
+	assert_eq(
+		float(state.economy.get("cash", -1.0)), float(RunState.new().economy.get("cash", 0.0)),
+		"An unknown operation leaves the target untouched rather than silently applying"
+	)
+
+
 ## A run happens in one location and gets that location's cooling, once. Nothing
 ## from the chapters below it carries over, because it was never bought.
 func _location_cooling(key: String) -> float:
@@ -172,6 +245,9 @@ func run() -> void:
 	assert_true(ContentDatabase.jobs.size() > 0, "Content loads jobs after reload")
 	_validate_every_machine_can_be_cooled()
 	_validate_ascension_contracts()
+	_test_shipped_content_passes_validation()
+	_test_validation_catches_synthetic_bad_content()
+	_test_effect_resolver_errors_on_unknown_operation()
 
 	for upgrade in ContentDatabase.upgrades:
 		if upgrade.category == "hardware" and upgrade.hardware_key != "":

@@ -13,7 +13,7 @@ func run() -> void:
 	state.economy["cash"] = 100.0
 	state.economy["round_rent"] = 400.0
 	state.economy["recurring_costs"] = 50.0
-	state.economy["cloud_liability"] = 200.0
+	state.economy["cloud_surcharge_liability"] = 200.0
 	economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
 	assert_eq(state.economy.get("cash", 0.0), 0.0, "Unpaid bills drain cash")
 	assert_true(float(state.economy.get("debt", 0.0)) > 0.0, "Unpaid bills add debt")
@@ -112,7 +112,7 @@ func _test_round_statement(economy: EconomySystem) -> void:
 	state.economy["cash"] = 5000.0
 	state.economy["round_rent"] = 400.0
 	state.economy["recurring_costs"] = 70.0
-	state.economy["cloud_liability"] = 0.0
+	state.economy["cloud_surcharge_liability"] = 0.0
 	state.economy["costs_this_round"] = 150.0
 	var statement: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
 	assert_eq(statement.get("round", 0), 4, "Statement reports the round that closed")
@@ -143,7 +143,7 @@ func _test_rent_is_flat_however_long_the_round_runs(economy: EconomySystem) -> v
 		state.economy["cash"] = 100000.0
 		state.economy["round_rent"] = 400.0
 		state.economy["recurring_costs"] = 0.0
-		state.economy["cloud_liability"] = 0.0
+		state.economy["cloud_surcharge_liability"] = 0.0
 		state.economy["power_cost_per_prompt"] = 10.0
 		state.economy["cloud_cost_per_prompt"] = 0.0
 	for _i in range(3):

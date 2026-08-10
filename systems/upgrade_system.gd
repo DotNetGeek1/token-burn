@@ -12,6 +12,34 @@ static func upgrade_level(run_state: RunState, upgrade_id: String) -> int:
 	return int(levels.get(upgrade_id, 0))
 
 
+## The one ledger of how many of each upgrade id this run owns, one-offs
+## included at a count of 1. Everything that only needs "how many" — rather
+## than the older split of a hardware array, a one-off list and a repeatable
+## level map — should read this instead.
+static func upgrade_counts(run_state: RunState) -> Dictionary:
+	return Dictionary(run_state.build.get("upgrade_counts", {}))
+
+
+static func _set_upgrade_count(run_state: RunState, upgrade_id: String, count: int) -> void:
+	if not run_state.build.has("upgrade_counts") or not (run_state.build["upgrade_counts"] is Dictionary):
+		run_state.build["upgrade_counts"] = {}
+	if count <= 0:
+		run_state.build["upgrade_counts"].erase(upgrade_id)
+	else:
+		run_state.build["upgrade_counts"][upgrade_id] = count
+
+
+static func _increment_upgrade_count(run_state: RunState, upgrade_id: String) -> void:
+	_set_upgrade_count(run_state, upgrade_id, int(upgrade_counts(run_state).get(upgrade_id, 0)) + 1)
+
+
+## For the rare grant that is not a purchase — a meta unlock handing over an
+## upgrade for free — so the ledger still knows about kit the run owns
+## without pretending `EconomySystem` ever charged for it.
+static func record_free_grant(run_state: RunState, upgrade_id: String) -> void:
+	_increment_upgrade_count(run_state, upgrade_id)
+
+
 static func purchase_cost(upgrade: UpgradeDefinition, level: int) -> float:
 	if upgrade.repeatable:
 		return upgrade.cost * pow(upgrade.cost_growth, float(level))
@@ -165,6 +193,7 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 			run_state.build["advertising_tier"] = upgrade_id
 	if not upgrade.repeatable:
 		run_state.build["upgrades"].append(upgrade_id)
+	_increment_upgrade_count(run_state, upgrade_id)
 	effect_resolver.apply_effects(run_state, upgrade.effects, "upgrade.%s" % upgrade_id)
 	return true
 
@@ -205,6 +234,7 @@ func install_carried(
 			run_state.build["advertising_tier"] = upgrade_id
 	if not upgrade.repeatable and not (upgrade_id in run_state.build["upgrades"]):
 		run_state.build["upgrades"].append(upgrade_id)
+	_increment_upgrade_count(run_state, upgrade_id)
 	effect_resolver.apply_effects(run_state, upgrade.effects, "upgrade.%s" % upgrade_id)
 	return true
 
@@ -212,16 +242,16 @@ func install_carried(
 ## Everything the run bought, as a level count per upgrade id, in the order the
 ## campaign has to reinstall it: a component cannot go into a machine that has
 ## not been racked yet.
-static func owned_upgrade_levels(run_state: RunState, content_db: Node) -> Dictionary:
-	var levels: Dictionary = {}
-	for upgrade_id in Array(run_state.build.get("upgrades", [])):
-		levels[str(upgrade_id)] = 1
-	for upgrade_id in Dictionary(run_state.build.get("upgrade_levels", {})).keys():
-		levels[str(upgrade_id)] = int(run_state.build["upgrade_levels"][upgrade_id])
-	# Dwellings are chapters, not stock, and must never be carried as kit.
+##
+## Only hardware and the components that bolt onto it are rig: cash, modules
+## and perks reset every chapter by design, and so must anything else the
+## Market sells — cloud tiers, advertising tiers, workspace upgrades — or it
+## arrives in the next location already installed and already billing.
+static func carriable_rig_levels(run_state: RunState, content_db: Node) -> Dictionary:
+	var levels: Dictionary = upgrade_counts(run_state).duplicate(true)
 	for upgrade_id in levels.keys():
 		var upgrade: UpgradeDefinition = content_db.get_upgrade(str(upgrade_id))
-		if upgrade == null or upgrade.category == "dwelling":
+		if upgrade == null or not (upgrade.category == "hardware" or upgrade.category == "component"):
 			levels.erase(upgrade_id)
 	return levels
 
@@ -324,8 +354,10 @@ func sell(run_state: RunState, key: String, content_db: Node, economy_system: Ec
 			run_state.build.get("upgrade_levels", {}).erase(upgrade.id)
 		else:
 			run_state.build["upgrade_levels"][upgrade.id] = level
+		_set_upgrade_count(run_state, upgrade.id, level)
 	else:
 		run_state.build["upgrades"].erase(upgrade.id)
+		_set_upgrade_count(run_state, upgrade.id, 0)
 	run_state.economy["recurring_costs"] = maxf(
 		0.0,
 		float(run_state.economy.get("recurring_costs", 0.0)) - upgrade.recurring_cost_delta

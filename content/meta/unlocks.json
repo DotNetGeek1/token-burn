@@ -36,6 +36,15 @@
     "operation_id": "op.distillation"
   },
   {
+    "id": "unlock.starting_rig",
+    "name": "The Rig Comes Home",
+    "kind": "starting_hardware",
+    "description": "Every future run starts with the next machine of a permanent rig already racked: first the custom desktop, then the GPU rack, then the compute cluster.",
+    "flavour": "The liquidators never checked the storage unit. The storage unit hums.",
+    "repeatable": true,
+    "ladder": ["upgrade.custom_desktop", "upgrade.gpu_rack", "upgrade.compute_cluster"]
+  },
+  {
     "id": "unlock.cooling",
     "name": "Better Airflow, Permanently",
     "kind": "cooling",
@@ -133,7 +142,6 @@
     "description": "Every future run starts with room for a second workflow, so two contracts can be worked through two different pipelines.",
     "flavour": "You never deleted the old workflow. You just stopped explaining why.",
     "repeatable": true,
-    "amount": 1,
-    "reward_only": true
+    "amount": 1
   }
 ]

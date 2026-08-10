@@ -48,6 +48,7 @@ func run() -> void:
 	_test_round_end_pending_survives_load(sim_script)
 	_test_a_pre_round_save_keeps_its_progress()
 	_test_a_pre_workflow_save_keeps_its_pipelines()
+	_test_corrupt_primary_save_recovers_from_backup()
 
 
 func _test_round_end_pending_survives_load(sim_script: GDScript) -> void:
@@ -55,17 +56,17 @@ func _test_round_end_pending_survives_load(sim_script: GDScript) -> void:
 	sim.autosave_enabled = false
 	sim.start_run(201)
 	sim.phase = sim.Phase.ANGEL_ROUND
-	sim._round_end_pending = true
-	sim._present_angel_offers()
+	sim.debug_set_round_end_pending(true)
+	sim.debug_present_angel_offers()
 	# Written with the phase's old name on purpose: saves made before the angel
 	# round was split out of the market still have to load.
-	SaveManager.save_run(sim.run_state, "UPGRADE_CHOICE", sim.run_seed, sim.pending_choices, sim._round_end_pending)
+	SaveManager.save_run(sim.run_state, "UPGRADE_CHOICE", sim.run_seed, sim.pending_choices, sim.debug_round_end_pending())
 
 	var sim2: Node = sim_script.new()
 	sim2.autosave_enabled = false
 	assert_true(sim2.load_saved_run(), "Save with a pending round end loads")
 	assert_eq(sim2.phase, sim2.Phase.ANGEL_ROUND, "A pre-split save resumes in the angel phase")
-	assert_true(sim2._round_end_pending, "Round-end pending flag restored on load")
+	assert_true(sim2.debug_round_end_pending(), "Round-end pending flag restored on load")
 	var round_before: int = int(sim2.run_state.calendar["round"])
 	sim2.decline_offers()
 	assert_eq(int(sim2.run_state.calendar["round"]), round_before + 1, "The round rolls after loading mid angel phase")
@@ -165,3 +166,29 @@ func _test_a_pre_workflow_save_keeps_its_pipelines() -> void:
 	)
 	assert_eq(board.active_workflow_index(migrated), 1, "The run resumes on the lane it was left on")
 	assert_true(str(board.workflow_at(migrated, 0).get("name", "")) != "", "Every workflow arrives named")
+
+
+## Saving is what produces the `.bak` in the first place: a truncated write to
+## the live save must not cost the player the previous, good save it replaced.
+func _test_corrupt_primary_save_recovers_from_backup() -> void:
+	var state := RunState.new()
+	state.economy["cash"] = 4242.0
+	var saved: bool = SaveManager.save_run(state, "IN_ROUND", 777, [], false)
+	assert_true(saved, "First save succeeds and becomes the backup on the next save")
+
+	state.economy["cash"] = 9999.0
+	saved = SaveManager.save_run(state, "IN_ROUND", 777, [], false)
+	assert_true(saved, "Second save succeeds, demoting the first to .bak")
+
+	var file := FileAccess.open(SaveManager.SAVE_PATH, FileAccess.WRITE)
+	file.store_string("{not valid json")
+	file.close()
+
+	var loaded: Dictionary = SaveManager.load_run()
+	assert_true(not loaded.is_empty(), "A corrupt primary save falls back to the backup")
+	var recovered_state: Dictionary = loaded.get("run_state", {})
+	assert_eq(
+		float(recovered_state.get("economy", {}).get("cash", 0.0)), 4242.0,
+		"The recovered save is the last good write, not the corrupt one"
+	)
+	SaveManager.delete_save()

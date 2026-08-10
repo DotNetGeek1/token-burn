@@ -57,7 +57,7 @@
         "priority": 16,
         "conditions": [{"left": "calendar.prompt", "operator": ">", "right": "$trial_prompts"}],
         "effects": [
-          {"operation": "multiply", "target": "economy.cloud_liability", "value": "$late_multiplier"},
+          {"operation": "multiply", "target": "economy.cloud_surcharge_liability", "value": "$late_multiplier"},
           {"operation": "defer_cost", "target": "economy.cash", "value": "$deferred_penalty", "prompts": 2}
         ]
       }
@@ -249,7 +249,7 @@
         "event": "prompt.started",
         "priority": 15,
         "conditions": [],
-        "effects": [{"operation": "add", "target": "economy.cloud_liability", "value": "$liability_per_prompt"}]
+        "effects": [{"operation": "add", "target": "economy.cloud_surcharge_liability", "value": "$liability_per_prompt"}]
       }
     ]
   },

@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 12
+const SAVE_VERSION := 14
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -24,7 +24,7 @@ var economy: Dictionary = {
 	"debt": 0.0,
 	"recurring_costs": 0.0,
 	"income": 0.0,
-	"cloud_liability": 0.0,
+	"cloud_surcharge_liability": 0.0,
 	"pending_bills": [],
 	"rent_unpaid_streak": 0,
 	"rent_multiplier": 1.0,
@@ -84,6 +84,13 @@ var build: Dictionary = {
 	"cloud_tier": "none",
 	"advertising_tier": "none",
 	"upgrade_levels": {},
+	## The one ledger of "how many of upgrade X does this run own", repeatable
+	## and one-off alike (a one-off sits in here at 1). `hardware`/`upgrades`/
+	## `upgrade_levels` above are the older, split representation of the same
+	## fact and are being folded into this one incrementally — see
+	## `UpgradeSystem.upgrade_counts()` — rather than removed outright, since
+	## UI and save data still address them directly.
+	"upgrade_counts": {},
 }
 
 var statistics: Dictionary = {
@@ -129,6 +136,10 @@ var flags: Dictionary = {
 	"location_completed": false,
 	"next_location": "",
 	"draft_kind": "",
+	## Set once at `reset_run` from the profile's chosen difficulty, and read
+	## back by job scaling rather than re-reading the profile mid-run — so a
+	## difficulty change in the menu cannot reach into a run already going.
+	"difficulty": "normal",
 }
 
 
@@ -245,6 +256,28 @@ func update_peaks() -> void:
 	)
 
 
+## A typed snapshot of `economy`, for code that wants real property names and
+## static types instead of `.get("cash", 0.0)`. It is a snapshot, not a live
+## view: write changes back with `apply_economy_state`, the same way a UI
+## screen edits a form and then submits it, rather than expecting field
+## assignment to reach back into the dictionary on its own.
+func economy_state() -> EconomyState:
+	return EconomyState.from_dict(economy)
+
+
+func apply_economy_state(state: EconomyState) -> void:
+	economy = state.to_dict()
+
+
+## A typed snapshot of `compute`. See `economy_state()`.
+func compute_state() -> ComputeState:
+	return ComputeState.from_dict(compute)
+
+
+func apply_compute_state(state: ComputeState) -> void:
+	compute = state.to_dict()
+
+
 func to_dict() -> Dictionary:
 	return {
 		"save_version": SAVE_VERSION,
@@ -331,6 +364,38 @@ func _migrate(from_version: int) -> void:
 		_migrate_off_the_ascension_ladder()
 	if from_version < 12:
 		_migrate_to_the_contract_as_the_level()
+	if from_version < 13:
+		_migrate_cloud_liability_rename()
+	if from_version < 14:
+		_migrate_upgrade_counts()
+
+
+## The liability was always the surcharge on metered cloud spend, not cloud
+## spend itself — the rename says so, and lands alongside the fix that had
+## been applying its multiplier twice.
+func _migrate_cloud_liability_rename() -> void:
+	if economy.has("cloud_liability"):
+		economy["cloud_surcharge_liability"] = float(economy.get("cloud_liability", 0.0))
+		economy.erase("cloud_liability")
+	if not flags.has("difficulty"):
+		flags["difficulty"] = "normal"
+
+
+## `upgrade_counts` is a new, unified ledger folding together the older split
+## representation (`hardware` + `upgrades` + `upgrade_levels`); a save from
+## before it existed has all the facts, just spread across those three
+## fields, so it is rebuilt from them rather than starting empty.
+func _migrate_upgrade_counts() -> void:
+	if not build.has("upgrade_counts") or not (build["upgrade_counts"] is Dictionary):
+		build["upgrade_counts"] = {}
+	if not Dictionary(build["upgrade_counts"]).is_empty():
+		return
+	var counts: Dictionary = {}
+	for upgrade_id in Array(build.get("upgrades", [])):
+		counts[str(upgrade_id)] = int(counts.get(str(upgrade_id), 0)) + 1
+	for upgrade_id in Dictionary(build.get("upgrade_levels", {})).keys():
+		counts[str(upgrade_id)] = int(build["upgrade_levels"][upgrade_id])
+	build["upgrade_counts"] = counts
 
 
 ## The three-rung ladder became one boss contract per location. A save taken
@@ -468,7 +533,7 @@ func _default_economy(profile: Dictionary = {}) -> Dictionary:
 		"debt": 0.0,
 		"recurring_costs": 0.0,
 		"income": 0.0,
-		"cloud_liability": 0.0,
+		"cloud_surcharge_liability": 0.0,
 		"pending_bills": [],
 		"rent_unpaid_streak": 0,
 		"rent_multiplier": float(profile.get("rent_multiplier", 1.0)),
@@ -578,6 +643,7 @@ func _default_flags() -> Dictionary:
 		"location_completed": false,
 		"next_location": "",
 		"draft_kind": "",
+		"difficulty": "normal",
 	}
 
 
