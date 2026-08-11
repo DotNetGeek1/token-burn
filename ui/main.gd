@@ -3,13 +3,15 @@ extends Control
 ## The shell: a desk, in landscape, with the game played on the things standing
 ## on it.
 ##
-## Nothing here is a page the player navigates to. The desk artwork fills the
-## window and everything else is mounted onto it at a position authored beside
-## the art (`board_scene.regions` / `board_scene.props` in the asset catalog):
-## the machine stands on the desk in the work column, the readouts are painted
-## into the props that carry them, and the job board, market, build and menu
-## slide in from the right over the room rather than replacing it. The desk is
-## never off screen, so the player is always looking at their own operation.
+## Nothing here is a page the player navigates to. The room the run is being
+## played in fills the window and everything else is mounted onto it at a
+## position authored beside the art (`board_scenes.<dwelling>` in the asset
+## catalog): the machine stands on the desk in the work column, the readouts are
+## painted into the props that carry them, and the job board, market, build and
+## menu slide in from the right over the room rather than replacing it. Moving
+## the operation to the garage repaints the room and moves every one of those
+## mounts with it. The desk is never off screen, so the player is always looking
+## at their own operation.
 
 ## Screens that live on the desk, in the work column, where the machine is.
 const DESK_SCENES := {
@@ -26,7 +28,8 @@ const PANEL_SCENES := {
 	"menu": preload("res://ui/menu/menu_screen.tscn"),
 }
 
-## Bottom navigation buttons to the icon each one borrows from the art kit.
+## Navigation destinations to the icon each one borrows from the art kit. The
+## menu itself is printed on the laptop now; these are for the panel's own rail.
 const NAV_ICON_KEYS := {
 	"work": "office",
 	"jobs": "jobs",
@@ -36,19 +39,8 @@ const NAV_ICON_KEYS := {
 	"more": "menu",
 }
 
-## Which nav button owns each tab, so the highlight survives WORK resolving to
-## either the office or the burn board.
-const TAB_TO_NAV := {
-	"office": "work",
-	"board": "work",
-	"jobs": "jobs",
-	"build": "build",
-	"market": "market",
-	"menu": "more",
-}
-
-## The rail down the inside edge of the side panel, mirroring the nav for the
-## hand that is already over there.
+## The rail down the inside edge of the side panel, mirroring the laptop's menu
+## for the hand that is already over there.
 const RAIL_TABS: Array[String] = ["jobs", "market", "build", "menu"]
 
 ## How far the desk is dimmed. The machine is lit by its own screen, so the desk
@@ -71,7 +63,6 @@ const INVESTOR_CALL := preload("res://ui/screens/investor_call.tscn")
 const TITLE_SCREEN := preload("res://ui/title/title_screen.tscn")
 
 const HUD_HEIGHT := 76.0
-const NAV_HEIGHT := 78.0
 const CHIP_FONT_SIZE := 22
 const CHIP_FONT_SIZE_MIN := 15
 
@@ -87,22 +78,12 @@ const CHIP_FONT_SIZE_MIN := 15
 @onready var version_label: Label = $TopHud/HudMargin/HudRow/Wordmark/Version
 @onready var stats_row: HBoxContainer = $TopHud/HudMargin/HudRow/StatsRow
 @onready var cash_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/CashChip
-@onready var token_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/TokenChip
-@onready var heat_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/HeatChip
-@onready var power_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/PowerChip
 @onready var rep_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/RepChip
 @onready var round_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/RoundChip
-@onready var ascension_goal: Button = $TopHud/HudMargin/HudRow/AscensionGoal
-@onready var goal_name: Label = $TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalName
-@onready var goal_kicker: Label = $TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalKicker
-@onready var goal_bar: ProgressBar = $TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalRow/GoalBar
-@onready var goal_count: Label = $TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalRow/GoalCount
 @onready var side_panel: Control = $SidePanel
 @onready var panel_bg: PanelContainer = $SidePanel/PanelBg
 @onready var panel_body: Control = $SidePanel/PanelBg/PanelRow/PanelBody
 @onready var icon_rail: VBoxContainer = $SidePanel/PanelBg/PanelRow/IconRail
-@onready var bottom_nav: PanelContainer = $BottomNav
-@onready var nav_bar: HBoxContainer = $BottomNav/NavHBox
 @onready var overlay_root: Control = $OverlayRoot
 
 var _desk_tab: String = "office"
@@ -130,9 +111,8 @@ var _investor_call: Control = null
 var _achievement_splash: AchievementSplash = null
 var _last_angel_phase: bool = false
 var _pending_statement: Dictionary = {}
-var _market_badge: Label = null
-var _board_stage: int = -1
-var _stage_reveal_running: bool = false
+var _board_dwelling: String = ""
+var _room_reveal_running: bool = false
 var _hud_values: Dictionary = {}
 var _title_screen: Control = null
 ## While the title is up the shell behind it is already live (so Continue is
@@ -149,17 +129,13 @@ func _ready() -> void:
 	# The HUD floats directly over the room, the way the readouts in the artwork
 	# do, instead of sitting in an opaque bar bolted across the top.
 	top_hud.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	bottom_nav.add_theme_stylebox_override("panel", UiThemeBuilder.nav_bar_style())
 	panel_bg.add_theme_stylebox_override("panel", _side_panel_style())
 	logo.add_theme_color_override("font_color", UiThemeBuilder.color("red"))
 	version_label.text = "v%s" % ProjectSettings.get_setting("application/config/version", "0.0.0")
-	_style_ascension_goal()
 	get_viewport().size_changed.connect(_layout_board)
 	stats_row.minimum_size_changed.connect(_fit_hud)
 	_build_props()
 	_layout_board()
-	_apply_nav_icons()
-	_connect_nav_buttons()
 	_build_icon_rail()
 	_build_overlays()
 	_show_desk_tab("office")
@@ -214,20 +190,6 @@ func _side_panel_style() -> StyleBoxFlat:
 	return style
 
 
-func _style_ascension_goal() -> void:
-	ascension_goal.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
-	ascension_goal.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
-	ascension_goal.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
-	ascension_goal.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	goal_bar.add_theme_stylebox_override("background", UiThemeBuilder.progress_bg())
-	goal_bar.add_theme_stylebox_override(
-		"fill", UiThemeBuilder.progress_fill(UiThemeBuilder.semantic("perk"))
-	)
-	for label: Label in [goal_kicker, goal_name, goal_count]:
-		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-		label.add_theme_constant_override("outline_size", 2)
-
-
 # --- Desk layout -------------------------------------------------------------
 
 ## Everything on the desk is placed from the artwork's own coordinates, so a
@@ -236,17 +198,18 @@ func _style_ascension_goal() -> void:
 func _layout_board() -> void:
 	var size: Vector2 = get_viewport_rect().size
 	var panel_width: float = _base_panel_width(size)
-	_place(work_column, AssetCatalog.board_region("work_column"), size, Rect2(
-		0.014, HUD_HEIGHT / size.y, 1.0 - (panel_width / size.x) - 0.03,
-		1.0 - (HUD_HEIGHT + NAV_HEIGHT) / size.y
+	_place(work_column, AssetCatalog.board_region(board_dwelling(), "work_column"), size, Rect2(
+		0.0, 0.0, 1.0, 1.0
 	))
 	top_hud.offset_bottom = HUD_HEIGHT
 	side_panel.offset_left = -panel_width
 	side_panel.offset_right = 0.0
-	bottom_nav.offset_top = -NAV_HEIGHT
 	_apply_panel_slide(_panel_slide)
 	_layout_props(size)
 	_fit_hud()
+	# Screens that hang off the room's own furniture rather than off the work
+	# column as a whole have to be told the room has moved.
+	get_tree().call_group("board_mounted", "relayout_on_board")
 
 
 ## Screens that are catalogues rather than status readouts. On the narrow slab a
@@ -272,7 +235,7 @@ func _panel_width(viewport_size: Vector2) -> float:
 ## The desk keeps this measure whatever the panel is doing: a wide slide-over is
 ## an overlay on the room, not a resize of it.
 func _base_panel_width(viewport_size: Vector2) -> float:
-	var region: Rect2 = AssetCatalog.board_region("side_panel")
+	var region: Rect2 = AssetCatalog.board_region(board_dwelling(), "side_panel")
 	if region.size.x > 0.0:
 		return region.size.x * viewport_size.x
 	return minf(UiThemeBuilder.SIDE_PANEL_WIDTH, viewport_size.x * 0.4)
@@ -299,7 +262,7 @@ func _place(control: Control, region: Rect2, viewport_size: Vector2, fallback: R
 ## rings. Built from the catalog rather than hand-placed, so the artwork decides
 ## what the room contains.
 func _build_props() -> void:
-	for key in AssetCatalog.board_prop_keys():
+	for key in AssetCatalog.board_prop_keys(board_dwelling()):
 		var prop := BoardProp.new()
 		prop.prop_key = str(key)
 		prop_layer.add_child(prop)
@@ -307,14 +270,19 @@ func _build_props() -> void:
 	var phone: BoardProp = _props.get("phone")
 	if phone != null:
 		phone.pressed.connect(open_investor_terms)
+	var plan: BoardProp = _props.get("plan_board")
+	if plan != null:
+		plan.pressed.connect(open_ascension_select)
 
 
 func _layout_props(viewport_size: Vector2) -> void:
+	var dwelling: String = board_dwelling()
 	for key in _props:
 		var prop: Control = _props[key]
-		_place(prop, AssetCatalog.board_prop(str(key)), viewport_size, Rect2())
+		var rect: Rect2 = AssetCatalog.board_prop(dwelling, str(key))
+		_place(prop, rect, viewport_size, Rect2())
 		# A prop the artwork does not carry has nowhere honest to sit.
-		prop.visible = AssetCatalog.board_prop(str(key)).size.x > 0.0
+		prop.visible = rect.size.x > 0.0
 
 
 func _refresh_props() -> void:
@@ -325,7 +293,7 @@ func _refresh_props() -> void:
 	_set_prop("heat_readout", "HEAT", "%d%%" % int(round(ratio * 100.0)), _heat_role(ratio))
 	var watts: float = float(state.compute.get("power_draw", 0.0))
 	_set_prop("power_meter", "POWER", "%.1f kW" % (watts / 1000.0), "energy")
-	_set_prop_lines("plan_board", "BURN PLAN", _plan_lines())
+	_set_prop_lines("plan_board", "BURN PLAN", _plan_lines(), _contract_lines())
 	# Always the terms line: tapping re-reads the contract. There is nothing to
 	# qualify for any more, so the phone does not ring for a "ready" state.
 	_set_prop("phone", "ANGEL", "TERMS", "neutral")
@@ -348,17 +316,11 @@ func _plan_lines() -> Array:
 	var state := Simulation.run_state
 	var has_contracts: bool = not Array(state.business.get("job_queue", [])).is_empty() \
 		or not Array(state.business.get("active_jobs", [])).is_empty()
-	var progress: Dictionary = Simulation.ascension_progress()
-	var contract_done: bool = not progress.is_empty() \
-		and float(progress.get("burn_ratio", 0.0)) >= 1.0 \
-		and float(progress.get("quality_average", 0.0)) \
-			>= float(progress.get("quality_min", 0.0))
 	return [
 		["CONTRACTS", has_contracts],
 		["UPGRADE RIG", Array(state.build.get("hardware", [])).size() > 1],
 		["STAY COOL", float(state.compute.get("heat", 0.0))
 			< 0.7 * maxf(1.0, float(state.compute.get("heat_capacity", 100.0)))],
-		["CONTRACT", contract_done],
 	]
 
 
@@ -368,10 +330,39 @@ func _set_prop(key: String, caption: String, value: String, role: String) -> voi
 		prop.set_readout(caption, value, UiThemeBuilder.semantic(role))
 
 
-func _set_prop_lines(key: String, caption: String, lines: Array) -> void:
+func _set_prop_lines(key: String, caption: String, lines: Array, notes: Array = []) -> void:
 	var prop: BoardProp = _props.get(key)
 	if prop != null:
-		prop.set_checklist(caption, lines)
+		prop.set_checklist(caption, lines, notes)
+
+
+## The investor's terms, written up on the board under the plan rather than on a
+## plate in the corner of the window. It is the one thing in the run with a
+## deadline attached, so it belongs where the player writes down what they still
+## have to do.
+func _contract_lines() -> Array:
+	var summary: Dictionary = Simulation.ascension_summary()
+	var contract: Dictionary = Dictionary(summary.get("contract", {}))
+	if contract.is_empty():
+		return []
+	var progress: Dictionary = Dictionary(summary.get("progress", {}))
+	var burned: float = float(progress.get("tokens_burned", 0.0))
+	var total: float = maxf(1.0, float(progress.get("total_burn", contract.get("total_burn", 1.0))))
+	var filled: int = clampi(int(round(burned / total * 10.0)), 0, 10)
+	var lines: Array = [
+		str(contract.get("name", "The contract")).to_upper(),
+		"%s/%s" % [NumberFormat.format(burned), NumberFormat.format(total)],
+		"%s%s" % ["|".repeat(filled), "-".repeat(10 - filled)],
+	]
+	var quality_min: float = float(progress.get("quality_min", 0.0))
+	var tail: String = "%d rnd(s)" % maxi(0, int(progress.get("rounds_remaining", 0)))
+	if quality_min > 0.0:
+		tail += " q%s/%s" % [
+			JobPresentation.quality_mark(float(progress.get("quality_average", 0.0))),
+			JobPresentation.quality_mark(quality_min),
+		]
+	lines.append(tail)
+	return lines
 
 
 # --- Title -------------------------------------------------------------------
@@ -438,9 +429,7 @@ func _fit_hud() -> void:
 	var strip: float = top_hud.size.x
 	if strip <= 1.0:
 		strip = get_viewport_rect().size.x
-	var budget: float = maxf(
-		120.0, strip - 36.0 - 150.0 - ascension_goal.custom_minimum_size.x - 28.0
-	)
+	var budget: float = maxf(120.0, strip - 36.0 - 150.0 - 28.0)
 	var chip_size: int = CHIP_FONT_SIZE
 	while chip_size > CHIP_FONT_SIZE_MIN and _chips_width(chip_size) > budget:
 		chip_size -= 1
@@ -449,7 +438,7 @@ func _fit_hud() -> void:
 
 
 func _hud_chips() -> Array[StatChip]:
-	return [cash_chip, token_chip, heat_chip, power_chip, rep_chip, round_chip]
+	return [cash_chip, rep_chip, round_chip]
 
 
 func _chips_width(font_size: int) -> float:
@@ -471,41 +460,6 @@ func _set_chip_font_size(font_size: int) -> void:
 
 
 # --- Navigation --------------------------------------------------------------
-
-func _apply_nav_icons() -> void:
-	for child in nav_bar.get_children():
-		if child is Button:
-			var nav_key: String = child.name.to_lower()
-			var icon: Texture2D = AssetCatalog.nav_icon(str(NAV_ICON_KEYS.get(nav_key, nav_key)))
-			if icon != null:
-				child.icon = icon
-			child.add_theme_constant_override("icon_max_width", 30)
-			child.add_theme_constant_override("h_separation", 6)
-			child.add_theme_font_size_override("font_size", 19)
-			child.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			child.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-			child.expand_icon = false
-	var market_button: Button = nav_bar.get_node_or_null("Market")
-	if market_button != null and _market_badge == null:
-		_market_badge = Label.new()
-		_market_badge.text = "!"
-		_market_badge.tooltip_text = "You can afford upgrades — spend your cash in the Market."
-		_market_badge.add_theme_font_size_override("font_size", 22)
-		_market_badge.add_theme_color_override("font_color", UiThemeBuilder.color("green"))
-		_market_badge.add_theme_color_override("font_outline_color", UiThemeBuilder.color("bg"))
-		_market_badge.add_theme_constant_override("outline_size", 5)
-		_market_badge.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		_market_badge.offset_left = 22.0
-		_market_badge.offset_top = 0.0
-		_market_badge.visible = false
-		market_button.add_child(_market_badge)
-
-
-func _connect_nav_buttons() -> void:
-	for child in nav_bar.get_children():
-		if child is Button:
-			child.pressed.connect(_on_nav_pressed.bind(child.name.to_lower()))
-
 
 ## A second way into the panel's screens, down its own inside edge, for the hand
 ## that is already on that side of the window.
@@ -531,20 +485,6 @@ func _build_icon_rail() -> void:
 	close.pressed.connect(close_panel)
 	icon_rail.add_child(close)
 	icon_rail.move_child(close, 0)
-
-
-func _on_nav_pressed(nav_key: String) -> void:
-	UiSound.play("tap")
-	match nav_key:
-		"work":
-			close_panel()
-			_show_desk_tab(_desk_tab_now())
-		"ascend":
-			open_ascension_select()
-		"more":
-			open_panel("menu")
-		_:
-			open_panel(nav_key)
 
 
 func _on_rail_pressed(tab: String) -> void:
@@ -593,7 +533,6 @@ func open_panel(tab_name: String) -> void:
 	_mount(panel_body, PANEL_SCENES, tab_name)
 	_slide_panel(0.0)
 	_update_scrim()
-	_update_nav_highlight()
 
 
 func close_panel() -> void:
@@ -606,7 +545,6 @@ func close_panel() -> void:
 	_closing_tab = _panel_tab
 	_panel_tab = ""
 	_update_scrim()
-	_update_nav_highlight()
 
 
 func _slide_panel(target: float) -> void:
@@ -625,12 +563,6 @@ func _apply_panel_slide(value: float) -> void:
 	# The HUD is the room's own signage, so it retreats to the desk rather than
 	# running on behind the slab where the goal plate would be half-covered.
 	top_hud.offset_right = -width * (1.0 - value)
-	# The nav is the room's, not the slab's, so it gives up whatever floor the
-	# slab is standing on. Without this a wide slide-over buries half the tabs.
-	bottom_nav.offset_right = -width * (1.0 - value)
-	# The goal plate is the widest thing on the strip and the panel is where its
-	# business gets done, so it stands down rather than squeezing the chips.
-	ascension_goal.visible = value > 0.5
 	_fit_hud()
 
 
@@ -641,7 +573,6 @@ func _show_desk_tab(tab_name: String) -> void:
 	_mount(content_container, DESK_SCENES, tab_name)
 	_update_board_art()
 	_update_scrim()
-	_update_nav_highlight()
 
 
 ## Screens are built once and then kept: switching is a visibility flip and a
@@ -699,15 +630,27 @@ func open_achievements() -> void:
 # --- The desk artwork --------------------------------------------------------
 
 func _update_board_art() -> void:
-	var stage: int = AssetCatalog.office_stage_for_build(Simulation.run_state.build)
-	if stage != _board_stage and not _stage_reveal_running:
-		if _board_stage < 0:
-			_board_stage = stage
-			board_art.texture = AssetCatalog.board_scene_art(stage)
+	var dwelling: String = AssetCatalog.dwelling_for_build(Simulation.run_state.build)
+	if dwelling != _board_dwelling and not _room_reveal_running:
+		var first_room: bool = _board_dwelling.is_empty()
+		_board_dwelling = dwelling
+		# Every mount in the shell is measured off the picture, so a new room has
+		# to move the furniture before it is shown, not after.
+		_layout_board()
+		if first_room:
+			board_art.texture = AssetCatalog.board_scene_art(dwelling)
 		else:
-			_reveal_stage(stage)
+			_reveal_room(dwelling)
 	board_art.visible = board_art.texture != null
 	scrim.visible = board_art.visible
+
+
+## The room the shell is currently laid out against. Screens mounted inside a
+## region ask for this so they can place themselves off the same picture.
+func board_dwelling() -> String:
+	if _board_dwelling.is_empty():
+		return AssetCatalog.dwelling_for_build(Simulation.run_state.build)
+	return _board_dwelling
 
 
 func _update_scrim() -> void:
@@ -716,14 +659,13 @@ func _update_scrim() -> void:
 	scrim.color = Color(base.r, base.g, base.b, alpha)
 
 
-## Buying something that changes the room is the reward, so the chrome steps out
-## of the way, the new desk fades in, and then it all comes back.
-func _reveal_stage(stage: int) -> void:
-	_stage_reveal_running = true
-	_board_stage = stage
-	board_art_next.texture = AssetCatalog.board_scene_art(stage)
+## Moving premises is the reward for finishing a chapter, so the chrome steps
+## out of the way, the new room fades in, and then it all comes back.
+func _reveal_room(dwelling: String) -> void:
+	_room_reveal_running = true
+	board_art_next.texture = AssetCatalog.board_scene_art(dwelling)
 	board_art_next.visible = board_art_next.texture != null
-	var chrome: Array[Control] = [top_hud, work_column, bottom_nav, prop_layer]
+	var chrome: Array[Control] = [top_hud, work_column, prop_layer]
 	var tween: Tween = create_tween()
 	for control in chrome:
 		tween.parallel().tween_property(control, "modulate:a", 0.0, 0.22)
@@ -731,55 +673,21 @@ func _reveal_stage(stage: int) -> void:
 	tween.tween_interval(0.4)
 	for control in chrome:
 		tween.parallel().tween_property(control, "modulate:a", 1.0, 0.28)
-	tween.tween_callback(_finish_stage_reveal)
+	tween.tween_callback(_finish_room_reveal)
 
 
-func _finish_stage_reveal() -> void:
+func _finish_room_reveal() -> void:
 	board_art.texture = board_art_next.texture
 	board_art.visible = board_art.texture != null
 	board_art_next.modulate.a = 0.0
 	board_art_next.visible = false
-	_stage_reveal_running = false
+	_room_reveal_running = false
 	_update_board_art()
-
-
-func _update_nav_highlight() -> void:
-	var active_nav: String = "work" if _panel_slide > 0.5 else str(TAB_TO_NAV.get(_panel_tab, ""))
-	for child in nav_bar.get_children():
-		if child is Button:
-			var nav_key: String = child.name.to_lower()
-			var active: bool = nav_key == active_nav
-			child.disabled = false
-			child.modulate = Color.WHITE
-			child.add_theme_color_override(
-				"icon_normal_color",
-				(
-					UiThemeBuilder.semantic("action")
-					if active
-					else Color(UiThemeBuilder.TEXT_SECONDARY)
-				)
-			)
-			child.add_theme_color_override(
-				"font_color",
-				(
-					Color(UiThemeBuilder.TEXT_PRIMARY)
-					if active
-					else Color(UiThemeBuilder.TEXT_SECONDARY)
-				)
-			)
-			child.add_theme_stylebox_override("normal", UiThemeBuilder.nav_tab_style(active))
-			child.add_theme_stylebox_override("hover", UiThemeBuilder.nav_tab_style(active))
-			child.add_theme_stylebox_override("pressed", UiThemeBuilder.nav_tab_style(true))
-			child.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var work_button: Button = nav_bar.get_node_or_null("Work")
-	if work_button != null:
-		work_button.text = "BURN" if Simulation.is_work_running() else "DESK"
 
 
 # --- Events ------------------------------------------------------------------
 
 func _connect_events() -> void:
-	ascension_goal.pressed.connect(open_ascension_select)
 	EventBus.run_started.connect(refresh_all)
 	EventBus.run_started.connect(_reset_ascension_prompts)
 	Simulation.work_session_finished.connect(_on_work_session_finished)
@@ -857,8 +765,6 @@ func _on_bills_continue() -> void:
 func refresh_all() -> void:
 	_refresh_hud()
 	_update_board_art()
-	_update_market_badge()
-	_update_nav_highlight()
 	for screen in _screen_cache.values():
 		if screen.has_method("refresh"):
 			screen.refresh()
@@ -883,77 +789,21 @@ func refresh_all() -> void:
 	_sync_overlay_input()
 
 
-func _update_market_badge() -> void:
-	if _market_badge == null:
-		return
-	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
-	var owned: Array = Simulation.run_state.build.get("upgrades", [])
-	var affordable: bool = false
-	for upgrade in ContentDatabase.upgrades:
-		if not (upgrade.id in owned) and upgrade.cost > 0.0 and upgrade.cost <= cash:
-			affordable = true
-			break
-	_market_badge.visible = affordable
-
-
+## What is left in the strip over the room: the two numbers with no diegetic
+## home yet, and the round, which stays legible while a wide panel covers the
+## laptop. Heat, power, throughput and the contract are all on the board now.
 func _refresh_hud() -> void:
 	var state := Simulation.run_state
 	var cash: float = float(state.economy.get("cash", 0.0))
 	var token_rate: float = float(state.compute.get("token_rate", 0.0))
 	var reputation: float = float(int(state.business.get("reputation", 0.0)))
-	var heat: float = float(state.compute.get("heat", 0.0))
-	var capacity: float = maxf(1.0, float(state.compute.get("heat_capacity", 100.0)))
-	var heat_ratio: float = heat / capacity
-	var watts: float = float(state.compute.get("power_draw", 0.0))
 	cash_chip.setup_value("cash", cash, "cash")
 	cash_chip.set_value_color(UiThemeBuilder.semantic("money" if cash >= 0.0 else "danger"))
-	token_chip.setup_value("tokens", token_rate, "tokens")
-	token_chip.tooltip_text = "Throughput: tokens the rig produces per second."
-	heat_chip.setup("heat", "%d%%" % int(round(heat_ratio * 100.0)))
-	heat_chip.set_value_color(UiThemeBuilder.semantic(_heat_role(heat_ratio)))
-	heat_chip.tooltip_text = "Heat %d of %d. The rig throttles hot and catches fire at the top." % [
-		int(round(heat)), int(round(capacity)),
-	]
-	power_chip.setup("power", "%.1f kW" % (watts / 1000.0))
-	power_chip.set_value_color(UiThemeBuilder.semantic("energy"))
-	power_chip.tooltip_text = "%d W draw. Power is metered every prompt and makes the heat." % int(round(watts))
 	rep_chip.setup_value("reputation", reputation, "plain")
 	rep_chip.tooltip_text = _reputation_tooltip(reputation)
 	_pulse_changed_chips(cash, token_rate, reputation)
 	_refresh_round_chip()
-	_refresh_ascension_goal()
 	_refresh_props()
-
-
-## The investor's terms, on screen at all times rather than behind a tab the
-## player has to already know about: what he wants, and how much of it is done.
-## The contract is live from round one, so this is never a checklist of things
-## still to unlock — it is always the burn itself.
-func _refresh_ascension_goal() -> void:
-	var summary: Dictionary = Simulation.ascension_summary()
-	var contract: Dictionary = Dictionary(summary.get("contract", {}))
-	if contract.is_empty() or Simulation.phase == Simulation.Phase.RUN_END:
-		ascension_goal.visible = false
-		return
-	ascension_goal.visible = true
-	goal_name.text = str(contract.get("name", "The contract"))
-	var progress: Dictionary = Dictionary(summary.get("progress", {}))
-	var burned: float = float(progress.get("tokens_burned", 0.0))
-	var total: float = maxf(1.0, float(progress.get("total_burn", contract.get("total_burn", 1.0))))
-	var rounds_left: int = int(progress.get("rounds_remaining", Simulation.rounds_remaining()))
-	var role: String = "danger" if rounds_left <= 3 else (
-		"warning" if rounds_left <= 6 else "perk"
-	)
-	goal_kicker.text = "CONTRACT · %d ROUND(S) LEFT" % rounds_left
-	goal_kicker.add_theme_color_override("font_color", UiThemeBuilder.semantic(role))
-	goal_bar.max_value = total
-	goal_bar.value = clampf(burned, 0.0, total)
-	goal_bar.add_theme_stylebox_override(
-		"fill", UiThemeBuilder.progress_fill(UiThemeBuilder.semantic(role))
-	)
-	goal_count.text = "%s / %s" % [
-		NumberFormat.format(burned), NumberFormat.format(total),
-	]
 
 
 ## The round the deadline stops being background reading and starts being the
@@ -1107,8 +957,6 @@ func _pulse_changed_chips(cash: float, token_rate: float, reputation: float) -> 
 	if not _hud_values.is_empty():
 		if absf(cash - float(_hud_values["cash"])) > 0.5:
 			cash_chip.pulse(UiThemeBuilder.semantic("money"))
-		if absf(token_rate - float(_hud_values["tokens"])) > 0.5:
-			token_chip.pulse(UiThemeBuilder.semantic("compute"))
 		if absf(reputation - float(_hud_values["reputation"])) > 0.5:
 			rep_chip.pulse(UiThemeBuilder.semantic("perk"))
 	_hud_values = {"cash": cash, "tokens": token_rate, "reputation": reputation}

@@ -1,6 +1,9 @@
 # Godot 4
 .godot/
 .import/
+build/
+build_android/
+build_ios/
 export.cfg
 export_presets.cfg
 *.translation
@@ -23,3 +26,7 @@ desktop.ini
 
 # Logs
 *.log
+
+# Screenshot tool output
+tools/shot_*.png
+tools/shot_*.png.import

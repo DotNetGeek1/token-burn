@@ -1,120 +1,155 @@
 extends Control
 
-## Idle desk status. Accepting a contract lands on the burn board, and the deck
-## owns BOOST / CLOUD / START — this screen is only what the office looks like
-## when there is nothing to burn yet (or when the player peeks back at the room
-## while a session is already running).
+## The desk with nothing burning on it, printed on the laptop standing in the
+## room.
+##
+## Accepting a contract lands on the burn board and the deck owns BOOST / CLOUD
+## / START, so this is only what the operation looks like between sessions (or
+## when the player peeks back at the room while one is running). It is drawn
+## into the laptop screen the artwork painted rather than in a card floated over
+## the picture, so the status of the business is something in the room.
 
 const BREAKDOWN_SHEET := preload("res://ui/common/effect_breakdown_sheet.tscn")
 
-const STATUS_BOX_PATH := "Bottom/StatusPanel/Margin/StatusBox"
-
-@onready var status_panel: PanelContainer = $Bottom/StatusPanel
-@onready var status_title: Label = get_node("%s/StatusTitle" % STATUS_BOX_PATH)
-@onready var status_body: Label = get_node("%s/StatusBody" % STATUS_BOX_PATH)
-@onready var token_rate_label: Label = get_node("%s/InfoRow/TokenRateLabel" % STATUS_BOX_PATH)
-@onready var reward_label: Label = get_node("%s/InfoRow/RewardLabel" % STATUS_BOX_PATH)
-@onready var risk_label: Label = get_node("%s/RiskLabel" % STATUS_BOX_PATH)
-@onready var costs_label: Label = get_node("%s/CostsLabel" % STATUS_BOX_PATH)
-@onready var round_bar: ResourceBar = get_node("%s/RoundBar" % STATUS_BOX_PATH)
-@onready var token_bar: ResourceBar = get_node("%s/TokenBar" % STATUS_BOX_PATH)
-@onready var quality_bar: ResourceBar = get_node("%s/QualityBar" % STATUS_BOX_PATH)
-@onready var deadline_bar: ResourceBar = get_node("%s/DeadlineBar" % STATUS_BOX_PATH)
-@onready var heat_row: HBoxContainer = get_node("%s/HeatRow" % STATUS_BOX_PATH)
-@onready var heat_gauge: HeatGauge = get_node("%s/HeatRow/HeatGauge" % STATUS_BOX_PATH)
-@onready var heat_bar: ResourceBar = get_node("%s/HeatRow/HeatBar" % STATUS_BOX_PATH)
-@onready var actions: HBoxContainer = get_node("%s/Actions" % STATUS_BOX_PATH)
-@onready var choose_contract_button: GameButton = get_node("%s/ChooseContractButton" % STATUS_BOX_PATH)
-@onready var start_work_button: GameButton = get_node("%s/Actions/StartWorkButton" % STATUS_BOX_PATH)
-@onready var boost_button: GameButton = get_node("%s/Actions/BoostButton" % STATUS_BOX_PATH)
-@onready var cloud_button: GameButton = get_node("%s/Actions/CloudButton" % STATUS_BOX_PATH)
-
+var _laptop: LaptopScreen = null
 var _breakdown_sheet: EffectBreakdownSheet = null
 var _danger_vignette: DangerVignette = null
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
+	# The shell re-lays the room out whenever the operation moves premises, and
+	# the laptop is a piece of that room's furniture.
+	add_to_group("board_mounted")
 	_danger_vignette = DangerVignette.mount(self)
+	_laptop = LaptopScreen.new()
+	_laptop.name = "Laptop"
+	add_child(_laptop)
+	_laptop.setup("desk")
+	ConsoleNav.mount(_laptop, self)
 	_breakdown_sheet = BREAKDOWN_SHEET.instantiate()
 	add_child(_breakdown_sheet)
-	status_panel.add_theme_stylebox_override("panel", UiThemeBuilder.panel_style(
-		UiThemeBuilder.color("bg_panel"), UiThemeBuilder.color("stroke_dim")
-	))
-	choose_contract_button.pressed.connect(func(): get_tree().call_group("main_ui", "switch_tab", "jobs"))
-	start_work_button.pressed.connect(_on_open_board)
-	# Pre-burn arming and the session start live on the deck now.
-	boost_button.visible = false
-	cloud_button.visible = false
-	token_bar.visible = false
-	quality_bar.visible = false
-	deadline_bar.visible = false
-	heat_row.visible = false
-	reward_label.visible = false
-	risk_label.visible = false
+	relayout_on_board()
 	Simulation.work_tick_completed.connect(refresh)
 	Simulation.work_session_finished.connect(func(_result): refresh())
 	EventBus.run_started.connect(refresh)
 	EventBus.job_accepted.connect(func(_id): refresh())
-	_wire_breakdown_taps()
 	refresh()
 
 
+## Anchors the console onto the blank screen of the laptop in the current room.
+## Both rects are fractions of the window and this screen fills the work column,
+## so the laptop rect is rebased onto the column it is mounted in.
+func relayout_on_board() -> void:
+	if _laptop == null:
+		return
+	var dwelling: String = _board_dwelling()
+	var column: Rect2 = AssetCatalog.board_region(dwelling, "work_column")
+	var screen: Rect2 = AssetCatalog.board_laptop_screen(dwelling)
+	var rect: Rect2 = AssetCatalog.board_rect_in_region(column, screen)
+	if rect.size.x <= 0.0:
+		# A room with no laptop authored still has to show its status, so the
+		# console takes the lower half of the column.
+		rect = Rect2(0.18, 0.45, 0.64, 0.45)
+	_laptop.anchor_left = rect.position.x
+	_laptop.anchor_top = rect.position.y
+	_laptop.anchor_right = rect.position.x + rect.size.x
+	_laptop.anchor_bottom = rect.position.y + rect.size.y
+	_laptop.offset_left = 0.0
+	_laptop.offset_top = 0.0
+	_laptop.offset_right = 0.0
+	_laptop.offset_bottom = 0.0
+
+
+func _board_dwelling() -> String:
+	for node in get_tree().get_nodes_in_group("main_ui"):
+		if node.has_method("board_dwelling"):
+			return str(node.call("board_dwelling"))
+	return AssetCatalog.dwelling_for_build(Simulation.run_state.build)
+
+
 func refresh() -> void:
+	if _laptop == null:
+		return
 	var queued: Array = Simulation.run_state.business.get("job_queue", [])
 	var active_jobs: Array = Simulation.run_state.business.get("active_jobs", [])
 	var working: bool = Simulation.is_work_running()
-	var has_queue: bool = queued.size() > 0
-	var has_active: bool = active_jobs.size() > 0
-	var has_jobs: bool = has_queue or has_active
+	var has_active: bool = working or active_jobs.size() > 0
 
 	_danger_vignette.set_alarming(false)
-	_refresh_costs()
-	token_rate_label.text = "Token rate · %s" % NumberFormat.format_token_rate(
-		float(Simulation.run_state.compute.get("token_rate", 0.0))
-	)
+	_refresh_readouts()
+	ConsoleNav.refresh(_laptop)
 
-	if working or has_active:
-		status_title.text = "On the burn board"
-		status_body.text = "%d contract(s) in progress. Work happens on the deck." % maxi(
+	if has_active:
+		_laptop.set_status("burn in progress", "%d contract(s) running. Work happens on the deck." % maxi(
 			active_jobs.size(), queued.size()
-		)
-		choose_contract_button.visible = false
-		actions.visible = true
-		start_work_button.set_lines("OPEN BOARD", "Back to the deck")
+		))
+		_laptop.set_actions([{
+			"headline": "OPEN BOARD", "value": "back to the deck", "pressed": _on_open_board,
+		}])
 		return
 
-	if has_jobs:
-		status_title.text = "%d contract(s) ready" % queued.size()
-		var names: PackedStringArray = []
-		for job in queued:
-			names.append(str(job.get("name", "Job")))
-		status_body.text = "%s\nOpen WORK and burn — the deck starts the session." % ", ".join(names)
-		choose_contract_button.visible = false
-		actions.visible = true
-		start_work_button.set_lines("OPEN BOARD", "Burn these contracts")
+	if queued.size() > 0:
+		_laptop.set_status("%d contract(s) ready" % queued.size(), "%s\nOpen the board and burn." % _queued_names(queued))
+		_laptop.set_actions([{
+			"headline": "OPEN BOARD", "value": "burn these contracts", "pressed": _on_open_board,
+		}])
 		return
 
-	status_title.text = "Desk is idle"
-	status_body.text = "Take contracts from the job board. Accepting one opens the burn board."
-	choose_contract_button.visible = true
-	actions.visible = false
+	_laptop.set_status("desk is idle", "Take contracts from the job board. Accepting one opens the burn board.")
+	_laptop.set_actions([{
+		"headline": "CHOOSE A CONTRACT", "value": "job board", "pressed": _on_choose_contract,
+	}])
 
 
-func _refresh_costs() -> void:
+func _queued_names(queued: Array) -> String:
+	var names: PackedStringArray = []
+	for job in queued:
+		names.append(str(job.get("name", "Job")))
+	return ", ".join(names)
+
+
+func _refresh_readouts() -> void:
 	var costs: Dictionary = Simulation.cost_forecast()
-	costs_label.text = "Running costs · %s burned · %s due at round end" % [
-		NumberFormat.format_cash(float(costs.get("operating_so_far", 0.0))),
-		NumberFormat.format_cash(float(costs.get("fixed_due", 0.0))),
-	]
+	_laptop.set_stat("rate", "token rate", NumberFormat.format_token_rate(
+		float(Simulation.run_state.compute.get("token_rate", 0.0))
+	), ConsoleStyle.PHOSPHOR)
+	_laptop.set_stat("burned", "burned this round", NumberFormat.format_cash(
+		float(costs.get("operating_so_far", 0.0))
+	), ConsoleStyle.WARNING)
+	_laptop.set_stat("due", "due at round end", NumberFormat.format_cash(
+		float(costs.get("fixed_due", 0.0))
+	), ConsoleStyle.DANGER)
 	var round_number: int = int(Simulation.run_state.calendar.get("round", 1))
 	var prompts_used: int = int(costs.get("prompts_used", 0))
-	round_bar.setup(
-		"Round · tap costs for breakdown",
-		float(mini(round_number, Simulation.ROUNDS_PER_RUN)),
-		float(Simulation.ROUNDS_PER_RUN),
-		"deadline",
-		"round %d · %d prompt(s) spent" % [round_number, prompts_used]
+	_laptop.set_meter(
+		"round",
+		"round %d/%d" % [round_number, Simulation.ROUNDS_PER_RUN],
+		float(round_number) / float(maxi(1, Simulation.ROUNDS_PER_RUN)),
+		"%d prompt(s)" % prompts_used
+	)
+	_wire_breakdown_taps()
+
+
+## Wired once the rows exist, because the rows are created by the first refresh
+## rather than by the scene.
+func _wire_breakdown_taps() -> void:
+	_wire_tap(_laptop.stat_row("rate"), func() -> void:
+		_show_breakdown("Token Rate", "compute.token_rate", "")
+	)
+	for key in ["burned", "due", "round"]:
+		_wire_tap(_laptop.stat_row(key), _show_cost_breakdown)
+
+
+func _wire_tap(control: Control, handler: Callable) -> void:
+	if control == null or control.has_meta("tap_wired"):
+		return
+	control.set_meta("tap_wired", true)
+	control.mouse_filter = Control.MOUSE_FILTER_PASS
+	var tap := TapGesture.new()
+	control.gui_input.connect(func(event: InputEvent) -> void:
+		if tap.feed(event):
+			handler.call()
 	)
 
 
@@ -141,40 +176,14 @@ func _show_cost_breakdown() -> void:
 	_breakdown_sheet.show_content("Running Costs", "\n".join(lines))
 
 
-func _wire_breakdown_taps() -> void:
-	_make_tappable(token_rate_label, "Token Rate", "compute.token_rate", "")
-	_wire_tap(costs_label, _show_cost_breakdown)
-	_wire_tap(round_bar, _show_cost_breakdown)
-
-
-func _make_tappable(control: Control, title: String, target_path: String, chain_id: String) -> void:
-	_wire_tap(control, func() -> void: _show_breakdown(title, target_path, chain_id))
-
-
-func _wire_tap(control: Control, handler: Callable) -> void:
-	control.mouse_filter = Control.MOUSE_FILTER_PASS
-	if control.custom_minimum_size.y < 44:
-		control.custom_minimum_size.y = 44
-	for child in control.get_children():
-		_set_mouse_ignore_recursive(child)
-	var tap := TapGesture.new()
-	control.gui_input.connect(func(event: InputEvent) -> void:
-		if tap.feed(event):
-			handler.call()
-	)
-
-
-func _set_mouse_ignore_recursive(node: Node) -> void:
-	if node is Control:
-		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for child in node.get_children():
-		_set_mouse_ignore_recursive(child)
-
-
 func _show_breakdown(title: String, target_path: String, chain_id: String) -> void:
 	if _breakdown_sheet == null:
 		return
 	_breakdown_sheet.show_breakdown(title, target_path, chain_id)
+
+
+func _on_choose_contract() -> void:
+	get_tree().call_group("main_ui", "switch_tab", "jobs")
 
 
 func _on_open_board() -> void:

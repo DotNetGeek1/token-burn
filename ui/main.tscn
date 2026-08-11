@@ -133,66 +133,11 @@ alignment = 1
 [node name="CashChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
 
-[node name="TokenChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
-layout_mode = 2
-
-[node name="HeatChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
-layout_mode = 2
-
-[node name="PowerChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
-layout_mode = 2
-
 [node name="RepChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
 
 [node name="RoundChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
 layout_mode = 2
-
-[node name="AscensionGoal" type="Button" parent="TopHud/HudMargin/HudRow"]
-custom_minimum_size = Vector2(268, 0)
-layout_mode = 2
-size_flags_vertical = 4
-tooltip_text = "The Angel Investor's terms for this run."
-flat = true
-
-[node name="GoalVBox" type="VBoxContainer" parent="TopHud/HudMargin/HudRow/AscensionGoal"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_constants/separation = 1
-
-[node name="GoalKicker" type="Label" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox"]
-layout_mode = 2
-theme_type_variation = &"SectionLabel"
-theme_override_font_sizes/font_size = 13
-text = "ASCENSION GOAL"
-
-[node name="GoalName" type="Label" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 17
-text = "Ascension Contract"
-
-[node name="GoalRow" type="HBoxContainer" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
-
-[node name="GoalBar" type="ProgressBar" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalRow"]
-custom_minimum_size = Vector2(0, 8)
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 4
-show_percentage = false
-
-[node name="GoalCount" type="Label" parent="TopHud/HudMargin/HudRow/AscensionGoal/GoalVBox/GoalRow"]
-layout_mode = 2
-theme_type_variation = &"SectionLabel"
-theme_override_font_sizes/font_size = 13
-text = "0 / 0"
 
 [node name="SidePanel" type="Control" parent="."]
 layout_mode = 1
@@ -226,80 +171,6 @@ size_flags_vertical = 3
 custom_minimum_size = Vector2(56, 0)
 layout_mode = 2
 theme_override_constants/separation = 4
-
-[node name="BottomNav" type="PanelContainer" parent="."]
-layout_mode = 1
-anchors_preset = 12
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = -78.0
-grow_horizontal = 2
-grow_vertical = 0
-
-[node name="NavHBox" type="HBoxContainer" parent="BottomNav"]
-layout_mode = 2
-theme_override_constants/separation = 0
-
-[node name="Work" type="Button" parent="BottomNav/NavHBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "The desk"
-text = "BURN"
-flat = true
-icon_alignment = 1
-vertical_icon_alignment = 0
-expand_icon = true
-
-[node name="Jobs" type="Button" parent="BottomNav/NavHBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Job board"
-text = "JOBS"
-flat = true
-icon_alignment = 1
-vertical_icon_alignment = 0
-expand_icon = true
-
-[node name="Build" type="Button" parent="BottomNav/NavHBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Build the pipeline"
-text = "BUILD"
-flat = true
-icon_alignment = 1
-vertical_icon_alignment = 0
-expand_icon = true
-
-[node name="Market" type="Button" parent="BottomNav/NavHBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Market"
-text = "MARKET"
-flat = true
-icon_alignment = 1
-vertical_icon_alignment = 0
-expand_icon = true
-
-[node name="Ascend" type="Button" parent="BottomNav/NavHBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "The Ascension Contract"
-text = "ASCEND"
-flat = true
-icon_alignment = 1
-vertical_icon_alignment = 0
-expand_icon = true
-
-[node name="More" type="Button" parent="BottomNav/NavHBox"]
-custom_minimum_size = Vector2(92, 0)
-layout_mode = 2
-tooltip_text = "More"
-text = "MORE"
-flat = true
-icon_alignment = 1
-vertical_icon_alignment = 0
-expand_icon = true
 
 [node name="OverlayRoot" type="Control" parent="."]
 layout_mode = 1

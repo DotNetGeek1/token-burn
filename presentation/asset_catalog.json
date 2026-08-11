@@ -89,36 +89,109 @@
     "middle_management": "res://presentation/ui/icons/perks/founder_mode.svg",
     "pipeline_momentum": "res://presentation/ui/icons/perks/the_wrapper.svg"
   },
-  "board_scene": {
-    "art": {
-      "stage_01": "res://presentation/board/desk_stage_01.png",
-      "stage_02": "res://presentation/board/desk_stage_02.png",
-      "stage_03": "res://presentation/board/desk_stage_03.png",
-      "stage_04": "res://presentation/board/desk_stage_04.png",
-      "stage_05": "res://presentation/board/desk_stage_05.png"
+  "board_scenes": {
+    "bedroom": {
+      "art": "res://presentation/board/room_bedroom.png",
+      "regions": {
+        "work_column": [0.0, 0.0, 1.0, 1.0],
+        "side_panel": [0.655, 0.0, 0.345, 1.0]
+      },
+      "props": {
+        "plan_board": [0.032, 0.055, 0.150, 0.285],
+        "heat_readout": [0.029, 0.396, 0.026, 0.035],
+        "power_meter": [0.882, 0.095, 0.036, 0.038],
+        "phone": [0.799, 0.838, 0.070, 0.134]
+      },
+      "laptop_screen": [0.306, 0.248, 0.393, 0.502]
     },
-    "regions": {
-      "work_column": [0.12, 0.08, 0.56, 0.80],
-      "side_panel": [0.655, 0.0, 0.345, 1.0],
-      "bottom_nav": [0.0, 0.892, 0.655, 0.108]
+    "garage": {
+      "art": "res://presentation/board/room_garage.png",
+      "regions": {
+        "work_column": [0.0, 0.0, 1.0, 1.0],
+        "side_panel": [0.655, 0.0, 0.345, 1.0]
+      },
+      "props": {
+        "plan_board": [0.018, 0.014, 0.090, 0.372],
+        "heat_readout": [0.021, 0.448, 0.029, 0.042],
+        "power_meter": [0.903, 0.104, 0.032, 0.035],
+        "phone": [0.801, 0.839, 0.093, 0.104]
+      },
+      "laptop_screen": [0.290, 0.269, 0.413, 0.486]
     },
-    "props": {
-      "plan_board": [0.018, 0.105, 0.105, 0.275],
-      "heat_readout": [0.028, 0.505, 0.072, 0.070],
-      "power_meter": [0.598, 0.228, 0.078, 0.072],
-      "phone": [0.665, 0.705, 0.115, 0.140]
+    "office_unit": {
+      "art": "res://presentation/board/room_office_unit.png",
+      "regions": {
+        "work_column": [0.0, 0.0, 1.0, 1.0],
+        "side_panel": [0.655, 0.0, 0.345, 1.0]
+      },
+      "props": {
+        "plan_board": [0.014, 0.045, 0.158, 0.345],
+        "heat_readout": [0.021, 0.495, 0.047, 0.035],
+        "power_meter": [0.828, 0.156, 0.046, 0.043],
+        "phone": [0.801, 0.868, 0.083, 0.104]
+      },
+      "laptop_screen": [0.289, 0.347, 0.416, 0.446]
+    },
+    "warehouse": {
+      "art": "res://presentation/board/room_warehouse.png",
+      "regions": {
+        "work_column": [0.0, 0.0, 1.0, 1.0],
+        "side_panel": [0.655, 0.0, 0.345, 1.0]
+      },
+      "props": {
+        "plan_board": [0.015, 0.095, 0.117, 0.339],
+        "heat_readout": [0.051, 0.495, 0.047, 0.061],
+        "power_meter": [0.898, 0.165, 0.054, 0.043],
+        "phone": [0.801, 0.868, 0.073, 0.095]
+      },
+      "laptop_screen": [0.306, 0.299, 0.378, 0.465]
+    },
+    "datacentre_campus": {
+      "art": "res://presentation/board/room_datacentre_campus.png",
+      "regions": {
+        "work_column": [0.0, 0.0, 1.0, 1.0],
+        "side_panel": [0.655, 0.0, 0.345, 1.0]
+      },
+      "props": {
+        "plan_board": [0.008, 0.009, 0.139, 0.399],
+        "heat_readout": [0.042, 0.439, 0.056, 0.068],
+        "power_meter": [0.903, 0.148, 0.052, 0.057],
+        "phone": [0.791, 0.833, 0.078, 0.130]
+      },
+      "laptop_screen": [0.308, 0.304, 0.384, 0.446]
+    },
+    "private_power_grid": {
+      "art": "res://presentation/board/room_private_power_grid.png",
+      "regions": {
+        "work_column": [0.0, 0.0, 1.0, 1.0],
+        "side_panel": [0.655, 0.0, 0.345, 1.0]
+      },
+      "props": {
+        "plan_board": [0.012, 0.014, 0.174, 0.399],
+        "heat_readout": [0.015, 0.491, 0.056, 0.038],
+        "power_meter": [0.879, 0.135, 0.073, 0.064],
+        "phone": [0.771, 0.877, 0.073, 0.095]
+      },
+      "laptop_screen": [0.276, 0.408, 0.423, 0.443]
+    },
+    "moon_facility": {
+      "art": "res://presentation/board/room_moon_facility.png",
+      "regions": {
+        "work_column": [0.0, 0.0, 1.0, 1.0],
+        "side_panel": [0.655, 0.0, 0.345, 1.0]
+      },
+      "props": {
+        "plan_board": [0.015, 0.052, 0.146, 0.373],
+        "heat_readout": [0.049, 0.455, 0.078, 0.062],
+        "power_meter": [0.903, 0.142, 0.059, 0.066],
+        "phone": [0.796, 0.877, 0.078, 0.087]
+      },
+      "laptop_screen": [0.286, 0.339, 0.409, 0.460]
     }
   },
   "investor": {
     "portrait": "res://presentation/investor/angel_portrait.png",
     "phone_frame": "res://presentation/investor/phone_frame.png"
-  },
-  "office_stages": {
-    "stage_01": "res://presentation/office/stage_01.png",
-    "stage_02": "res://presentation/office/stage_02.png",
-    "stage_03": "res://presentation/office/stage_03.png",
-    "stage_04": "res://presentation/office/stage_04.png",
-    "stage_05": "res://presentation/office/stage_05.png"
   },
   "panels": {
     "card_bg": "res://presentation/ui/panels/card_bg.svg",

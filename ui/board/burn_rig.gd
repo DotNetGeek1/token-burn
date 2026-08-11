@@ -574,6 +574,16 @@ func hide_meters() -> void:
 	deadline_meter.visible = false
 
 
+## Reduces the rig to the machine itself: the case, its glow, the shake, the
+## smoke and fire it throws off as it heats, and the beacon. Used where the rig
+## stands behind the laptop, which is the only screen in the room and would
+## otherwise have this one's terminal ghosting through it.
+func set_dressing_only(dressing: bool) -> void:
+	screen.visible = not dressing
+	if dressing:
+		hide_meters()
+
+
 ## Pulses the quality meter, for a burn stage that moved it.
 func pulse_quality() -> void:
 	quality_meter.pulse()

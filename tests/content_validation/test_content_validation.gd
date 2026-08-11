@@ -239,12 +239,56 @@ func _validate_ascension_contracts() -> void:
 		assert_true(bosses.has(str(location)), "%s has a way out of it" % str(location))
 
 
+## The shell mounts itself onto the room art: the work column, the side panel,
+## the readouts on the wall and the laptop console are all placed from rects
+## authored beside each location's picture. A location that ships without them,
+## or with a laptop that falls outside the column the console is mounted in,
+## lands the player in a room where the UI does not line up with the furniture.
+func _validate_room_art() -> void:
+	var props: Array[String] = ["plan_board", "heat_readout", "power_meter", "phone"]
+	for raw_location in MetaProgress.location_order():
+		var location: String = str(raw_location)
+		assert_true(
+			AssetCatalog.board_scene_art(location) != null,
+			"%s has a room painted for it" % location
+		)
+		var column: Rect2 = AssetCatalog.board_region(location, "work_column")
+		assert_true(column.size.x > 0.0, "%s places its work column" % location)
+		assert_true(
+			AssetCatalog.board_region(location, "side_panel").size.x > 0.0,
+			"%s places its side panel" % location
+		)
+		for key in props:
+			var rect: Rect2 = AssetCatalog.board_prop(location, key)
+			assert_true(rect.size.x > 0.0, "%s carries a %s" % [location, key])
+			assert_true(
+				rect.position.x >= 0.0 and rect.position.y >= 0.0
+					and rect.end.x <= 1.0 and rect.end.y <= 1.0,
+				"%s keeps its %s inside the picture" % [location, key]
+			)
+		var laptop: Rect2 = AssetCatalog.board_laptop_screen(location)
+		assert_true(laptop.size.x > 0.0, "%s stands a laptop on the desk" % location)
+		assert_true(
+			column.encloses(laptop),
+			"%s keeps its laptop inside the work column the console mounts in" % location
+		)
+		# The laptop drives the whole game, so a room that paints it small enough
+		# to be scenery would leave the player squinting at the only screen they
+		# can act on. A quarter of the frame is roughly the size the art was
+		# recomposed to.
+		assert_true(
+			laptop.size.x * laptop.size.y >= 0.14,
+			"%s paints its laptop large enough to run the game from" % location
+		)
+
+
 func run() -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
 	assert_true(ContentDatabase.jobs.size() > 0, "Content loads jobs after reload")
 	_validate_every_machine_can_be_cooled()
 	_validate_ascension_contracts()
+	_validate_room_art()
 	_test_shipped_content_passes_validation()
 	_test_validation_catches_synthetic_bad_content()
 	_test_effect_resolver_errors_on_unknown_operation()

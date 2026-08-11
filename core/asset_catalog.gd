@@ -62,64 +62,87 @@ static func stat_icon(stat: String) -> Texture2D:
 	return get_texture("stat_icons", stat.to_lower())
 
 
-static func office_stage(stage_index: int) -> Texture2D:
-	var key: String = "stage_%02d" % clampi(stage_index, 1, 5)
-	return get_texture("office_stages", key)
+## The room the campaign is currently played in. Every location is painted as
+## one picture with its furniture in known places, and the shell mounts itself
+## onto that picture: the HUD, the machine, the readouts and the side panel are
+## all positioned against rects authored beside the art, so moving the run to
+## the garage moves the furniture with it instead of leaving the UI pinned to
+## coordinates that were measured off the bedroom.
+const DEFAULT_DWELLING := "bedroom"
 
 
-## The desk the whole game is played on. Unlike the old office diorama this is
-## not a picture behind the UI: the HUD, the machine, the props and the side
-## panel are all positioned against regions authored alongside the artwork, so
-## a repainted desk moves the furniture with it.
-##
-## Falls back down the ladder rather than to nothing, so a run that has earned a
-## stage with no art yet still gets a desk.
-static func board_scene_art(stage_index: int) -> Texture2D:
-	_ensure_loaded()
-	var section: Variant = _data.get("board_scene")
-	if not section is Dictionary:
+static func board_scene_art(dwelling: String) -> Texture2D:
+	var path: String = str(_board_scene(dwelling).get("art", ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
 		return null
-	var art: Variant = Dictionary(section).get("art")
-	if not art is Dictionary:
-		return null
-	for stage in range(clampi(stage_index, 1, 5), 0, -1):
-		var path: String = str(Dictionary(art).get("stage_%02d" % stage, ""))
-		if path.is_empty() or not ResourceLoader.exists(path):
-			continue
-		var loaded: Variant = load(path)
-		if loaded is Texture2D:
-			return loaded
-	return null
+	var loaded: Variant = load(path)
+	return loaded if loaded is Texture2D else null
 
 
-## Where a named part of the shell sits on the desk, as a fraction of the
+## Where a named part of the shell sits in the room, as a fraction of the
 ## viewport. Returns an empty rect when the key is unknown, which callers read
-## as "this scene does not place that part" and fall back to their own layout.
-static func board_region(key: String) -> Rect2:
-	return _board_rect("regions", key)
+## as "this room does not place that part" and fall back to their own layout.
+static func board_region(dwelling: String, key: String) -> Rect2:
+	return _board_rect(dwelling, "regions", key)
 
 
-## Where a diegetic readout is painted onto the desk: the plan board on the
+## Where a diegetic readout is painted into the room: the plan board on the
 ## wall, the thermometer, the power meter, the phone.
-static func board_prop(key: String) -> Rect2:
-	return _board_rect("props", key)
+static func board_prop(dwelling: String, key: String) -> Rect2:
+	return _board_rect(dwelling, "props", key)
 
 
-static func board_prop_keys() -> Array:
-	_ensure_loaded()
-	var section: Variant = _data.get("board_scene")
-	if not section is Dictionary:
-		return []
-	var props: Variant = Dictionary(section).get("props")
+static func board_prop_keys(dwelling: String) -> Array:
+	var props: Variant = _board_scene(dwelling).get("props")
 	return Dictionary(props).keys() if props is Dictionary else []
 
 
-static func _board_rect(group: String, key: String) -> Rect2:
-	_ensure_loaded()
-	var section: Variant = _data.get("board_scene")
-	if not section is Dictionary:
+## The blank screen of the laptop standing on the desk. The office console is
+## drawn into this rather than floated over the room.
+static func board_laptop_screen(dwelling: String) -> Rect2:
+	var scene: Dictionary = _board_scene(dwelling)
+	if not scene.has("laptop_screen"):
 		return Rect2()
-	var group_data: Variant = Dictionary(section).get(group)
+	return _rect_from(Array(scene["laptop_screen"]))
+
+
+## A room rect expressed relative to one of that room's own regions, for
+## controls that are mounted inside a region rather than on the window.
+static func board_rect_in_region(outer: Rect2, inner: Rect2) -> Rect2:
+	if outer.size.x <= 0.0 or outer.size.y <= 0.0 or inner.size.x <= 0.0:
+		return Rect2()
+	return Rect2(
+		(inner.position.x - outer.position.x) / outer.size.x,
+		(inner.position.y - outer.position.y) / outer.size.y,
+		inner.size.x / outer.size.x,
+		inner.size.y / outer.size.y
+	)
+
+
+## Which rooms the art kit carries, in catalog order.
+static func board_scene_keys() -> Array:
+	_ensure_loaded()
+	var scenes: Variant = _data.get("board_scenes")
+	return Dictionary(scenes).keys() if scenes is Dictionary else []
+
+
+## A location with no art of its own still has to have somewhere to stand, so
+## every lookup falls back to the room the campaign starts in.
+static func _board_scene(dwelling: String) -> Dictionary:
+	_ensure_loaded()
+	var scenes: Variant = _data.get("board_scenes")
+	if not scenes is Dictionary:
+		return {}
+	var table: Dictionary = scenes
+	if table.has(dwelling):
+		return Dictionary(table[dwelling])
+	if table.has(DEFAULT_DWELLING):
+		return Dictionary(table[DEFAULT_DWELLING])
+	return {}
+
+
+static func _board_rect(dwelling: String, group: String, key: String) -> Rect2:
+	var group_data: Variant = _board_scene(dwelling).get(group)
 	if not group_data is Dictionary or not Dictionary(group_data).has(key):
 		return Rect2()
 	return _rect_from(Array(Dictionary(group_data)[key]))
@@ -372,24 +395,11 @@ static func tag_icon(tag: String) -> Texture2D:
 	return stat_icon(stat_key)
 
 
-static func office_stage_for_build(build: Dictionary) -> int:
-	var dwelling: String = str(build.get("dwelling", "bedroom"))
-	var hardware_count: int = _hardware_count(build)
-	match dwelling:
-		"bedroom":
-			if hardware_count <= 1:
-				return 1
-			return 2
-		"garage":
-			if hardware_count <= 2:
-				return 2
-			return 3
-		"warehouse":
-			if hardware_count <= 8:
-				return 4
-			return 5
-		_:
-			return clampi(1 + hardware_count / 4, 1, 5)
+## Which room a run is being played in. The rig growing on the desk is the burn
+## board's job; the room only changes when the operation moves premises.
+static func dwelling_for_build(build: Dictionary) -> String:
+	var dwelling: String = str(build.get("dwelling", DEFAULT_DWELLING))
+	return dwelling if not dwelling.is_empty() else DEFAULT_DWELLING
 
 
 static func palette_color(color_name: String, fallback: Color = Color.WHITE) -> Color:
@@ -398,13 +408,6 @@ static func palette_color(color_name: String, fallback: Color = Color.WHITE) -> 
 	if colors is Dictionary and colors.has(color_name):
 		return Color(str(colors[color_name]))
 	return fallback
-
-
-static func _hardware_count(build: Dictionary) -> int:
-	var hardware_value: Variant = build.get("hardware", [])
-	if hardware_value is Array:
-		return hardware_value.size()
-	return 0
 
 
 static func _is_category_tag(tag: String) -> bool:

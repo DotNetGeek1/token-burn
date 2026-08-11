@@ -9,9 +9,16 @@ extends Button
 ## whose HUD is furniture: nothing here floats, and every number is somewhere a
 ## person at that desk could actually read it.
 ##
-## Props are placed by the shell from `board_scene.props` in the asset catalog,
-## so where each one sits is a property of the picture rather than a constant in
-## this script.
+## Props are placed by the shell from `board_scenes.<dwelling>.props` in the
+## asset catalog, so where each one sits is a property of the picture rather
+## than a constant in this script, and moving the operation to the garage moves
+## every readout onto the garage's own furniture.
+
+## Whiteboard marker, and the colour a line gets once it is crossed off. The
+## board in the artwork is white, so the plan is written in ink rather than in
+## the phosphor the recessed meters glow with.
+const MARKER_INK := Color(0.16, 0.17, 0.20)
+const MARKER_DONE := Color(0.10, 0.42, 0.24)
 
 ## Catalog key this prop was built for. Only used for debugging and tooltips.
 var prop_key: String = ""
@@ -27,8 +34,6 @@ func _ready() -> void:
 	flat = true
 	focus_mode = Control.FOCUS_NONE
 	clip_contents = true
-	# Only the phone is worth pressing; the rest are readouts, and a readout that
-	# eats a click on the desk behind it is a bug.
 	mouse_filter = Control.MOUSE_FILTER_STOP if _is_interactive() else Control.MOUSE_FILTER_IGNORE
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		add_theme_stylebox_override(state, _face_style())
@@ -45,7 +50,10 @@ func _ready() -> void:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 0)
 	add_child(box)
-	_caption = _make_label(11, UiThemeBuilder.color("grey").lightened(0.35))
+	_caption = _make_label(
+		11,
+		MARKER_INK if _is_whiteboard() else UiThemeBuilder.color("grey").lightened(0.35)
+	)
 	_caption.add_theme_font_override("font", UiThemeBuilder.mono_font())
 	box.add_child(_caption)
 	_value = _make_label(16, UiThemeBuilder.color("white"))
@@ -77,23 +85,50 @@ func _fit_to_housing() -> void:
 		box.offset_top = 3.0
 		box.offset_bottom = -3.0
 	_caption.visible = height >= 46.0
-	_caption.add_theme_font_size_override("font_size", clampi(int(height * 0.16), 9, 13))
+	# The whiteboard is a whole wall panel rather than a meter face, so its type
+	# is allowed to grow with it instead of sitting tiny in the middle of it.
+	var caption_max: int = 20 if _is_whiteboard() else 13
+	_caption.add_theme_font_size_override("font_size", clampi(int(height * 0.16), 9, caption_max))
 	_value.add_theme_font_size_override(
 		"font_size", clampi(int(height * (0.3 if _caption.visible else 0.5)), 10, 20)
 	)
-	var line_size: int = clampi(int(height / 8.5), 8, 13)
+	# A plan line is fixed pitch, so how many characters the widest line has is
+	# what decides whether it fits across the board. Sizing off the height alone
+	# is what cropped "UPGRADE RIG" to "UPGRADE R".
+	var columns: int = 1
+	for child in _checklist.get_children():
+		columns = maxi(columns, (child as Label).text.length())
+	var line_size: int = clampi(
+		mini(int(height / 8.5), int((size.x - 16.0) / (float(columns) * 0.58))), 8, 20
+	)
 	for child in _checklist.get_children():
 		(child as Label).add_theme_font_size_override("font_size", line_size)
 
 
+## The phone rings the investor and the whiteboard carries his contract, so both
+## are worth pressing; the rest are readouts, and a readout that eats a click on
+## the desk behind it is a bug.
 func _is_interactive() -> bool:
-	return prop_key == "phone"
+	return prop_key == "phone" or prop_key == "plan_board"
+
+
+## The plan board is a whiteboard in the artwork, not an instrument: it has no
+## glass to sink a reading into, and painting one over it was what made the
+## board look like a widget stuck to the wall rather than something written on.
+func _is_whiteboard() -> bool:
+	return prop_key == "plan_board"
 
 
 ## Recessed window: near-black glass with a lip around it, so the reading looks
-## sunk into the housing the artwork drew rather than printed on top of it.
+## sunk into the housing the artwork drew rather than printed on top of it. The
+## whiteboard instead gets nothing at all, so the painted surface shows through
+## and the plan reads as marker on the board.
 func _face_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
+	if _is_whiteboard():
+		style.bg_color = Color(1, 1, 1, 0.0)
+		style.set_corner_radius_all(0)
+		return style
 	var bay: Color = UiThemeBuilder.color("bay")
 	style.bg_color = Color(bay.r, bay.g, bay.b, 0.78)
 	style.border_width_left = 1
@@ -109,8 +144,11 @@ func _make_label(font_size: int, font_color: Color) -> Label:
 	var label := Label.new()
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", font_color)
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	label.add_theme_constant_override("outline_size", 3)
+	# An outline is what keeps a lit reading legible against the dark inside of
+	# its housing; on a white board it would only smear the marker.
+	if not _is_whiteboard():
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+		label.add_theme_constant_override("outline_size", 3)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.clip_text = true
 	return label
@@ -130,32 +168,41 @@ func set_readout(caption: String, value: String, value_color: Color) -> void:
 ## The plan on the wall. Each line is `[text, done]`; done lines are ticked and
 ## dimmed, so the board is a to-do list the run crosses off rather than a static
 ## piece of set dressing.
-func set_checklist(caption: String, lines: Array) -> void:
+## `notes` are written underneath in the same marker but without a box, for
+## things that are being tracked rather than ticked off — the investor's
+## contract and how much of it is burned.
+func set_checklist(caption: String, lines: Array, notes: Array = []) -> void:
 	if _caption == null:
 		return
 	_caption.text = caption
 	_value.visible = false
 	_checklist.visible = true
-	var grew: bool = _checklist.get_child_count() < lines.size()
-	while _checklist.get_child_count() < lines.size():
-		var line_label: Label = _make_label(11, UiThemeBuilder.color("white"))
+	var written: Array = []
+	for entry in lines:
+		var row: Array = Array(entry)
+		var done: bool = row.size() > 1 and bool(row[1])
+		written.append(["%s %s" % ["[x]" if done else "[ ]", str(row[0])], done])
+	if not notes.is_empty():
+		written.append(["", false])
+		for note in notes:
+			written.append([str(note), false])
+	while _checklist.get_child_count() < written.size():
+		var line_label: Label = _make_label(11, MARKER_INK)
 		line_label.add_theme_font_override("font", UiThemeBuilder.mono_font())
 		_checklist.add_child(line_label)
-	if grew:
-		_fit_to_housing()
 	for index in range(_checklist.get_child_count()):
 		var label: Label = _checklist.get_child(index)
-		if index >= lines.size():
+		if index >= written.size():
 			label.visible = false
 			continue
-		var entry: Array = Array(lines[index])
-		var done: bool = entry.size() > 1 and bool(entry[1])
 		label.visible = true
-		label.text = "%s %s" % ["[x]" if done else "[ ]", str(entry[0])]
+		label.text = str(written[index][0])
 		label.add_theme_color_override(
-			"font_color",
-			UiThemeBuilder.semantic("success") if done else UiThemeBuilder.color("grey").lightened(0.4)
+			"font_color", MARKER_DONE if bool(written[index][1]) else MARKER_INK
 		)
+	# Sized once the lines are written, because how wide the longest one is is
+	# what the type has to fit inside.
+	_fit_to_housing()
 
 
 ## The phone lights up when the investor has something to say. Drawn rather than

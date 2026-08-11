@@ -437,10 +437,6 @@ def generate_catalog() -> None:
         "category_icons": {k: f"res://presentation/ui/icons/category/{k}.svg" for k in ["cloud", "local", "hybrid", "hardware", "perks"]},
         "status_icons": {k: f"res://presentation/ui/icons/status/{k}.svg" for k in ["warning", "event", "bug"]},
         "perk_icons": {k: f"res://presentation/ui/icons/perks/{k}.svg" for k in PERK_ICONS},
-        "office_stages": {
-            f"stage_{i:02d}": f"res://presentation/office/stage_{i:02d}.png"
-            for i in range(1, 6)
-        },
         "panels": {
             "card_bg": "res://presentation/ui/panels/card_bg.svg",
             "card_bg_selected": "res://presentation/ui/panels/card_bg_selected.svg",
@@ -480,6 +476,13 @@ def generate_catalog() -> None:
     import json
 
     catalog_path = ROOT / "presentation" / "asset_catalog.json"
+    # The catalog also carries things this generator does not draw — the room
+    # layouts, the rig ladder, the hand-authored art — so it is merged rather
+    # than rewritten. Overwriting it used to take the desk out with the icons.
+    if catalog_path.exists():
+        existing = json.loads(catalog_path.read_text(encoding="utf-8"))
+        existing.update(catalog)
+        catalog = existing
     catalog_path.write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
     print(f"  wrote {catalog_path.relative_to(ROOT)}")
 
