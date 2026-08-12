@@ -97,6 +97,30 @@ static func board_prop_keys(dwelling: String) -> Array:
 	return Dictionary(props).keys() if props is Dictionary else []
 
 
+## The surface a prop's readout is actually painted on, as four corners in
+## viewport fractions: top-left, top-right, bottom-right, bottom-left.
+##
+## Most props face the camera, so their rect is the whole story. A phone lying
+## flat on the desk does not: its screen is a foreshortened parallelogram, and
+## writing on it in an upright box makes the text look stuck to the picture
+## rather than displayed on the thing. Rooms that measure the quad get their
+## readout laid into the phone's own plane. Empty when the room does not.
+static func board_prop_plane(dwelling: String, key: String) -> PackedVector2Array:
+	var planes: Variant = _board_scene(dwelling).get("prop_planes")
+	if not planes is Dictionary or not Dictionary(planes).has(key):
+		return PackedVector2Array()
+	var corners: Array = Array(Dictionary(planes)[key])
+	if corners.size() != 4:
+		return PackedVector2Array()
+	var quad := PackedVector2Array()
+	for corner in corners:
+		var point: Array = Array(corner)
+		if point.size() != 2:
+			return PackedVector2Array()
+		quad.append(Vector2(float(point[0]), float(point[1])))
+	return quad
+
+
 ## The blank screen of the laptop standing on the desk. The office console is
 ## drawn into this rather than floated over the room.
 static func board_laptop_screen(dwelling: String) -> Rect2:

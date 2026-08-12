@@ -67,7 +67,13 @@ func _print_statement(statement: Dictionary) -> void:
 
 	set_context("ROUND %d" % round_number)
 	_statement.clear()
-	if paid:
+	if bool(statement.get("waived", false)):
+		_statement.set_title("ROUND %d BILLS COVERED" % round_number, ConsoleStyle.PHOSPHOR)
+		_statement.set_note(
+			"The contract is complete, so the investor settled this round's %s of rent and standing costs."
+			% NumberFormat.format_cash(float(statement.get("waived_total", 0.0)))
+		)
+	elif paid:
 		_statement.set_title("ROUND %d BILLS PAID" % round_number, ConsoleStyle.PHOSPHOR)
 		_statement.set_note("Rent and running costs are settled. Here is where the money went.")
 	else:

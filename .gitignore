@@ -35,3 +35,6 @@ site/out/
 # Screenshot tool output
 tools/shot_*.png
 tools/shot_*.png.import
+
+# Prop plane check output (regenerate with tools/check_prop_planes.py)
+shots/plane_*.png

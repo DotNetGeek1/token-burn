@@ -1099,6 +1099,7 @@ func _reach_victory(contract: Dictionary) -> void:
 		if ending_unlock != "":
 			MetaProgress.grant_ending_unlock(ending_unlock)
 	_bank_run_legacy(true)
+	_pay_ascension_bonus(contract)
 	_settling_victory = true
 	_end_session("ascended")
 	_settling_victory = false
@@ -1112,6 +1113,43 @@ func _reach_victory(contract: Dictionary) -> void:
 	phase = Phase.RUN_END
 	EventBus.emit_event(EventBus.EVENT_RUN_ENDED, {"victory": true})
 	_autosave()
+
+
+## The investor pays for the contract on delivery, and pays more for delivering
+## early: every round left on the deadline is worth another round's rent. Rent is
+## the scale because it is the one figure that already tracks the chapter — the
+## same formula is pocket money in the bedroom and a fortune on the moon, without
+## a table of per-location numbers to keep in step.
+func _pay_ascension_bonus(contract: Dictionary) -> void:
+	var cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("ascension_bonus", {})
+	var rent: float = float(run_state.economy.get("round_rent", 400.0))
+	var rounds_spare: int = maxi(
+		0, _ascension_system.deadline_round(contract) - int(run_state.calendar.get("round", 1))
+	)
+	var multiple: float = (
+		float(cfg.get("base_multiple", 1.0))
+		+ float(cfg.get("per_round_multiple", 1.0)) * float(rounds_spare)
+	)
+	var bonus: float = rent * multiple
+	if bonus <= 0.0:
+		return
+	_economy_system.credit(run_state, bonus, "ascension_bonus", {
+		"contract": str(contract.get("id", "")),
+		"rounds_spare": rounds_spare,
+		"multiple": multiple,
+	})
+	run_state.statistics["ascension_bonus"] = (
+		float(run_state.statistics.get("ascension_bonus", 0.0)) + bonus
+	)
+	if rounds_spare > 0:
+		round_log.append(
+			"The investor pays %s for delivering with %d round%s to spare."
+			% [NumberFormat.format_cash(bonus), rounds_spare, "" if rounds_spare == 1 else "s"]
+		)
+	else:
+		round_log.append(
+			"The investor pays %s on delivery." % NumberFormat.format_cash(bonus)
+		)
 
 
 ## Beating the boss retires the chapter and opens the next one. Guarded once-only
@@ -1200,6 +1238,12 @@ func advance_to_next_chapter() -> bool:
 	run_state.flags["location_completed"] = false
 	run_state.flags["next_location"] = ""
 	run_state.flags["post_victory_phase"] = ""
+	# A new room comes with a new landlord. Arrears from the chapter just cleared
+	# do not follow the company through the door, and neither does a loss reason
+	# a suppressed mid-victory check may have left lying around — carried over,
+	# either one could evict the run on its first prompt in the new chapter.
+	run_state.economy["rent_unpaid_streak"] = 0
+	run_state.flags["loss_reason"] = ""
 	# The investor's stake pays for the room, but the company keeps its own
 	# float: the stake is a floor under the new rent, not a replacement for
 	# what the last chapter earned.
@@ -1501,7 +1545,9 @@ func _end_session(reason: String) -> void:
 	run_state.business["job_board_seq"] = int(run_state.business.get("job_board_seq", 0)) + 1
 	_work_running = false
 
-	if _progression_system.check_loss(run_state):
+	# A won run is not re-judged on its way out: the check would only write a
+	# loss reason onto a victory that `_end_run` then refuses to act on.
+	if not _settling_victory and _progression_system.check_loss(run_state):
 		_end_run(false)
 		return
 
@@ -1923,7 +1969,15 @@ func draft_picks_remaining() -> int:
 ## the player is never billed in the middle of a job.
 func _end_round() -> void:
 	phase = Phase.ROUND_END
-	var statement: Dictionary = _economy_system.apply_round_bills(run_state, tuning)
+	# The round a contract was completed in is settled by the investor, not the
+	# landlord. Charging it could evict a player on the same screen that told
+	# them they had won.
+	var statement: Dictionary
+	if _settling_victory:
+		statement = _economy_system.waive_round_bills(run_state)
+		round_log.append("The investor covers this round's bills.")
+	else:
+		statement = _economy_system.apply_round_bills(run_state, tuning)
 	_expire_status_effects()
 	var event := _event_system.maybe_trigger(run_state, rng.derive("events"), ContentDatabase, effect_resolver, tuning)
 	if event != null:
@@ -1941,26 +1995,31 @@ func _end_round() -> void:
 	# rollover below happens first.
 	round_statement_ready.emit.call_deferred(statement)
 	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
-	if _progression_system.check_loss(run_state):
-		_end_run(false)
-		return
-	if int(run_state.calendar["round"]) >= _contract_deadline_round():
-		if in_post_victory() or MetaProgress.endless_enabled():
-			# Endless keeps going instead of stopping: the bills get harder every
-			# round past the twelfth, so staying alive is the challenge rather
-			# than survival being a foregone conclusion.
-			_escalate_endless_costs()
-		else:
-			# The terms were stated before the first prompt: the contract is done
-			# inside the year or it is not done at all. Completing it ends the run
-			# the moment it happens, mid-round, well before this check is reached.
-			_ascension_system.fail_on_deadline(run_state)
-			run_state.flags["loss_reason"] = "The year ran out with the contract unfinished."
-			round_log.append(
-				"The year is up and the contract is not complete. The investor is done with you."
-			)
-			_end_run(false, "contract_expired")
+	# A completed contract cannot be lost on the way out of the round it was
+	# completed in, and the year cannot run out on work that is already done.
+	# Both checks would only stamp a loss reason onto a won run.
+	if not _settling_victory:
+		if _progression_system.check_loss(run_state):
+			_end_run(false)
 			return
+		if int(run_state.calendar["round"]) >= _contract_deadline_round():
+			if in_post_victory() or MetaProgress.endless_enabled():
+				# Endless keeps going instead of stopping: the bills get harder
+				# every round past the twelfth, so staying alive is the challenge
+				# rather than survival being a foregone conclusion.
+				_escalate_endless_costs()
+			else:
+				# The terms were stated before the first prompt: the contract is
+				# done inside the year or it is not done at all. Completing it
+				# ends the run the moment it happens, mid-round, well before this
+				# check is reached.
+				_ascension_system.fail_on_deadline(run_state)
+				run_state.flags["loss_reason"] = "The year ran out with the contract unfinished."
+				round_log.append(
+					"The year is up and the contract is not complete. The investor is done with you."
+				)
+				_end_run(false, "contract_expired")
+				return
 	run_state.calendar["round"] = int(run_state.calendar["round"]) + 1
 	_achievement_system.evaluate_tick(run_state, ContentDatabase)
 	_begin_round()

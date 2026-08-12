@@ -50,7 +50,6 @@ func _ready() -> void:
 	_laptop.name = "Laptop"
 	add_child(_laptop)
 	_laptop.setup("burn")
-	ConsoleNav.mount(_laptop, self)
 	_mount_sheet(_detail_sheet)
 	# The rig is scenery here, so it gives up every readout it used to own.
 	rig.set_dressing_only(true)
@@ -130,7 +129,6 @@ func refresh() -> void:
 	_refresh_status(job, working)
 	_refresh_readouts(job, working)
 	_refresh_actions(job, working)
-	ConsoleNav.refresh(_laptop)
 
 
 ## Which machine is on the desk. Hardware bought mid-round changes the artwork on
@@ -218,7 +216,17 @@ func _refresh_readouts(job: Dictionary, working: bool) -> void:
 		var prompts_left: int = maxi(0, int(job.get("prompts_remaining", 0)))
 		_laptop.set_stat("time", "time", "%d prompt(s)" % prompts_left, _deadline_color(prompts_left))
 	_laptop.set_meter("heat", "heat", heat_ratio, "%d%%" % int(round(heat_ratio * 100.0)))
-	var keys: Array = ["tokens", "quality", "time", "heat"]
+	# Cloud bursts are bought a batch at a time out of the same account the rent
+	# comes out of, so what is left in it belongs on the deck where the spending
+	# happens rather than only on the wall behind the laptop.
+	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
+	_laptop.set_stat(
+		"cash",
+		"bank",
+		NumberFormat.format_cash(cash),
+		ConsoleStyle.DANGER if cash < 0.0 else ConsoleStyle.PHOSPHOR
+	)
+	var keys: Array = ["tokens", "quality", "time", "heat", "cash"]
 	keys.append_array(_refresh_lane_rows(job))
 	_laptop.prune_stats(keys)
 

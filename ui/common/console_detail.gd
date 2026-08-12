@@ -2,6 +2,8 @@ class_name ConsoleDetail
 extends PanelContainer
 
 signal action_pressed
+## The player is done reading and wants the board back.
+signal closed
 
 const PAD := 10
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
@@ -58,7 +60,9 @@ class ActionRow:
 
 var _outer_margin: MarginContainer = null
 var _box: VBoxContainer = null
+var _headline_row: HBoxContainer = null
 var _headline: Label = null
+var _close: Button = null
 var _scroll: ScrollContainer = null
 var _lines: VBoxContainer = null
 var _action: ActionRow = null
@@ -79,9 +83,32 @@ func _build() -> void:
 	_box = VBoxContainer.new()
 	_box.add_theme_constant_override("separation", 4)
 	_outer_margin.add_child(_box)
+	_headline_row = HBoxContainer.new()
+	_box.add_child(_headline_row)
 	_headline = ConsoleStyle.label("", ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR)
 	_headline.clip_text = true
-	_box.add_child(_headline)
+	_headline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_headline_row.add_child(_headline)
+	# The pane takes a third of a handset's screen, and the only other ways out
+	# of it are pressing a different line on a board it is covering or leaving
+	# the screen entirely.
+	_close = Button.new()
+	_close.text = "[X]"
+	_close.flat = true
+	_close.visible = false
+	_close.focus_mode = Control.FOCUS_NONE
+	_close.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var font: Font = UiThemeBuilder.mono_font()
+	if font != null:
+		_close.add_theme_font_override("font", font)
+	_close.add_theme_color_override("font_color", ConsoleStyle.PHOSPHOR_DIM)
+	_close.add_theme_color_override("font_hover_color", ConsoleStyle.PHOSPHOR)
+	_close.add_theme_color_override("font_pressed_color", ConsoleStyle.PHOSPHOR)
+	_close.pressed.connect(func() -> void:
+		UiSound.play("tap")
+		closed.emit()
+	)
+	_headline_row.add_child(_close)
 	# On a phone the scaled-up description would push the action row off the
 	# bottom of the screen, leaving the player unable to press it, so the lines
 	# scroll inside a capped window instead of claiming their full height.
@@ -111,6 +138,7 @@ func set_metrics(scale: float) -> void:
 	_box.add_theme_constant_override("separation", ConsoleMetrics.px(4, scale))
 	_lines.add_theme_constant_override("separation", ConsoleMetrics.px(2, scale))
 	_headline.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
+	_close.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
 	_action.apply_metrics(scale)
 	_apply_line_fonts()
 	call_deferred("_fit_lines")
@@ -132,6 +160,7 @@ func show_detail(headline: String, lines: Array, action: String = "", action_ena
 		_build()
 	visible = true
 	_headline.text = "> %s" % headline
+	_close.visible = true
 	for child in _lines.get_children():
 		_lines.remove_child(child)
 		child.queue_free()
@@ -150,11 +179,18 @@ func clear(placeholder: String = "SELECT A ROW") -> void:
 	if _box == null:
 		_build()
 	_headline.text = "> %s" % placeholder
+	_close.visible = false
 	for child in _lines.get_children():
 		_lines.remove_child(child)
 		child.queue_free()
 	_action.visible = false
 	call_deferred("_fit_lines")
+
+
+## Most of the screen the pane may take. The board it was opened from is still
+## the screen the player is on, and a pane that grew to fit its own description
+## would push every line of that board off the top.
+const HEIGHT_SHARE := 0.5
 
 
 ## The description window: as tall as its lines want, up to the share of the
@@ -163,10 +199,17 @@ func clear(placeholder: String = "SELECT A ROW") -> void:
 func _fit_lines() -> void:
 	if _scroll == null:
 		return
-	var cap: float = 240.0
-	var viewport: Vector2 = get_viewport_rect().size
-	if viewport.y > 1.0:
-		cap = viewport.y * 0.38
+	# Measured against the space the screen gave the pane rather than against
+	# the window, because on a handset the pane's own type is twice the size and
+	# the console around it is not.
+	var host: float = get_viewport_rect().size.y
+	var content: Control = get_parent() as Control
+	if content != null and content.size.y > 1.0:
+		host = content.size.y
+	var pad: float = float(ConsoleMetrics.px(PAD, _scale)) * 2.0
+	var chrome: float = _box.get_combined_minimum_size().y - _scroll.custom_minimum_size.y
+	var floor_height: float = float(ConsoleMetrics.font_small(_scale)) * 3.0
+	var cap: float = maxf(floor_height, host * HEIGHT_SHARE - chrome - pad)
 	var wanted: float = _lines.get_combined_minimum_size().y
 	_scroll.custom_minimum_size = Vector2(0.0, minf(wanted, cap))
 

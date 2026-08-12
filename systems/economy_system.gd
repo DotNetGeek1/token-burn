@@ -143,6 +143,40 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 	return bill_metadata
 
 
+## The round the contract was completed in is on the investor. Nothing is
+## charged and nothing is owed: the statement still itemises what the round
+## would have cost so the player can see what was covered, and the unpaid
+## streak is wiped so a chapter cleared with empty pockets cannot be evicted
+## for it afterwards.
+func waive_round_bills(run_state: RunState) -> Dictionary:
+	var rent: float = float(run_state.economy.get("round_rent", 400.0))
+	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
+	var cloud_bill: float = float(run_state.economy.get("cloud_surcharge_liability", 0.0))
+	var operating: float = float(run_state.economy.get("costs_this_round", 0.0))
+	var total: float = rent + recurring + cloud_bill
+	var bill_metadata: Dictionary = {
+		"round": int(run_state.calendar.get("round", 1)),
+		"prompts_used": maxi(0, int(run_state.calendar.get("prompt", 1)) - 1),
+		"rent": 0.0,
+		"recurring": 0.0,
+		"cloud_bill": 0.0,
+		"operating": operating,
+		"bill_total": 0.0,
+		"round_total": operating,
+		"paid_in_full": true,
+		"waived": true,
+		"waived_total": total,
+	}
+	_append_ledger_entry(run_state, LEDGER_TYPE_DEBIT, 0.0, "round_bills_waived", float(run_state.economy.get("cash", 0.0)), bill_metadata)
+	run_state.economy["cloud_surcharge_liability"] = 0.0
+	run_state.economy["rent_unpaid_streak"] = 0
+	run_state.economy["last_round_costs"] = operating
+	bill_metadata["cash_after"] = float(run_state.economy.get("cash", 0.0))
+	bill_metadata["debt"] = float(run_state.economy.get("debt", 0.0))
+	bill_metadata["unpaid_streak"] = 0
+	return bill_metadata
+
+
 func add_income(run_state: RunState, amount: float, tuning: Dictionary) -> void:
 	var adjusted: float = amount * float(tuning.get("economy_multiplier", 1.0))
 	credit(run_state, adjusted, "income", {

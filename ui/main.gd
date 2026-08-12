@@ -101,6 +101,26 @@ var _last_angel_phase: bool = false
 var _pending_statement: Dictionary = {}
 var _board_dwelling: String = ""
 var _room_reveal_running: bool = false
+## The menu, written on notes stuck to the whiteboard.
+var _notes: BoardNotes = null
+## Which piece of furniture the room is currently leant in on, or "" for the
+## room as a whole. Only ever set where `ConsoleMetrics.needs_focus()`.
+var _focus_key: String = ""
+## Where the room holds still while it comes forward and goes back.
+var _focus_point: Vector2 = Vector2(0.5, 0.5)
+## The zoom at which that point has finished travelling to the middle of the
+## window. Kept while the room withdraws, so the pan retraces its own path.
+var _focus_full_zoom: float = 1.0
+var _room_zoom: float = 1.0
+## Where the window's origin lands once the room is zoomed and panned.
+var _room_offset := Vector2.ZERO
+var _zoom_tween: Tween = null
+## Steps the room back out again. Shown only while leant in, because a way out
+## of a view is only worth window space while the player is in it.
+var _step_back: Button = null
+## Presses on the room itself, which are a request to stand back from whatever
+## the player leant in on. Live only while there is something to stand back from.
+var _wall: Control = null
 var _title_screen: Control = null
 ## While the title is up the shell behind it is already live (so Continue is
 ## instant), but its flow overlays must stay quiet until the player commits.
@@ -116,6 +136,8 @@ func _ready() -> void:
 	panel_bg.add_theme_stylebox_override("panel", _side_panel_style())
 	get_viewport().size_changed.connect(_layout_board)
 	_build_props()
+	_build_wall()
+	_build_step_back()
 	_layout_board()
 	_build_icon_rail()
 	_build_overlays()
@@ -185,28 +207,45 @@ func _side_panel_style() -> StyleBoxFlat:
 ## numbers that used to be right.
 func _layout_board() -> void:
 	var size: Vector2 = get_viewport_rect().size
-	var panel_width: float = _base_panel_width(size)
-	# On a handset the room is zoomed in around the laptop glass, so the console
-	# type — which has to grow to stay physically readable — still prints on the
-	# painted screen instead of floating past the bezel. The art, the work
-	# column and every prop take the same transform, so the picture and the
-	# furniture keep their registration; the edges of the room crop away.
-	var zoom: float = ConsoleMetrics.room_zoom()
-	var focus: Vector2 = _room_focus()
-	var full_rect: Rect2 = _zoom_rect(Rect2(0.0, 0.0, 1.0, 1.0), zoom, focus)
-	_place(board_art, full_rect, size, full_rect)
-	_place(board_art_next, full_rect, size, full_rect)
-	_place(work_column, _zoom_rect(
-		AssetCatalog.board_region(board_dwelling(), "work_column"), zoom, focus
-	), size, full_rect)
-	side_panel.offset_left = -panel_width
+	side_panel.offset_left = -_base_panel_width(size)
 	side_panel.offset_right = 0.0
 	_apply_panel_slide(_panel_slide)
-	_layout_props(size, zoom, focus)
+	_apply_room_transform()
 	get_tree().call_group("console_screens", "fit_console")
 	# Screens that hang off the room's own furniture rather than off the work
 	# column as a whole have to be told the room has moved.
 	get_tree().call_group("board_mounted", "relayout_on_board")
+
+
+## Places the picture and everything measured off it at the current zoom.
+##
+## The art, the work column and every prop take the same transform, so the
+## furniture stays registered on the photograph however far in the room is
+## brought; what changes is how much of the room is left in the window. Kept
+## separate from the full relayout because the zoom is animated, and re-fitting
+## every console on the way is neither cheap nor visible.
+func _apply_room_transform() -> void:
+	var size: Vector2 = get_viewport_rect().size
+	# Where the thing being leant in on is shown. It starts where the artwork
+	# painted it and travels to the middle of the window as the room comes
+	# forward, so the move reads as the camera walking up to a piece of
+	# furniture rather than as the picture being blown up where it stands.
+	var travel: float = 0.0
+	if _focus_full_zoom > 1.001:
+		travel = clampf((_room_zoom - 1.0) / (_focus_full_zoom - 1.0), 0.0, 1.0)
+	var shown: Vector2 = _focus_point.lerp(Vector2(0.5, 0.5), travel)
+	_room_offset = shown - _focus_point * _room_zoom
+	# The picture is the whole room, so no amount of walking up to something at
+	# the edge of it may bring the edge into the window: furniture near a wall
+	# is leant in on from an angle rather than by stepping outside the room.
+	_room_offset = _room_offset.clamp(Vector2.ONE * (1.0 - _room_zoom), Vector2.ZERO)
+	var full_rect: Rect2 = _zoom_rect(Rect2(0.0, 0.0, 1.0, 1.0))
+	_place(board_art, full_rect, size, full_rect)
+	_place(board_art_next, full_rect, size, full_rect)
+	_place(work_column, _zoom_rect(
+		AssetCatalog.board_region(board_dwelling(), "work_column")
+	), size, full_rect)
+	_layout_props(size)
 
 
 ## Screens that are catalogues rather than status readouts. On the narrow slab a
@@ -218,6 +257,11 @@ const WIDE_PANEL_TABS := ["jobs", "market", "build"]
 ## and the player can see what they are shopping for.
 const WIDE_PANEL_RATIO := 0.62
 const WIDE_PANEL_RATIO_MOBILE := 0.82
+## On a handset the room behind the slab is a strip a few millimetres wide,
+## which is not a view of anything — and the board in front of it is a table of
+## contracts with their titles clipped. So the catalogue takes the window and
+## the room waits behind it, the same as it does when the player leans in.
+const WIDE_PANEL_RATIO_HANDSET := 1.0
 const MOBILE_VIEWPORT_WIDTH := 900.0
 const SHORT_VIEWPORT_HEIGHT := 400.0
 const WIDE_PANEL_RATIO_SHORT := 0.88
@@ -233,6 +277,8 @@ func _panel_width(viewport_size: Vector2) -> float:
 
 
 func _wide_panel_ratio(viewport_size: Vector2) -> float:
+	if ConsoleMetrics.needs_focus():
+		return WIDE_PANEL_RATIO_HANDSET
 	if viewport_size.y < SHORT_VIEWPORT_HEIGHT:
 		return WIDE_PANEL_RATIO_SHORT
 	# The viewport is design units, which expand past 900 on a phone; the
@@ -252,26 +298,163 @@ func _base_panel_width(viewport_size: Vector2) -> float:
 	return minf(UiThemeBuilder.SIDE_PANEL_WIDTH, viewport_size.x * 0.4)
 
 
-## Scales a window-fraction rect about the room's focus point. Applying the
-## same transform to the art and to everything measured off it keeps the
-## furniture registered on the picture at any zoom.
-func _zoom_rect(rect: Rect2, zoom: float, focus: Vector2) -> Rect2:
-	if zoom <= 1.001 or rect.size.x <= 0.0 or rect.size.y <= 0.0:
+## Puts a window-fraction rect through the room's current zoom and pan.
+## Applying the same transform to the art and to everything measured off it
+## keeps the furniture registered on the picture however far in the room is.
+func _zoom_rect(rect: Rect2) -> Rect2:
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 		return rect
-	return Rect2(focus + (rect.position - focus) * zoom, rect.size * zoom)
+	return Rect2(_room_offset + rect.position * _room_zoom, rect.size * _room_zoom)
 
 
-## Where the zoom holds still: the centre of the laptop glass, which is the
-## thing the player has to be able to read.
-func _room_focus() -> Vector2:
+# --- Leaning in --------------------------------------------------------------
+
+## How long the room takes to come forward. Short enough not to be a transition
+## the player waits through, long enough that it reads as the camera moving
+## rather than as a cut to another screen.
+const FOCUS_SECONDS := 0.26
+
+## The furniture that can be worked at, and where the artwork put it.
+func _focus_rect(key: String) -> Rect2:
 	var dwelling: String = board_dwelling()
-	var glass: Rect2 = AssetCatalog.board_laptop_screen(dwelling)
-	if glass.size.x > 0.0 and glass.size.y > 0.0:
-		return glass.get_center()
-	var column: Rect2 = AssetCatalog.board_region(dwelling, "work_column")
-	if column.size.x > 0.0 and column.size.y > 0.0:
-		return column.get_center()
-	return Vector2(0.5, 0.55)
+	match key:
+		"laptop":
+			return AssetCatalog.board_laptop_screen(dwelling)
+		"board":
+			return AssetCatalog.board_prop(dwelling, "plan_board")
+	return Rect2()
+
+
+## Brings the room forward until `key` is at reading size.
+##
+## Whether leaning in is offered at all is the furniture's decision, not this
+## one: on a monitor the room is already at reading size, so nothing asks for
+## it and every piece of furniture stays live where it is painted.
+func focus_room(key: String) -> void:
+	if _focus_key == key:
+		return
+	var rect: Rect2 = _focus_rect(key)
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	_focus_key = key
+	_focus_point = rect.get_center()
+	_focus_full_zoom = ConsoleMetrics.focus_zoom(rect)
+	_tween_room_zoom(_focus_full_zoom)
+
+
+## Back to the whole room. Called by anything that takes over the window, so the
+## player is never left leant in on furniture they have finished with.
+func clear_room_focus() -> void:
+	if _focus_key == "":
+		return
+	_focus_key = ""
+	_tween_room_zoom(1.0)
+
+
+func _tween_room_zoom(target: float) -> void:
+	var leaning: bool = _focus_key != ""
+	if _step_back != null:
+		_step_back.visible = leaning
+	if _wall != null:
+		_wall.visible = leaning
+	if _zoom_tween != null and _zoom_tween.is_valid():
+		_zoom_tween.kill()
+	_zoom_tween = create_tween()
+	_zoom_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	_zoom_tween.tween_method(_set_room_zoom, _room_zoom, target, FOCUS_SECONDS)
+	# The consoles are re-fitted once, at rest. Doing it per frame would size
+	# type against a rect that is still moving, for a frame nobody reads.
+	_zoom_tween.finished.connect(_layout_board, CONNECT_ONE_SHOT)
+
+
+func _set_room_zoom(value: float) -> void:
+	_room_zoom = value
+	_apply_room_transform()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _focus_key == "" or not event.is_action_pressed("ui_cancel"):
+		return
+	clear_room_focus()
+	get_viewport().set_input_as_handled()
+
+
+## The wall, as something that can be pressed.
+##
+## Anything the room is not is a way out of it, and the natural way to write
+## that is to catch what the furniture did not. But the room is a picture with
+## panels, scrims and screens layered over it, any one of which may swallow a
+## press on its way past, so the wall is given a surface of its own instead:
+## the whole window, under every piece of furniture and over the photograph,
+## live only while the player is leant in on something.
+func _build_wall() -> void:
+	_wall = Control.new()
+	_wall.name = "Wall"
+	_wall.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_wall.mouse_filter = Control.MOUSE_FILTER_STOP
+	_wall.visible = false
+	_wall.gui_input.connect(_on_wall_input)
+	add_child(_wall)
+	move_child(_wall, prop_layer.get_index())
+
+
+func _on_wall_input(event: InputEvent) -> void:
+	var released: bool = (
+		(event is InputEventMouseButton and not event.pressed
+			and event.button_index == MOUSE_BUTTON_LEFT)
+		or (event is InputEventScreenTouch and not event.pressed)
+	)
+	if released:
+		clear_room_focus()
+		_wall.accept_event()
+
+
+## The way out, for a player who does not know that the wall is one. It is the
+## only thing in the game drawn over the room rather than in it, which is the
+## price of the room being a place you can get lost in.
+func _build_step_back() -> void:
+	_step_back = Button.new()
+	_step_back.name = "StepBack"
+	_step_back.text = "◄ ROOM"
+	_step_back.flat = true
+	_step_back.focus_mode = Control.FOCUS_NONE
+	_step_back.visible = false
+	var font: Font = UiThemeBuilder.mono_font()
+	if font != null:
+		_step_back.add_theme_font_override("font", font)
+	# Sized for the screen it is on rather than for the canvas: this is the one
+	# control a player who has leant in on the wrong thing has to be able to
+	# find, so it is never the smallest type in the window.
+	var scale: float = ConsoleMetrics.stretch_compensation()
+	_step_back.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_step_back.add_theme_color_override(state, ConsoleStyle.PHOSPHOR)
+	for state in ["normal", "hover", "pressed"]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(0.02, 0.05, 0.04, 0.86 if state != "hover" else 0.96)
+		box.border_color = Color(
+			ConsoleStyle.PHOSPHOR.r, ConsoleStyle.PHOSPHOR.g, ConsoleStyle.PHOSPHOR.b, 0.45
+		)
+		box.set_border_width_all(1)
+		box.set_corner_radius_all(0)
+		box.content_margin_left = ConsoleMetrics.pad_h(scale)
+		box.content_margin_right = ConsoleMetrics.pad_h(scale)
+		box.content_margin_top = ConsoleMetrics.pad_h(scale) * 0.6
+		box.content_margin_bottom = ConsoleMetrics.pad_h(scale) * 0.6
+		_step_back.add_theme_stylebox_override(state, box)
+	_step_back.pressed.connect(clear_room_focus)
+	add_child(_step_back)
+	move_child(_step_back, overlay_root.get_index())
+	_step_back.reset_size()
+	# Bottom right, because leaning in walks the room's own furniture into the
+	# top left of the window — the plan board is pinned to the corner of every
+	# wall the game has painted, and the way out should not be written over it.
+	var margin: float = 12.0
+	_step_back.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT, true)
+	_step_back.offset_right = -margin
+	_step_back.offset_bottom = -margin
+	_step_back.offset_left = -_step_back.size.x - margin
+	_step_back.offset_top = -_step_back.size.y - margin
 
 
 ## Anchors a control to a fractional rect of the window, falling back to a
@@ -305,17 +488,105 @@ func _build_props() -> void:
 		phone.pressed.connect(open_investor_terms)
 	var plan: BoardProp = _props.get("plan_board")
 	if plan != null:
-		plan.pressed.connect(open_ascension_select)
+		plan.pressed.connect(_on_plan_board_pressed)
+	_notes = BoardNotes.new()
+	_notes.name = "BoardNotes"
+	prop_layer.add_child(_notes)
+	ConsoleNav.mount(_notes, self)
 
 
-func _layout_props(viewport_size: Vector2, zoom: float = 1.0, focus: Vector2 = Vector2(0.5, 0.5)) -> void:
+## How much of the whiteboard the menu is stuck over: a column down one side of
+## a board with the width to spare, or a block along the bottom of one without.
+const NOTES_COLUMN_SHARE := 0.34
+const NOTES_STRIP_SHARE := 0.34
+## Kept off the board's own edge, because a note stuck flush to the frame reads
+## as part of the furniture rather than as paper on it.
+const NOTES_MARGIN := 0.04
+## Width, in canvas units, the plan needs to be written at a legible size. Under
+## this the menu goes along the bottom instead: every room hangs a board taller
+## than it is wide, so width is the measure a narrow one runs out of first.
+const PLAN_MIN_WIDTH := 120.0
+
+
+func _layout_props(viewport_size: Vector2) -> void:
 	var dwelling: String = board_dwelling()
 	for key in _props:
-		var prop: Control = _props[key]
+		var prop: BoardProp = _props[key]
 		var rect: Rect2 = AssetCatalog.board_prop(dwelling, str(key))
-		_place(prop, _zoom_rect(rect, zoom, focus), viewport_size, Rect2())
+		_place(prop, _zoom_rect(rect), viewport_size, Rect2())
 		# A prop the artwork does not carry has nowhere honest to sit.
 		prop.visible = rect.size.x > 0.0
+		prop.set_plane(_prop_plane(dwelling, str(key), rect))
+	_layout_notes(viewport_size)
+
+
+## The notes hang in whatever part of the plan board is kept clear for them.
+## Which part that is depends on the wall the room hangs: a bedroom's board can
+## spare a column down one side, a garage's board is a third the width and
+## would have nowhere left to write the plan, so its menu goes underneath.
+func _layout_notes(viewport_size: Vector2) -> void:
+	if _notes == null:
+		return
+	var plan: BoardProp = _props.get("plan_board")
+	var board: Rect2 = AssetCatalog.board_prop(board_dwelling(), "plan_board")
+	_notes.visible = board.size.x > 0.0 and board.size.y > 0.0
+	if not _notes.visible:
+		return
+	var margin: Vector2 = board.size * NOTES_MARGIN
+	var down_the_side: bool = (
+		board.size.x * viewport_size.x * (1.0 - NOTES_COLUMN_SHARE) >= PLAN_MIN_WIDTH
+	)
+	var area: Rect2
+	if down_the_side:
+		_notes.columns = 1
+		area = Rect2(
+			board.position.x + board.size.x * (1.0 - NOTES_COLUMN_SHARE),
+			board.position.y + margin.y,
+			board.size.x * NOTES_COLUMN_SHARE - margin.x,
+			board.size.y - margin.y * 2.0
+		)
+	else:
+		# Two across rather than five: a note wide enough for the word is wider
+		# than a fifth of a narrow board, and three shallow rows cost the plan
+		# less than five would.
+		_notes.columns = 2
+		area = Rect2(
+			board.position.x + margin.x,
+			board.position.y + board.size.y * (1.0 - NOTES_STRIP_SHARE),
+			board.size.x - margin.x * 2.0,
+			board.size.y * NOTES_STRIP_SHARE - margin.y
+		)
+	if plan != null:
+		plan.reserve(
+			NOTES_COLUMN_SHARE if down_the_side else 0.0,
+			0.0 if down_the_side else NOTES_STRIP_SHARE
+		)
+	_place(_notes, _zoom_rect(area), viewport_size, Rect2())
+
+
+## The board is a surface, and the notes on it are the buttons. Pressing the
+## board itself is therefore only ever a request to read it — which on a
+## monitor means the contract, and on a handset means leaning in far enough to
+## make out any of it.
+func _on_plan_board_pressed() -> void:
+	if ConsoleMetrics.needs_focus() and _focus_key != "board":
+		focus_room("board")
+		return
+	open_ascension_select()
+
+
+## The room measures a prop's painted surface against the whole picture; the
+## prop wants it against itself, so the corners are rebased onto its own rect.
+## The zoom cancels out — both are scaled by it — so this is the same quad at
+## any magnification.
+func _prop_plane(dwelling: String, key: String, rect: Rect2) -> PackedVector2Array:
+	var quad: PackedVector2Array = AssetCatalog.board_prop_plane(dwelling, key)
+	if quad.size() != 4 or rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return PackedVector2Array()
+	var local := PackedVector2Array()
+	for corner in quad:
+		local.append((corner - rect.position) / rect.size)
+	return local
 
 
 func _refresh_props() -> void:
@@ -337,6 +608,8 @@ func _refresh_props() -> void:
 	var plan: BoardProp = _props.get("plan_board")
 	if plan != null:
 		plan.tooltip_text = _board_tooltip()
+	if _notes != null:
+		ConsoleNav.refresh(_notes)
 	# Always the terms line: tapping re-reads the contract. There is nothing to
 	# qualify for any more, so the phone does not ring for a "ready" state.
 	_set_prop("phone", "ANGEL", "TERMS", "neutral")
@@ -531,6 +804,10 @@ func switch_tab(tab_name: String) -> void:
 func open_panel(tab_name: String) -> void:
 	if not PANEL_SCENES.has(tab_name):
 		return
+	# A catalogue is not furniture, so the room stands back up before one slides
+	# over it. Otherwise the player shuts the panel and finds themselves still
+	# nose to whatever they were reading when they opened it.
+	clear_room_focus()
 	# Tapping the tab you are already on shuts the panel, which is how a slab
 	# bolted to the edge of the room should behave.
 	if _panel_tab == tab_name and _panel_slide <= 0.01:
@@ -616,24 +893,32 @@ func _fit_to_panel(screen: Control) -> void:
 				margin.add_theme_constant_override("margin_" + side, UiThemeBuilder.SPACE_MD)
 
 
+## Every overlay takes the window off the room, so each one stands the room back
+## up on its way in. The player closes it onto the room they left, not onto the
+## inside of a whiteboard.
 func open_burn_lab() -> void:
 	if FeatureFlags.is_enabled("burn_lab_enabled"):
+		clear_room_focus()
 		_burn_lab.open()
 
 
 func open_pipeline_editor() -> void:
+	clear_room_focus()
 	_pipeline_editor.open()
 
 
 func open_ascension_select() -> void:
+	clear_room_focus()
 	_ascension_select.open()
 
 
 func open_meta_hub() -> void:
+	clear_room_focus()
 	_meta_hub.open()
 
 
 func open_achievements() -> void:
+	clear_room_focus()
 	_achievements.open()
 
 
@@ -886,6 +1171,7 @@ func _maybe_open_intro_call() -> void:
 ## The investor, on demand. Tapping the phone on the desk is how the player
 ## re-reads the terms they agreed to.
 func open_investor_terms() -> void:
+	clear_room_focus()
 	_investor_call.call_player("terms")
 
 

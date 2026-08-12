@@ -23,6 +23,11 @@ const ROW_HEIGHT_REF := 26
 const PAD_H_REF := 8
 const ACTION_HEIGHT_REF := 26
 
+## Of the window a piece of leant-in furniture claims. The rest is the room it
+## is in, which is what stops a leant-in board reading as a screen change.
+const FOCUS_FILL := 0.9
+const MAX_FOCUS_ZOOM := 4.0
+
 
 static func is_mobile() -> bool:
 	return (
@@ -71,13 +76,30 @@ static func compute_scale(height: float, viewport_width: float = 0.0) -> float:
 	return clampf(scale, MIN_SCALE, MAX_SCALE)
 
 
-## The painted laptop glass is a couple of centimetres tall on a handset, and
-## no font fits a console's dozen lines into that legibly. Rather than letting
-## the console float past the bezel, the whole room is zoomed in around the
-## glass by this factor — the laptop grows, the type grows with it, and the
-## edges of the room crop away. 1.0 on desktop.
-static func room_zoom() -> float:
-	return clampf(stretch_compensation() * 0.7, 1.0, 1.8)
+## Whether the room has to be leant into to be worked.
+##
+## The game is a picture of a room, and the things in that room are read at the
+## size the picture draws them. On a monitor that is fine: the laptop glass is
+## the better part of a hand span and the whiteboard is a paperback. On a
+## handset the whole room is the size of a playing card, and nothing painted
+## into it can be read or reliably hit.
+##
+## Where that is true the room becomes the view rather than the workspace: the
+## player sees all of it, and taps whichever piece of furniture they want to
+## use to pull it up to reading size.
+static func needs_focus() -> bool:
+	return stretch_compensation() > 1.2
+
+
+## How far the room has to come forward for `rect` — a fraction of the window —
+## to be worked at. Enough to fill the window bar a margin, so the thing being
+## read is the thing on screen without its edges touching the frame.
+static func focus_zoom(rect: Rect2) -> float:
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return 1.0
+	return clampf(
+		minf(FOCUS_FILL / rect.size.x, FOCUS_FILL / rect.size.y), 1.0, MAX_FOCUS_ZOOM
+	)
 
 
 static func px(base: int, scale: float) -> int:

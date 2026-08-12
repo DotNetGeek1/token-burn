@@ -142,23 +142,6 @@ func _reserve_index_column() -> void:
 	_index.custom_minimum_size = Vector2(_text_width(_index.text, _font_size), 0)
 
 
-## The width this line needs to print in full, which is not something it can be
-## asked for in the usual way: every cell clips itself, and a clipped label
-## reports no minimum width at all. A row laid out in a strip across a screen —
-## rather than stacked down one — has to be measured rather than left to the
-## container, which would otherwise silently shave the ends off the words.
-func natural_width(font_size: int, pad_h: int) -> float:
-	if _index == null:
-		return 0.0
-	var total: float = 0.0
-	for label: Label in [_index, _headline, _value]:
-		total += _text_width(label.text, font_size)
-	# All three cells are always in the row, so the gaps between them are paid
-	# for even by the empty ones.
-	var separation: float = float(maxi(2, int(font_size * 0.6)))
-	return total + separation * 2.0 + float(pad_h * 2)
-
-
 func _text_width(text: String, font_size: int) -> float:
 	if text == "":
 		return 0.0

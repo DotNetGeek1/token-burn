@@ -66,21 +66,30 @@ func _build_console() -> void:
 	_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_table.row_selected.connect(_on_row_selected)
 	scroll.add_child(_table)
+	# What the board gives up first when it is being printed on a carriage too
+	# narrow for all of it: the marking bar, then the client's name, then the
+	# ratings. Everything dropped is in the pane below the moment a contract is
+	# selected, and a contract's own name never is — a board of clipped titles
+	# would be a board you cannot read.
 	_table.set_columns([
-		{"label": "id", "weight": 0.5},
-		{"label": "client", "weight": 1.2},
-		{"label": "contract", "weight": 2.6},
-		{"label": "pmt", "weight": 0.6, "align": HORIZONTAL_ALIGNMENT_RIGHT},
-		{"label": "qual", "weight": 0.6, "align": HORIZONTAL_ALIGNMENT_RIGHT},
-		{"label": "pay", "weight": 0.9, "align": HORIZONTAL_ALIGNMENT_RIGHT},
-		{"label": "risk", "weight": 0.8},
-		{"label": "tok", "weight": 0.8},
-		{"label": "status", "weight": 1.0},
+		{"label": "id", "weight": 0.5, "min_chars": 4},
+		{"label": "client", "weight": 1.0, "min_chars": 14, "optional": 2},
+		{"label": "contract", "weight": 3.2, "min_chars": 24},
+		{"label": "pmt", "weight": 0.6, "min_chars": 4, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{
+			"label": "qual", "weight": 0.6, "min_chars": 5, "optional": 1,
+			"align": HORIZONTAL_ALIGNMENT_RIGHT,
+		},
+		{"label": "pay", "weight": 0.9, "min_chars": 7, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"label": "risk", "weight": 0.8, "min_chars": 6, "optional": 4},
+		{"label": "tok", "weight": 0.8, "min_chars": 6, "optional": 3},
+		{"label": "status", "weight": 0.9, "min_chars": 11},
 	])
 
 	_detail = ConsoleDetail.new()
 	_detail.size_flags_vertical = Control.SIZE_SHRINK_END
 	_detail.action_pressed.connect(_on_detail_action)
+	_detail.closed.connect(_on_detail_closed)
 	content.add_child(_detail)
 	_detail.clear("SELECT A CONTRACT")
 
@@ -279,6 +288,14 @@ func _on_row_selected(meta: Variant) -> void:
 		"[ ENTER ] ACCEPT CONTRACT" if can_accept else _blocked_action(),
 		can_accept
 	)
+
+
+## Closing the pane puts the whole board back, which on a handset is most of the
+## screen. The contract is no longer the subject, so its line goes out with it.
+func _on_detail_closed() -> void:
+	_selected_id = ""
+	_table.clear_selection()
+	_detail.clear("SELECT A CONTRACT")
 
 
 func _blocked_action() -> String:

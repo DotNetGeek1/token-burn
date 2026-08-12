@@ -26,6 +26,9 @@ func run() -> void:
 	_test_a_finished_contract_beats_the_deadline_to_it()
 	_test_there_is_no_overtime_left_to_fall_into()
 	_test_beating_the_contract_wins_the_run()
+	_test_the_winning_round_is_on_the_investor()
+	_test_a_deadline_round_win_is_not_stamped_as_expired()
+	_test_the_investor_pays_more_for_finishing_early()
 	_test_beating_the_contract_unlocks_the_next_location()
 	_test_advancing_to_the_next_chapter_carries_the_whole_business()
 	_test_no_ladder_state_is_left_in_the_run()
@@ -294,6 +297,95 @@ func _test_beating_the_contract_wins_the_run() -> void:
 		"The profile remembers which contract was completed"
 	)
 	sim.free()
+
+
+## The reported bug: a contract completed by a company that could not cover that
+## round's rent was billed anyway on the way out, which left an eviction notice
+## in the run state behind the victory screen and collapsed the company on its
+## first prompt in the next chapter. The winning round is the investor's to pay.
+func _test_the_winning_round_is_on_the_investor() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5032)
+	# Broke, and already one missed rent into an eviction.
+	sim.run_state.economy["cash"] = 0.0
+	sim.run_state.economy["rent_unpaid_streak"] = 1
+	var rent: float = float(sim.run_state.economy.get("round_rent", 0.0))
+	_meet_requirement(sim, "ascension.first_scale_up")
+	sim.debug_finish_prompt({"ok": true, "messages": []})
+
+	assert_true(bool(sim.run_state.flags.get("victory", false)), "Finishing broke still wins the chapter")
+	assert_eq(
+		int(sim.run_state.economy.get("rent_unpaid_streak", -1)), 0,
+		"The winning round's bills are waived, so no arrears are owed on it"
+	)
+	assert_eq(
+		str(sim.run_state.flags.get("loss_reason", "")), "",
+		"And no loss reason is left sitting behind the victory"
+	)
+	assert_true(
+		float(sim.run_state.economy.get("cash", 0.0)) >= rent,
+		"The investor's cheque is paid rather than swallowed by rent"
+	)
+
+	assert_true(sim.advance_to_next_chapter(), "The company moves into the garage")
+	assert_true(sim.phase != sim.Phase.RUN_END, "Alive, not collapsed on arrival")
+	assert_eq(
+		int(sim.run_state.economy.get("rent_unpaid_streak", -1)), 0,
+		"With a clean rent record under the new landlord"
+	)
+	assert_eq(str(sim.run_state.flags.get("loss_reason", "")), "", "And nothing left to be evicted for")
+	sim.free()
+
+
+## Winning in the last round of the year used to run the deadline check on the way
+## out of the same round and stamp "the year ran out" onto a completed contract.
+func _test_a_deadline_round_win_is_not_stamped_as_expired() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5033)
+	sim.run_state.economy["cash"] = 0.0
+	sim.run_state.calendar["round"] = 12
+	_meet_requirement(sim, "ascension.first_scale_up")
+	sim.debug_finish_prompt({"ok": true, "messages": []})
+
+	assert_true(bool(sim.run_state.flags.get("victory", false)), "The last round is still a round to win in")
+	assert_eq(str(sim.run_state.flags.get("outcome", "")), "ascended", "Recorded as an ascension")
+	assert_eq(str(sim.run_state.flags.get("loss_reason", "")), "", "With no expiry written over it")
+	assert_eq(
+		str(sim.run_state.ascension.get("status", "")), "completed",
+		"And the contract stays completed rather than being failed on its deadline"
+	)
+	sim.free()
+
+
+## The investor pays on delivery, and pays by how much of the year was left. The
+## figure scales off the room's rent so it keeps pace with the chapter instead of
+## needing a hand-written number per location.
+func _test_the_investor_pays_more_for_finishing_early() -> void:
+	_fresh_profile()
+	var early: Node = _sim()
+	early.start_run(5034)
+	var rent: float = float(early.run_state.economy.get("round_rent", 0.0))
+	assert_true(rent > 0.0, "The bedroom charges rent to scale the bonus against")
+	_meet_requirement(early, "ascension.first_scale_up")
+	early.debug_finish_prompt({"ok": true, "messages": []})
+	var early_bonus: float = float(early.run_state.statistics.get("ascension_bonus", 0.0))
+	assert_almost_eq(
+		early_bonus, rent * 12.0, 0.01,
+		"Delivered in round one: the round itself plus the eleven rounds to spare"
+	)
+	early.free()
+
+	var late: Node = _sim()
+	late.start_run(5035)
+	late.run_state.calendar["round"] = 12
+	_meet_requirement(late, "ascension.first_scale_up")
+	late.debug_finish_prompt({"ok": true, "messages": []})
+	var late_bonus: float = float(late.run_state.statistics.get("ascension_bonus", 0.0))
+	assert_almost_eq(late_bonus, rent, 0.01, "Delivered on the deadline: one round's rent")
+	assert_true(late_bonus < early_bonus, "So speed is what the bonus rewards")
+	late.free()
 
 
 func _test_beating_the_contract_unlocks_the_next_location() -> void:

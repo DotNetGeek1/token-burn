@@ -8,6 +8,10 @@
     "exponent": 1.15
   },
   "starting_rent": 400,
+  "ascension_bonus": {
+    "base_multiple": 1.0,
+    "per_round_multiple": 1.0
+  },
   "power_cost_per_watt_prompt": 0.05,
   "cloud_burst_cost_per_token": 0.00008,
   "cloud_burst_activation_fee": 25,

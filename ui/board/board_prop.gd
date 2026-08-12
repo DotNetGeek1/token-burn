@@ -1,8 +1,6 @@
 class_name BoardProp
 extends Button
 
-const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
-
 ## A readout painted onto something standing in the room.
 ##
 ## The desk artwork carries the housing — the thermometer's case, the meter box
@@ -19,14 +17,21 @@ const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 ## Whiteboard marker, and the colour a line gets once it is crossed off. The
 ## board in the artwork is white, so the plan is written in ink rather than in
 ## the phosphor the recessed meters glow with.
-const MARKER_INK := Color(0.16, 0.17, 0.20)
-const MARKER_DONE := Color(0.10, 0.42, 0.24)
+##
+## Both pens are darker than a screen palette would pick. The board is lit by a
+## desk lamp at night rather than by an office ceiling, so it renders as a mid
+## grey: a green at screen brightness lands on almost exactly the board's own
+## luminance and disappears, however green it looks against a white page.
+const MARKER_INK := Color(0.09, 0.10, 0.12)
+const MARKER_DONE := Color(0.04, 0.18, 0.09)
 ## The other pen on the tray, for the line that has stopped being a note to self
 ## and started being a problem.
-const MARKER_URGENT := Color(0.66, 0.14, 0.16)
+const MARKER_URGENT := Color(0.48, 0.07, 0.09)
 ## Narrowest column the standing figures will be packed into, for a board with
 ## nothing else written on it yet to take the measure from.
 const MIN_LEDGER_COLUMN := 14
+## How tall a written line stands against the size of its type.
+const LINE_HEIGHT := 1.35
 
 ## Catalog key this prop was built for. Only used for debugging and tooltips.
 var prop_key: String = ""
@@ -34,6 +39,14 @@ var prop_key: String = ""
 var _caption: Label = null
 var _value: Label = null
 var _checklist: VBoxContainer = null
+var _plane_node: Node2D = null
+## Corners of the surface the readout is painted on, in this prop's own 0..1
+## space. Empty for a prop that faces the camera.
+var _plane: PackedVector2Array = PackedVector2Array()
+## Fractions of the face something else is using. The whiteboard hangs the menu
+## on itself — down one side of a wide board, across the bottom of a narrow one
+## — and the plan is written in what is left.
+var _reserved := Vector2.ZERO
 var _glow: float = 0.0
 var _ringing: bool = false
 
@@ -45,19 +58,21 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP if _is_interactive() else Control.MOUSE_FILTER_IGNORE
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		add_theme_stylebox_override(state, _face_style())
+	# The readout hangs off a Node2D rather than being anchored to the face,
+	# because a prop lying flat on the desk needs its content sheared into the
+	# picture's plane and only a Node2D carries an arbitrary transform. With no
+	# plane measured the transform is the identity and this is a plain inset box.
+	_plane_node = Node2D.new()
+	_plane_node.name = "Plane"
+	add_child(_plane_node)
 	var box := VBoxContainer.new()
 	box.name = "Box"
-	box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 8.0
-	box.offset_top = 5.0
-	box.offset_right = -8.0
-	box.offset_bottom = -5.0
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Centred, because the window the artwork cut is the window the reading has
 	# to land in; top-aligning it puts the number on the bezel.
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 0)
-	add_child(box)
+	_plane_node.add_child(box)
 	_caption = _make_label(
 		11,
 		MARKER_INK if _is_whiteboard() else UiThemeBuilder.color("grey").lightened(0.35)
@@ -85,29 +100,24 @@ func _fit_to_housing() -> void:
 	if _caption == null:
 		return
 	var viewport: Vector2 = get_viewport_rect().size
-	# The viewport is in design units and expands past 900 on a phone, so the
-	# platform is what decides this, not the canvas width.
-	var mobile: bool = ConsoleMetrics.is_mobile() or viewport.x < 900.0
-	var mobile_boost: float = 1.0
-	if mobile:
-		mobile_boost = maxf(1.3, ConsoleMetrics.stretch_compensation())
-	var line_floor: int = 12 if mobile else 8
-	var height: float = size.y
+	var face: Vector2 = _face_size()
+	var height: float = face.y
 	if _is_whiteboard():
 		height = maxf(height, viewport.y * 0.14)
-	var box: Control = get_node_or_null("Box")
-	if box != null:
-		var inset: float = 6.0 if height < 60.0 else 8.0
-		box.offset_left = inset
-		box.offset_right = -inset
-		box.offset_top = 3.0
-		box.offset_bottom = -3.0
+	_place_box(6.0 if height < 60.0 else 8.0)
 	_caption.visible = height >= 46.0
-	var caption_max: int = 20 if _is_whiteboard() else 13
-	var caption_min: int = 12 if mobile and _is_whiteboard() else 9
+	# Everything here is sized to the surface it is written on and nothing else.
+	# A handset used to inflate it, because the board was a centimetre of a
+	# picture and the marker would otherwise have been invisible; the player
+	# leans the room in on the board now, which grows the board itself, so type
+	# written larger than the board is only type written off the edge of it.
+	var caption_max: int = 40 if _is_whiteboard() else 13
+	# Fitted to the width as well as the height. The caption is the one line
+	# nobody chose the wording of at runtime, so a face too narrow for it used
+	# to write "BURN PLAN" as "BURN P" rather than write it a size smaller.
+	var caption_width: float = (face.x - 12.0) / maxf(4.0, float(_caption.text.length()) * 0.55)
 	_caption.add_theme_font_size_override(
-		"font_size",
-		clampi(int(height * 0.16 * mobile_boost), caption_min, caption_max)
+		"font_size", clampi(int(minf(height * 0.16, caption_width)), 9, caption_max)
 	)
 	_value.add_theme_font_size_override(
 		"font_size", clampi(int(height * (0.3 if _caption.visible else 0.5)), 10, 20)
@@ -122,17 +132,73 @@ func _fit_to_housing() -> void:
 		columns = maxi(columns, line.text.length())
 	# Sized against however many lines are actually on the board plus room for
 	# the caption above them, rather than against a fixed guess: a board given
-	# more to say has to write smaller, not run off the bottom of itself.
-	var rows: float = maxf(8.5, float(written) + 2.0)
+	# more to say has to write smaller, not run off the bottom of itself. A
+	# written line stands taller than its type is big, so the count is paid for
+	# at the line height rather than at the font size.
+	var rows: float = maxf(8.0, float(written) + 1.0) * LINE_HEIGHT
 	var line_size: int = clampi(
-		mini(int(height / rows), int((size.x - 16.0) / (float(columns) * 0.58))),
-		line_floor,
-		20
+		mini(int(height / rows), int((face.x - 16.0) / (float(columns) * 0.58))),
+		8,
+		40 if _is_whiteboard() else 20
 	)
-	if mobile and _is_whiteboard():
-		line_size = clampi(int(round(float(line_size) * mobile_boost)), line_floor, 20)
 	for child in _checklist.get_children():
 		(child as Label).add_theme_font_size_override("font_size", line_size)
+
+
+## Keeps a strip down the right of this prop's face, or along the bottom of it,
+## clear for something else to be mounted on. The prop still covers its whole
+## rect — the whiteboard's own surface has to reach its frame — but nothing is
+## written into the reserved part.
+func reserve(right: float, bottom: float) -> void:
+	var reserved := Vector2(clampf(right, 0.0, 0.9), clampf(bottom, 0.0, 0.9))
+	if reserved.is_equal_approx(_reserved):
+		return
+	_reserved = reserved
+	_fit_to_housing()
+
+
+## The surface this prop's readout is painted on, as four corners in the prop's
+## own 0..1 space: top-left, top-right, bottom-right, bottom-left. Set by the
+## shell from the room's catalog entry.
+func set_plane(corners: PackedVector2Array) -> void:
+	_plane = corners if corners.size() == 4 else PackedVector2Array()
+	_fit_to_housing()
+
+
+## How big the painted surface is in pixels. For a prop facing the camera that
+## is the prop's own rect; for one lying flat it is the length of the plane's
+## edges, which is what the type has to fit between.
+func _face_size() -> Vector2:
+	var face: Vector2 = size
+	if _plane.size() == 4:
+		face = Vector2(
+			((_plane[1] - _plane[0]) * size).length(), ((_plane[3] - _plane[0]) * size).length()
+		)
+	return face * (Vector2.ONE - _reserved)
+
+
+## Lays the readout onto the surface. With no plane this is an inset box on the
+## prop's face; with one, the box is built at the plane's own dimensions and
+## then mapped onto it, so the type is rendered upright at its natural size and
+## sheared into the picture rather than drawn small and stretched.
+func _place_box(inset: float) -> void:
+	var box: Control = _plane_node.get_node_or_null("Box") if _plane_node != null else null
+	if box == null:
+		return
+	var face: Vector2 = _face_size()
+	if _plane.size() != 4:
+		_plane_node.transform = Transform2D.IDENTITY
+		box.position = Vector2(inset, 3.0)
+		box.size = Vector2(maxf(1.0, face.x - inset * 2.0), maxf(1.0, face.y - 6.0))
+		return
+	var origin: Vector2 = _plane[0] * size
+	var across: Vector2 = (_plane[1] - _plane[0]) * size
+	var down: Vector2 = (_plane[3] - _plane[0]) * size
+	if across.length() < 1.0 or down.length() < 1.0:
+		return
+	_plane_node.transform = Transform2D(across.normalized(), down.normalized(), origin)
+	box.position = Vector2(inset, inset)
+	box.size = Vector2(maxf(1.0, face.x - inset * 2.0), maxf(1.0, face.y - inset * 2.0))
 
 
 ## How wide the board is already being written, in characters. The plan and the
@@ -190,7 +256,13 @@ func _is_whiteboard() -> bool:
 func _face_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	if _is_whiteboard():
-		style.bg_color = Color(1, 1, 1, 0.0)
+		# The board is the one prop that is read rather than glanced at, and the
+		# artwork lights it for a room at night: a dark grey surface no marker
+		# can get real contrast against. This is the board catching a little
+		# more of the desk lamp than the photograph gave it — enough to write
+		# on, and short of the flat panel that used to make it look like a
+		# widget screwed to the wall.
+		style.bg_color = Color(1, 1, 1, 0.20)
 		style.set_corner_radius_all(0)
 		return style
 	var bay: Color = UiThemeBuilder.color("bay")

@@ -24,7 +24,6 @@ func _ready() -> void:
 	_laptop.name = "Laptop"
 	add_child(_laptop)
 	_laptop.setup("desk")
-	ConsoleNav.mount(_laptop, self)
 	_breakdown_sheet = ConsoleSheet.new()
 	_mount_sheet(_breakdown_sheet)
 	relayout_on_board()
@@ -86,7 +85,6 @@ func refresh() -> void:
 
 	_danger_vignette.set_alarming(false)
 	_refresh_readouts()
-	ConsoleNav.refresh(_laptop)
 
 	if has_active:
 		_laptop.set_status("burn in progress", "%d contract(s) running. Work happens on the deck." % maxi(
@@ -119,22 +117,35 @@ func _queued_names(queued: Array) -> String:
 
 func _refresh_readouts() -> void:
 	var costs: Dictionary = Simulation.cost_forecast()
+	# First line on the desk, because every decision made from this screen —
+	# taking a contract, buying a rig, letting the cloud meter run — is a
+	# question about what is in the account, and the answer used to only be
+	# legible on the wall behind the laptop.
+	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
+	_laptop.set_stat(
+		"cash",
+		"in the bank",
+		NumberFormat.format_cash(cash),
+		ConsoleStyle.DANGER if cash < 0.0 else ConsoleStyle.PHOSPHOR,
+		"bank"
+	)
 	_laptop.set_stat("rate", "token rate", NumberFormat.format_token_rate(
 		float(Simulation.run_state.compute.get("token_rate", 0.0))
-	), ConsoleStyle.PHOSPHOR)
+	), ConsoleStyle.PHOSPHOR, "rate")
 	_laptop.set_stat("burned", "burned this round", NumberFormat.format_cash(
 		float(costs.get("operating_so_far", 0.0))
-	), ConsoleStyle.WARNING)
+	), ConsoleStyle.WARNING, "burned")
 	_laptop.set_stat("due", "due at round end", NumberFormat.format_cash(
 		float(costs.get("fixed_due", 0.0))
-	), ConsoleStyle.DANGER)
+	), ConsoleStyle.DANGER, "due")
 	var round_number: int = int(Simulation.run_state.calendar.get("round", 1))
 	var prompts_used: int = int(costs.get("prompts_used", 0))
 	_laptop.set_meter(
 		"round",
 		"round %d/%d" % [round_number, Simulation.ROUNDS_PER_RUN],
 		float(round_number) / float(maxi(1, Simulation.ROUNDS_PER_RUN)),
-		"%d prompt(s)" % prompts_used
+		"%d prompt(s)" % prompts_used,
+		"r%d/%d" % [round_number, Simulation.ROUNDS_PER_RUN]
 	)
 	_wire_breakdown_taps()
 

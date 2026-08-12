@@ -66,17 +66,21 @@ func _build_console() -> void:
 	_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_table.row_selected.connect(_on_row_selected)
 	scroll.add_child(_table)
+	# On a narrow carriage the shelf is what it is called, what it does and what
+	# it costs. What kind of thing it is can be read off the section it is
+	# printed under, so that column is the one that goes.
 	_table.set_columns([
-		{"label": "item", "weight": 2.0},
-		{"label": "type", "weight": 1.0},
-		{"label": "effect", "weight": 2.4},
-		{"label": "cost", "weight": 1.0, "align": HORIZONTAL_ALIGNMENT_RIGHT},
-		{"label": "status", "weight": 1.1},
+		{"label": "item", "weight": 2.0, "min_chars": 14},
+		{"label": "type", "weight": 1.0, "min_chars": 9, "optional": 1},
+		{"label": "effect", "weight": 2.4, "min_chars": 22},
+		{"label": "cost", "weight": 1.0, "min_chars": 8, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"label": "status", "weight": 1.1, "min_chars": 10},
 	])
 
 	_detail = ConsoleDetail.new()
 	_detail.size_flags_vertical = Control.SIZE_SHRINK_END
 	_detail.action_pressed.connect(_on_detail_action)
+	_detail.closed.connect(_on_detail_closed)
 	content.add_child(_detail)
 	_detail.clear("SELECT AN ITEM")
 
@@ -329,6 +333,14 @@ func _on_row_selected(meta: Variant) -> void:
 		_show_upgrade_detail(_rows.get(_selected, null))
 	else:
 		_detail.clear("SELECT AN ITEM")
+
+
+## Puts the shelves back. The pane is most of a handset's screen, and until now
+## the only way out of it was to change counter and come back.
+func _on_detail_closed() -> void:
+	_selected = ""
+	_table.clear_selection()
+	_detail.clear("SELECT AN ITEM")
 
 
 func _show_installed_detail(row: Dictionary) -> void:

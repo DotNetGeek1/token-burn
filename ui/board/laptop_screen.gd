@@ -17,9 +17,10 @@ const REFERENCE_HEIGHT := 240.0
 const MOBILE_VIEWPORT_WIDTH := 900.0
 const MIN_SCALE_DESKTOP := 0.6
 const MIN_SCALE_MOBILE := 0.85
-## Below this the menu strip is no longer worth reading, so a laptop too narrow
-## for its own menu at this size clips rather than shrinking further.
-const NAV_MIN_FONT := 6
+## Glass this size or smaller, measured on the player's actual screen, cannot
+## print the desktop console at a readable size however the type is scaled. See
+## `_compact`.
+const COMPACT_GLASS_MM := 48.0
 
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
@@ -31,13 +32,17 @@ var _blurb: Label = null
 var _scroll: ScrollContainer = null
 var _stats: VBoxContainer = null
 var _actions: GridContainer = null
-var _nav: HBoxContainer = null
-var _nav_rule: ColorRect = null
-var _nav_rows: Dictionary = {}
-var _nav_font: int = ConsoleStyle.FONT_SMALL
-var _nav_pad: int = 4
+## Swallows taps on a laptop too small to be operated, so the first press leans
+## the room in on the glass instead of hitting a command by accident.
+var _lean_in: Button = null
 var _rules: Array[ColorRect] = []
 var _stat_rows: Dictionary = {}
+## What each reading says, kept rather than only printed. The same reading is
+## worded differently on glass of different sizes, and the glass changes size
+## under the console when the player leans in on it.
+var _readings: Dictionary = {}
+## Which wording is currently on the screen.
+var _printed_compact: bool = false
 var _screen_name: String = "DESK"
 var _scale: float = 1.0
 
@@ -113,19 +118,16 @@ func _build() -> void:
 	_actions.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_body.add_child(_actions)
 
-	# The main menu is part of the machine rather than a bar bolted under the
-	# room, so it is always the last block on the glass. It is one line across
-	# rather than five down: the commands above it are what the player came to
-	# press, and a menu stacked underneath them was taking a third of the screen.
-	_nav = HBoxContainer.new()
-	_nav.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_nav.visible = false
-	_nav_rule = _rule(0.2)
-	_nav_rule.visible = false
-	_body.add_child(_nav_rule)
-	_body.add_child(_nav)
-
 	add_child(ConsoleStyle.crt_overlay())
+
+	_lean_in = Button.new()
+	_lean_in.flat = true
+	_lean_in.focus_mode = Control.FOCUS_NONE
+	_lean_in.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_lean_in.visible = false
+	_lean_in.pressed.connect(_on_lean_in_pressed)
+	add_child(_lean_in)
+
 	_refresh_header()
 
 
@@ -154,29 +156,51 @@ func set_status(headline: String, blurb: String) -> void:
 	_fit_to_glass()
 
 
+## Whether the glass this console is being drawn on is too small, on the
+## player's actual screen, to print the desktop version of itself.
+##
+## This is a physical measurement rather than a platform check. The same
+## handset shows this laptop twice: once as a few centimetres of a room, where
+## the console can only sketch itself, and again with the room leant in on the
+## glass, where there is room for the lot. Which of those is being drawn is a
+## question about millimetres, not about Android.
+func _compact() -> bool:
+	var mm: float = ConsoleMetrics.design_px_mm()
+	if mm <= 0.0:
+		return ConsoleMetrics.is_mobile() or _viewport_width() < MOBILE_VIEWPORT_WIDTH
+	return size.y * mm < COMPACT_GLASS_MM
+
+
+## Puts a tap-catcher over the whole screen while the room is pulled back far
+## enough that the commands on it are smaller than a fingertip. Pressing the
+## machine then means "let me read this", which is the only thing a player can
+## honestly intend at that size.
+func _refresh_lean_in() -> void:
+	if _lean_in == null:
+		return
+	_lean_in.visible = ConsoleMetrics.needs_focus() and _compact()
+
+
+func _on_lean_in_pressed() -> void:
+	UiSound.play("tap")
+	get_tree().call_group("main_ui", "focus_room", "laptop")
+
+
 ## One printed reading. Rows are addressed by key so the caller can rewrite a
 ## value every tick without rebuilding the screen under the player's pointer.
-func set_stat(key: String, caption: String, value: String, color: Color = ConsoleStyle.PHOSPHOR) -> void:
-	if _body == null:
-		_build()
-	var row: HBoxContainer = _stat_rows.get(key)
-	if row == null:
-		row = HBoxContainer.new()
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var caption_label: Label = ConsoleStyle.label("", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR_DIM)
-		caption_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		caption_label.clip_text = true
-		row.add_child(caption_label)
-		var value_label: Label = ConsoleStyle.label("", ConsoleStyle.FONT_SMALL, color)
-		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(value_label)
-		_stats.add_child(row)
-		_stat_rows[key] = row
-		_fit_to_glass()
-	(row.get_child(0) as Label).text = caption.to_upper()
-	var value_label: Label = row.get_child(1)
-	value_label.text = value
-	value_label.add_theme_color_override("font_color", color)
+## `short_caption` is what the reading is called on glass too small for the full
+## wording, which would otherwise set the width of the whole print-out.
+func set_stat(
+	key: String,
+	caption: String,
+	value: String,
+	color: Color = ConsoleStyle.PHOSPHOR,
+	short_caption: String = ""
+) -> void:
+	_readings[key] = {
+		"caption": caption, "short": short_caption, "value": value, "color": color,
+	}
+	_print_reading(key)
 
 
 ## Drops any printed reading whose key is not in `keep`. Lanes come and go with
@@ -188,10 +212,54 @@ func prune_stats(keep: Array) -> void:
 			continue
 		var row: Control = _stat_rows[key]
 		_stat_rows.erase(key)
+		_readings.erase(key)
 		# Detached before freeing, so the next fit does not measure a reading
 		# that is already gone.
 		_stats.remove_child(row)
 		row.queue_free()
+
+
+## Writes one held reading onto the glass at the wording the glass has room for.
+func _print_reading(key: String) -> void:
+	if _body == null:
+		_build()
+	var reading: Dictionary = _readings.get(key, {})
+	if reading.is_empty():
+		return
+	var row: HBoxContainer = _stat_rows.get(key)
+	if row == null:
+		row = HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var caption_label: Label = ConsoleStyle.label(
+			"", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR_DIM
+		)
+		caption_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		caption_label.clip_text = true
+		row.add_child(caption_label)
+		var new_value: Label = ConsoleStyle.label("", ConsoleStyle.FONT_SMALL)
+		new_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(new_value)
+		_stats.add_child(row)
+		_stat_rows[key] = row
+		_fit_to_glass()
+	var short: String = str(reading.get("short", ""))
+	var caption: String = str(reading.get("caption", ""))
+	if _printed_compact and short != "":
+		caption = short
+	if reading.has("ratio"):
+		# The bar is the longest thing the console prints, so glass that cannot
+		# take the full-width version gets the same reading at half the
+		# resolution rather than a bar written off the edge of the screen.
+		var blocks: int = 8 if _printed_compact else 16
+		var filled: int = clampi(
+			int(round(clampf(float(reading["ratio"]), 0.0, 1.0) * float(blocks))), 0, blocks
+		)
+		caption = "%s [%s%s]" % [caption, "#".repeat(filled), ".".repeat(blocks - filled)]
+	(row.get_child(0) as Label).text = caption.to_upper()
+	var value_label: Label = row.get_child(1)
+	value_label.text = str(reading.get("value", ""))
+	var ink: Color = reading.get("color", ConsoleStyle.PHOSPHOR)
+	value_label.add_theme_color_override("font_color", ink)
 
 
 ## A readout the player can tap for the breakdown behind it. Handed back so the
@@ -203,10 +271,17 @@ func stat_row(key: String) -> Control:
 
 ## Console progress: a bar of blocks rather than a styled widget, because the
 ## machine is printing characters.
-func set_meter(key: String, caption: String, ratio: float, note: String) -> void:
-	var filled: int = clampi(int(round(clampf(ratio, 0.0, 1.0) * 16.0)), 0, 16)
-	var bar: String = "%s%s" % ["#".repeat(filled), ".".repeat(16 - filled)]
-	set_stat(key, "%s [%s]" % [caption.to_upper(), bar], note, ConsoleStyle.PHOSPHOR_DIM)
+func set_meter(
+	key: String, caption: String, ratio: float, note: String, short_caption: String = ""
+) -> void:
+	_readings[key] = {
+		"caption": caption,
+		"short": short_caption,
+		"value": note,
+		"color": ConsoleStyle.PHOSPHOR_DIM,
+		"ratio": ratio,
+	}
+	_print_reading(key)
 
 
 ## The commands available on this screen. Rebuilt whenever the list changes,
@@ -239,44 +314,6 @@ func set_actions(entries: Array) -> void:
 	_fit_to_glass()
 
 
-## The main menu, printed on the machine. Unlike the context actions this is the
-## same list on every console screen, so it is built once and then only its
-## flags are rewritten.
-func set_nav(entries: Array) -> void:
-	if _body == null:
-		_build()
-	# Detached before freeing, so the fit below measures only the new menu.
-	for child in _nav.get_children():
-		_nav.remove_child(child)
-		child.queue_free()
-	_nav_rows.clear()
-	for raw in entries:
-		var entry: Dictionary = raw
-		var row := ConsoleMenuRow.new()
-		row.index_label = str(entry.get("index", entry.get("key", "?"))).substr(0, 1).to_upper()
-		row.headline = str(entry.get("headline", ""))
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var handler: Variant = entry.get("pressed")
-		if handler is Callable:
-			row.pressed.connect(handler)
-		_nav.add_child(row)
-		_nav_rows[str(entry.get("key", ""))] = row
-	_nav.visible = not _nav_rows.is_empty()
-	_nav_rule.visible = _nav.visible
-	_fit_to_glass()
-
-
-## Flags a menu line as having something worth looking at — stock the player can
-## now afford, say. On one line across there is no room for a hint, so the
-## marker is an asterisk against the label.
-func set_nav_flag(key: String, flagged: bool) -> void:
-	var row: ConsoleMenuRow = _nav_rows.get(key)
-	if row == null:
-		return
-	var label: String = row.headline.trim_suffix("*")
-	row.headline = "%s*" % label if flagged else label
-
-
 # --- Fitting -----------------------------------------------------------------
 
 ## How far the command rows may be squeezed before the console gives up and lets
@@ -297,17 +334,34 @@ func _fit_to_glass() -> void:
 	var height: float = size.y
 	if height <= 1.0:
 		return
+	_refresh_lean_in()
 	var mobile: bool = ConsoleMetrics.is_mobile() or _viewport_width() < MOBILE_VIEWPORT_WIDTH
-	var min_scale: float = MIN_SCALE_MOBILE if mobile else MIN_SCALE_DESKTOP
+	var compact: bool = _compact()
+	if compact != _printed_compact:
+		_printed_compact = compact
+		for key in _readings:
+			_print_reading(key)
+	# The mobile floor is there to stop a readable screen being shrunk below
+	# what a thumb can work. A screen that is not readable at any size is not
+	# being worked, so it may go as small as it likes: this is the laptop seen
+	# across the room, and it should look like a machine with a screenful on it
+	# rather than like a clipped one.
+	var min_scale: float = MIN_SCALE_DESKTOP
+	if mobile and not compact:
+		min_scale = MIN_SCALE_MOBILE
 	_scale = clampf(height / REFERENCE_HEIGHT, min_scale, 2.6)
 	if mobile:
 		_scale = clampf(_scale * ConsoleMetrics.stretch_compensation(), min_scale, 2.6)
 
 	# Readability pulls the type up; the glass pulls it back down. Type that
-	# prints the nav off the bottom of the laptop is worse than type a step
+	# prints the commands off the bottom of the laptop is worse than type a step
 	# smaller, so the target is walked back until the whole print-out fits:
 	# first the explanatory sentence goes, then the scale.
-	var show_blurb: bool = height >= 150.0
+	#
+	# On glass too small to print it the sentence never gets written. It
+	# explains what the screen is for, which is worth a couple of lines on a
+	# monitor and is worth more as legible readings on a phone.
+	var show_blurb: bool = height >= 150.0 and not compact
 	while true:
 		var available: float = _apply_glass_chrome(height, show_blurb)
 		if _try_row_scale(MIN_ROW_SCALE, height, available):
@@ -320,7 +374,6 @@ func _fit_to_glass() -> void:
 				row_scale += 0.05
 			_try_row_scale(best, height, available)
 			_spread_commands(best, available)
-			_fit_nav()
 			return
 		if show_blurb:
 			show_blurb = false
@@ -328,7 +381,6 @@ func _fit_to_glass() -> void:
 		if _scale <= min_scale + 0.01:
 			_try_row_scale(MIN_ROW_SCALE, height, available)
 			_spread_commands(MIN_ROW_SCALE, available)
-			_fit_nav()
 			return
 		_scale = maxf(min_scale, _scale - 0.15)
 
@@ -344,7 +396,6 @@ func _apply_glass_chrome(height: float, show_blurb: bool) -> float:
 	_stats.add_theme_constant_override("separation", maxi(1, int(3.0 * _scale)))
 	_actions.add_theme_constant_override("v_separation", maxi(1, int(3.0 * _scale)))
 	_actions.add_theme_constant_override("h_separation", maxi(4, int(10.0 * _scale)))
-	_nav.add_theme_constant_override("separation", 0)
 
 	_apply_font(_header, ConsoleStyle.FONT_TINY)
 	_blurb.visible = show_blurb
@@ -383,9 +434,14 @@ func _command_height(row_scale: float) -> float:
 ## scrolled out of sight.
 func _try_row_scale(row_scale: float, height: float, available: float) -> bool:
 	_apply_row_metrics(row_scale)
-	_scroll.custom_minimum_size = Vector2(
-		0.0, minf(_stats.get_combined_minimum_size().y, height * MAX_READOUT_SHARE)
-	)
+	var wanted: float = _stats.get_combined_minimum_size().y
+	# Glass being read across the room is not being scrolled, so it prints the
+	# whole screenful small rather than a third of one at size: a laptop with a
+	# reading sawn in half by the edge of a scroll box reads as a broken screen
+	# rather than as a machine seen from four feet away.
+	if not _printed_compact:
+		wanted = minf(wanted, height * MAX_READOUT_SHARE)
+	_scroll.custom_minimum_size = Vector2(0.0, wanted)
 	return _body.get_combined_minimum_size().y <= available
 
 
@@ -405,53 +461,6 @@ func _apply_row_metrics(row_scale: float, command_slack: float = 0.0) -> void:
 	for child in _actions.get_children():
 		if child is ConsoleMenuRow:
 			child.set_metrics(row_font, row_height, pad_h)
-	# The menu is reference rather than the thing the player came to press, so it
-	# sits a size below the context commands.
-	_nav_font = maxi(7, int(round(float(_font_size(ConsoleStyle.FONT_SMALL)) * row_scale)))
-	_nav_pad = maxi(2, pad_h / 2)
-	_apply_nav_metrics(_nav_font)
-
-
-func _apply_nav_metrics(font_size: int) -> void:
-	for child in _nav.get_children():
-		if child is ConsoleMenuRow:
-			var row: ConsoleMenuRow = child
-			row.set_metrics(font_size, int(font_size * 1.7), _nav_pad)
-			# Claimed outright rather than left to the container's share-out:
-			# every cell in the row clips itself, so a row given less than it
-			# needs loses the end of its word without anything reporting that
-			# the strip did not fit.
-			var needed: float = row.natural_width(font_size, _nav_pad)
-			row.custom_minimum_size.x = needed
-			row.size_flags_stretch_ratio = needed
-
-
-## The menu is the one row that has to fit across rather than down, and five
-## commands on a line run out of width long before the print-out runs out of
-## height. It is fitted last and on its own, so a narrow laptop loses a size off
-## its menu rather than losing the ends of the words in it.
-func _fit_nav() -> void:
-	if _nav == null or not _nav.visible:
-		return
-	var pad: int = maxi(6, int(10.0 * _scale))
-	var width: float = size.x - float(pad) * 2.0
-	if width <= 1.0:
-		return
-	# A pixel of slack per row, because each cell is clipped to its share and a
-	# strip that fits exactly still loses the last column of the last glyph.
-	var slack: float = float(_nav.get_child_count())
-	var font: int = _nav_font
-	while font > NAV_MIN_FONT and _nav_width(font) + slack > width:
-		font -= 1
-	_apply_nav_metrics(font)
-
-
-## What the strip needs at `font_size`. Measured off the rows' own claims, which
-## they have already staked as minimum widths, so this is the width the container
-## would actually be forced to.
-func _nav_width(font_size: int) -> float:
-	_apply_nav_metrics(font_size)
-	return _nav.get_combined_minimum_size().x
 
 
 ## Contract names are written by content and some of them are long, so the
@@ -497,6 +506,13 @@ func _refresh_header() -> void:
 	if _header == null:
 		return
 	var clock: Dictionary = Time.get_time_dict_from_system()
+	if _compact():
+		# The machine does not need to tell a phone what it is called every
+		# frame; which screen is open and what time it is are the useful half.
+		_header.text = "[ %s ] · %02d:%02d" % [
+			_screen_name, int(clock["hour"]), int(clock["minute"]),
+		]
+		return
 	var version: String = str(ProjectSettings.get_setting("application/config/version", "0.1.0"))
 	_header.text = "TOKEN_BURN v%s · [ %s ] · %02d:%02d" % [
 		version, _screen_name, int(clock["hour"]), int(clock["minute"]),

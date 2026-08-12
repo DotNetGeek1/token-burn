@@ -1,43 +1,43 @@
 class_name ConsoleNav
 extends RefCounted
 
-## The main menu of the game, as rows on the laptop.
+## The main menu of the game, as notes on the whiteboard.
 ##
-## There is no navigation bar bolted under the room any more: getting to the job
-## board, the market, the build sheet or the contract is something the player
-## does on the machine on their desk, in the same phosphor type as everything
-## else the machine prints. Both desk consoles share this so the menu is in the
-## same place whether or not a burn is running.
+## There is no navigation bar bolted under the room, and no menu strip across
+## the bottom of the laptop either: getting to the job board, the market, the
+## build sheet or the contract is something the player does by taking the note
+## off the wall. The board is the one surface every room hangs, so the menu is
+## in the same place whatever premises the operation is working out of, and the
+## machine's glass is left for what the machine is actually reporting.
 
-## Menu key to the letter printed in its bracket and the label beside it.
+## Menu key to the word written on its note, in the order they are stuck up.
 const ENTRIES: Array[Dictionary] = [
-	{"key": "jobs", "index": "J", "headline": "JOBS"},
-	{"key": "build", "index": "B", "headline": "BUILD"},
-	{"key": "market", "index": "M", "headline": "MARKET"},
-	{"key": "ascend", "index": "A", "headline": "TERMS"},
-	{"key": "menu", "index": "X", "headline": "MENU"},
+	{"key": "jobs", "headline": "JOBS"},
+	{"key": "build", "headline": "BUILD"},
+	{"key": "market", "headline": "MARKET"},
+	{"key": "ascend", "headline": "TERMS"},
+	{"key": "menu", "headline": "MENU"},
 ]
 
 
-## Prints the menu onto a console. `host` is the screen the rows route through:
-## it only has to be inside the tree, because every destination is reached by
+## Writes the menu onto the board. `host` is what the notes route through: it
+## only has to be inside the tree, because every destination is reached by
 ## calling the shell.
-static func mount(laptop: LaptopScreen, host: Node) -> void:
+static func mount(notes: BoardNotes, host: Node) -> void:
 	var rows: Array = []
 	for entry in ENTRIES:
 		var key: String = str(entry["key"])
 		rows.append({
 			"key": key,
-			"index": str(entry["index"]),
 			"headline": str(entry["headline"]),
 			"pressed": func() -> void: _go(host, key),
 		})
-	laptop.set_nav(rows)
+	notes.set_entries(rows)
 
 
-## The market is the only line with news to report: cash that can be spent is
+## The market is the only note with news to report: cash that can be spent is
 ## the one thing the player is likely to have forgotten about.
-static func refresh(laptop: LaptopScreen) -> void:
+static func refresh(notes: BoardNotes) -> void:
 	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
 	var owned: Array = Simulation.run_state.build.get("upgrades", [])
 	var affordable: bool = false
@@ -45,7 +45,7 @@ static func refresh(laptop: LaptopScreen) -> void:
 		if not (upgrade.id in owned) and upgrade.cost > 0.0 and upgrade.cost <= cash:
 			affordable = true
 			break
-	laptop.set_nav_flag("market", affordable)
+	notes.set_flag("market", affordable)
 
 
 static func _go(host: Node, key: String) -> void:

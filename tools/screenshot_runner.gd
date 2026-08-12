@@ -10,6 +10,19 @@ const MAIN_SCENE := "res://ui/main.tscn"
 func _ready() -> void:
 	var out_path: String = "user://screenshot.png"
 	var tab: String = ""
+	# Which premises the run is being played out of. The shell re-registers
+	# every mount against the room's own artwork, so anything measured off the
+	# picture — the props, the plan board, the laptop glass — has to be checked
+	# in more than one of them.
+	var room: String = ""
+	# Which piece of furniture the room is leant in on. Only a handset ever
+	# offers this, so it is the one state a desktop shot cannot reach by
+	# pressing its way to it.
+	var focus: String = ""
+	# Which line of a table screen is picked before the shot. The detail pane
+	# under a board only says anything once something on the board is selected,
+	# and that pane is half of what these screens are.
+	var row: int = -1
 	# Particles and looping tweens run on real time, so shots of the rig need a
 	# wall-clock settle before the capture or they land on an empty first frame.
 	var settle_seconds: float = 0.0
@@ -18,6 +31,12 @@ func _ready() -> void:
 			out_path = arg.trim_prefix("--out=")
 		elif arg.begins_with("--tab="):
 			tab = arg.trim_prefix("--tab=")
+		elif arg.begins_with("--room="):
+			room = arg.trim_prefix("--room=")
+		elif arg.begins_with("--focus="):
+			focus = arg.trim_prefix("--focus=")
+		elif arg.begins_with("--row="):
+			row = int(arg.trim_prefix("--row="))
 		elif arg.begins_with("--settle="):
 			settle_seconds = float(arg.trim_prefix("--settle="))
 	Simulation.autosave_enabled = false
@@ -33,6 +52,12 @@ func _ready() -> void:
 	# title's own has to press past it.
 	if tab != "title":
 		main.dismiss_title()
+	if room != "":
+		# Written onto the run rather than bought, because the shop route also
+		# needs the cash and the right order, and the point is the room.
+		Simulation.run_state.build["dwelling"] = room
+		main.refresh_all()
+		settle_seconds = maxf(settle_seconds, 1.6)
 	if tab == "session":
 		# Play one round end to end so the debrief screen shows. Burning is
 		# interactive, so this drives it synchronously rather than waiting on a
@@ -240,8 +265,15 @@ func _ready() -> void:
 		main._screen_cache["market"]._on_tab_pressed("hardware")
 	elif tab != "":
 		main.switch_tab(tab)
+	if focus != "":
+		main.focus_room(focus)
+		settle_seconds = maxf(settle_seconds, 0.6)
 	for _i in range(20):
 		await get_tree().process_frame
+	if row >= 0:
+		var table: ConsoleTable = _find_table(main)
+		if table != null and row < table.rows().size():
+			table._on_row_pressed(table.rows()[row])
 	if settle_seconds > 0.0:
 		await get_tree().create_timer(settle_seconds).timeout
 	# Count-up animations advance per frame, and this tool runs uncapped, so
@@ -255,6 +287,17 @@ func _ready() -> void:
 		DirAccess.rename_absolute(SaveManager.SAVE_PATH + ".stash", SaveManager.SAVE_PATH)
 	print("Saved screenshot to %s" % out_path)
 	get_tree().quit()
+
+
+## The board on whichever screen is open, wherever the screen chose to hang it.
+func _find_table(node: Node) -> ConsoleTable:
+	if node is ConsoleTable and node.is_visible_in_tree():
+		return node
+	for child in node.get_children():
+		var found: ConsoleTable = _find_table(child)
+		if found != null:
+			return found
+	return null
 
 
 func _settle_numbers(node: Node) -> void:
