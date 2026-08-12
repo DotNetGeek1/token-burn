@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/staticwebapp.config.json",
+  "navigationFallback": {
+    "rewrite": "/404.html"
+  },
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/404.html"
+    }
+  },
+  "mimeTypes": {
+    ".apk": "application/vnd.android.package-archive",
+    ".webp": "image/webp",
+    ".ttf": "font/ttf"
+  },
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "routes": [
+    {
+      "route": "/downloads/*.apk",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    }
+  ]
+}

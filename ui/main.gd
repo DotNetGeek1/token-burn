@@ -369,11 +369,16 @@ func _set_prop(key: String, caption: String, value: String, role: String) -> voi
 
 
 func _set_prop_lines(
-	key: String, caption: String, lines: Array, notes: Array = [], ledger: Array = []
+	key: String,
+	caption: String,
+	lines: Array,
+	notes: Array = [],
+	ledger: Array = [],
+	ledger_ink: Color = BoardProp.MARKER_INK
 ) -> void:
 	var prop: BoardProp = _props.get(key)
 	if prop != null:
-		prop.set_checklist(caption, lines, notes, ledger)
+		prop.set_checklist(caption, lines, notes, ledger, ledger_ink)
 
 
 ## The investor's terms, written up on the board under the plan rather than on a
@@ -807,29 +812,30 @@ var _investor_beats: Dictionary = {}
 ## numbers that used to float in a strip over the room instead of being written
 ## somewhere a person at this desk could have written them.
 ##
-## All on one line, because the board is a fixed piece of wall and the plan and
-## the contract under this have to fit on it too. It goes up in the red pen when
-## the company is in trouble on either count, which is what anyone keeping this
-## board would do to it.
-func _ledger_lines() -> Array:
+## Handed over as three separate figures, because the board a room hangs is
+## whatever size that room's wall is: a wide one writes them across a line, a
+## narrow one stacks them, and neither has to be told which it is.
+func _ledger_figures() -> Array:
 	var state := Simulation.run_state
-	var cash: float = float(state.economy.get("cash", 0.0))
 	var round_number: int = int(state.calendar.get("round", 1))
 	var deadline: int = round_number + Simulation.rounds_remaining() - 1
+	return [
+		NumberFormat.format_cash(float(state.economy.get("cash", 0.0))),
+		"REP %d" % int(state.business.get("reputation", 0.0)),
+		"R%d/%d" % [round_number, deadline],
+	]
+
+
+## The board goes up in the red pen when the company is in trouble on either
+## count, which is what anyone keeping it would do to it.
+func _ledger_ink() -> Color:
+	var round_number: int = int(Simulation.run_state.calendar.get("round", 1))
 	var trouble: bool = (
-		cash < 0.0
+		float(Simulation.run_state.economy.get("cash", 0.0)) < 0.0
 		or Simulation.rounds_remaining() <= 2
 		or _ascension_urgency_line(round_number) != ""
 	)
-	return [[
-		"%s · REP %d · R%d/%d" % [
-			NumberFormat.format_cash(cash),
-			int(state.business.get("reputation", 0.0)),
-			round_number,
-			deadline,
-		],
-		BoardProp.MARKER_URGENT if trouble else BoardProp.MARKER_INK,
-	]]
+	return BoardProp.MARKER_URGENT if trouble else BoardProp.MARKER_INK
 
 
 ## Says the quiet part out loud from round nine on: the year is the deadline, and

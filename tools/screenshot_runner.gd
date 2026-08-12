@@ -87,6 +87,14 @@ func _ready() -> void:
 		# Winning also puts him on the phone about it; the shot wanted here is
 		# the report underneath the handset.
 		main._investor_call.hide_overlay()
+	elif tab == "garage":
+		# The second room, which the campaign reaches by buying the property.
+		# Written onto the run rather than bought, because the shop route also
+		# needs the cash and the right order, and the point of the shot is the
+		# room the shell has to re-register itself against.
+		Simulation.run_state.build["dwelling"] = "garage"
+		main.refresh_all()
+		settle_seconds = maxf(settle_seconds, 1.6)
 	elif tab == "call":
 		# The handset held up over the room. He types his lines out at reading
 		# speed, so the shot has to wait for the paragraph to finish arriving.

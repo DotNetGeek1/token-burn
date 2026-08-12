@@ -24,6 +24,9 @@ const MARKER_DONE := Color(0.10, 0.42, 0.24)
 ## The other pen on the tray, for the line that has stopped being a note to self
 ## and started being a problem.
 const MARKER_URGENT := Color(0.66, 0.14, 0.16)
+## Narrowest column the standing figures will be packed into, for a board with
+## nothing else written on it yet to take the measure from.
+const MIN_LEDGER_COLUMN := 14
 
 ## Catalog key this prop was built for. Only used for debugging and tooltips.
 var prop_key: String = ""
@@ -132,6 +135,40 @@ func _fit_to_housing() -> void:
 		(child as Label).add_theme_font_size_override("font_size", line_size)
 
 
+## How wide the board is already being written, in characters. The plan and the
+## contract are what set the column; the figures above them are packed to it.
+func _column_budget(body: Array) -> int:
+	var budget: int = MIN_LEDGER_COLUMN
+	for row in body:
+		budget = maxi(budget, str(row[0]).length())
+	return budget
+
+
+## Fits the standing figures onto as few lines as the board is wide enough for.
+## Some rooms hang a narrow board, and a single long line of figures would be
+## the widest thing on it — which would force the plan underneath to be written
+## smaller to match, for the sake of a line nobody reads across.
+func _pack_ledger(parts: Array, budget: int) -> Array:
+	var packed: Array = []
+	var current: String = ""
+	for part in parts:
+		var text: String = str(part)
+		if text == "":
+			continue
+		if current == "":
+			current = text
+			continue
+		var joined: String = "%s · %s" % [current, text]
+		if joined.length() <= budget:
+			current = joined
+		else:
+			packed.append(current)
+			current = text
+	if current != "":
+		packed.append(current)
+	return packed
+
+
 ## The phone rings the investor and the whiteboard carries his contract, so both
 ## are worth pressing; the rest are readouts, and a readout that eats a click on
 ## the desk behind it is a bug.
@@ -199,33 +236,35 @@ func set_readout(caption: String, value: String, value_color: Color) -> void:
 ## things that are being tracked rather than ticked off — the investor's
 ## contract and how much of it is burned.
 ## `ledger` goes above the list, for the standing figures the board is kept in
-## the corner of the eye for at all.
+## the corner of the eye for at all. It is given as separate figures rather than
+## as finished lines so the board can pack them to its own width.
 func set_checklist(
-	caption: String, lines: Array, notes: Array = [], ledger: Array = []
+	caption: String,
+	lines: Array,
+	notes: Array = [],
+	ledger: Array = [],
+	ledger_ink: Color = MARKER_INK
 ) -> void:
 	if _caption == null:
 		return
 	_caption.text = caption
 	_value.visible = false
 	_checklist.visible = true
-	var written: Array = []
-	for entry in ledger:
-		# A ledger line may name the pen it is written in; most are in the
-		# ordinary one.
-		if entry is Array and (entry as Array).size() > 1:
-			written.append([str(entry[0]), false, Color(entry[1])])
-		else:
-			written.append([str(entry), false])
-	if not ledger.is_empty():
-		written.append(["", false])
+	var body: Array = []
 	for entry in lines:
 		var row: Array = Array(entry)
 		var done: bool = row.size() > 1 and bool(row[1])
-		written.append(["%s %s" % ["[x]" if done else "[ ]", str(row[0])], done])
+		body.append(["%s %s" % ["[x]" if done else "[ ]", str(row[0])], done])
 	if not notes.is_empty():
-		written.append(["", false])
+		body.append(["", false])
 		for note in notes:
-			written.append([str(note), false])
+			body.append([str(note), false])
+	var written: Array = []
+	for line in _pack_ledger(ledger, _column_budget(body)):
+		written.append([line, false, ledger_ink])
+	if not ledger.is_empty() and not body.is_empty():
+		written.append(["", false])
+	written.append_array(body)
 	while _checklist.get_child_count() < written.size():
 		var line_label: Label = _make_label(11, MARKER_INK)
 		line_label.add_theme_font_override("font", UiThemeBuilder.mono_font())

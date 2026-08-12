@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+/* Palette lifted from the game's presentation/asset_catalog.json so the site and
+   the game read as the same piece of hardware. */
+@theme {
+  --color-bg: #0d1013;
+  --color-panel: #101418;
+  --color-bay: #090b0d;
+  --color-glass: #0b1614;
+  --color-line: #343a40;
+  --color-line-hot: #596168;
+  --color-ink: #e1e1df;
+  --color-muted: #7e858a;
+  --color-action: #18b7d8;
+  --color-action-bright: #32d6f3;
+  --color-money: #3fbf6f;
+  --color-money-bright: #5fd98a;
+  --color-heat: #e45125;
+  --color-heat-bright: #ff6838;
+  --color-danger: #c93847;
+  --color-perk: #9b70c8;
+  --color-energy: #d7a624;
+  --color-lab: #3b9daa;
+  --color-phosphor: #6beb99;
+  --color-phosphor-dim: #4d9e70;
+
+  --font-display: var(--font-bebas), "Arial Narrow", sans-serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-share-tech), ui-monospace, monospace;
+
+  --radius-panel: 3px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--color-action);
+  color: var(--color-bay);
+}
+
+@layer components {
+  /* Dark hardware module with a 1px hairline and an illuminated left rail. */
+  .panel {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-left: 3px solid var(--color-line-hot);
+    border-radius: var(--radius-panel);
+  }
+
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .heading {
+    font-family: var(--font-display);
+    letter-spacing: 0.03em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  /* Console glass, matching the in-game terminal screens. */
+  .screen {
+    background-color: var(--color-glass);
+    border: 1px solid #1c3a2c;
+    border-radius: var(--radius-panel);
+    font-family: var(--font-mono);
+    color: var(--color-phosphor);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .screen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgb(0 0 0 / 0.22) 0px,
+      rgb(0 0 0 / 0.22) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

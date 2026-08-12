@@ -24,6 +24,11 @@ desktop.ini
 *.swo
 *~
 
+# Promo site (site/)
+site/node_modules/
+site/.next/
+site/out/
+
 # Logs
 *.log
 
