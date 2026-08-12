@@ -174,8 +174,9 @@ func add_rate_modifier(multiplier: float, duration_prompts: int = 1, source: Str
 
 ## Ages temporary rate modifiers by one prompt. Must be called when a prompt
 ## *ends*: a one-prompt modifier added mid-prompt has to survive long enough to
-## multiply that prompt's batch, which is exactly what BOOST and heat throttling
-## depend on.
+## multiply that prompt's batch, which is exactly what BOOST depends on. Heat
+## throttling is added after this runs, by which point the prompt's batch is
+## already resolved — so a throttle only ever slows the prompt that follows.
 func tick_rate_modifiers() -> void:
 	var modifiers: Array = compute.get("rate_modifiers", [])
 	var remaining: Array = []

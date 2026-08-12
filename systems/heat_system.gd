@@ -7,14 +7,17 @@ extends RefCounted
 ## against the room's own capacity rather than each caller inventing its own
 ## ceiling. Returns the heat value after the clamp.
 func add_heat(run_state: RunState, amount: float) -> float:
+	return set_heat(run_state, float(run_state.compute.get("heat", 0.0)) + amount)
+
+
+## Writes an absolute heat value through the same clamp, for the few callers
+## that replace the reading rather than move it. Keeps `add_heat`'s promise of
+## being the only place the ceiling is decided literally true.
+func set_heat(run_state: RunState, value: float) -> float:
 	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 	# Capped at twice the room's tolerance rather than a fixed number, so a
 	# location with more headroom does not silently lose it to the clamp.
-	run_state.compute["heat"] = clampf(
-		float(run_state.compute.get("heat", 0.0)) + amount,
-		0.0,
-		capacity * 2.0
-	)
+	run_state.compute["heat"] = clampf(value, 0.0, capacity * 2.0)
 	return float(run_state.compute["heat"])
 
 
@@ -64,7 +67,7 @@ func process_prompt(
 func shed_between_rounds(run_state: RunState) -> void:
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
 	var retained: float = clampf(float(heat_cfg.get("round_end_retained", 0.5)), 0.0, 1.0)
-	run_state.compute["heat"] = maxf(0.0, float(run_state.compute.get("heat", 0.0)) * retained)
+	set_heat(run_state, float(run_state.compute.get("heat", 0.0)) * retained)
 	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 	if float(run_state.compute["heat"]) < capacity:
 		run_state.flags["fire_risk"] = false

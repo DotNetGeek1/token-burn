@@ -179,6 +179,41 @@ func _test_validation_catches_synthetic_bad_content() -> void:
 	assert_true(clean_errors.is_empty(), "Removing the synthetic upgrade restores a clean validation pass")
 
 
+## A board rule BoardSystem does not recognise is ignored at the table, and a
+## demand naming a capability nothing reports can never be met — both read to
+## the player as a contract behaving differently to the card it is printed on,
+## so both have to fail at load rather than in a run.
+func _test_validation_catches_unknown_rules_and_capabilities() -> void:
+	var job: JobDefinition = ContentDatabase.jobs[0]
+	var original_rules: Array = job.board_rules.duplicate(true)
+	job.board_rules.append({"type": "not_a_real_rule", "label": "Nonsense"})
+
+	var demands: Dictionary = ContentDatabase.balance.get("job_demands", {})
+	demands["demand.synthetic_probe"] = {
+		"name": "Probe",
+		"requirement": "Something impossible",
+		"unmet_note": "Nothing can answer this.",
+		"match": {"capability": "not_a_real_capability"},
+	}
+
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	job.board_rules = original_rules
+	demands.erase("demand.synthetic_probe")
+
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown board rule type 'not_a_real_rule'")),
+		"Validation catches a board rule BoardSystem would ignore"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown capability 'not_a_real_capability'")),
+		"Validation catches a demand no workflow could ever satisfy"
+	)
+	assert_true(
+		ContentDatabase.collect_validation_errors().is_empty(),
+		"Removing the synthetic content restores a clean validation pass"
+	)
+
+
 ## A typo'd operation must not silently no-op when it is actually resolved,
 ## matching the load-time check above with the runtime path it guards.
 func _test_effect_resolver_errors_on_unknown_operation() -> void:
@@ -291,6 +326,7 @@ func run() -> void:
 	_validate_room_art()
 	_test_shipped_content_passes_validation()
 	_test_validation_catches_synthetic_bad_content()
+	_test_validation_catches_unknown_rules_and_capabilities()
 	_test_effect_resolver_errors_on_unknown_operation()
 
 	for upgrade in ContentDatabase.upgrades:

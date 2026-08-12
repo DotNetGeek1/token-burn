@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3 uid="uid://main_scene_full"]
+[gd_scene load_steps=2 format=3 uid="uid://main_scene_full"]
 
 [ext_resource type="Script" path="res://ui/main.gd" id="1"]
-[ext_resource type="PackedScene" uid="uid://stat_chip" path="res://ui/common/stat_chip.tscn" id="2"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -78,66 +77,6 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-
-[node name="TopHud" type="PanelContainer" parent="."]
-clip_contents = true
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_bottom = 76.0
-grow_horizontal = 2
-mouse_filter = 2
-
-[node name="HudMargin" type="MarginContainer" parent="TopHud"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 6
-theme_override_constants/margin_right = 18
-theme_override_constants/margin_bottom = 6
-
-[node name="HudRow" type="HBoxContainer" parent="TopHud/HudMargin"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 14
-
-[node name="Wordmark" type="VBoxContainer" parent="TopHud/HudMargin/HudRow"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 0
-
-[node name="Logo" type="Label" parent="TopHud/HudMargin/HudRow/Wordmark"]
-layout_mode = 2
-theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
-theme_override_constants/outline_size = 8
-theme_override_font_sizes/font_size = 30
-text = "TOKEN BURN"
-vertical_alignment = 1
-
-[node name="Version" type="Label" parent="TopHud/HudMargin/HudRow/Wordmark"]
-layout_mode = 2
-theme_type_variation = &"SectionLabel"
-theme_override_colors/font_outline_color = Color(0.02, 0.02, 0.05, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 13
-text = "v0.7.0"
-
-[node name="StatsRow" type="HBoxContainer" parent="TopHud/HudMargin/HudRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 4
-mouse_filter = 2
-theme_override_constants/separation = 10
-alignment = 1
-
-[node name="CashChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
-layout_mode = 2
-
-[node name="RepChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
-layout_mode = 2
-
-[node name="RoundChip" parent="TopHud/HudMargin/HudRow/StatsRow" instance=ExtResource("2")]
-layout_mode = 2
 
 [node name="SidePanel" type="Control" parent="."]
 layout_mode = 1

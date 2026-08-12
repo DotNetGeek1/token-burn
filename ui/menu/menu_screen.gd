@@ -3,75 +3,155 @@ extends Control
 ## The "More" tab: everything that is not the run itself.
 ##
 ## Starting, resuming and deleting runs moved to the title screen, so this tab is
-## now settings plus the way back to the front door.
+## now settings plus the way back to the front door. It prints as a console
+## index — a numbered line per destination — because it shares the side panel
+## with the job board and the market, and a stack of raised cards next to those
+## reads as a different game.
 
-@onready var normal_button: GameButton = $Panel/Margin/VBox/DifficultyRow/NormalButton
-@onready var hard_button: GameButton = $Panel/Margin/VBox/DifficultyRow/HardButton
-@onready var endless_button: GameButton = $Panel/Margin/VBox/EndlessButton
-@onready var workflows_button: GameButton = $Panel/Margin/VBox/WorkflowsButton
-@onready var meta_hub_button: GameButton = $Panel/Margin/VBox/MetaHubButton
-@onready var achievements_button: GameButton = $Panel/Margin/VBox/AchievementsButton
-@onready var burn_lab_button: GameButton = $Panel/Margin/VBox/BurnLabButton
-@onready var title_button: GameButton = $Panel/Margin/VBox/TitleButton
-@onready var save_label: Label = $Panel/Margin/VBox/SaveLabel
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
+
+@onready var frame: ConsoleFrame = $Margin/Frame
+
+var _rows: Dictionary = {}
+var _section_labels: Array[Label] = []
+var _note: Label = null
+var _console_scale: float = 1.0
 
 
 func _ready() -> void:
-	normal_button.pressed.connect(_on_pick_difficulty.bind("normal"))
-	hard_button.pressed.connect(_on_pick_difficulty.bind("hard"))
-	endless_button.pressed.connect(_on_toggle_endless)
-	workflows_button.pressed.connect(_on_workflows)
-	meta_hub_button.pressed.connect(_on_meta_hub)
-	achievements_button.pressed.connect(_on_achievements)
-	burn_lab_button.pressed.connect(_on_burn_lab)
-	title_button.pressed.connect(_on_title)
 	add_to_group("ui_refresh")
+	add_to_group("console_screens")
+	frame.setup("More")
+	_build_console()
+	resized.connect(_fit_console)
+	visibility_changed.connect(_on_visibility_changed)
 	EventBus.run_started.connect(refresh)
 	refresh()
 
 
+func _build_console() -> void:
+	var content: VBoxContainer = frame.content()
+
+	_section(content, "DIFFICULTY · APPLIES FROM YOUR NEXT NEW RUN")
+	_row(content, "normal", "1", "NORMAL", _on_pick_difficulty.bind("normal"))
+	_row(content, "hard", "2", "HARD", _on_pick_difficulty.bind("hard"))
+	_row(content, "endless", "3", "ENDLESS MODE", _on_toggle_endless)
+
+	content.add_child(ConsoleStyle.rule(0.22))
+
+	_section(content, "RECORDS AND TOOLS")
+	_row(content, "workflows", "W", "WORKFLOWS", _on_workflows)
+	_row(content, "meta", "L", "THE LEGACY", _on_meta_hub)
+	_row(content, "achievements", "T", "THE TROPHY CABINET", _on_achievements)
+	_row(content, "burn_lab", "D", "BURN LAB", _on_burn_lab)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(spacer)
+
+	_note = ConsoleStyle.paragraph("", ConsoleStyle.FONT_TINY)
+	content.add_child(_note)
+
+	content.add_child(ConsoleStyle.rule(0.22))
+	_row(content, "title", "X", "QUIT TO TITLE", _on_title, true)
+
+
+func _section(parent: Node, text: String) -> void:
+	var label: Label = ConsoleStyle.label(text, ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
+	parent.add_child(label)
+	_section_labels.append(label)
+
+
+func _row(
+	parent: Node,
+	key: String,
+	index_label: String,
+	headline: String,
+	handler: Callable,
+	destructive: bool = false
+) -> void:
+	var row := ConsoleMenuRow.new()
+	parent.add_child(row)
+	row.index_label = index_label
+	row.headline = headline
+	row.destructive = destructive
+	row.pressed.connect(handler)
+	_rows[key] = row
+
+
+func fit_console() -> void:
+	_fit_console()
+
+
+func _on_visibility_changed() -> void:
+	if visible:
+		call_deferred("_fit_console")
+
+
+func _fit_console() -> void:
+	if size.y <= 1.0:
+		return
+	_console_scale = ConsoleMetrics.compute_scale(size.y, get_viewport_rect().size.x)
+	frame.set_metrics(_console_scale)
+	var font_small: int = ConsoleMetrics.font_small(_console_scale)
+	var font_tiny: int = ConsoleMetrics.font_tiny(_console_scale)
+	var height: int = ConsoleMetrics.row_height(_console_scale)
+	var pad_h: int = ConsoleMetrics.pad_h(_console_scale)
+	for key in _rows:
+		(_rows[key] as ConsoleMenuRow).set_metrics(font_small, height, pad_h)
+	for label in _section_labels:
+		label.add_theme_font_size_override("font_size", font_tiny)
+	if _note != null:
+		_note.add_theme_font_size_override("font_size", font_tiny)
+
+
 func refresh() -> void:
-	burn_lab_button.visible = FeatureFlags.is_enabled("burn_lab_enabled")
-	save_label.text = "Autosave runs after every decision. Difficulty and endless settings apply from your next new run."
+	_rows["burn_lab"].visible = FeatureFlags.is_enabled("burn_lab_enabled")
+	_note.text = (
+		"Autosave runs after every decision. Difficulty and endless settings "
+		+ "apply from your next new run."
+	)
 	_refresh_difficulty()
 	_refresh_endless()
-	achievements_button.set_lines(
-		"THE TROPHY CABINET",
-		"%d / %d earned" % [MetaProgress.achievement_count(), ContentDatabase.achievements.size()]
-	)
+	_rows["achievements"].value_text = "%d / %d EARNED" % [
+		MetaProgress.achievement_count(), ContentDatabase.achievements.size(),
+	]
+	_rows["meta"].value_text = "UNLOCKS"
+	_rows["burn_lab"].value_text = "DEBUG"
+	_rows["title"].value_text = "RUN IS SAVED"
 	# Only meaningful inside a run: workflows belong to the run, not the profile.
-	workflows_button.visible = Simulation.phase != Simulation.Phase.IDLE
-	if workflows_button.visible:
-		workflows_button.set_lines(
-			"WORKFLOWS",
-			"%d of %d defined" % [Simulation.workflow_count(), Simulation.workflow_capacity()]
-		)
+	var in_run: bool = Simulation.phase != Simulation.Phase.IDLE
+	_rows["workflows"].visible = in_run
+	if in_run:
+		_rows["workflows"].value_text = "%d OF %d DEFINED" % [
+			Simulation.workflow_count(), Simulation.workflow_capacity(),
+		]
+	frame.set_context(MetaProgress.difficulty().to_upper())
+	_fit_console()
 
 
 func _refresh_difficulty() -> void:
 	var current: String = MetaProgress.difficulty()
-	_set_toggle_state(normal_button, current == "normal", "action")
-	_set_toggle_state(hard_button, current == "hard", "danger")
+	_rows["normal"].set_selected(current == "normal")
+	_rows["hard"].set_selected(current == "hard")
 
 
 func _refresh_endless() -> void:
 	var unlocked: bool = MetaProgress.endless_unlocked()
-	endless_button.visible = unlocked
+	var row: ConsoleMenuRow = _rows["endless"]
+	row.visible = unlocked
 	if not unlocked:
 		return
 	var on: bool = MetaProgress.endless_enabled()
-	endless_button.set_lines("ENDLESS MODE", "ON" if on else "OFF")
-	_set_toggle_state(endless_button, on, "perk")
-
-
-func _set_toggle_state(button: GameButton, selected: bool, accent: String) -> void:
-	button.theme_type_variation = &"PrimaryButton" if selected else &"SecondaryButton"
-	button.accent_key = accent if selected else "neutral"
+	row.value_text = "ON" if on else "OFF"
+	row.set_selected(on)
 
 
 func _on_pick_difficulty(difficulty_id: String) -> void:
 	MetaProgress.set_difficulty(difficulty_id)
 	_refresh_difficulty()
+	frame.set_context(MetaProgress.difficulty().to_upper())
 
 
 func _on_toggle_endless() -> void:

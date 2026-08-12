@@ -1007,7 +1007,11 @@ func _layout_score(job: Dictionary) -> float:
 	# bill is what `cost_forecast` already tracks for the bills screen, so the
 	# same figure — power and cloud metering both — is what should be scored.
 	var operating_per_prompt: float = float(cost_forecast().get("operating_per_prompt", 0.0))
-	var outgoings: float = burns * (float(preview.get("cost", 0.0)) + operating_per_prompt)
+	# Pipeline stage costs are only paid on a burn, but the metered power and
+	# cloud bills land on every prompt the run spends — cooling prompts
+	# included. Charging them per burn alone made hot layouts look cheaper
+	# than the cooling they force.
+	var outgoings: float = burns * float(preview.get("cost", 0.0)) + prompts * operating_per_prompt
 	return (fee - outgoings) / prompts
 
 
@@ -1310,7 +1314,9 @@ func _record_completed_quality(run_state: RunState) -> void:
 			continue
 		if bool(job.get("_ascension_quality_recorded", false)):
 			continue
-		_ascension_system.record_job_quality(run_state, float(job.get("quality", 0.0)))
+		# Judged on what the client receives, not what the pipeline produced:
+		# unfinished delivery and shipped known bugs both come off first.
+		_ascension_system.record_job_quality(run_state, JobSystem.delivered_quality(job))
 		job["_ascension_quality_recorded"] = true
 
 

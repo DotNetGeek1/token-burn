@@ -63,10 +63,6 @@ const INVESTOR_CALL := preload("res://ui/screens/investor_call.tscn")
 const TITLE_SCREEN := preload("res://ui/title/title_screen.tscn")
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
-const HUD_HEIGHT := 76.0
-const CHIP_FONT_SIZE := 22
-const CHIP_FONT_SIZE_MIN := 15
-
 @onready var background: ColorRect = $Background
 @onready var board_art: TextureRect = $BoardArt
 @onready var board_art_next: TextureRect = $BoardArtNext
@@ -74,13 +70,6 @@ const CHIP_FONT_SIZE_MIN := 15
 @onready var prop_layer: Control = $PropLayer
 @onready var work_column: Control = $WorkColumn
 @onready var content_container: Control = $WorkColumn/ContentContainer
-@onready var top_hud: PanelContainer = $TopHud
-@onready var logo: Label = $TopHud/HudMargin/HudRow/Wordmark/Logo
-@onready var version_label: Label = $TopHud/HudMargin/HudRow/Wordmark/Version
-@onready var stats_row: HBoxContainer = $TopHud/HudMargin/HudRow/StatsRow
-@onready var cash_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/CashChip
-@onready var rep_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/RepChip
-@onready var round_chip: StatChip = $TopHud/HudMargin/HudRow/StatsRow/RoundChip
 @onready var side_panel: Control = $SidePanel
 @onready var panel_bg: PanelContainer = $SidePanel/PanelBg
 @onready var panel_body: Control = $SidePanel/PanelBg/PanelRow/PanelBody
@@ -95,8 +84,6 @@ var _panel_tab: String = ""
 var _closing_tab: String = ""
 var _panel_slide: float = 1.0
 var _panel_tween: Tween = null
-var _chip_font_size: int = CHIP_FONT_SIZE
-var _fitting_hud: bool = false
 var _screen_cache: Dictionary = {}
 var _props: Dictionary = {}
 var _angel_investors: Control = null
@@ -114,7 +101,6 @@ var _last_angel_phase: bool = false
 var _pending_statement: Dictionary = {}
 var _board_dwelling: String = ""
 var _room_reveal_running: bool = false
-var _hud_values: Dictionary = {}
 var _title_screen: Control = null
 ## While the title is up the shell behind it is already live (so Continue is
 ## instant), but its flow overlays must stay quiet until the player commits.
@@ -127,14 +113,8 @@ func _ready() -> void:
 	add_to_group("main_ui")
 	background.color = UiThemeBuilder.color("bg")
 	scrim.color = UiThemeBuilder.color("bg")
-	# The HUD floats directly over the room, the way the readouts in the artwork
-	# do, instead of sitting in an opaque bar bolted across the top.
-	top_hud.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	panel_bg.add_theme_stylebox_override("panel", _side_panel_style())
-	logo.add_theme_color_override("font_color", UiThemeBuilder.color("red"))
-	version_label.text = "v%s" % ProjectSettings.get_setting("application/config/version", "0.0.0")
 	get_viewport().size_changed.connect(_layout_board)
-	stats_row.minimum_size_changed.connect(_fit_hud)
 	_build_props()
 	_layout_board()
 	_build_icon_rail()
@@ -219,12 +199,10 @@ func _layout_board() -> void:
 	_place(work_column, _zoom_rect(
 		AssetCatalog.board_region(board_dwelling(), "work_column"), zoom, focus
 	), size, full_rect)
-	top_hud.offset_bottom = HUD_HEIGHT
 	side_panel.offset_left = -panel_width
 	side_panel.offset_right = 0.0
 	_apply_panel_slide(_panel_slide)
 	_layout_props(size, zoom, focus)
-	_fit_hud()
 	get_tree().call_group("console_screens", "fit_console")
 	# Screens that hang off the room's own furniture rather than off the work
 	# column as a whole have to be told the room has moved.
@@ -348,7 +326,12 @@ func _refresh_props() -> void:
 	_set_prop("heat_readout", "HEAT", "%d%%" % int(round(ratio * 100.0)), _heat_role(ratio))
 	var watts: float = float(state.compute.get("power_draw", 0.0))
 	_set_prop("power_meter", "POWER", "%.1f kW" % (watts / 1000.0), "energy")
-	_set_prop_lines("plan_board", "BURN PLAN", _plan_lines(), _contract_lines())
+	_set_prop_lines(
+		"plan_board", "BURN PLAN", _plan_lines(), _contract_lines(), _ledger_lines()
+	)
+	var plan: BoardProp = _props.get("plan_board")
+	if plan != null:
+		plan.tooltip_text = _board_tooltip()
 	# Always the terms line: tapping re-reads the contract. There is nothing to
 	# qualify for any more, so the phone does not ring for a "ready" state.
 	_set_prop("phone", "ANGEL", "TERMS", "neutral")
@@ -385,10 +368,12 @@ func _set_prop(key: String, caption: String, value: String, role: String) -> voi
 		prop.set_readout(caption, value, UiThemeBuilder.semantic(role))
 
 
-func _set_prop_lines(key: String, caption: String, lines: Array, notes: Array = []) -> void:
+func _set_prop_lines(
+	key: String, caption: String, lines: Array, notes: Array = [], ledger: Array = []
+) -> void:
 	var prop: BoardProp = _props.get(key)
 	if prop != null:
-		prop.set_checklist(caption, lines, notes)
+		prop.set_checklist(caption, lines, notes, ledger)
 
 
 ## The investor's terms, written up on the board under the plan rather than on a
@@ -470,48 +455,6 @@ func _sync_overlay_input() -> void:
 			blocking = true
 			break
 	overlay_root.mouse_filter = Control.MOUSE_FILTER_STOP if blocking else Control.MOUSE_FILTER_IGNORE
-
-
-# --- HUD ---------------------------------------------------------------------
-
-## The HUD is one row over the room and the numbers in it grow all run, so it is
-## the chips that give: they read a size smaller rather than pushing the goal
-## plate off the right-hand edge.
-func _fit_hud() -> void:
-	if _fitting_hud or stats_row == null:
-		return
-	_fitting_hud = true
-	var strip: float = top_hud.size.x
-	if strip <= 1.0:
-		strip = get_viewport_rect().size.x
-	var budget: float = maxf(120.0, strip - 36.0 - 150.0 - 28.0)
-	var chip_size: int = CHIP_FONT_SIZE
-	while chip_size > CHIP_FONT_SIZE_MIN and _chips_width(chip_size) > budget:
-		chip_size -= 1
-	_set_chip_font_size(chip_size)
-	_fitting_hud = false
-
-
-func _hud_chips() -> Array[StatChip]:
-	return [cash_chip, rep_chip, round_chip]
-
-
-func _chips_width(font_size: int) -> float:
-	var chips: Array[StatChip] = _hud_chips()
-	var total: float = stats_row.get_theme_constant("separation") * float(chips.size() - 1)
-	for chip in chips:
-		total += chip.width_at_font_size(font_size)
-	return total
-
-
-## Re-applying an override re-measures every chip and restarts their count-up
-## animations, so the size is only pushed when it has actually moved.
-func _set_chip_font_size(font_size: int) -> void:
-	if font_size == _chip_font_size:
-		return
-	_chip_font_size = font_size
-	for chip in _hud_chips():
-		chip.set_value_font_size(font_size)
 
 
 # --- Navigation --------------------------------------------------------------
@@ -619,10 +562,6 @@ func _apply_panel_slide(value: float) -> void:
 	var width: float = _panel_width(get_viewport_rect().size)
 	side_panel.offset_left = -width + width * value
 	side_panel.offset_right = width * value
-	# The HUD is the room's own signage, so it retreats to the desk rather than
-	# running on behind the slab where the goal plate would be half-covered.
-	top_hud.offset_right = -width * (1.0 - value)
-	_fit_hud()
 
 
 func _show_desk_tab(tab_name: String) -> void:
@@ -726,7 +665,7 @@ func _reveal_room(dwelling: String) -> void:
 	_room_reveal_running = true
 	board_art_next.texture = AssetCatalog.board_scene_art(dwelling)
 	board_art_next.visible = board_art_next.texture != null
-	var chrome: Array[Control] = [top_hud, work_column, prop_layer]
+	var chrome: Array[Control] = [work_column, prop_layer]
 	var tween: Tween = create_tween()
 	for control in chrome:
 		tween.parallel().tween_property(control, "modulate:a", 0.0, 0.22)
@@ -762,10 +701,11 @@ func _connect_events() -> void:
 	EventBus.upgrade_purchased.connect(func(_a): refresh_all())
 	EventBus.run_ended.connect(func(_victory): refresh_all())
 	EventBus.run_ended.connect(_on_run_ended_call)
-	# Burning and billing move cash mid-prompt. The HUD is the only place the
-	# player watches it, so keep it honest without rebuilding every screen.
-	EventBus.tokens_consumed.connect(func(_amount): _refresh_hud())
-	EventBus.bill_due.connect(func(_type, _amount): _refresh_hud())
+	# Burning and billing move cash mid-prompt. The board on the wall is where
+	# the player watches it, so keep the room honest without rebuilding every
+	# screen behind it.
+	EventBus.tokens_consumed.connect(func(_amount): _refresh_props())
+	EventBus.bill_due.connect(func(_type, _amount): _refresh_props())
 	EventBus.achievement_unlocked.connect(_on_achievement_unlocked)
 
 
@@ -824,7 +764,7 @@ func _on_bills_continue() -> void:
 
 
 func refresh_all() -> void:
-	_refresh_hud()
+	_refresh_props()
 	_update_board_art()
 	for screen in _screen_cache.values():
 		if screen.has_method("refresh"):
@@ -850,23 +790,6 @@ func refresh_all() -> void:
 	_sync_overlay_input()
 
 
-## What is left in the strip over the room: the two numbers with no diegetic
-## home yet, and the round, which stays legible while a wide panel covers the
-## laptop. Heat, power, throughput and the contract are all on the board now.
-func _refresh_hud() -> void:
-	var state := Simulation.run_state
-	var cash: float = float(state.economy.get("cash", 0.0))
-	var token_rate: float = float(state.compute.get("token_rate", 0.0))
-	var reputation: float = float(int(state.business.get("reputation", 0.0)))
-	cash_chip.setup_value("cash", cash, "cash")
-	cash_chip.set_value_color(UiThemeBuilder.semantic("money" if cash >= 0.0 else "danger"))
-	rep_chip.setup_value("reputation", reputation, "plain")
-	rep_chip.tooltip_text = _reputation_tooltip(reputation)
-	_pulse_changed_chips(cash, token_rate, reputation)
-	_refresh_round_chip()
-	_refresh_props()
-
-
 ## The round the deadline stops being background reading and starts being the
 ## thing the player is running out of time for.
 const ASCENSION_WARNING_ROUND := 9
@@ -879,33 +802,34 @@ var _intro_call_shown: bool = false
 var _investor_beats: Dictionary = {}
 
 
-## A round has no prompt budget any more, so the chip counts up rather than down:
-## "R3 · 5p" is the third round, five prompts spent on it so far. What limits a
-## round is each contract's own deadline, which the job cards and board show.
-func _refresh_round_chip() -> void:
+## Everything the board is kept in the corner of the eye for. What the company
+## has, what it is thought of, and how much of the year is left — the last three
+## numbers that used to float in a strip over the room instead of being written
+## somewhere a person at this desk could have written them.
+##
+## All on one line, because the board is a fixed piece of wall and the plan and
+## the contract under this have to fit on it too. It goes up in the red pen when
+## the company is in trouble on either count, which is what anyone keeping this
+## board would do to it.
+func _ledger_lines() -> Array:
 	var state := Simulation.run_state
+	var cash: float = float(state.economy.get("cash", 0.0))
 	var round_number: int = int(state.calendar.get("round", 1))
-	var prompts_used: int = Simulation.prompts_used_this_round()
 	var deadline: int = round_number + Simulation.rounds_remaining() - 1
-	round_chip.setup("deadline", "R%d/%d · %dp" % [round_number, deadline, prompts_used])
-	var lines: PackedStringArray = []
-	lines.append("Round %d of %d" % [round_number, deadline])
-	lines.append("%d prompt(s) spent this round" % prompts_used)
-	lines.append("A round runs until every contract you took resolves, then the bills land.")
-	var urgency: String = _ascension_urgency_line(round_number)
-	if urgency != "":
-		lines.append(urgency)
-	var slots: int = Simulation.job_slots()
-	if slots > 1:
-		lines.append("%d machines: %d contracts advance per prompt" % [slots, slots])
-	else:
-		lines.append("One machine: one contract advances per prompt. Buy another to work in parallel.")
-	round_chip.tooltip_text = "\n".join(lines)
-	var remaining: int = Simulation.rounds_remaining()
-	round_chip.set_value_color(
-		UiThemeBuilder.semantic("danger") if remaining <= 2
-		else (UiThemeBuilder.semantic("warning") if urgency != "" else UiThemeBuilder.color("white"))
+	var trouble: bool = (
+		cash < 0.0
+		or Simulation.rounds_remaining() <= 2
+		or _ascension_urgency_line(round_number) != ""
 	)
+	return [[
+		"%s · REP %d · R%d/%d" % [
+			NumberFormat.format_cash(cash),
+			int(state.business.get("reputation", 0.0)),
+			round_number,
+			deadline,
+		],
+		BoardProp.MARKER_URGENT if trouble else BoardProp.MARKER_INK,
+	]]
 
 
 ## Says the quiet part out loud from round nine on: the year is the deadline, and
@@ -988,9 +912,35 @@ func _on_run_ended_call(victory: bool) -> void:
 	investor_says("ascension_complete" if victory else "run_lost")
 
 
-## Reputation is three things at once, so the chip says all three rather than
-## leaving the player to infer them from a bare number.
-func _reputation_tooltip(reputation: float) -> String:
+## The board is written in shorthand, so pressing it is what spells the
+## shorthand out: what the round is, and what reputation is actually doing.
+## Reputation in particular is three things at once, and a bare number leaves
+## the player to infer all three.
+func _board_tooltip() -> String:
+	var state := Simulation.run_state
+	var round_number: int = int(state.calendar.get("round", 1))
+	var deadline: int = round_number + Simulation.rounds_remaining() - 1
+	var lines: PackedStringArray = [
+		"Round %d of %d" % [round_number, deadline],
+		"%d prompt(s) spent this round" % Simulation.prompts_used_this_round(),
+		"A round runs until every contract you took resolves, then the bills land.",
+	]
+	var urgency: String = _ascension_urgency_line(round_number)
+	if urgency != "":
+		lines.append(urgency)
+	var slots: int = Simulation.job_slots()
+	if slots > 1:
+		lines.append("%d machines: %d contracts advance per prompt" % [slots, slots])
+	else:
+		lines.append(
+			"One machine: one contract advances per prompt. Buy another to work in parallel."
+		)
+	lines.append("")
+	lines.append_array(_reputation_lines(float(int(state.business.get("reputation", 0.0)))))
+	return "\n".join(lines)
+
+
+func _reputation_lines(reputation: float) -> PackedStringArray:
 	var state := Simulation.run_state
 	var bonus: int = int(round(
 		(JobSystem.reputation_reward_multiplier(state, ContentDatabase) - 1.0) * 100.0
@@ -1009,15 +959,4 @@ func _reputation_tooltip(reputation: float) -> String:
 	lines.append("Delivering above a client's quality bar earns it; missing deadlines costs it")
 	if reputation <= 0.0:
 		lines.append("At -5 the business collapses")
-	return "\n".join(lines)
-
-
-## A number that moved because of something the player did should be seen
-## moving, not just found changed on the next glance.
-func _pulse_changed_chips(cash: float, token_rate: float, reputation: float) -> void:
-	if not _hud_values.is_empty():
-		if absf(cash - float(_hud_values["cash"])) > 0.5:
-			cash_chip.pulse(UiThemeBuilder.semantic("money"))
-		if absf(reputation - float(_hud_values["reputation"])) > 0.5:
-			rep_chip.pulse(UiThemeBuilder.semantic("perk"))
-	_hud_values = {"cash": cash, "tokens": token_rate, "reputation": reputation}
+	return lines

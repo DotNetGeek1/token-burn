@@ -15,8 +15,6 @@ extends Control
 ## itself. Its own screen and instruments are hidden — there is one screen in
 ## this room and the laptop is it.
 
-const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
-
 ## How long each pipeline stage holds on the console during a batch. Long
 ## enough to read the stage's own line before the next one prints over it —
 ## the batch is the show, not a loading bar.
@@ -37,7 +35,7 @@ var _laptop: LaptopScreen = null
 var _burning: bool = false
 var _kill_requested: bool = false
 var _stages_completed: int = 0
-var _detail_sheet: DetailSheet = null
+var _detail_sheet: ConsoleSheet = null
 var _danger_vignette: DangerVignette = null
 
 
@@ -47,7 +45,7 @@ func _ready() -> void:
 	# both the laptop and the machine behind it are furniture in that room.
 	add_to_group("board_mounted")
 	_danger_vignette = DangerVignette.mount(self)
-	_detail_sheet = DETAIL_SHEET.instantiate()
+	_detail_sheet = ConsoleSheet.new()
 	_laptop = LaptopScreen.new()
 	_laptop.name = "Laptop"
 	add_child(_laptop)

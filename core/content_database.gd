@@ -445,6 +445,41 @@ func collect_validation_errors() -> Array[String]:
 					operation.id, partner_id,
 				])
 	var demands: Dictionary = balance.get("job_demands", {})
+	# Built locally rather than as constants so this file keeps no load-time
+	# dependency on BoardSystem, which reads back from this database.
+	var known_rule_types: Array = [
+		BoardSystem.RULE_BLOCKED_SLOTS,
+		BoardSystem.RULE_TAG_BONUS,
+		BoardSystem.RULE_MAX_HIDDEN_BUGS,
+		BoardSystem.RULE_RECURSION_RISK,
+		BoardSystem.RULE_AGENT_SCOPE,
+		BoardSystem.RULE_FEATURE_CREEP,
+	]
+	var known_capabilities: Array = [
+		BoardSystem.CAPABILITY_FIX_BUGS,
+		BoardSystem.CAPABILITY_REVEAL_BUGS,
+		BoardSystem.CAPABILITY_HEAVY_QUALITY,
+		BoardSystem.CAPABILITY_THROUGHPUT,
+		BoardSystem.CAPABILITY_COOLING,
+	]
+	# A demand naming a capability nothing can ever report is a demand no
+	# workflow can satisfy, which reads in game as an unwinnable contract.
+	for demand_id in demands:
+		var definition: Variant = demands[demand_id]
+		if not definition is Dictionary:
+			errors.append("demand '%s' is not an object" % str(demand_id))
+			continue
+		var match_spec: Dictionary = Dictionary(definition.get("match", {}))
+		if match_spec.is_empty():
+			errors.append("demand '%s' has no 'match' rule" % str(demand_id))
+			continue
+		if not match_spec.has("capability"):
+			continue
+		var capability: String = str(match_spec["capability"])
+		if not known_capabilities.has(capability):
+			errors.append("demand '%s' asks for unknown capability '%s'" % [
+				str(demand_id), capability,
+			])
 	for job in jobs:
 		_check_unique_id(errors, seen_ids, "job", job.id)
 		if job.revision_risk < 0.0 or job.revision_risk > 1.0:
@@ -455,8 +490,18 @@ func collect_validation_errors() -> Array[String]:
 					job.id, str(demand_id),
 				])
 		for rule in job.board_rules:
-			if rule is Dictionary and not rule.has("type"):
+			if not rule is Dictionary:
+				continue
+			if not rule.has("type"):
 				errors.append("job '%s' has a board rule with no 'type'" % job.id)
+				continue
+			# A rule type BoardSystem does not recognise is silently ignored at
+			# the table, so the contract quietly plays without the constraint
+			# its card advertises.
+			if not known_rule_types.has(str(rule["type"])):
+				errors.append("job '%s' has an unknown board rule type '%s'" % [
+					job.id, str(rule["type"]),
+				])
 	for achievement in achievements:
 		var reward: Dictionary = Dictionary(achievement.get("reward", {}))
 		if str(reward.get("type", "none")) != "unlock_module":

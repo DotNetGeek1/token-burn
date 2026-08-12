@@ -1,143 +1,178 @@
-extends Control
+extends ConsoleOverlay
 
 ## Round Debrief: what the round just finished delivered, earned and cost, with a
 ## plain-language explanation for each number. Shown at the end of every round,
 ## and every contract the round took is accounted for in it — the round only ends
 ## once they have all resolved, so there is no "still in progress" to hide.
+##
+## Printed as a statement rather than shown as a docket: the machine reports the
+## round back to the operator, and CONTINUE is the only way off it because the
+## bills are waiting behind this screen.
 
 signal continue_pressed
 
-@onready var title_label: Label = $Panel/Margin/VBox/Title
-@onready var subtitle_label: Label = $Panel/Margin/VBox/Subtitle
-@onready var verdict_label: Label = $Panel/Margin/VBox/Verdict
-@onready var reward_value: Label = $Panel/Margin/VBox/RewardValue
-@onready var rows: VBoxContainer = $Panel/Margin/VBox/Scroll/Rows
-@onready var continue_button: GameButton = $Panel/Margin/VBox/ContinueButton
-@onready var _panel: PanelContainer = $Panel
-
-var _stat_grid: GridContainer = null
+var _statement: ConsoleStatement = null
+var _summary: Dictionary = {}
 
 
 func _ready() -> void:
-	continue_button.pressed.connect(_on_continue)
-	_panel.add_theme_stylebox_override("panel", UiThemeBuilder.docket_style())
-	subtitle_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("muted"))
-	reward_value.add_theme_color_override(
-		"font_color", UiThemeBuilder.semantic("money").darkened(0.4)
-	)
+	super._ready()
+	setup("Round Debrief")
+	# The debrief is a mandatory step in the round flow, so neither a stray tap
+	# on the room nor ESC may leave it: CONTINUE is what advances the flow.
+	dismiss_on_scrim = false
+	set_closable(false)
+	_build_body()
 
 
+func _build_body() -> void:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content().add_child(scroll)
+
+	_statement = ConsoleStatement.new()
+	_statement.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_statement)
+
+	set_actions([{"index": "1", "headline": "CONTINUE", "pressed": _on_continue}])
+
+
+## The contract `main.gd` drives the end-of-round flow through.
 func show_summary(summary: Dictionary) -> void:
+	_summary = summary
+	open()
+	# The payout is the thing the round was for, so it lands as an event rather
+	# than as a figure that was always on the glass.
+	UiTransition.count_up(_statement.figure_label(), float(summary.get("reward", 0.0)), 0.55)
+	UiSound.play("complete")
+
+
+func refresh() -> void:
+	if _summary.is_empty():
+		return
+	_print_statement(_summary)
+	_apply_body_metrics()
+
+
+func fit_console() -> void:
+	super.fit_console()
+	_apply_body_metrics()
+
+
+func _apply_body_metrics() -> void:
+	if _statement != null:
+		_statement.set_metrics(console_scale())
+
+
+func _print_statement(summary: Dictionary) -> void:
 	var success: bool = bool(summary.get("success", false))
 	var completed: int = int(summary.get("completed", 0))
 	var failed: int = int(summary.get("failed", 0))
 	var round_number: int = int(summary.get("round", 1))
 	var prompts_used: int = int(summary.get("prompts_used", 0))
-	title_label.text = "ROUND %d DEBRIEF" % round_number
+
+	set_context("ROUND %d" % round_number)
+	_statement.clear()
+	_statement.set_title("ROUND %d DEBRIEF" % round_number, _verdict_color(success, completed))
 	if success:
-		title_label.add_theme_color_override(
-			"font_color", UiThemeBuilder.semantic("success").darkened(0.45)
-		)
-		subtitle_label.text = "Every contract resolved and the clients accepted the work. The bills are next."
+		_statement.set_note("Every contract resolved and the clients accepted the work. The bills are next.")
 	elif completed > 0:
-		title_label.add_theme_color_override(
-			"font_color", UiThemeBuilder.semantic("warning").darkened(0.45)
-		)
-		subtitle_label.text = "Some work landed, some ran out of time. You keep partial pay for what was finished, but reputation takes a hit."
+		_statement.set_note("Some work landed, some ran out of time. You keep partial pay for what was finished, but reputation takes a hit.")
 	else:
-		title_label.add_theme_color_override(
-			"font_color", UiThemeBuilder.semantic("failure").darkened(0.4)
-		)
-		subtitle_label.text = "Nothing was delivered this round. The bills still land, so the next round has to earn its way back."
+		_statement.set_note("Nothing was delivered this round. The bills still land, so the next round has to earn its way back.")
 	_show_verdict(summary, success)
-	_slam_reward(float(summary.get("reward", 0.0)))
+	_statement.set_figure(
+		NumberFormat.format_cash(float(summary.get("reward", 0.0))), "PAID FOR THIS ROUND"
+	)
 
-	for child in rows.get_children():
-		child.queue_free()
-	_begin_stat_grid()
-
-	_add_row(
+	_statement.add_item(
 		"Contracts",
 		"%d delivered · %d missed" % [completed, failed],
 		"Every contract you took this round is in one of these two columns — a round does not end until they all resolve."
 	)
-	_add_row(
+	_statement.add_item(
 		"Prompts spent",
 		str(prompts_used),
 		"Each burn or cool is one prompt. Rent is the same however many the round took, but power is metered per prompt."
 	)
 	var slots: int = int(summary.get("job_slots", 1))
 	if slots > 1:
-		_add_row(
+		_statement.add_item(
 			"Parallel lanes",
 			"%d machines" % slots,
 			"Your machines worked %d contracts side by side, sharing one batch between them. More machines means more deadlines moving at once, not a bigger batch." % slots
 		)
 	var early_jobs: int = int(summary.get("early_jobs", 0))
 	if early_jobs > 0:
-		_add_row(
+		_statement.add_item(
 			"Early delivery",
 			"+%d%% on %d contract(s)" % [int(round(float(summary.get("early_bonus_pct", 0.0)) * 100.0)), early_jobs],
 			"Clients pay a premium for work that arrives before they expected it. Every prompt to spare is worth more fee."
 		)
-	_add_row(
+	_statement.add_item(
 		"Money earned",
 		NumberFormat.format_cash(float(summary.get("reward", 0.0))),
 		"Payout received for delivered work, after quality adjustments."
 	)
-	_add_row(
+	_statement.add_item(
 		"Money spent",
 		NumberFormat.format_cash(float(summary.get("spent", 0.0))),
-		"Running costs during the round: energy, cloud rental and other burn. Rent is not in here — that lands on the next screen."
+		"Running costs during the round: energy, cloud rental and other burn. Rent is not in here — that lands on the next screen.",
+		{"value_color": ConsoleStyle.WARNING}
 	)
-	_add_row(
+	_statement.add_item(
 		"Cash now",
 		NumberFormat.format_cash(float(summary.get("cash_after", 0.0))),
-		"Your new balance. If it hits zero, the run is over."
+		"Your new balance. If it hits zero, the run is over.",
+		{"emphasis": true}
 	)
 	var quality: float = float(summary.get("avg_quality", 0.0))
 	var threshold: float = float(summary.get("avg_quality_threshold", 0.0))
 	var multiplier: float = float(summary.get("quality_multiplier", 1.0))
-	_add_row(
+	_statement.add_item(
 		"Average quality",
 		JobPresentation.quality_against_bar(quality, threshold),
-		"Final quality across the round's contracts, marked out of ten against what the clients asked for."
+		"Final quality across the round's contracts, marked out of ten against what the clients asked for.",
+		{"rule_above": true}
 	)
-	_add_row(
+	_statement.add_item(
 		"Quality payout",
 		"×%.2f" % multiplier,
 		_quality_payout_note(multiplier)
 	)
 	var reputation_delta: float = float(summary.get("reputation_delta", 0.0))
 	if absf(reputation_delta) > 0.01:
-		_add_row(
+		_statement.add_item(
 			"Reputation",
 			"%+.0f" % reputation_delta,
 			"Clearing the quality bar comfortably earns more than scraping under it. Reputation opens bigger clients and raises what they pay."
 		)
 	var bugs: int = int(summary.get("bugs", 0))
 	if bugs > 0:
-		_add_row(
+		_statement.add_item(
 			"Bugs",
 			str(bugs),
-			"Bugs appeared during the work and dragged quality down. Perks can soften this."
+			"Bugs appeared during the work and dragged quality down. Perks can soften this.",
+			{"value_color": ConsoleStyle.DANGER}
 		)
-	_add_row(
+	_statement.add_item(
 		"Tokens processed",
 		NumberFormat.format_tokens(float(summary.get("tokens_processed", 0.0))),
 		"Total AI output produced this round."
 	)
-	_add_row(
+	_statement.add_item(
 		"Throughput",
 		"%s / prompt" % NumberFormat.format_tokens(float(summary.get("tokens_per_tick", 0.0))),
 		"Tokens produced per prompt. Upgrade hardware to finish contracts in fewer prompts."
 	)
+	UiTransition.stagger(_statement.items())
 
-	UiTransition.enter(self)
-	UiTransition.stagger(rows)
-	var main := get_tree().get_first_node_in_group("main_ui")
-	if main != null and main.has_method("sync_overlay_input"):
-		main.sync_overlay_input()
+
+func _verdict_color(success: bool, completed: int) -> Color:
+	if success:
+		return ConsoleStyle.PHOSPHOR
+	return ConsoleStyle.WARNING if completed > 0 else ConsoleStyle.DANGER
 
 
 func _quality_payout_note(multiplier: float) -> String:
@@ -149,72 +184,19 @@ func _quality_payout_note(multiplier: float) -> String:
 
 
 ## The one voice in the game gets the last word on the round. This is the opening
-## line of the call he is about to make, so the note on the docket and the phone
-## that follows it are the same man saying the same thing.
+## line of the call he is about to make, so the note on the statement and the
+## phone that follows it are the same man saying the same thing.
 func _show_verdict(summary: Dictionary, success: bool) -> void:
 	var quip: String = InvestorVoice.debrief_quip(summary)
-	verdict_label.visible = quip != ""
 	if quip == "":
+		_statement.set_aside("")
 		return
-	verdict_label.text = "%s — %s" % [quip, InvestorVoice.investor_name()]
-	verdict_label.add_theme_color_override(
-		"font_color",
-		UiThemeBuilder.semantic("success" if success else "failure").darkened(0.4)
+	_statement.set_aside(
+		"%s — %s" % [quip, InvestorVoice.investor_name()],
+		ConsoleStyle.PHOSPHOR if success else ConsoleStyle.DANGER
 	)
 
 
-## The payout arrives with weight: it slams in oversized and counts up as it
-## settles, so the number the round was for is the thing that moves.
-func _slam_reward(reward: float) -> void:
-	UiTransition.count_up(reward_value, reward, 0.55)
-	reward_value.pivot_offset = reward_value.size / 2.0
-	reward_value.scale = Vector2(1.6, 1.6)
-	reward_value.modulate.a = 0.0
-	var tween: Tween = create_tween()
-	tween.tween_property(reward_value, "modulate:a", 1.0, 0.12)
-	tween.parallel().tween_property(reward_value, "scale", Vector2.ONE, 0.28).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	UiSound.play("complete")
-
-
-func _begin_stat_grid() -> void:
-	_stat_grid = GridContainer.new()
-	_stat_grid.columns = 2
-	_stat_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_stat_grid.add_theme_constant_override("h_separation", UiThemeBuilder.SPACE_LG)
-	_stat_grid.add_theme_constant_override("v_separation", UiThemeBuilder.SPACE_MD)
-	rows.add_child(_stat_grid)
-
-
-func _add_row(name_text: String, value_text: String, explanation: String) -> void:
-	var box := VBoxContainer.new()
-	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 2)
-	var line := HBoxContainer.new()
-	var name_label := Label.new()
-	name_label.text = name_text
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("title"))
-	line.add_child(name_label)
-	var value_label := Label.new()
-	value_label.text = value_text
-	value_label.theme_type_variation = &"AccentLabel"
-	value_label.add_theme_font_override("font", UiThemeBuilder.mono_font())
-	value_label.add_theme_color_override("font_color", UiThemeBuilder.docket_ink())
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	line.add_child(value_label)
-	box.add_child(line)
-	var explain := Label.new()
-	explain.text = explanation
-	explain.theme_type_variation = &"MutedLabel"
-	explain.add_theme_color_override("font_color", UiThemeBuilder.docket_ink("muted"))
-	explain.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(explain)
-	(_stat_grid if _stat_grid != null else rows).add_child(box)
-
-
 func _on_continue() -> void:
-	visible = false
+	hide_overlay()
 	continue_pressed.emit()
-	var main := get_tree().get_first_node_in_group("main_ui")
-	if main != null and main.has_method("sync_overlay_input"):
-		main.sync_overlay_input()

@@ -119,8 +119,7 @@ func set_metrics(font_size: int, height: int, pad_h: int) -> void:
 	_margin.add_theme_constant_override("margin_left", pad_h)
 	_margin.add_theme_constant_override("margin_right", pad_h)
 	_row.add_theme_constant_override("separation", maxi(2, int(font_size * 0.6)))
-	# Widest bracket is "[9]", so reserving it keeps every label at one column.
-	_index.custom_minimum_size = Vector2(font_size * 2.2, 0)
+	_reserve_index_column()
 	for label: Label in [_index, _headline, _value]:
 		label.add_theme_font_size_override("font_size", font_size)
 
@@ -131,7 +130,42 @@ func _apply_text() -> void:
 	_index.text = "[%s]" % index_label
 	_headline.text = headline
 	_value.text = value_text
+	_reserve_index_column()
 	set_reveal(_revealed)
+
+
+## The bracket is clipped like every other cell, so the column has to be wide
+## enough for the label actually in it — "[ESC]" needs more room than "[9]".
+func _reserve_index_column() -> void:
+	if _index == null:
+		return
+	_index.custom_minimum_size = Vector2(_text_width(_index.text, _font_size), 0)
+
+
+## The width this line needs to print in full, which is not something it can be
+## asked for in the usual way: every cell clips itself, and a clipped label
+## reports no minimum width at all. A row laid out in a strip across a screen —
+## rather than stacked down one — has to be measured rather than left to the
+## container, which would otherwise silently shave the ends off the words.
+func natural_width(font_size: int, pad_h: int) -> float:
+	if _index == null:
+		return 0.0
+	var total: float = 0.0
+	for label: Label in [_index, _headline, _value]:
+		total += _text_width(label.text, font_size)
+	# All three cells are always in the row, so the gaps between them are paid
+	# for even by the empty ones.
+	var separation: float = float(maxi(2, int(font_size * 0.6)))
+	return total + separation * 2.0 + float(pad_h * 2)
+
+
+func _text_width(text: String, font_size: int) -> float:
+	if text == "":
+		return 0.0
+	var font: Font = UiThemeBuilder.mono_font()
+	if font == null:
+		return float(font_size) * 0.75 * float(text.length())
+	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 
 ## Used where a row is a persistent choice — a market counter, say — rather than

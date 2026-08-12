@@ -1,4 +1,4 @@
-extends Control
+extends ConsoleOverlay
 
 ## End of run. The debrief is the whole point of the endgame rewrite: cash was
 ## always the means, so the run's legacy is reported here as tokens burned,
@@ -12,21 +12,17 @@ extends Control
 ## boost permanently — and only it offers the endless tail. A fresh run after
 ## any of this starts back in the bedroom, carrying the permanent unlocks and
 ## nothing else.
+##
+## The verdict is the machine's closing report and is printed as one, but the
+## picks under it are deliberately not: what you keep out of a dead company is
+## a physical thing you take off the desk, so those stay as cards.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
 
-@onready var panel: PanelContainer = $Panel
-@onready var title_label: Label = $Panel/Margin/VBox/TitleLabel
-@onready var body_label: Label = $Panel/Margin/VBox/BodyLabel
-@onready var headline_label: Label = $Panel/Margin/VBox/HeadlineLabel
-@onready var comparison_label: Label = $Panel/Margin/VBox/ComparisonLabel
-@onready var score_list: VBoxContainer = $Panel/Margin/VBox/ScoreScroll/ScoreList
-@onready var debrief_label: Label = $Panel/Margin/VBox/DebriefLabel
-@onready var debrief_scroll: ScrollContainer = $Panel/Margin/VBox/DebriefScroll
-@onready var debrief_list: VBoxContainer = $Panel/Margin/VBox/DebriefScroll/DebriefList
-@onready var continue_button: GameButton = $Panel/Margin/VBox/ContinueButton
-@onready var restart_button: GameButton = $Panel/Margin/VBox/RestartButton
-@onready var menu_button: GameButton = $Panel/Margin/VBox/MenuButton
+var _statement: ConsoleStatement = null
+var _pick_rule: ColorRect = null
+var _pick_caption: Label = null
+var _pick_list: VBoxContainer = null
 
 ## Whether this specific run just banked the pending pick(s) being offered.
 ## A pick skipped past on a win used to sit in the profile and quietly turn
@@ -34,81 +30,141 @@ const CARD_SCENE := preload("res://ui/common/card.tscn")
 ## look like the reward for whatever ended that run. It never was: it is
 ## always paid out for completing the run that earned it, and only that run.
 var _earned_this_run: bool = false
+var _loss_reason: String = ""
+## An aside the player's own last choice wrote, which survives the redraws that
+## spending a pick triggers.
+var _keep_note: String = ""
 
 
 func _ready() -> void:
-	continue_button.pressed.connect(_on_continue)
-	restart_button.pressed.connect(_on_restart)
-	menu_button.pressed.connect(_on_menu)
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_to_group("flow_overlay")
+	super._ready()
+	setup("Run Report")
+	# There is no walking away from the end of a run, and an unspent pick has
+	# to be spent here or it attaches itself to some later run's ending.
+	dismiss_on_scrim = false
+	set_closable(false)
+	_build_body()
 	EventBus.run_ended.connect(_on_run_ended)
 
 
+func _build_body() -> void:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content().add_child(scroll)
+
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 10)
+	scroll.add_child(column)
+
+	_statement = ConsoleStatement.new()
+	_statement.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_statement)
+
+	_pick_rule = ConsoleStyle.rule(0.22)
+	column.add_child(_pick_rule)
+
+	_pick_caption = ConsoleStyle.label("", ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR)
+	column.add_child(_pick_caption)
+
+	_pick_list = VBoxContainer.new()
+	_pick_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pick_list.add_theme_constant_override("separation", 8)
+	column.add_child(_pick_list)
+
+
 func _on_run_ended(victory: bool) -> void:
-	show_from_state(victory, Simulation.run_state.flags.get("loss_reason", ""))
+	show_from_state(victory, str(Simulation.run_state.flags.get("loss_reason", "")))
 
 
+## The contract `main.gd` drives the end of a run through. It is called again on
+## every refresh while the screen is up, so a redraw must not restage the
+## report — only the pick, which the player is still changing.
 func show_from_state(victory: bool, loss_reason: String) -> void:
-	var outcome: String = str(Simulation.run_state.flags.get("outcome", "" if not victory else "ascended"))
-	_earned_this_run = outcome == "ascended"
-	var score: Dictionary = RunScore.compute(Simulation.run_state, ContentDatabase)
-	_set_verdict(outcome, loss_reason, score)
-	headline_label.text = RunScore.headline(score)
-	comparison_label.text = str(score.get("comparison", ""))
-	comparison_label.visible = comparison_label.text != ""
-	_fill_score_rows(score)
-	_refresh_debrief()
-	UiTransition.enter(self)
-	UiTransition.stagger(score_list)
-	_count_up_legacy(score)
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	get_tree().call_group("main_ui", "sync_overlay_input")
-
-
-## The run's legacy is one number, so it is counted up rather than printed. The
-## headline carries its own wording, so the ticker rewrites the figure inside it
-## instead of formatting cash.
-func _count_up_legacy(score: Dictionary) -> void:
-	var total: float = float(score.get("total_tokens_burned", 0.0))
-	if total <= 0.0:
+	_loss_reason = loss_reason
+	if visible:
+		_refresh_debrief()
 		return
-	var tween: Tween = headline_label.create_tween()
-	tween.tween_method(
-		func(value: float) -> void:
-			headline_label.text = (
-				"TOTAL TOKENS BURNED: %s" % NumberFormat.format_tokens(value)
-			),
-		0.0,
-		total,
-		0.9
-	).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+	_keep_note = ""
+	var outcome: String = str(
+		Simulation.run_state.flags.get("outcome", "" if not victory else "ascended")
+	)
+	_earned_this_run = outcome == "ascended"
+	open()
 
 
-func _set_verdict(outcome: String, loss_reason: String, score: Dictionary) -> void:
+func refresh() -> void:
+	var score: Dictionary = RunScore.compute(Simulation.run_state, ContentDatabase)
+	_print_report(score)
+	_refresh_debrief()
+	_apply_body_metrics()
+	# The run's legacy is one number, so it is counted up rather than printed.
+	var total: float = float(score.get("total_tokens_burned", 0.0))
+	if total > 0.0:
+		UiTransition.count_up(_statement.figure_label(), total, 0.9, NumberFormat.format)
+
+
+func fit_console() -> void:
+	super.fit_console()
+	_apply_body_metrics()
+
+
+func _apply_body_metrics() -> void:
+	if _statement == null:
+		return
+	var scale: float = console_scale()
+	_statement.set_metrics(scale)
+	_pick_caption.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
+
+
+func _print_report(score: Dictionary) -> void:
+	_statement.clear()
+	_apply_verdict(score)
+	# The caption already says what the number is, so the figure is the bare
+	# count rather than `format_tokens`' "... tokens".
+	_statement.set_figure(
+		NumberFormat.format(float(score.get("total_tokens_burned", 0.0))),
+		"TOTAL TOKENS BURNED"
+	)
+	for row in RunScore.rows(score):
+		_statement.add_item(str(row.get("label", "")), str(row.get("value", "")))
+	UiTransition.stagger(_statement.items())
+
+
+func _apply_verdict(score: Dictionary) -> void:
+	var outcome: String = str(Simulation.run_state.flags.get("outcome", ""))
 	match outcome:
 		"ascended":
 			var next_location: String = Simulation.next_location_unlocked()
-			title_label.text = "ASCENDED" if next_location == "" else "LOCATION COMPLETE"
-			title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("success"))
+			_statement.set_title(
+				"ASCENDED" if next_location == "" else "LOCATION COMPLETE", ConsoleStyle.PHOSPHOR
+			)
+			set_context("CONTRACT MET")
 			var contract_name: String = str(score.get("contract_name", ""))
-			body_label.text = (
+			var opening: String = (
 				"%s: requirement met." % contract_name
 				if contract_name != "" else "The contract is complete."
 			)
-			body_label.text += " " + _campaign_progress_text()
+			_statement.set_note("%s %s" % [opening, _campaign_progress_text()])
 		"contract_expired":
-			title_label.text = "TIME UP"
-			title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("failure"))
-			body_label.text = "The year ended with the contract unfinished. %s takes the hardware back." % (
-				InvestorVoice.investor_name()
+			_statement.set_title("TIME UP", ConsoleStyle.DANGER)
+			set_context("CONTRACT EXPIRED", ConsoleStyle.DANGER)
+			var expired: String = (
+				"The year ended with the contract unfinished. %s takes the hardware back."
+				% InvestorVoice.investor_name()
 			)
-			body_label.text += " " + _contract_shortfall_text()
+			_statement.set_note("%s %s" % [expired, _contract_shortfall_text()])
 		_:
-			title_label.text = "RUN ENDED"
-			title_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("failure"))
-			body_label.text = loss_reason if loss_reason != "" else "The company collapsed."
+			_statement.set_title("RUN ENDED", ConsoleStyle.DANGER)
+			set_context("COMPANY CLOSED", ConsoleStyle.DANGER)
+			_statement.set_note(
+				_loss_reason if _loss_reason != "" else "The company collapsed."
+			)
+	var aside: String = _keep_note
+	if aside == "":
+		aside = str(score.get("comparison", ""))
+	_statement.set_aside(aside)
 
 
 ## How close the run came, which is the only useful thing to say to somebody who
@@ -141,74 +197,24 @@ func _campaign_progress_text() -> String:
 	]
 
 
-func _fill_score_rows(score: Dictionary) -> void:
-	for child in score_list.get_children():
-		child.queue_free()
-	var rows: Array = RunScore.rows(score)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", UiThemeBuilder.SPACE_LG)
-	grid.add_theme_constant_override("v_separation", UiThemeBuilder.SPACE_SM)
-	score_list.add_child(grid)
-	for row in rows:
-		var cell: Control = _stat_row(str(row.get("label", "")), str(row.get("value", "")))
-		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(cell)
-
-
-func _stat_row(label_text: String, value_text: String) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", UiThemeBuilder.SPACE_MD)
-	var name_label := Label.new()
-	name_label.text = label_text.to_upper()
-	name_label.theme_type_variation = &"SectionLabel"
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name_label)
-	var value_label := Label.new()
-	value_label.text = value_text
-	value_label.add_theme_font_override("font", UiThemeBuilder.mono_font())
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	row.add_child(value_label)
-	return row
-
-
-## A banked pick has to be spent before the next run starts, so both the New
-## Run and Menu buttons wait until the player has chosen what they are
-## keeping — otherwise an unclaimed pick sits in the profile and turns up
-## attached to whatever run happens to end next, win or lose.
+## A banked pick has to be spent before the next run starts, so every way off
+## this screen waits until the player has chosen what they are keeping —
+## otherwise an unclaimed pick sits in the profile and turns up attached to
+## whatever run happens to end next, win or lose.
 func _refresh_debrief() -> void:
-	for child in debrief_list.get_children():
+	for child in _pick_list.get_children():
+		_pick_list.remove_child(child)
 		child.queue_free()
 	var choices: Array = Simulation.debrief_choices()
 	var has_pick: bool = not choices.is_empty()
-	debrief_label.visible = has_pick
-	debrief_label.text = (
+	_pick_rule.visible = has_pick
+	_pick_caption.visible = has_pick
+	_pick_list.visible = has_pick
+	_pick_caption.text = (
 		"CHOOSE YOUR REWARD FOR ASCENDING" if _earned_this_run
 		else "AN UNCLAIMED REWARD FROM AN EARLIER ASCENSION"
 	)
-	debrief_scroll.visible = has_pick
-	restart_button.disabled = has_pick
-	menu_button.disabled = has_pick
-	# Carrying on into the endless tail is only on the table for the run that beat
-	# the last chapter: a mid-campaign win's continuation is the next location,
-	# and the build has to still exist for there to be anything to carry.
-	continue_button.visible = _earned_this_run and Simulation.next_location_unlocked() == ""
-	continue_button.disabled = has_pick
-	var pending: int = MetaProgress.pending_picks()
-	if has_pick:
-		restart_button.set_lines(
-			"CHOOSE WHAT YOU KEEP",
-			"%d rewards left to spend" % pending if pending > 1 else "One reward left to spend"
-		)
-	elif _chapter_ahead():
-		restart_button.set_lines("NEXT CHAPTER", _new_run_subtitle())
-	else:
-		restart_button.set_lines("NEW RUN", _new_run_subtitle())
-	# A verdict is a page of numbers and sits in a scrolling panel; make room
-	# for the debrief cards too when there is a pick to spend.
-	panel.anchor_top = 0.04
-	panel.anchor_bottom = 0.96
+	_set_exits(has_pick)
 	if not has_pick:
 		return
 	for unlock in choices:
@@ -228,23 +234,59 @@ func _refresh_debrief() -> void:
 		}])
 		card.set_action_style("reputation", "perk")
 		card.pressed.connect(_keep.bind(str(unlock.get("id", ""))))
-		debrief_list.add_child(card)
-	UiTransition.stagger(debrief_list)
+		_pick_list.add_child(card)
+	UiTransition.stagger(_pick_list)
 
 
-func hide_overlay() -> void:
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	get_tree().call_group("main_ui", "sync_overlay_input")
+func _set_exits(has_pick: bool) -> void:
+	var pending: int = MetaProgress.pending_picks()
+	var entries: Array = []
+	# Carrying on into the endless tail is only on the table for the run that
+	# beat the last chapter: a mid-campaign win's continuation is the next
+	# location, and the build has to still exist for there to be anything to
+	# carry.
+	if _earned_this_run and Simulation.next_location_unlocked() == "":
+		entries.append({
+			"index": "1",
+			"headline": "KEEP PLAYING",
+			"value": "Endless",
+			"enabled": not has_pick,
+			"pressed": _on_continue,
+		})
+	if has_pick:
+		entries.append({
+			"index": str(entries.size() + 1),
+			"headline": "CHOOSE WHAT YOU KEEP",
+			"value": (
+				"%d left to spend" % pending if pending > 1 else "One left to spend"
+			),
+			"enabled": false,
+		})
+	else:
+		entries.append({
+			"index": str(entries.size() + 1),
+			"headline": "NEXT CHAPTER" if _chapter_ahead() else "NEW RUN",
+			"value": _new_run_subtitle(),
+			"pressed": _on_restart,
+		})
+	entries.append({
+		"index": str(entries.size() + 1),
+		"headline": "TITLE SCREEN",
+		"enabled": not has_pick,
+		"pressed": _on_menu,
+	})
+	set_actions(entries)
 
 
 func _keep(unlock_id: String) -> void:
 	if not Simulation.spend_debrief_pick(unlock_id):
 		return
 	var unlock: Dictionary = MetaProgress.get_unlock(unlock_id)
-	body_label.text = "%s stays with you. Everything else was the company's, and there is no company." % str(
-		unlock.get("name", "It")
+	_keep_note = (
+		"%s stays with you. Everything else was the company's, and there is no company."
+		% str(unlock.get("name", "It"))
 	)
+	_statement.set_aside(_keep_note)
 	_refresh_debrief()
 
 
@@ -262,7 +304,7 @@ func _chapter_ahead() -> bool:
 	return _earned_this_run and Simulation.next_location_unlocked() != ""
 
 
-## What the main button leads to. After a mid-campaign win it is the move into
+## What the main exit leads to. After a mid-campaign win it is the move into
 ## the newly opened chapter; otherwise it is a fresh game from the bottom of
 ## the campaign, carrying only the permanent unlocks.
 func _new_run_subtitle() -> String:

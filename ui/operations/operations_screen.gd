@@ -9,10 +9,8 @@ extends Control
 ## into the laptop screen the artwork painted rather than in a card floated over
 ## the picture, so the status of the business is something in the room.
 
-const BREAKDOWN_SHEET := preload("res://ui/common/effect_breakdown_sheet.tscn")
-
 var _laptop: LaptopScreen = null
-var _breakdown_sheet: EffectBreakdownSheet = null
+var _breakdown_sheet: ConsoleSheet = null
 var _danger_vignette: DangerVignette = null
 
 
@@ -27,7 +25,7 @@ func _ready() -> void:
 	add_child(_laptop)
 	_laptop.setup("desk")
 	ConsoleNav.mount(_laptop, self)
-	_breakdown_sheet = BREAKDOWN_SHEET.instantiate()
+	_breakdown_sheet = ConsoleSheet.new()
 	_mount_sheet(_breakdown_sheet)
 	relayout_on_board()
 	Simulation.work_tick_completed.connect(refresh)
@@ -186,10 +184,57 @@ func _show_cost_breakdown() -> void:
 	_breakdown_sheet.show_content("Running Costs", "\n".join(lines))
 
 
+## The trace behind a headline number: what it started at, every modifier that
+## touched it in order, and where it ended up.
 func _show_breakdown(title: String, target_path: String, chain_id: String) -> void:
 	if _breakdown_sheet == null:
 		return
-	_breakdown_sheet.show_breakdown(title, target_path, chain_id)
+	var breakdown: Dictionary = Simulation.query_effect_breakdown(target_path, chain_id)
+	var entries: Array = breakdown.get("entries", [])
+	var rows: Array = []
+	if entries.is_empty():
+		rows.append({"text": "No modifiers recorded yet."})
+	else:
+		rows.append({
+			"stat": "Base",
+			"value": _format_traced(target_path, breakdown.get("base_value")),
+		})
+		for i in range(entries.size()):
+			if not entries[i] is Dictionary:
+				continue
+			var entry: Dictionary = entries[i]
+			var source: String = str(entry.get("source_id", ""))
+			rows.append({
+				"stat": "%02d %s · %s" % [
+					i + 1,
+					source if source != "" else "unknown",
+					str(entry.get("operation", "")),
+				],
+				"value": "%s → %s" % [
+					_format_traced(target_path, entry.get("before")),
+					_format_traced(target_path, entry.get("after")),
+				],
+			})
+			var event_name: String = str(entry.get("event_name", ""))
+			if event_name != "":
+				rows.append({"text": "   %s" % event_name})
+		rows.append({
+			"stat": "Final",
+			"value": _format_traced(target_path, breakdown.get("final_value")),
+		})
+	_breakdown_sheet.show_detail(title, "effect trace", rows)
+
+
+func _format_traced(target_path: String, value: Variant) -> String:
+	if value == null:
+		return "—"
+	match target_path:
+		"compute.token_rate":
+			return NumberFormat.format_token_rate(float(value))
+		"job.reward":
+			return NumberFormat.format_cash(float(value))
+		_:
+			return NumberFormat.format(float(value))
 
 
 func _on_choose_contract() -> void:

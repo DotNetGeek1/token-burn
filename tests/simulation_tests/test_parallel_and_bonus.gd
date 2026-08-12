@@ -14,6 +14,7 @@ func run() -> void:
 	_test_two_contracts_run_through_two_workflows_in_one_prompt()
 	_test_early_delivery_pays_a_bonus()
 	_test_shipping_unfinished_earns_no_early_bonus()
+	_test_the_prompt_that_finishes_a_contract_still_costs_a_deadline()
 
 
 func _sim(seed_value: int) -> Node:
@@ -193,4 +194,97 @@ func _test_shipping_unfinished_earns_no_early_bonus() -> void:
 	assert_almost_eq(
 		JobSystem.early_delivery_bonus(cut_short), 0.0, 0.0001,
 		"Cutting the scope to hit a date is not the same as being quick"
+	)
+
+
+## A rig, a contract and the systems around them, without the run lifecycle:
+## these tests are about what one prompt does to a deadline, so the round-end
+## machinery would only get in the way.
+class DeadlineRig extends RefCounted:
+	var jobs := JobSystem.new()
+	var board := BoardSystem.new()
+	var compute := ComputeSystem.new()
+	var heat := HeatSystem.new()
+	var economy := EconomySystem.new()
+	var resolver := EffectResolver.new()
+	var rng := DeterministicRng.new(8801)
+	var state := RunState.new()
+	var job: Dictionary
+
+	func _init(deadline: int, requirement: float) -> void:
+		board.ensure_board(state, ContentDatabase)
+		state.economy["cash"] = 1000000.0
+		job = {
+			"id": "job.deadline",
+			"name": "Deadline Probe",
+			"token_requirement": requirement,
+			"tokens_remaining": requirement,
+			"deadline_prompts": deadline,
+			"prompts_remaining": deadline,
+			"reward": 500.0,
+			"quality": 0.0,
+			"quality_threshold": 0.0,
+			"revision_risk": 0.0,
+			"bug_chance": 0.0,
+		}
+		state.business["active_jobs"] = [job]
+		state.business["focused_job_id"] = "job.deadline"
+
+	func burn() -> Dictionary:
+		return jobs.run_burn(
+			state, rng, resolver, [], {}, compute, heat, economy, board
+		)
+
+
+## The bug this closes: `end_prompt` skipped finished contracts before taking
+## the prompt off their deadline, so work delivered on the last allowed prompt
+## looked like it had a prompt in hand and collected an early bonus for it.
+func _test_the_prompt_that_finishes_a_contract_still_costs_a_deadline() -> void:
+	var last_prompt := DeadlineRig.new(1, 1.0)
+	last_prompt.burn()
+	assert_eq(
+		float(last_prompt.job.get("tokens_remaining", -1.0)), 0.0,
+		"One prompt is enough to finish a one-token contract"
+	)
+	assert_eq(
+		int(last_prompt.job.get("prompts_remaining", -1)), 0,
+		"And that prompt comes off the deadline like any other"
+	)
+	assert_almost_eq(
+		JobSystem.early_delivery_bonus(last_prompt.job), 0.0, 0.0001,
+		"Delivering on the deadline is on time, not early"
+	)
+
+	var missed := DeadlineRig.new(1, 1.0e9)
+	missed.burn()
+	assert_true(
+		float(missed.job.get("tokens_remaining", 0.0)) > 0.0,
+		"A contract far too big for one prompt is still unfinished"
+	)
+	assert_eq(int(missed.job.get("prompts_remaining", -1)), 0, "With no prompts left to finish it in")
+
+	var early := DeadlineRig.new(2, 1.0)
+	early.burn()
+	assert_eq(
+		int(early.job.get("prompts_remaining", -1)), 1,
+		"Finishing a two-prompt contract on the first prompt leaves one to spare"
+	)
+	assert_true(
+		JobSystem.early_delivery_bonus(early.job) > 0.0,
+		"Which is what an early-delivery bonus is for"
+	)
+
+	var on_time := DeadlineRig.new(2, 1.0e9)
+	on_time.burn()
+	assert_eq(int(on_time.job.get("prompts_remaining", -1)), 1, "The first prompt of two is spent")
+	on_time.job["tokens_remaining"] = 1.0
+	on_time.burn()
+	assert_eq(
+		float(on_time.job.get("tokens_remaining", -1.0)), 0.0,
+		"The second finishes the work"
+	)
+	assert_eq(int(on_time.job.get("prompts_remaining", -1)), 0, "Using the last prompt to do it")
+	assert_almost_eq(
+		JobSystem.early_delivery_bonus(on_time.job), 0.0, 0.0001,
+		"So there is nothing spare to pay a bonus on"
 	)

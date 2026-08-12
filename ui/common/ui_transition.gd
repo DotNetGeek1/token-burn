@@ -80,14 +80,19 @@ static func stagger(container: Node) -> void:
 		index += 1
 
 
-## Counts a money figure up from zero. The reward is the point of a debrief, so
-## it lands as an event rather than as text that was always on screen.
-static func count_up(label: Label, amount: float, seconds: float = 0.7) -> void:
+## Counts a headline figure up from zero. The number a report was written to
+## deliver — the round's fee, the run's legacy — lands as an event rather than
+## as text that was always on screen. `printer` renders the running value; it
+## defaults to money, which is what most of these figures are.
+static func count_up(
+	label: Label, amount: float, seconds: float = 0.7, printer: Callable = Callable()
+) -> void:
+	var render: Callable = printer if printer.is_valid() else NumberFormat.format_cash
 	if amount <= 0.0:
-		label.text = NumberFormat.format_cash(amount)
+		label.text = str(render.call(amount))
 		return
 	var shown: Callable = func(value: float) -> void:
-		label.text = NumberFormat.format_cash(value)
+		label.text = str(render.call(value))
 	var tween: Tween = label.create_tween()
 	tween.tween_method(shown, 0.0, amount, seconds).set_trans(Tween.TRANS_QUINT).set_ease(
 		Tween.EASE_OUT

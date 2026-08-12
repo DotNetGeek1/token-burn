@@ -104,7 +104,7 @@ const EMBER_COUNT := 22
 )
 @onready var side_panels: VBoxContainer = $Stage/Terminal/Inner/Body/Columns/SidePanels
 
-var _detail_sheet: DetailSheet = null
+var _detail_sheet: ConsoleSheet = null
 var _rows: Array[ConsoleMenuRow] = []
 var _panels: Dictionary = {}
 var _glass_uv: Rect2 = Rect2()
@@ -120,7 +120,7 @@ func _ready() -> void:
 	add_to_group("title_screen")
 	_build_scene()
 	_build_panels()
-	_detail_sheet = preload("res://ui/common/detail_sheet.tscn").instantiate()
+	_detail_sheet = ConsoleSheet.new()
 	add_child(_detail_sheet)
 	refresh()
 	_layout_stage()

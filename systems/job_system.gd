@@ -275,13 +275,18 @@ func run_burn(
 	# transition worth telling anyone about. `end_prompt`'s own bookkeeping
 	# runs afterwards and never itself produces this transition, so it cannot
 	# be told apart from a job that had already finished a prompt earlier.
-	if mode == ResolveMode.COMMIT:
-		for job in lanes:
-			var job_id: String = str(job.get("id", ""))
-			if was_complete_before.get(job_id, false):
-				continue
-			if float(job.get("tokens_remaining", 0.0)) <= 0.0:
-				EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job_id})
+	for job in lanes:
+		var job_id: String = str(job.get("id", ""))
+		if was_complete_before.get(job_id, false):
+			continue
+		# The contract was live when this prompt started, so this prompt comes
+		# off its deadline whether or not it was the one that finished it.
+		# `end_prompt` skips finished work, so without this a contract
+		# delivered on its very last allowed prompt kept a phantom spare
+		# prompt and collected an early-delivery bonus it had not earned.
+		job["_deadline_pending"] = true
+		if mode == ResolveMode.COMMIT and float(job.get("tokens_remaining", 0.0)) <= 0.0:
+			EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job_id})
 	primary = primary.duplicate(true)
 	primary["lanes"] = lane_reports
 	primary["lane_count"] = lane_reports.size()
@@ -522,7 +527,12 @@ func end_prompt(
 	for job in active_jobs:
 		if not job is Dictionary:
 			continue
-		if float(job.get("tokens_remaining", 0.0)) <= 0.0:
+		# Set by the burn for every contract that was live when the prompt
+		# started, so work finished by this prompt still pays for it.
+		var worked_this_prompt: bool = bool(job.get("_deadline_pending", false))
+		job.erase("_deadline_pending")
+		var complete: bool = float(job.get("tokens_remaining", 0.0)) <= 0.0
+		if complete and not worked_this_prompt:
 			continue
 		# A deadline already at zero has had its last action: it failed the
 		# prompt that took it there and does not get another free one.
@@ -532,7 +542,7 @@ func end_prompt(
 		job["time_remaining_ratio"] = maxf(
 			0.0, float(job.get("prompts_remaining", 0)) / maxf(1.0, float(job.get("deadline_prompts", 4)))
 		)
-		if int(job.get("prompts_remaining", 0)) <= 0:
+		if not complete and int(job.get("prompts_remaining", 0)) <= 0:
 			messages.append("%s: deadline missed." % job.get("name", "Job"))
 
 	run_state.business["active_jobs"] = active_jobs
@@ -743,6 +753,19 @@ static func quality_payout_multiplier(quality: float, threshold: float) -> float
 	return 1.0 + bonus_max * clampf((quality - threshold) / bonus_span, 0.0, 1.0)
 
 
+## The quality the client actually receives, as opposed to the quality the
+## pipeline produced: work cut short is only worth the fraction that shipped,
+## and defects the player knew about and shipped anyway cost three points each.
+## Read without mutating so the Ascension contract can be judged on the same
+## number the fee is paid against, before payout has settled it.
+static func delivered_quality(job: Dictionary) -> float:
+	var quality: float = float(job.get("quality", 0.0))
+	if bool(job.get("shipped_unfinished", false)):
+		quality *= clampf(float(job.get("shipped_progress", 1.0)), 0.0, 1.0)
+	quality -= 3.0 * float(maxi(0, int(job.get("known_bugs", 0))))
+	return maxf(0.0, quality)
+
+
 ## What delivery costs: work that went out unfinished, defects the client can
 ## see, and the ones nobody looked for. Hidden bugs are resolved here and only
 ## here, which is what makes skipping the tests a gamble rather than a saving.
@@ -756,16 +779,18 @@ func _delivery_penalty(
 	var multiplier: float = 1.0
 	var job_name: String = str(job.get("name", "Job"))
 
+	# Settled in one place so the recorded figure can never drift from the one
+	# the Ascension contract was judged against.
+	job["quality"] = delivered_quality(job)
+
 	if bool(job.get("shipped_unfinished", false)):
 		var shipped: float = clampf(float(job.get("shipped_progress", 1.0)), 0.0, 1.0)
 		multiplier *= shipped
-		job["quality"] = float(job.get("quality", 0.0)) * shipped
 		messages.append("%s: shipped at %d%% — paid for what was delivered." % [job_name, int(shipped * 100.0)])
 
 	var known: int = maxi(0, int(job.get("known_bugs", 0)))
 	if known > 0:
 		multiplier *= maxf(0.3, 1.0 - 0.08 * float(known))
-		job["quality"] = maxf(0.0, float(job.get("quality", 0.0)) - 3.0 * float(known))
 		messages.append("%s: shipped with %d known bug(s)." % [job_name, known])
 
 	var hidden: int = maxi(0, int(job.get("hidden_bugs", 0)))

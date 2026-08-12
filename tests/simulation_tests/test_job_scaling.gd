@@ -47,3 +47,43 @@ func run() -> void:
 		"Offers scale to current token rate"
 	)
 	sim.free()
+
+	_test_hard_pays_less_for_more_work(job_system)
+
+
+## Difficulty is snapshotted into the run's flags at reset, and job scaling is
+## where it is meant to bite. Easy to reintroduce silently, so the relationship
+## is asserted directly: the same contract, the same seed, both difficulties.
+##
+## The contract is synthetic on purpose. Shipped tier-0 postings sit against the
+## tier's work-prompt ceiling and the reward floor that guarantees a contract
+## pays for the round it occupies, and both clamps hide the difficulty
+## multipliers this test exists to measure.
+func _test_hard_pays_less_for_more_work(job_system: JobSystem) -> void:
+	var job_def := JobDefinition.new()
+	job_def.id = "job.difficulty_probe"
+	job_def.name = "Difficulty Probe"
+	job_def.reward = 100000.0
+	job_def.token_requirement = 2000000.0
+
+	var normal := RunState.new()
+	normal.flags["difficulty"] = "normal"
+	var hard := RunState.new()
+	hard.flags["difficulty"] = "hard"
+	for state in [normal, hard]:
+		state.compute["token_rate"] = 1000000.0
+
+	var normal_job: Dictionary = job_system._scale_job(
+		job_def, 8, ContentDatabase, {}, normal, DeterministicRng.new(31337)
+	)
+	var hard_job: Dictionary = job_system._scale_job(
+		job_def, 8, ContentDatabase, {}, hard, DeterministicRng.new(31337)
+	)
+	assert_true(
+		float(hard_job.get("reward", 0.0)) < float(normal_job.get("reward", 0.0)),
+		"A hard run is paid less for the same contract"
+	)
+	assert_true(
+		float(hard_job.get("token_requirement", 0.0)) > float(normal_job.get("token_requirement", 0.0)),
+		"And has to burn more to deliver it"
+	)

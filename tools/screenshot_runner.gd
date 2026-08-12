@@ -84,6 +84,14 @@ func _ready() -> void:
 		Simulation.run_state.calendar["round"] = 12
 		Simulation._end_run(true)
 		main.refresh_all()
+		# Winning also puts him on the phone about it; the shot wanted here is
+		# the report underneath the handset.
+		main._investor_call.hide_overlay()
+	elif tab == "call":
+		# The handset held up over the room. He types his lines out at reading
+		# speed, so the shot has to wait for the paragraph to finish arriving.
+		main.investor_says("terms")
+		settle_seconds = maxf(settle_seconds, 1.2)
 	elif tab == "achievements":
 		# A scratch profile rather than the developer's own, with a couple of
 		# awards earned so the shot shows both states side by side.

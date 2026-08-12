@@ -21,6 +21,7 @@ func run() -> void:
 	_test_the_contract_belongs_to_the_run_s_location()
 	_test_progress_counts_from_the_first_prompt()
 	_test_the_quality_bar_gates_completion()
+	_test_a_real_final_job_decides_the_quality_bar()
 	_test_the_year_running_out_ends_the_run()
 	_test_a_finished_contract_beats_the_deadline_to_it()
 	_test_there_is_no_overtime_left_to_fall_into()
@@ -156,6 +157,70 @@ func _test_the_quality_bar_gates_completion() -> void:
 		"Clearing the bar on average completes it"
 	)
 	sim.free()
+
+
+## The original bug was the contract being judged before the job that finished
+## it had been counted. These two cases drive that ordering with a real
+## completed contract rather than a hand-set average, and pin down which
+## quality is canonical: the one the client receives, after the known bugs the
+## player chose to ship have come off it.
+func _test_a_real_final_job_decides_the_quality_bar() -> void:
+	var bar: float = float(
+		ContentDatabase.get_ascension_contract("ascension.first_scale_up").get("quality_min", 0.0)
+	)
+	assert_true(bar > 0.0, "The bedroom's contract has a quality bar to test against")
+
+	var clears: Node = _sim()
+	clears.start_run(5041)
+	_meet_burn_only(clears, "ascension.first_scale_up")
+	clears.run_state.business["active_jobs"] = [_delivered_job(bar + 10.0, 0)]
+	clears.debug_finish_prompt({"ok": true, "messages": []})
+	assert_true(
+		bool(clears.run_state.flags.get("victory", false)),
+		"A finished contract delivered above the bar wins the run on the prompt that finished it"
+	)
+	clears.free()
+
+	var misses: Node = _sim()
+	misses.start_run(5042)
+	_meet_burn_only(misses, "ascension.first_scale_up")
+	# Same pipeline quality, but four known bugs went out with it — three
+	# points each, which is what drops the delivery under the bar.
+	misses.run_state.business["active_jobs"] = [_delivered_job(bar + 10.0, 4)]
+	misses.debug_finish_prompt({"ok": true, "messages": []})
+	assert_false(
+		bool(misses.run_state.flags.get("victory", false)),
+		"The same work shipped with known bugs does not clear the bar"
+	)
+	assert_almost_eq(
+		float(misses.run_state.ascension.get("quality_sum", 0.0)), bar - 2.0, 0.01,
+		"Because the contract is judged on delivered quality, not what the pipeline produced"
+	)
+	misses.free()
+
+
+## The burn side of the contract met, with the quality average left empty so the
+## job under test is the only thing deciding it.
+func _meet_burn_only(sim: Node, contract_id: String) -> void:
+	var contract: Dictionary = ContentDatabase.get_ascension_contract(contract_id)
+	sim.run_state.statistics["lifetime_tokens"] = (
+		float(sim.run_state.ascension.get("baseline_tokens", 0.0))
+		+ float(contract.get("total_burn", 0.0)) + 1.0
+	)
+	sim.run_state.ascension["quality_sum"] = 0.0
+	sim.run_state.ascension["quality_count"] = 0
+
+
+func _delivered_job(quality: float, known_bugs: int) -> Dictionary:
+	return {
+		"id": "job.final",
+		"name": "Final Contract",
+		"token_requirement": 1000.0,
+		"tokens_remaining": 0.0,
+		"quality": quality,
+		"known_bugs": known_bugs,
+		"hidden_bugs": 0,
+	}
 
 
 ## The reported bug, now the rule: the year is the deadline and running it out

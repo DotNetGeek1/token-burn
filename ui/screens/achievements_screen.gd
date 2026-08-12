@@ -1,4 +1,4 @@
-extends Control
+extends ConsoleOverlay
 
 ## The trophy cabinet: every award, whether it has been earned, and what earning
 ## it hands over.
@@ -7,17 +7,16 @@ extends Control
 ## player would attempt on purpose, so the screen's job is to make the shape of
 ## the collection legible: what is already yours, what is still out there, and
 ## which modules are waiting behind which disaster.
+##
+## The cabinet prints as one listing with a category column rather than as a
+## grid of tiles, because the question the player brings to it — how much of the
+## set is missing — is answered by a column of EARNED/LOCKED, not by artwork.
 
 const CATEGORY_ORDER := ["milestone", "disaster", "secret"]
 const CATEGORY_LABELS := {
 	"milestone": "MILESTONES",
 	"disaster": "DISASTERS",
 	"secret": "CLASSIFIED",
-}
-const CATEGORY_ACCENTS := {
-	"milestone": "success",
-	"disaster": "danger",
-	"secret": "perk",
 }
 const FILTERS := [
 	{"id": "all", "label": "ALL"},
@@ -30,104 +29,122 @@ const FILTERS := [
 const REDACTED_NAME := "? ? ?"
 const REDACTED_HINT := "Classified. You will know when it happens."
 
-@onready var progress_label: Label = $Panel/Margin/VBox/ProgressLabel
-@onready var filter_row: HBoxContainer = $Panel/Margin/VBox/FilterRow
-@onready var content: VBoxContainer = $Panel/Margin/VBox/Scroll/Content
-@onready var close_button: GameButton = $Panel/Margin/VBox/CloseButton
-
-var _detail_sheet: DetailSheet = null
+var _filter_row: HBoxContainer = null
+var _filter_rows: Array[ConsoleMenuRow] = []
+var _blurb: Label = null
+var _table: ConsoleTable = null
+var _detail_sheet: ConsoleSheet = null
 var _filter: String = "all"
 
 
 func _ready() -> void:
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_to_group("flow_overlay")
-	close_button.pressed.connect(hide_overlay)
-	_detail_sheet = preload("res://ui/common/detail_sheet.tscn").instantiate()
+	super._ready()
+	setup("Trophy Cabinet")
+	_build_body()
+	_detail_sheet = ConsoleSheet.new()
 	add_child(_detail_sheet)
-	_build_filters()
 
 
-func open() -> void:
-	_refresh()
-	UiTransition.enter(self)
-	UiTransition.stagger(content)
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	get_tree().call_group("main_ui", "sync_overlay_input")
+func _build_body() -> void:
+	var body: VBoxContainer = content()
+
+	_blurb = ConsoleStyle.paragraph(
+		"Awards are permanent. Some of them hand over a module that joins the draft pool in every run from then on.",
+		ConsoleStyle.FONT_TINY
+	)
+	body.add_child(_blurb)
+
+	_filter_row = HBoxContainer.new()
+	_filter_row.add_theme_constant_override("separation", 8)
+	body.add_child(_filter_row)
+	for i in range(FILTERS.size()):
+		var filter: Dictionary = FILTERS[i]
+		var row := ConsoleMenuRow.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_filter_row.add_child(row)
+		row.index_label = str(i + 1)
+		row.headline = str(filter["label"])
+		row.pressed.connect(_on_filter.bind(str(filter["id"])))
+		_filter_rows.append(row)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(scroll)
+
+	_table = ConsoleTable.new()
+	_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_table.row_selected.connect(_on_row_selected)
+	scroll.add_child(_table)
+	_table.set_columns([
+		{"label": "award", "weight": 1.8},
+		{"label": "status", "weight": 0.7},
+		{"label": "how", "weight": 3.0},
+		{"label": "unlocks", "weight": 1.2},
+	])
 
 
-func hide_overlay() -> void:
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	get_tree().call_group("main_ui", "sync_overlay_input")
+func refresh() -> void:
+	_refresh_filters()
+	_refresh_progress()
+	_refresh_list()
+	_apply_body_metrics()
 
 
-func _build_filters() -> void:
-	for filter in FILTERS:
-		var button := Button.new()
-		button.text = str(filter["label"])
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", UiThemeBuilder.FONT_BODY)
-		button.clip_text = true
-		button.pressed.connect(_on_filter.bind(str(filter["id"])))
-		filter_row.add_child(button)
-	_style_filters()
+func fit_console() -> void:
+	super.fit_console()
+	_apply_body_metrics()
+
+
+## The body's own widgets are not part of the shell, so they are re-scaled
+## alongside it whenever the room is laid out.
+func _apply_body_metrics() -> void:
+	var scale: float = console_scale()
+	if _blurb != null:
+		_blurb.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
+	var font_small: int = ConsoleMetrics.font_small(scale)
+	var height: int = ConsoleMetrics.row_height(scale)
+	var pad_h: int = ConsoleMetrics.pad_h(scale)
+	for row in _filter_rows:
+		row.set_metrics(font_small, height, pad_h)
+	if _table != null:
+		_table.set_metrics(scale)
 
 
 func _on_filter(filter_id: String) -> void:
-	UiSound.play("tap")
 	_filter = filter_id
-	_style_filters()
+	_refresh_filters()
 	_refresh_list()
-	UiTransition.stagger(content)
+	_apply_body_metrics()
 
 
-func _style_filters() -> void:
-	var index: int = 0
-	for child in filter_row.get_children():
-		if child is Button:
-			var active: bool = str(FILTERS[index]["id"]) == _filter
-			child.theme_type_variation = &"PrimaryButton" if active else &"SecondaryButton"
-			index += 1
+func _refresh_filters() -> void:
+	for i in range(_filter_rows.size()):
+		_filter_rows[i].set_selected(str(FILTERS[i]["id"]) == _filter)
 
 
-func _refresh() -> void:
-	_refresh_progress()
-	_refresh_list()
-
-
+## How much of the set is in the cabinet, reported in the header where the
+## machine reports its state.
 func _refresh_progress() -> void:
 	var total: int = ContentDatabase.achievements.size()
 	var earned: int = 0
 	for achievement in ContentDatabase.achievements:
 		if MetaProgress.has_achievement(str(achievement.get("id", ""))):
 			earned += 1
-	progress_label.text = "%d / %d EARNED" % [earned, total]
+	set_context("%d / %d EARNED" % [earned, total])
 
 
 func _refresh_list() -> void:
-	for child in content.get_children():
-		content.remove_child(child)
-		child.queue_free()
-	var columns: int = UiThemeBuilder.tile_columns(size.x)
+	_table.clear()
 	for category in CATEGORY_ORDER:
 		if _filter != "all" and _filter != category:
 			continue
 		var entries: Array = _entries_in(category)
 		if entries.is_empty():
 			continue
-		content.add_child(_section_label(category, entries))
-		var grid := GridContainer.new()
-		grid.columns = columns
-		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_theme_constant_override("h_separation", UiThemeBuilder.SPACE_SM)
-		grid.add_theme_constant_override("v_separation", UiThemeBuilder.SPACE_SM)
-		content.add_child(grid)
+		_table.add_note(_section_text(category, entries))
 		for achievement in entries:
-			var tile: Control = _achievement_row(achievement)
-			tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			grid.add_child(tile)
+			_add_row(achievement)
 
 
 func _entries_in(category: String) -> Array:
@@ -138,142 +155,59 @@ func _entries_in(category: String) -> Array:
 	return entries
 
 
-func _section_label(category: String, entries: Array) -> Control:
+func _section_text(category: String, entries: Array) -> String:
 	var earned: int = 0
 	for achievement in entries:
 		if MetaProgress.has_achievement(str(achievement.get("id", ""))):
 			earned += 1
-	var label := Label.new()
-	label.theme_type_variation = &"SectionLabel"
-	label.text = "%s · %d/%d" % [
+	return "%s · %d/%d" % [
 		str(CATEGORY_LABELS.get(category, category.to_upper())), earned, entries.size(),
 	]
-	label.add_theme_color_override(
-		"font_color", UiThemeBuilder.semantic(str(CATEGORY_ACCENTS.get(category, "neutral")))
-	)
-	return label
 
 
-func _achievement_row(achievement: Dictionary) -> Control:
+func _add_row(achievement: Dictionary) -> void:
 	var id: String = str(achievement.get("id", ""))
 	var earned: bool = MetaProgress.has_achievement(id)
 	var redacted: bool = bool(achievement.get("hidden", false)) and not earned
-
-	# A PanelContainer rather than a Button holding a layout: the row's height is
-	# whatever its wrapped text needs, and a Button does not grow for children it
-	# does not own. The tap target is a flat button stretched over the top, which
-	# the panel sizes to the same rect for free.
-	var card := PanelContainer.new()
-	# The same card surface the catalogue screens use, so the cabinet reads as one
-	# bank of hardware. An earned award lights its rail; a locked one does not.
-	var accent: String = str(
-		CATEGORY_ACCENTS.get(str(achievement.get("category", "")), "energy")
-	)
-	card.add_theme_stylebox_override(
-		"panel",
-		(
-			UiThemeBuilder.card_style_accent(UiThemeBuilder.semantic(accent))
-			if earned
-			else UiThemeBuilder.card_style()
-		)
-	)
-	var margin := MarginContainer.new()
-	for side in ["left", "right"]:
-		margin.add_theme_constant_override("margin_%s" % side, UiThemeBuilder.SPACE_MD)
-	for side in ["top", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, UiThemeBuilder.SPACE_SM)
-	card.add_child(margin)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", UiThemeBuilder.SPACE_MD)
-	margin.add_child(row)
-
-	var icon_rect := TextureRect.new()
-	icon_rect.texture = _icon_for(achievement, earned, redacted)
-	icon_rect.custom_minimum_size = Vector2(48, 48)
-	icon_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_rect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	# Unearned awards are the same art with the light off, so the cabinet reads
-	# as a set with gaps in it rather than as two unrelated lists.
-	icon_rect.modulate = Color.WHITE if earned else Color(0.42, 0.42, 0.5)
-	row.add_child(icon_rect)
-
-	var text_box := VBoxContainer.new()
-	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	text_box.add_theme_constant_override("separation", UiThemeBuilder.SPACE_XS)
-	row.add_child(text_box)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", UiThemeBuilder.SPACE_SM)
-	text_box.add_child(header)
-
-	var name_label := Label.new()
-	name_label.text = REDACTED_NAME if redacted else str(achievement.get("name", id))
-	name_label.theme_type_variation = &"TitleLabel"
-	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if not earned:
-		name_label.add_theme_color_override("font_color", UiThemeBuilder.color("grey"))
-	header.add_child(name_label)
-
-	var status_label := Label.new()
-	status_label.text = "EARNED" if earned else "LOCKED"
-	status_label.theme_type_variation = &"SectionLabel"
-	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_label.add_theme_color_override(
-		"font_color", UiThemeBuilder.semantic("success" if earned else "neutral")
-	)
-	header.add_child(status_label)
-
-	var hint_label := Label.new()
-	hint_label.text = REDACTED_HINT if redacted else str(achievement.get("hint", ""))
-	hint_label.theme_type_variation = &"MutedLabel"
-	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	text_box.add_child(hint_label)
-
-	var reward_text: String = _reward_text(achievement)
-	if reward_text != "" and not redacted:
-		var reward_label := Label.new()
-		reward_label.text = reward_text
-		reward_label.theme_type_variation = &"MutedLabel"
-		reward_label.add_theme_color_override("font_color", UiThemeBuilder.semantic("perk"))
-		text_box.add_child(reward_label)
-
-	var button := Button.new()
-	button.flat = true
-	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(_on_row_pressed.bind(achievement))
-	card.add_child(button)
-	return card
+	# An earned award prints at full brightness and a locked one is dimmed, so
+	# the gaps in the set are visible at a glance down the column.
+	var lit: Color = ConsoleStyle.PHOSPHOR if earned else ConsoleStyle.PHOSPHOR_DIM
+	# The listing only has room for the module's name; the sentence about what it
+	# does is printed on the sheet the row opens.
+	var operation: OperationDefinition = _reward_module(achievement)
+	_table.add_row([
+		{
+			"text": REDACTED_NAME if redacted else str(achievement.get("name", id)).to_upper(),
+			"color": lit,
+		},
+		{
+			"text": "EARNED" if earned else "LOCKED",
+			"color": ConsoleStyle.PHOSPHOR if earned else ConsoleStyle.PHOSPHOR_DIM,
+		},
+		{
+			"text": REDACTED_HINT if redacted else str(achievement.get("hint", "")),
+			"color": ConsoleStyle.PHOSPHOR_DIM,
+		},
+		{
+			"text": "" if redacted or operation == null else operation.name.to_upper(),
+			"color": ConsoleStyle.PHOSPHOR_DIM,
+		},
+	], id, lit)
 
 
-func _icon_for(achievement: Dictionary, earned: bool, redacted: bool) -> Texture2D:
-	if redacted:
-		return AssetCatalog.achievement_icon("locked")
-	var icon: Texture2D = AssetCatalog.achievement_icon(str(achievement.get("icon", "")))
-	if icon != null:
-		return icon
-	return AssetCatalog.achievement_icon("trophy" if earned else "locked")
-
-
-## What the award hands over, phrased as the module it puts into the pool rather
-## than as an id nobody would recognise.
-func _reward_text(achievement: Dictionary) -> String:
+## The module the award puts into the draft pool, or null for the awards that
+## are their own reward.
+func _reward_module(achievement: Dictionary) -> OperationDefinition:
 	var reward: Dictionary = Dictionary(achievement.get("reward", {}))
 	if str(reward.get("type", "none")) != "unlock_module":
-		return ""
-	var operation: OperationDefinition = ContentDatabase.get_operation(
-		str(reward.get("operation_id", ""))
-	)
-	if operation == null:
-		return ""
-	return "Unlocks module · %s" % operation.name
+		return null
+	return ContentDatabase.get_operation(str(reward.get("operation_id", "")))
 
 
-func _on_row_pressed(achievement: Dictionary) -> void:
-	UiSound.play("tap")
+func _on_row_selected(meta: Variant) -> void:
+	var achievement: Dictionary = ContentDatabase.get_achievement(str(meta))
+	if achievement.is_empty():
+		return
 	var id: String = str(achievement.get("id", ""))
 	var earned: bool = MetaProgress.has_achievement(id)
 	var redacted: bool = bool(achievement.get("hidden", false)) and not earned
@@ -283,11 +217,8 @@ func _on_row_pressed(achievement: Dictionary) -> void:
 	else:
 		rows.append({"text": str(achievement.get("description", ""))})
 		rows.append({"stat": "How", "value": str(achievement.get("hint", ""))})
-	var reward_text: String = _reward_text(achievement)
-	if reward_text != "" and not redacted:
-		var operation: OperationDefinition = ContentDatabase.get_operation(
-			str(Dictionary(achievement.get("reward", {})).get("operation_id", ""))
-		)
+	var operation: OperationDefinition = _reward_module(achievement)
+	if operation != null and not redacted:
 		rows.append({
 			"rule": "Reward · %s" % operation.name,
 			"text": "%s Joins the angel draft pool in every run once this award is earned." % _module_summary(operation),
@@ -299,7 +230,7 @@ func _on_row_pressed(achievement: Dictionary) -> void:
 		rows,
 		[],
 		"",
-		UiThemeBuilder.semantic("success" if earned else "neutral")
+		ConsoleStyle.PHOSPHOR if earned else ConsoleStyle.PHOSPHOR_DIM
 	)
 
 

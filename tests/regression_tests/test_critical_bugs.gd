@@ -12,6 +12,7 @@ func run() -> void:
 	_test_mixed_job_finalization()
 	_test_multi_job_tick_counts_once()
 	_test_a_granted_module_does_not_replace_the_starters()
+	_test_previews_emit_no_domain_events()
 
 
 func _make_sim() -> Node:
@@ -151,3 +152,56 @@ func _test_a_granted_module_does_not_replace_the_starters() -> void:
 	assert_true(granted in owned, "The granted module is still there")
 	for starter in ContentDatabase.starter_operations():
 		assert_true(str(starter) in owned, "And so is starter %s" % str(starter))
+
+
+## A preview is the board screen asking what would happen. Anything listening on
+## the bus — achievements, perks, the HUD — must not be told it did happen, or
+## simply opening the burn readout awards progress the player never earned.
+func _test_previews_emit_no_domain_events() -> void:
+	var sim := _make_sim()
+	sim.start_run(140)
+	sim.run_state.economy["cash"] = 1000000.0
+	sim.run_state.business["active_jobs"] = [{
+		"id": "job.preview_probe",
+		"name": "Preview Probe",
+		"token_requirement": 1.0,
+		"tokens_remaining": 1.0,
+		"deadline_prompts": 8,
+		"prompts_remaining": 8,
+		"reward": 500.0,
+		"quality": 0.0,
+		"quality_threshold": 0.0,
+		"revision_risk": 1.0,
+		"bug_chance": 1.0,
+	}]
+	sim.run_state.business["focused_job_id"] = "job.preview_probe"
+	sim.phase = sim.Phase.IN_ROUND
+	sim._work_running = true
+	sim._board_system.ensure_board(sim.run_state, ContentDatabase)
+	# Hot enough that a prompt is guaranteed to cross the throttle threshold,
+	# so the heat event is genuinely on the table for the preview to suppress.
+	sim.run_state.compute["heat"] = float(sim.run_state.compute.get("heat_capacity", 100.0))
+
+	var seen: Array[String] = []
+	var connections: Array = [
+		[EventBus.tokens_generated, func(_a: float) -> void: seen.append("tokens.generated")],
+		[EventBus.tokens_consumed, func(_a: float) -> void: seen.append("tokens.consumed")],
+		[EventBus.quality_calculated, func(_v: float) -> void: seen.append("quality.calculated")],
+		[EventBus.bug_generated, func() -> void: seen.append("bug.generated")],
+		[EventBus.job_completed, func(_id: String) -> void: seen.append("job.completed")],
+		[EventBus.heat_threshold_crossed, func(_l: float) -> void: seen.append("heat.threshold_crossed")],
+	]
+	for pair in connections:
+		pair[0].connect(pair[1])
+
+	var burn: Dictionary = sim.preview_burn()
+	assert_true(bool(burn.get("ok", false)), "The burn previews")
+	assert_true(seen.is_empty(), "preview_burn() tells the bus nothing: %s" % str(seen))
+
+	var cool: Dictionary = sim.preview_cool()
+	assert_true(bool(cool.get("ok", false)), "The cool previews")
+	assert_true(seen.is_empty(), "preview_cool() tells the bus nothing either: %s" % str(seen))
+
+	for pair in connections:
+		pair[0].disconnect(pair[1])
+	sim.free()

@@ -21,6 +21,9 @@ const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 ## the phosphor the recessed meters glow with.
 const MARKER_INK := Color(0.16, 0.17, 0.20)
 const MARKER_DONE := Color(0.10, 0.42, 0.24)
+## The other pen on the tray, for the line that has stopped being a note to self
+## and started being a problem.
+const MARKER_URGENT := Color(0.66, 0.14, 0.16)
 
 ## Catalog key this prop was built for. Only used for debugging and tooltips.
 var prop_key: String = ""
@@ -107,10 +110,19 @@ func _fit_to_housing() -> void:
 		"font_size", clampi(int(height * (0.3 if _caption.visible else 0.5)), 10, 20)
 	)
 	var columns: int = 1
+	var written: int = 0
 	for child in _checklist.get_children():
-		columns = maxi(columns, (child as Label).text.length())
+		var line: Label = child
+		if not line.visible:
+			continue
+		written += 1
+		columns = maxi(columns, line.text.length())
+	# Sized against however many lines are actually on the board plus room for
+	# the caption above them, rather than against a fixed guess: a board given
+	# more to say has to write smaller, not run off the bottom of itself.
+	var rows: float = maxf(8.5, float(written) + 2.0)
 	var line_size: int = clampi(
-		mini(int(height / 8.5), int((size.x - 16.0) / (float(columns) * 0.58))),
+		mini(int(height / rows), int((size.x - 16.0) / (float(columns) * 0.58))),
 		line_floor,
 		20
 	)
@@ -186,13 +198,26 @@ func set_readout(caption: String, value: String, value_color: Color) -> void:
 ## `notes` are written underneath in the same marker but without a box, for
 ## things that are being tracked rather than ticked off — the investor's
 ## contract and how much of it is burned.
-func set_checklist(caption: String, lines: Array, notes: Array = []) -> void:
+## `ledger` goes above the list, for the standing figures the board is kept in
+## the corner of the eye for at all.
+func set_checklist(
+	caption: String, lines: Array, notes: Array = [], ledger: Array = []
+) -> void:
 	if _caption == null:
 		return
 	_caption.text = caption
 	_value.visible = false
 	_checklist.visible = true
 	var written: Array = []
+	for entry in ledger:
+		# A ledger line may name the pen it is written in; most are in the
+		# ordinary one.
+		if entry is Array and (entry as Array).size() > 1:
+			written.append([str(entry[0]), false, Color(entry[1])])
+		else:
+			written.append([str(entry), false])
+	if not ledger.is_empty():
+		written.append(["", false])
 	for entry in lines:
 		var row: Array = Array(entry)
 		var done: bool = row.size() > 1 and bool(row[1])
@@ -210,11 +235,13 @@ func set_checklist(caption: String, lines: Array, notes: Array = []) -> void:
 		if index >= written.size():
 			label.visible = false
 			continue
+		var row: Array = written[index]
 		label.visible = true
-		label.text = str(written[index][0])
-		label.add_theme_color_override(
-			"font_color", MARKER_DONE if bool(written[index][1]) else MARKER_INK
-		)
+		label.text = str(row[0])
+		var ink: Color = MARKER_DONE if bool(row[1]) else MARKER_INK
+		if row.size() > 2:
+			ink = Color(row[2])
+		label.add_theme_color_override("font_color", ink)
 	# Sized once the lines are written, because how wide the longest one is is
 	# what the type has to fit inside.
 	_fit_to_housing()

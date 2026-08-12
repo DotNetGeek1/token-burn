@@ -131,9 +131,11 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 		run_state.economy["debt"] = float(run_state.economy.get("debt", 0.0)) + debt_added
 		run_state.economy["cash"] = 0.0
 		run_state.economy["rent_unpaid_streak"] = int(run_state.economy.get("rent_unpaid_streak", 0)) + 1
-	run_state.economy["cloud_surcharge_liability"] = maxf(
-		0.0, float(run_state.economy.get("cloud_surcharge_liability", 0.0)) * 0.5
-	)
+	# The surcharge has been billed in full above — either paid out of cash or
+	# rolled into debt with the rest of the bill — so nothing of it survives
+	# into the next round. Carrying a fraction forward re-charged a settled
+	# debt every round until it rounded away, roughly doubling its true cost.
+	run_state.economy["cloud_surcharge_liability"] = 0.0
 	run_state.economy["last_round_costs"] = total + operating
 	bill_metadata["cash_after"] = float(run_state.economy.get("cash", 0.0))
 	bill_metadata["debt"] = float(run_state.economy.get("debt", 0.0))

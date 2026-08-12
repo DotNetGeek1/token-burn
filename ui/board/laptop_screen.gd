@@ -17,6 +17,9 @@ const REFERENCE_HEIGHT := 240.0
 const MOBILE_VIEWPORT_WIDTH := 900.0
 const MIN_SCALE_DESKTOP := 0.6
 const MIN_SCALE_MOBILE := 0.85
+## Below this the menu strip is no longer worth reading, so a laptop too narrow
+## for its own menu at this size clips rather than shrinking further.
+const NAV_MIN_FONT := 6
 
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
@@ -31,6 +34,8 @@ var _actions: GridContainer = null
 var _nav: HBoxContainer = null
 var _nav_rule: ColorRect = null
 var _nav_rows: Dictionary = {}
+var _nav_font: int = ConsoleStyle.FONT_SMALL
+var _nav_pad: int = 4
 var _rules: Array[ColorRect] = []
 var _stat_rows: Dictionary = {}
 var _screen_name: String = "DESK"
@@ -251,9 +256,6 @@ func set_nav(entries: Array) -> void:
 		row.index_label = str(entry.get("index", entry.get("key", "?"))).substr(0, 1).to_upper()
 		row.headline = str(entry.get("headline", ""))
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		# Across a strip an equal share clips the longer words, so each line
-		# claims width in proportion to what it has to print.
-		row.size_flags_stretch_ratio = float(row.headline.length() + 4)
 		var handler: Variant = entry.get("pressed")
 		if handler is Callable:
 			row.pressed.connect(handler)
@@ -318,6 +320,7 @@ func _fit_to_glass() -> void:
 				row_scale += 0.05
 			_try_row_scale(best, height, available)
 			_spread_commands(best, available)
+			_fit_nav()
 			return
 		if show_blurb:
 			show_blurb = false
@@ -325,6 +328,7 @@ func _fit_to_glass() -> void:
 		if _scale <= min_scale + 0.01:
 			_try_row_scale(MIN_ROW_SCALE, height, available)
 			_spread_commands(MIN_ROW_SCALE, available)
+			_fit_nav()
 			return
 		_scale = maxf(min_scale, _scale - 0.15)
 
@@ -403,10 +407,51 @@ func _apply_row_metrics(row_scale: float, command_slack: float = 0.0) -> void:
 			child.set_metrics(row_font, row_height, pad_h)
 	# The menu is reference rather than the thing the player came to press, so it
 	# sits a size below the context commands.
-	var nav_font: int = maxi(7, int(round(float(_font_size(ConsoleStyle.FONT_SMALL)) * row_scale)))
+	_nav_font = maxi(7, int(round(float(_font_size(ConsoleStyle.FONT_SMALL)) * row_scale)))
+	_nav_pad = maxi(2, pad_h / 2)
+	_apply_nav_metrics(_nav_font)
+
+
+func _apply_nav_metrics(font_size: int) -> void:
 	for child in _nav.get_children():
 		if child is ConsoleMenuRow:
-			child.set_metrics(nav_font, int(nav_font * 1.7), maxi(2, pad_h / 2))
+			var row: ConsoleMenuRow = child
+			row.set_metrics(font_size, int(font_size * 1.7), _nav_pad)
+			# Claimed outright rather than left to the container's share-out:
+			# every cell in the row clips itself, so a row given less than it
+			# needs loses the end of its word without anything reporting that
+			# the strip did not fit.
+			var needed: float = row.natural_width(font_size, _nav_pad)
+			row.custom_minimum_size.x = needed
+			row.size_flags_stretch_ratio = needed
+
+
+## The menu is the one row that has to fit across rather than down, and five
+## commands on a line run out of width long before the print-out runs out of
+## height. It is fitted last and on its own, so a narrow laptop loses a size off
+## its menu rather than losing the ends of the words in it.
+func _fit_nav() -> void:
+	if _nav == null or not _nav.visible:
+		return
+	var pad: int = maxi(6, int(10.0 * _scale))
+	var width: float = size.x - float(pad) * 2.0
+	if width <= 1.0:
+		return
+	# A pixel of slack per row, because each cell is clipped to its share and a
+	# strip that fits exactly still loses the last column of the last glyph.
+	var slack: float = float(_nav.get_child_count())
+	var font: int = _nav_font
+	while font > NAV_MIN_FONT and _nav_width(font) + slack > width:
+		font -= 1
+	_apply_nav_metrics(font)
+
+
+## What the strip needs at `font_size`. Measured off the rows' own claims, which
+## they have already staked as minimum widths, so this is the width the container
+## would actually be forced to.
+func _nav_width(font_size: int) -> float:
+	_apply_nav_metrics(font_size)
+	return _nav.get_combined_minimum_size().x
 
 
 ## Contract names are written by content and some of them are long, so the

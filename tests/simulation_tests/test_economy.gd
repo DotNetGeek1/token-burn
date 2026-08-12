@@ -33,6 +33,9 @@ func run() -> void:
 	_test_round_cost_accrual(economy)
 	_test_round_statement(economy)
 	_test_rent_is_flat_however_long_the_round_runs(economy)
+	_test_cloud_surcharge_is_zero_after_paid_round(economy)
+	_test_cloud_surcharge_is_not_rebilled_without_new_usage(economy)
+	_test_cloud_multiplier_applies_exactly_once(economy)
 	_test_power_scales_with_hardware()
 	_test_rent_scales_with_dwelling()
 
@@ -165,6 +168,68 @@ func _test_rent_is_flat_however_long_the_round_runs(economy: EconomySystem) -> v
 	assert_true(
 		float(long_statement.get("round_total", 0.0)) > float(short_statement.get("round_total", 0.0)),
 		"So a long round still costs more overall"
+	)
+
+
+## A surcharge that has been billed is settled. Carrying a fraction of it into
+## the next round re-charged the same metered spend over and over, so a cloud
+## build paid roughly twice what its invoice said.
+func _test_cloud_surcharge_is_zero_after_paid_round(economy: EconomySystem) -> void:
+	var state := RunState.new()
+	state.economy["cash"] = 10000.0
+	state.economy["round_rent"] = 400.0
+	state.economy["recurring_costs"] = 0.0
+	state.economy["cloud_surcharge_liability"] = 100.0
+	var statement: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
+	assert_eq(statement.get("cloud_bill", 0.0), 100.0, "The whole surcharge is billed once")
+	assert_eq(
+		state.economy.get("cloud_surcharge_liability", -1.0), 0.0,
+		"Nothing of a paid surcharge survives the round it was billed in"
+	)
+
+
+## The follow-up round: no cloud was metered, so no cloud is owed.
+func _test_cloud_surcharge_is_not_rebilled_without_new_usage(economy: EconomySystem) -> void:
+	var state := RunState.new()
+	state.economy["cash"] = 10000.0
+	state.economy["round_rent"] = 400.0
+	state.economy["recurring_costs"] = 0.0
+	state.economy["cloud_cost_per_prompt"] = 40.0
+	state.economy["power_cost_per_prompt"] = 0.0
+	economy.accrue_prompt_costs(state, {"cloud_cost_multiplier": 1.0})
+	var first: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
+	assert_eq(first.get("cloud_bill", 0.0), 10.0, "A metered cloud round owes 25% of what it burned")
+
+	state.economy["cloud_cost_per_prompt"] = 0.0
+	economy.accrue_prompt_costs(state, {"cloud_cost_multiplier": 1.0})
+	var second: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
+	assert_eq(second.get("cloud_bill", 0.0), 0.0, "A cloud-free round owes no surcharge at all")
+
+
+## The multiplier belongs to accrual. Billing at face value afterwards is what
+## keeps a doubled cloud price from being charged squared.
+func _test_cloud_multiplier_applies_exactly_once(economy: EconomySystem) -> void:
+	var plain := RunState.new()
+	var doubled := RunState.new()
+	for state in [plain, doubled]:
+		state.economy["cash"] = 10000.0
+		state.economy["round_rent"] = 0.0
+		state.economy["recurring_costs"] = 0.0
+		state.economy["power_cost_per_prompt"] = 0.0
+		state.economy["cloud_cost_per_prompt"] = 40.0
+	economy.accrue_prompt_costs(plain, {"cloud_cost_multiplier": 1.0})
+	economy.accrue_prompt_costs(doubled, {"cloud_cost_multiplier": 2.0})
+	assert_eq(
+		doubled.economy.get("costs_this_round", 0.0),
+		float(plain.economy.get("costs_this_round", 0.0)) * 2.0,
+		"Doubling the cloud price doubles the metered spend"
+	)
+	var plain_bill: Dictionary = economy.apply_round_bills(plain, {"cloud_cost_multiplier": 1.0})
+	var doubled_bill: Dictionary = economy.apply_round_bills(doubled, {"cloud_cost_multiplier": 2.0})
+	assert_eq(
+		float(doubled_bill.get("cloud_bill", 0.0)),
+		float(plain_bill.get("cloud_bill", 0.0)) * 2.0,
+		"And doubles the surcharge exactly once, rather than squaring it"
 	)
 
 

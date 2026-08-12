@@ -1,4 +1,4 @@
-extends Control
+extends ConsoleOverlay
 
 ## The contract this location is being played for, and how far through it the run
 ## is. There is nothing to decide here: the investor set the terms before the
@@ -8,65 +8,132 @@ extends Control
 ## Completing it wins the run and opens the next location. Reaching the end of
 ## the year without it ends the run. Both halves are said plainly, because a
 ## player who does not know the deadline cannot play against it.
+##
+## The terms are printed as a listing rather than as a stack of cards: every line
+## is the same shape — a clause, how far along it is, where the run stands — and
+## a column of them is how the machine would report a contract it is measuring.
 
-const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
+## How many cells the progress strip is drawn with. Ten reads as a percentage
+## without asking anyone to count dots.
+const PROGRESS_DOTS := 10
 
-@onready var subtitle_label: Label = $Panel/Margin/VBox/Subtitle
-@onready var cards_list: VBoxContainer = $Panel/Margin/VBox/Scroll/CardsList
-@onready var empty_label: Label = $Panel/Margin/VBox/EmptyLabel
-@onready var close_button: GameButton = $Panel/Margin/VBox/CloseButton
-
-var _detail_sheet: DetailSheet = null
+var _subtitle: Label = null
+var _terms_caption: Label = null
+var _terms: ConsoleTable = null
+var _stakes: ConsoleDetail = null
 
 
 func _ready() -> void:
-	close_button.pressed.connect(hide_overlay)
-	_detail_sheet = DETAIL_SHEET.instantiate()
-	add_child(_detail_sheet)
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_to_group("flow_overlay")
+	super._ready()
+	setup("Terms")
+	set_close_label("BACK TO WORK")
+	_build_body()
 
 
-func open() -> void:
-	_refresh()
-	UiTransition.enter(self)
-	UiTransition.stagger(cards_list)
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	get_tree().call_group("main_ui", "sync_overlay_input")
+func _build_body() -> void:
+	var body: VBoxContainer = content()
+
+	_subtitle = ConsoleStyle.paragraph("", ConsoleStyle.FONT_SMALL)
+	body.add_child(_subtitle)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(scroll)
+
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 8)
+	scroll.add_child(column)
+
+	_terms_caption = ConsoleStyle.label(
+		"TERMS", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+	)
+	column.add_child(_terms_caption)
+
+	_terms = ConsoleTable.new()
+	_terms.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_terms)
+	_terms.set_columns([
+		{"label": "clause", "weight": 1.4},
+		{"label": "progress", "weight": 1.2},
+		{"label": "standing", "weight": 1.8, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+	])
+
+	_stakes = ConsoleDetail.new()
+	_stakes.size_flags_vertical = Control.SIZE_SHRINK_END
+	body.add_child(_stakes)
+	_stakes.clear("STAKES")
 
 
-func hide_overlay() -> void:
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	get_tree().call_group("main_ui", "sync_overlay_input")
-
-
-func _refresh() -> void:
-	for child in cards_list.get_children():
-		child.queue_free()
+func refresh() -> void:
 	var summary: Dictionary = Simulation.ascension_summary()
 	var contract: Dictionary = Dictionary(summary.get("contract", {}))
-	empty_label.visible = false
-	subtitle_label.text = _subtitle(summary)
-	close_button.set_lines("BACK TO WORK", "The clock does not stop while you read")
-	if contract.is_empty():
-		cards_list.add_child(_note(
-			"There is no contract for this location yet. Ordinary work is all there is here."
-		))
-		return
 	var progress: Dictionary = Dictionary(summary.get("progress", {}))
-	for row in _progress_rows(contract, progress):
-		cards_list.add_child(_progress_row(
-			str(row["label"]), str(row["value"]), bool(row["met"])
-		))
-	cards_list.add_child(_note(_stakes_text(contract)))
+	_subtitle.text = _subtitle_text(summary)
+	set_context(_context_text(summary))
+	_terms.clear()
+	if contract.is_empty():
+		_terms.add_note(
+			"NO CONTRACT FOR THIS LOCATION — ORDINARY WORK IS ALL THERE IS HERE"
+		)
+		_stakes.clear("STAKES")
+	else:
+		for row in _progress_rows(contract, progress):
+			var met: bool = bool(row["met"])
+			var accent: Color = ConsoleStyle.PHOSPHOR if met else ConsoleStyle.WARNING
+			_terms.add_row([
+				str(row["label"]).to_upper(),
+				{
+					"dots": _dot_count(float(row["ratio"])),
+					"max": PROGRESS_DOTS,
+					"color": accent,
+				},
+				{"text": str(row["value"]), "color": accent},
+			], null, accent)
+		_stakes.show_detail("STAKES", [{"text": _stakes_text(contract)}])
+	_apply_body_metrics()
+
+
+func fit_console() -> void:
+	super.fit_console()
+	_apply_body_metrics()
+
+
+## The body's own widgets are not part of the shell, so they are re-scaled
+## alongside it whenever the room is laid out.
+func _apply_body_metrics() -> void:
+	var scale: float = console_scale()
+	if _subtitle != null:
+		_subtitle.add_theme_font_size_override("font_size", ConsoleMetrics.font_small(scale))
+	if _terms_caption != null:
+		_terms_caption.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
+	if _terms != null:
+		_terms.set_metrics(scale)
+	if _stakes != null:
+		_stakes.set_metrics(scale)
+
+
+func _dot_count(ratio: float) -> int:
+	return int(round(clampf(ratio, 0.0, 1.0) * float(PROGRESS_DOTS)))
+
+
+## Where the run stands, in the header where the machine reports its state.
+func _context_text(summary: Dictionary) -> String:
+	var location: String = MetaProgress.location_name(str(summary.get("location", "")))
+	var contract: Dictionary = Dictionary(summary.get("contract", {}))
+	if contract.is_empty():
+		return location.to_upper()
+	var progress: Dictionary = Dictionary(summary.get("progress", {}))
+	return "%s · %d ROUNDS LEFT" % [
+		location.to_upper(), int(progress.get("rounds_remaining", 0))
+	]
 
 
 ## Names the contract and where the run stands against it. The deadline is stated
 ## every time: the year running out is the loss condition, and a player who only
 ## reads this screen once should still leave knowing that.
-func _subtitle(summary: Dictionary) -> String:
+func _subtitle_text(summary: Dictionary) -> String:
 	var contract: Dictionary = Dictionary(summary.get("contract", {}))
 	var location: String = MetaProgress.location_name(str(summary.get("location", "")))
 	if contract.is_empty():
@@ -86,16 +153,19 @@ func _progress_rows(contract: Dictionary, progress: Dictionary) -> Array:
 	var quality_min: float = float(contract.get("quality_min", 0.0))
 	var quality_now: float = float(progress.get("quality_average", 0.0))
 	var rounds_left: int = int(progress.get("rounds_remaining", 0))
+	var deadline: int = int(progress.get("deadline_round", 12))
 	var rows: Array = [
 		{
 			"label": "Tokens burned",
 			"value": "%s of %s" % [NumberFormat.format(burned), NumberFormat.format(total)],
 			"met": burned >= total,
+			"ratio": burned / total if total > 0.0 else 1.0,
 		},
 		{
 			"label": "Rounds left",
-			"value": "%d of %d" % [rounds_left, int(progress.get("deadline_round", 12))],
+			"value": "%d of %d" % [rounds_left, deadline],
 			"met": rounds_left > 3,
+			"ratio": float(rounds_left) / float(deadline) if deadline > 0 else 0.0,
 		},
 	]
 	if quality_min > 0.0:
@@ -106,39 +176,15 @@ func _progress_rows(contract: Dictionary, progress: Dictionary) -> Array:
 				JobPresentation.quality_mark(quality_min),
 			],
 			"met": quality_now >= quality_min,
+			"ratio": quality_now / quality_min,
 		})
 	rows.append({
 		"label": "Pays out",
 		"value": "%d unlock pick(s)" % int(contract.get("picks", 1)),
 		"met": true,
+		"ratio": 1.0,
 	})
 	return rows
-
-
-func _progress_row(label_text: String, value_text: String, met: bool) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", UiThemeBuilder.SPACE_MD)
-	var name_label := Label.new()
-	name_label.text = label_text.to_upper()
-	name_label.theme_type_variation = &"SectionLabel"
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name_label)
-	var value_label := Label.new()
-	value_label.text = value_text
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value_label.add_theme_color_override(
-		"font_color", UiThemeBuilder.semantic("success" if met else "warning")
-	)
-	row.add_child(value_label)
-	return row
-
-
-func _note(text: String) -> Control:
-	var label := Label.new()
-	label.text = text
-	label.theme_type_variation = &"MutedLabel"
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	return label
 
 
 ## What finishing and missing the contract each mean, in one sentence, because

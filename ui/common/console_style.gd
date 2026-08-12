@@ -74,6 +74,58 @@ static func glass_box() -> StyleBoxFlat:
 	return box
 
 
+## A field the operator types into. Console screens have no rounded inputs, so a
+## text field is a hairline box with a phosphor caret sitting in it.
+static func line_edit(placeholder: String = "", font_size: int = FONT_BODY) -> LineEdit:
+	var field := LineEdit.new()
+	field.placeholder_text = placeholder
+	var font: Font = UiThemeBuilder.mono_font()
+	if font != null:
+		field.add_theme_font_override("font", font)
+	field.add_theme_font_size_override("font_size", font_size)
+	field.add_theme_color_override("font_color", PHOSPHOR)
+	field.add_theme_color_override("font_placeholder_color", PHOSPHOR_DIM)
+	field.add_theme_color_override("caret_color", PHOSPHOR)
+	field.add_theme_color_override("selection_color", Color(PHOSPHOR.r, PHOSPHOR.g, PHOSPHOR.b, 0.3))
+	field.add_theme_stylebox_override("normal", frame_box(0.24, 0.03))
+	field.add_theme_stylebox_override("focus", frame_box(0.6, 0.06))
+	field.add_theme_stylebox_override("read_only", frame_box(0.14, 0.02))
+	return field
+
+
+## One line of a detail readout. The vocabulary is shared by the inline detail
+## pane and the modal sheet so the same row dictionary prints identically
+## wherever the machine reports it:
+## - `"plain text"` or `{"text": "…"}`  a wrapped paragraph
+## - `{"warn": "…"}`                    a red `!` line
+## - `{"stat": "Cost", "value": "$8"}`  a key on the left, value on the right
+## - `{"rule": "Name", "text": "…"}`    a named rule and its consequence
+static func detail_line(entry: Variant, font_size: int = FONT_SMALL, separation: int = 8) -> Control:
+	if not entry is Dictionary:
+		return paragraph(str(entry), font_size)
+	if entry.has("warn"):
+		return paragraph("! %s" % str(entry["warn"]), font_size, DANGER)
+	if entry.has("stat"):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", separation)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var key: Label = label(str(entry["stat"]).to_upper(), font_size, PHOSPHOR_DIM)
+		key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(key)
+		var value: Label = label(
+			str(entry.get("value", "")), font_size, Color(entry.get("color", PHOSPHOR))
+		)
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(value)
+		return row
+	var text: String = str(entry.get("text", ""))
+	if entry.has("rule"):
+		text = "%s — %s" % [str(entry["rule"]), text] if text != "" else str(entry["rule"])
+	if text.strip_edges() == "":
+		return null
+	return paragraph(text, font_size)
+
+
 ## Inverse video: an idle row is bare text with no container, and a hovered,
 ## focused or pressed row becomes a solid bar the text is knocked out of.
 static func row_box(state: String, lit: Color = PHOSPHOR) -> StyleBoxFlat:

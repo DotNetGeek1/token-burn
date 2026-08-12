@@ -172,32 +172,6 @@ func _fit_lines() -> void:
 
 
 func _line(entry: Variant) -> Control:
-	if not entry is Dictionary:
-		return ConsoleStyle.paragraph(str(entry), ConsoleMetrics.font_small(_scale))
-	if entry.has("warn"):
-		return ConsoleStyle.paragraph(
-			"! %s" % str(entry["warn"]), ConsoleMetrics.font_small(_scale), ConsoleStyle.DANGER
-		)
-	if entry.has("stat"):
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", ConsoleMetrics.px(8, _scale))
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var key: Label = ConsoleStyle.label(
-			str(entry["stat"]).to_upper(), ConsoleMetrics.font_small(_scale), ConsoleStyle.PHOSPHOR_DIM
-		)
-		key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(key)
-		var value: Label = ConsoleStyle.label(
-			str(entry.get("value", "")),
-			ConsoleMetrics.font_small(_scale),
-			Color(entry.get("color", ConsoleStyle.PHOSPHOR))
-		)
-		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(value)
-		return row
-	var text: String = str(entry.get("text", ""))
-	if entry.has("rule"):
-		text = "%s — %s" % [str(entry["rule"]), text] if text != "" else str(entry["rule"])
-	if text.strip_edges() == "":
-		return null
-	return ConsoleStyle.paragraph(text, ConsoleMetrics.font_small(_scale))
+	return ConsoleStyle.detail_line(
+		entry, ConsoleMetrics.font_small(_scale), ConsoleMetrics.px(8, _scale)
+	)

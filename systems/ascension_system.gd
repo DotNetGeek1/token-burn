@@ -159,7 +159,10 @@ func _quality_met(asc: Dictionary, contract: Dictionary) -> bool:
 
 
 ## Folds a delivered job's quality into the contract's running average, so the
-## quality bar is judged on the work actually shipped under it.
+## quality bar is judged on the work actually shipped under it. Callers pass the
+## delivered figure — `JobSystem.delivered_quality()` — rather than the raw
+## pipeline output, so unfinished delivery and shipped known bugs count against
+## the contract exactly as they count against the fee.
 func record_job_quality(run_state: RunState, quality: float) -> void:
 	if not is_active(run_state):
 		return
