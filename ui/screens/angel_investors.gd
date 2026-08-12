@@ -1,4 +1,4 @@
-extends Control
+extends ConsoleOverlay
 
 ## The round's free draft. Usually that is the angel phase, once the bills have
 ## cleared: the investor puts a few things on the table and expects to be thanked
@@ -10,29 +10,70 @@ extends Control
 ## There is only one man doing the offering, so the table is his: the cards carry
 ## his patter rather than a different fictional fund on each one. On a landscape
 ## panel the offers sit side by side as columns rather than stacked.
+##
+## The shell around them is the console, because the standing — what is in the
+## pipeline, what is in the bank, what is due — is the machine's reckoning and
+## reads like it. The offers themselves are not: something handed to you across
+## a table is a physical object, so those stay as cards, the same way the run's
+## parting gift does on the debrief.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
-const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
+## Three cards side by side plus the gaps between them. Wider than an overlay
+## of printed lines would ever want, but the offers are the content here.
+const TABLE_WIDTH := 1040.0
+## Narrower than this and a card is a column of two words per line, so the
+## table stacks instead.
+const CARD_MIN_WIDTH := 300.0
 
-@onready var title_label: Label = $Panel/Margin/VBox/Title
-@onready var subtitle_label: Label = $Panel/Margin/VBox/Subtitle
-@onready var cards_list: GridContainer = $Panel/Margin/VBox/Scroll/CardsList
-@onready var board_label: Label = $Panel/Margin/VBox/BoardLabel
-@onready var bills_label: Label = $Panel/Margin/VBox/BillsLabel
-@onready var decline_button: GameButton = $Panel/Margin/VBox/DeclineButton
-
-var _detail_sheet: DetailSheet = null
+var _pitch: Label = null
+var _board_label: Label = null
+var _bills_label: Label = null
+var _scroll: ScrollContainer = null
+var _cards_list: GridContainer = null
+var _sheet: ConsoleSheet = null
 
 
 func _ready() -> void:
-	decline_button.pressed.connect(_on_decline)
-	_detail_sheet = DETAIL_SHEET.instantiate()
-	add_child(_detail_sheet)
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_to_group("flow_overlay")
+	super._ready()
+	setup("His Table")
+	# Free or not, which one he is handing over is a decision, and a stray tap
+	# on the room behind should not answer it.
+	dismiss_on_scrim = false
+	set_closable(false)
+	max_width = TABLE_WIDTH
+	_build_body()
+	_sheet = ConsoleSheet.new()
+	add_child(_sheet)
 	Simulation.work_session_finished.connect(_maybe_show)
 	EventBus.reward_calculated.connect(_maybe_show)
+
+
+func _build_body() -> void:
+	var column: VBoxContainer = content()
+
+	_pitch = ConsoleStyle.paragraph("", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR)
+	column.add_child(_pitch)
+
+	_board_label = ConsoleStyle.paragraph("")
+	column.add_child(_board_label)
+
+	_bills_label = ConsoleStyle.paragraph("")
+	column.add_child(_bills_label)
+
+	column.add_child(ConsoleStyle.rule(0.22))
+
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.resized.connect(_fit_columns)
+	column.add_child(_scroll)
+
+	_cards_list = GridContainer.new()
+	_cards_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cards_list.columns = 1
+	_cards_list.add_theme_constant_override("h_separation", 12)
+	_cards_list.add_theme_constant_override("v_separation", 12)
+	_scroll.add_child(_cards_list)
 
 
 func _maybe_show(_payload: Variant = null) -> void:
@@ -41,14 +82,69 @@ func _maybe_show(_payload: Variant = null) -> void:
 
 
 func show_choices() -> void:
-	for child in cards_list.get_children():
-		child.queue_free()
+	if Simulation.pending_choices.is_empty():
+		hide_overlay()
+		return
+	if visible:
+		refresh()
+		return
+	open()
+
+
+## `ConsoleOverlay.open` calls this, and so does every redraw while the table is
+## up — taking one offer off it leaves the rest standing.
+func refresh() -> void:
+	if _cards_list == null:
+		return
 	_refresh_heading()
 	_refresh_board_line()
 	_refresh_bills_line()
-	var offer_count: int = Simulation.pending_choices.size()
-	# Three offers across the landscape panel; fewer offers still fill the row.
-	cards_list.columns = clampi(maxi(1, offer_count), 1, 3)
+	_deal_cards()
+	set_actions([{
+		"index": "1",
+		"headline": "TAKE NOTHING",
+		"value": "Tell him you are fine",
+		"pressed": _on_decline,
+	}])
+	_apply_body_metrics()
+
+
+func fit_console() -> void:
+	super.fit_console()
+	_apply_body_metrics()
+
+
+func _apply_body_metrics() -> void:
+	if _pitch == null:
+		return
+	var scale: float = console_scale()
+	var small: int = ConsoleMetrics.font_small(scale)
+	_pitch.add_theme_font_size_override("font_size", small)
+	_board_label.add_theme_font_size_override("font_size", small)
+	_bills_label.add_theme_font_size_override("font_size", small)
+	_fit_columns()
+
+
+## Offers read as columns when the table is wide enough to lay them out that
+## way and as a list when it is not, rather than three cards being squeezed
+## into a handset until each one is a word wide.
+func _fit_columns() -> void:
+	if _cards_list == null:
+		return
+	var available: float = _scroll.size.x
+	if available <= 1.0:
+		return
+	var fits: int = maxi(1, int(available / (CARD_MIN_WIDTH * console_scale())))
+	_cards_list.columns = clampi(
+		mini(maxi(1, Simulation.pending_choices.size()), fits), 1, 3
+	)
+
+
+func _deal_cards() -> void:
+	for child in _cards_list.get_children():
+		_cards_list.remove_child(child)
+		child.queue_free()
+	_fit_columns()
 	var index: int = 0
 	for offer in Simulation.pending_choices:
 		var card: GameCard = CARD_SCENE.instantiate()
@@ -77,21 +173,13 @@ func show_choices() -> void:
 		# Taking a module or perk is a decision, so only TAKE IT commits to it.
 		# A tap on the card face reads the pitch in full instead.
 		card.body_pressed.connect(_show_offer_detail.bind(offer, patter))
-		cards_list.add_child(card)
-	if Simulation.pending_choices.is_empty():
-		visible = false
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-	else:
-		UiTransition.enter(self)
-		UiTransition.stagger(cards_list)
-		mouse_filter = Control.MOUSE_FILTER_STOP
-	get_tree().call_group("main_ui", "sync_overlay_input")
+		_cards_list.add_child(card)
+	UiTransition.stagger(_cards_list)
 
 
 func _refresh_heading() -> void:
-	title_label.text = "HIS TABLE"
-	subtitle_label.text = "%s is feeling generous. Take one." % InvestorVoice.investor_name()
-	decline_button.set_lines("TAKE NOTHING", "Tell him you are fine")
+	_pitch.text = "%s is feeling generous. Take one." % InvestorVoice.investor_name()
+	set_context("NOTHING HERE HAS A PRICE")
 
 
 func _kind_chip_text(offer_type: String) -> String:
@@ -113,7 +201,7 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 		})
 	for warning in _bench_warning():
 		rows.append({"rule": str(warning.get("text", "")), "text": "", "role": "warning"})
-	_detail_sheet.show_detail(
+	_sheet.show_detail(
 		str(offer.get("label", "Offer")),
 		"Free module" if offer_type == "operation" else "Free perk",
 		rows,
@@ -121,9 +209,9 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 		"TAKE IT",
 		UiThemeBuilder.semantic("perk")
 	)
-	for connection in _detail_sheet.action_confirmed.get_connections():
-		_detail_sheet.action_confirmed.disconnect(connection["callable"])
-	_detail_sheet.action_confirmed.connect(_accept.bind(offer_type, offer_id))
+	for connection in _sheet.action_confirmed.get_connections():
+		_sheet.action_confirmed.disconnect(connection["callable"])
+	_sheet.action_confirmed.connect(_accept.bind(offer_type, offer_id))
 
 
 func _body_text(offer: Dictionary, patter: String) -> String:
@@ -148,7 +236,7 @@ func _refresh_board_line() -> void:
 	# The perk count belongs next to the offers: a build is capped, so the last
 	# free perk of a run should not be taken by accident.
 	var perks: Dictionary = Simulation.perk_capacity()
-	board_label.text = "%d of %d modules in the pipeline · %d slot(s) · %d of %d perks" % [
+	_board_label.text = "%d of %d modules in the pipeline · %d slot(s) · %d of %d perks" % [
 		Simulation.filled_slot_count(), owned, Simulation.board_slots().size(),
 		int(perks.get("owned", 0)), int(perks.get("cap", 0))
 	]
@@ -157,16 +245,10 @@ func _refresh_board_line() -> void:
 ## Knowing rent is due while an investor talks about conviction is the whole joke.
 func _refresh_bills_line() -> void:
 	var outlook: Dictionary = Simulation.bills_outlook()
-	bills_label.text = "%s in the bank · %s rent and bills due when the next round ends" % [
+	_bills_label.text = "%s in the bank · %s rent and bills due when the next round ends" % [
 		NumberFormat.format_cash(float(outlook.get("cash", 0.0))),
 		NumberFormat.format_cash(float(outlook.get("due", 0.0))),
 	]
-
-
-func hide_overlay() -> void:
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	get_tree().call_group("main_ui", "sync_overlay_input")
 
 
 func _accept(offer_type: String, offer_id: String) -> void:
@@ -175,7 +257,7 @@ func _accept(offer_type: String, offer_id: String) -> void:
 	# A contract reward can still owe the run picks, in which case the table
 	# stays up minus what was just taken off it.
 	if Simulation.phase == Simulation.Phase.ANGEL_ROUND and not Simulation.pending_choices.is_empty():
-		show_choices()
+		refresh()
 	else:
 		hide_overlay()
 	get_tree().call_group("ui_refresh", "refresh")

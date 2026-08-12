@@ -38,6 +38,10 @@ var dismiss_on_scrim: bool = true
 ## Whether the glass shrinks to the height of what is printed on it. A screen
 ## full of listings wants the whole window; a five-line confirmation does not.
 var compact: bool = false
+## The cap `MAX_WIDTH` sets is about keeping a column of console text readable.
+## An overlay that lays things out side by side rather than printing lines can
+## raise it, because its content is what stops the eye instead.
+var max_width: float = MAX_WIDTH
 
 
 func _ready() -> void:
@@ -207,7 +211,7 @@ func _fit_console() -> void:
 	# Centred on the glass and inset from every edge, so the room stays visible
 	# around it and the overlay reads as something laid on top of the desk.
 	var pad: float = float(ConsoleMetrics.px(EDGE_PAD, _scale))
-	var width: float = minf(area.x - pad * 2.0, MAX_WIDTH * _scale)
+	var width: float = minf(area.x - pad * 2.0, max_width * _scale)
 	var height: float = area.y - pad * 2.0
 	if compact:
 		height = clampf(_frame.get_combined_minimum_size().y, 0.0, height)

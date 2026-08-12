@@ -327,7 +327,12 @@ func _refresh_props() -> void:
 	var watts: float = float(state.compute.get("power_draw", 0.0))
 	_set_prop("power_meter", "POWER", "%.1f kW" % (watts / 1000.0), "energy")
 	_set_prop_lines(
-		"plan_board", "BURN PLAN", _plan_lines(), _contract_lines(), _ledger_lines()
+		"plan_board",
+		"BURN PLAN",
+		_plan_lines(),
+		_contract_lines(),
+		_ledger_figures(),
+		_ledger_ink()
 	)
 	var plan: BoardProp = _props.get("plan_board")
 	if plan != null:
@@ -728,7 +733,7 @@ func _on_work_session_finished(result: Dictionary) -> void:
 	if not summary.is_empty() and Simulation.phase != Simulation.Phase.RUN_END:
 		# The debrief gets the stage to itself; the angel draft reopens when the
 		# player hits Continue.
-		_angel_investors.visible = false
+		_angel_investors.hide_overlay()
 		_round_debrief.show_summary(summary)
 	refresh_all()
 
@@ -752,7 +757,7 @@ func _on_debrief_continue() -> void:
 func _on_bills_ready(statement: Dictionary) -> void:
 	if statement.is_empty():
 		return
-	_angel_investors.visible = false
+	_angel_investors.hide_overlay()
 	if _round_debrief.visible:
 		_pending_statement = statement
 		refresh_all()

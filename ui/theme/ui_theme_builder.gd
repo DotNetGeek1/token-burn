@@ -95,7 +95,10 @@ const SEMANTIC_ROLES := {
 	"warning": "orange",
 	"danger": "red",
 	"failure": "red",
-	"perk": "purple",
+	# What the run hands you to keep. Amber rather than the violet this used to
+	# be: a lit indicator on a machine, which is the language the rest of the
+	# game is now in.
+	"perk": "amber",
 	"energy": "yellow",
 	"lab": "teal",
 	"neutral": "grey",
@@ -107,6 +110,7 @@ const BRIGHT_VARIANTS := {
 	"orange": "orange_bright",
 	"red": "red_bright",
 	"green": "green_bright",
+	"amber": "amber_bright",
 }
 
 ## Surface tiers, straight from the button style guide.

@@ -78,6 +78,12 @@ func _ready() -> void:
 		if main._bills_screen.visible:
 			main._bills_screen.hide()
 			main._on_bills_continue()
+		# Whether a round ends with anything on offer depends on the draw, and
+		# a shot of the table is no use when the table is empty.
+		if Simulation.pending_choices.is_empty():
+			Simulation.phase = Simulation.Phase.ANGEL_ROUND
+			Simulation._present_angel_offers()
+		main._angel_investors.show_choices()
 	elif tab == "debrief":
 		# Force a victory so the debrief has a pick to spend.
 		MetaProgress.reset_profile()
