@@ -1,54 +1,150 @@
 class_name JobSystem
 extends RefCounted
 
+## How many authored contracts a band needs before the board stops borrowing
+## from the band below it. Under this a thin location shows the same posting
+## three times, which reads as a bug rather than as a quiet week.
+const MIN_BAND_POOL := 3
+
 
 func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Node, tuning: Dictionary) -> void:
 	var count: int = clampi(int(run_state.business.get("demand", 3.0)), 1, 5)
 	var round_number: int = int(run_state.calendar.get("round", 1))
-	var max_tier: int = _player_max_job_tier(run_state, round_number, content_db)
-	var eligible: Array = _collect_eligible_jobs(content_db, round_number, max_tier)
+	var here: int = location_tier(run_state, content_db)
+	var eligible: Array = _collect_eligible_jobs(content_db, round_number, here)
 	if eligible.is_empty():
 		run_state.business["job_offers"] = []
 		return
 	eligible = rng.shuffle(eligible)
+
 	var offers: Array = []
 	var index: int = 0
-	while offers.size() < count:
+	# A board holds at most one of each kind of gamble, so a run is never handed
+	# three jackpots or three contracts it was built to fail.
+	var windfall_placed: bool = false
+	var attempts: int = 0
+	while offers.size() < count and attempts < eligible.size() * 4:
 		var job_def: JobDefinition = eligible[index % eligible.size()]
+		index += 1
+		attempts += 1
+		if job_def.windfall and windfall_placed:
+			continue
 		# Each offer gets its own rng stream so repeated definitions still
 		# differ, and so the board is reproducible for a given seed.
 		var offer_rng: DeterministicRng = rng.derive("offer_%d_%s" % [index, job_def.id])
 		offers.append(_scale_job(job_def, round_number, content_db, tuning, run_state, offer_rng))
-		index += 1
+		windfall_placed = windfall_placed or job_def.windfall
 		# Only reuse definitions once the pool is exhausted.
-		if index >= eligible.size() and offers.size() < count:
+		if index % eligible.size() == 0 and offers.size() < count:
 			eligible = rng.shuffle(eligible)
-	run_state.business["job_offers"] = offers
+
+	var stretch: Dictionary = _stretch_offer(run_state, rng, content_db, tuning, round_number)
+	if not stretch.is_empty() and offers.size() > 1:
+		offers[offers.size() - 1] = stretch
+	elif not stretch.is_empty():
+		offers.append(stretch)
+
+	run_state.business["job_offers"] = _classify_offers(offers, run_state, content_db)
 
 
-## The capstone is a round-twelve headliner, not the whole board: overtime still
-## has rent to pay, so the ordinary pool stays open alongside it rather than the
-## run being left with one impossible contract and no way to earn.
-func _collect_eligible_jobs(content_db: Node, round_number: int, max_tier: int) -> Array:
+## The board is drawn from the location's own band. The capstone is a
+## round-twelve headliner, not the whole board: overtime still has rent to pay,
+## so the ordinary pool stays open alongside it rather than the run being left
+## with one impossible contract and no way to earn.
+func _collect_eligible_jobs(content_db: Node, round_number: int, tier: int) -> Array:
+	# Walk down from the run's own band until there is enough authored work for a
+	# board that is not the same contract three times over.
 	var eligible: Array = []
-	for job_def in content_db.jobs:
-		if round_number < 12 and job_def.id == "job.capstone_simulation":
-			continue
-		if _job_tier(job_def, content_db) > max_tier:
-			continue
-		eligible.append(job_def)
-	if eligible.is_empty():
-		var fallback_pool: Array = content_db.jobs.duplicate()
-		fallback_pool.sort_custom(func(a: JobDefinition, b: JobDefinition) -> bool:
-			return _job_tier(a, content_db) < _job_tier(b, content_db)
-		)
-		for job_def in fallback_pool:
-			if _job_tier(job_def, content_db) > max_tier:
-				continue
+	for candidate_tier in range(tier, -1, -1):
+		for job_def in content_db.jobs:
 			if round_number < 12 and job_def.id == "job.capstone_simulation":
 				continue
+			if _job_tier(job_def, content_db) != candidate_tier:
+				continue
 			eligible.append(job_def)
+		if eligible.size() >= MIN_BAND_POOL:
+			break
 	return eligible
+
+
+## Bread and butter, stretch, or temptation — read off what the run's own
+## workflows can actually answer. A contract nobody's pipeline can serve used to
+## arrive at the same fee as one it was built for, so a ×0.6 throughput penalty
+## read as the maths breaking rather than as a risk that was taken knowingly.
+## Mismatched work now pays for the trouble and says so on the card.
+func _classify_offers(offers: Array, run_state: RunState, content_db: Node) -> Array:
+	var board := BoardSystem.new()
+	# The best any of the run's lanes can do: a contract is only mismatched if
+	# no workflow the player owns could answer it.
+	var capabilities: Dictionary = {}
+	for workflow in board.workflows(run_state):
+		if not workflow is Dictionary:
+			continue
+		var lane: Dictionary = board.pipeline_capabilities(Array(workflow.get("slots", [])))
+		for key in lane:
+			var value: Variant = lane[key]
+			if value is bool:
+				capabilities[key] = bool(capabilities.get(key, false)) or value
+			elif key == "cost":
+				capabilities[key] = minf(float(capabilities.get(key, INF)), float(value))
+	var definitions: Dictionary = BoardSystem.demand_definitions()
+	var bonus_per_gap: float = float(
+		content_db.balance.get("job_scaling", {}).get("mismatch_reward_bonus", 0.2)
+	)
+	for offer in offers:
+		if not offer is Dictionary:
+			continue
+		var unmet: int = 0
+		for demand_id in Array(offer.get("demands", [])):
+			var definition: Variant = definitions.get(str(demand_id), null)
+			if not definition is Dictionary:
+				continue
+			var match_spec: Dictionary = Dictionary(Dictionary(definition).get("match", {}))
+			if match_spec.has("capability"):
+				if not bool(capabilities.get(str(match_spec["capability"]), false)):
+					unmet += 1
+			elif match_spec.has("max_cost"):
+				if float(capabilities.get("cost", 0.0)) > float(match_spec["max_cost"]):
+					unmet += 1
+		offer["unmet_demands"] = unmet
+		if unmet == 0:
+			offer["fit"] = "bread_and_butter"
+			continue
+		offer["fit"] = "stretch" if unmet == 1 else "temptation"
+		offer["reward"] = snappedf(float(offer.get("reward", 0.0)) * (1.0 + bonus_per_gap * unmet), 5.0)
+	return offers
+
+
+## One posting from the band above, paying a premium for work the location was
+## not built for. Empty until reputation opens the rung.
+func _stretch_offer(
+	run_state: RunState,
+	rng: DeterministicRng,
+	content_db: Node,
+	tuning: Dictionary,
+	round_number: int
+) -> Dictionary:
+	var stretch_tier: int = _stretch_tier_available(run_state, content_db)
+	if stretch_tier < 0:
+		return {}
+	# Strictly the band above: a stretch that is really more of the same work is
+	# a lie on the card and a fee the run did not earn.
+	var pool: Array = []
+	for candidate in _collect_eligible_jobs(content_db, round_number, stretch_tier):
+		if _job_tier(candidate, content_db) == stretch_tier:
+			pool.append(candidate)
+	if pool.is_empty():
+		return {}
+	var job_def: JobDefinition = rng.derive("stretch_pool").shuffle(pool)[0]
+	var offer: Dictionary = _scale_job(
+		job_def, round_number, content_db, tuning, run_state, rng.derive("stretch_offer")
+	)
+	var bonus: float = float(
+		content_db.balance.get("job_scaling", {}).get("stretch_reward_bonus", 0.35)
+	)
+	offer["reward"] = snappedf(float(offer.get("reward", 0.0)) * (1.0 + bonus), 5.0)
+	offer["stretch"] = true
+	return offer
 
 
 func accept_job(run_state: RunState, job_id: String) -> bool:
@@ -897,10 +993,17 @@ func _blocked_slots_from_rules(job: Dictionary) -> int:
 	return clampi(blocked, 0, BoardSystem.DEFAULT_SLOT_COUNT - 1)
 
 
+## A contract that would be over in a single burn is not a round, so postings are
+## floored at a few prompts of the band's expected rig. Anchored to the band and
+## not to the player: the floor exists to keep a contract worth playing, not to
+## claw back the upgrade that made it easy.
 func _enforce_minimum_workload(job: Dictionary, run_state: RunState, content_db: Node) -> void:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
-	var min_prompts: float = float(scaling.get("min_work_prompts", 6))
-	var rate: float = maxf(1.0, float(run_state.compute.get("token_rate", 1.0)))
+	var min_prompts: float = float(scaling.get("min_work_prompts", 3))
+	var band: Dictionary = _band_for_tier(int(job.get("tier", 0)), content_db)
+	var rate: float = maxf(
+		1.0, float(band.get("expected_token_rate", scaling.get("baseline_token_rate", 1_000_000.0)))
+	)
 	var min_requirement: float = rate * min_prompts
 	var requirement: float = float(job.get("token_requirement", 0.0))
 	if requirement >= min_requirement:
@@ -923,20 +1026,21 @@ func _scale_job(
 	offer_rng: DeterministicRng = null
 ) -> Dictionary:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
-	var economy_cfg: Dictionary = content_db.balance.get("economy", {})
-	var baseline_rate: float = float(scaling.get("baseline_token_rate", 1_000_000.0))
-	var token_curve: Dictionary = economy_cfg.get("token_requirement_curve", {})
-	var curve_base: float = float(token_curve.get("base", baseline_rate))
-	var curve_exp: float = float(token_curve.get("exponent", 1.0))
-	var round_rate: float = curve_base * pow(maxf(1.0, float(round_number)), curve_exp)
-	var actual_rate: float = maxf(1.0, float(run_state.compute.get("token_rate", baseline_rate)))
-	var player_rate: float = maxf(maxf(baseline_rate * 0.25, round_rate), actual_rate)
+	# What the contract is worth and how big it is come from the band it was
+	# authored into, never from the rig reading the board. A rig that has
+	# doubled has to feel twice as strong against the same posting; sizing work
+	# off the player's own rate moved the goalposts with every upgrade.
+	var tier: int = _job_tier(job_def, content_db)
+	var band: Dictionary = _band_for_tier(tier, content_db)
+	var expected_rate: float = maxf(
+		1.0, float(band.get("expected_token_rate", scaling.get("baseline_token_rate", 1_000_000.0)))
+	)
+	var target_prompts: float = maxf(1.0, float(band.get("target_work_prompts", 6.0)))
 
-	var curve_round: int = campaign_round(round_number, run_state, content_db)
 	var reward_mult: float = float(scaling.get("reward_scaling", {}).get("base_multiplier", 1.0))
-	reward_mult += float(scaling.get("reward_scaling", {}).get("per_round_growth", 0.12)) * (curve_round - 1)
+	reward_mult += float(scaling.get("reward_scaling", {}).get("per_round_growth", 0.04)) * (round_number - 1)
 	var token_mult: float = float(scaling.get("token_scaling", {}).get("base_multiplier", 1.0))
-	token_mult += float(scaling.get("token_scaling", {}).get("per_round_growth", 0.15)) * (curve_round - 1)
+	token_mult += float(scaling.get("token_scaling", {}).get("per_round_growth", 0.03)) * (round_number - 1)
 
 	var difficulty_id: String = str(run_state.flags.get("difficulty", "normal"))
 	var profile: Dictionary = content_db.balance.get("difficulty_profiles", {}).get(
@@ -952,16 +1056,10 @@ func _scale_job(
 	# reputation is felt on every offer rather than only at a tier threshold.
 	reward_mult *= reputation_reward_multiplier(run_state, content_db)
 
-	var base_work_prompts: float = maxf(2.0, job_def.token_requirement / baseline_rate)
-	var tier: int = _job_tier(job_def, content_db)
-	var max_prompts_by_tier: Array = scaling.get("max_work_prompts_by_tier", [8, 16, 24, 40, 60, 100])
-	var max_work_prompts: float = float(max_prompts_by_tier[mini(tier, max_prompts_by_tier.size() - 1)])
-	var work_prompts: float = minf(base_work_prompts * token_mult, max_work_prompts)
-	var min_work_prompts: float = float(scaling.get("min_work_prompts", 6))
-	var token_requirement: float = maxf(
-		player_rate * work_prompts,
-		actual_rate * min_work_prompts
-	) * float(tuning.get("token_multiplier", 1.0))
+	var work_prompts: float = target_prompts * maxf(0.1, job_def.work_units)
+	var token_requirement: float = expected_rate * work_prompts * token_mult * float(
+		tuning.get("token_multiplier", 1.0)
+	)
 	# Per-offer variance so two postings of the same contract type are not
 	# identical. Skipped when no rng is supplied (balance tests, rescaling).
 	var reward_variance: float = 1.0
@@ -970,30 +1068,30 @@ func _scale_job(
 		reward_variance = 1.0 + (offer_rng.next_float() - 0.5) * 0.2
 	# A batch is worth more than its raw token count once it has been through a
 	# pipeline, so deadlines are measured in burns rather than in bare prompts.
+	# The clock is set against the band's expected rig, not the player's: that is
+	# what makes a strong rig deliver early and a weak one run out of days.
 	var board_multiplier: float = maxf(
 		1.0, float(scaling.get("board", {}).get("expected_progress_multiplier", 2.0))
 	)
-	var effective_work_prompts: float = token_requirement / maxf(1.0, actual_rate * board_multiplier)
+	var effective_work_prompts: float = token_requirement / (expected_rate * board_multiplier)
 
-	var slack_by_tier: Array = scaling.get("deadline_slack_by_tier", [3, 2, 2, 2, 2, 2])
+	var slack_by_tier: Array = scaling.get("deadline_slack_by_tier", [3, 2, 2, 2, 2, 2, 2])
 	var slack: int = int(slack_by_tier[mini(tier, slack_by_tier.size() - 1)])
-	# The deadline is what the round costs in real time, so it is capped by the
-	# tier's work budget rather than by how far behind the curve the rig has
-	# fallen. A player whose rig cannot keep up gets a contract they will miss —
-	# visible on the offer as more prompts needed than the deadline allows — not
-	# a round that grinds on for a hundred prompts.
-	var deadline_cap: int = int(ceil(max_work_prompts)) + slack
-	var deadline_prompts: int = clampi(int(ceil(effective_work_prompts)) + slack, 3, deadline_cap)
+	var pressure: float = clampf(job_def.deadline_pressure, 0.5, 2.0)
+	var deadline_prompts: int = maxi(3, int(ceil(effective_work_prompts / pressure)) + slack)
 
 	# economy_multiplier is applied once at payout time (EconomySystem.add_income).
-	var reward: float = job_def.reward * reward_mult * reward_variance
+	var base_reward: float = float(band.get("base_reward", 0.0))
+	var reward: float = base_reward * maxf(0.0, job_def.reward_units) * reward_mult * reward_variance
 	var power_per_prompt: float = float(run_state.economy.get("power_cost_per_prompt", 10.0))
 	# A contract has to pay for the round it occupies, not only the power it
 	# burns: rent lands once the work is done, so a fee that cannot clear it is a
-	# contract nobody could take and stay solvent. Rent is added at face value —
-	# the multiplier is on the metered costs — so one contract roughly breaks
-	# even and filling the round is what makes it profitable.
-	var round_rent: float = float(run_state.economy.get("round_rent", 400.0))
+	# contract nobody could take and stay solvent. Only a share of the rent
+	# counts, because a round holds more than one contract — charging every
+	# posting the whole rent flattened the cheap end of a band into one price.
+	var round_rent: float = float(run_state.economy.get("round_rent", 400.0)) * float(
+		scaling.get("min_reward_rent_share", 0.5)
+	)
 	# Metered cloud cost is real per-prompt spend too, so a cloud-heavy build's
 	# contracts must be able to cover it — not just the power they draw.
 	var cloud_per_prompt: float = float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) * float(
@@ -1040,6 +1138,7 @@ func _scale_job(
 		"board_rules": job_def.board_rules.duplicate(true),
 		"demands": Array(job_def.demands),
 		"tier": tier,
+		"windfall": job_def.windfall,
 	}
 
 
@@ -1054,8 +1153,9 @@ static func reputation_reward_multiplier(run_state: RunState, content_db: Node) 
 	return 1.0 + minf(cap, reputation * per_point)
 
 
-## The reputation the next contract tier is waiting on, and what it opens, for
-## the job board's header. Empty when every tier is already reachable.
+## The reputation the next band's stretch contract is waiting on, for the job
+## board's header. The ordinary board is set by the location; reputation is what
+## buys a look at the work above it. Empty when every band is already reachable.
 static func next_reputation_tier(run_state: RunState, content_db: Node) -> Dictionary:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
 	var thresholds: Array = scaling.get("tier_unlock_by_reputation", [])
@@ -1083,54 +1183,51 @@ func refresh_contract_board(run_state: RunState, rng: DeterministicRng, content_
 	generate_offers(run_state, rng.derive("job_offers"), content_db, tuning)
 
 
+static func location_bands(content_db: Node) -> Array:
+	return Array(content_db.balance.get("job_scaling", {}).get("location_bands", []))
+
+
+static func _band_for_tier(tier: int, content_db: Node) -> Dictionary:
+	var bands: Array = location_bands(content_db)
+	if bands.is_empty():
+		return {}
+	return Dictionary(bands[clampi(tier, 0, bands.size() - 1)])
+
+
+## The band the run is currently standing in. Contracts are offered from here,
+## so moving up a location is what puts bigger work on the board — the job pool
+## follows the seven-chapter ladder rather than a round counter that ran out of
+## rungs after twelve.
+static func location_tier(run_state: RunState, content_db: Node) -> int:
+	var bands: Array = location_bands(content_db)
+	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
+	for index in range(bands.size()):
+		if str(Dictionary(bands[index]).get("location", "")) == dwelling:
+			return index
+	return 0
+
+
 func _job_tier(job_def: JobDefinition, content_db: Node) -> int:
-	var baseline_rate: float = float(content_db.balance.get("job_scaling", {}).get("baseline_token_rate", 1_000_000.0))
-	var workload_prompts: float = job_def.token_requirement / baseline_rate
-	if workload_prompts <= 20.0:
-		return 0
-	if workload_prompts <= 80.0:
-		return 1
-	if workload_prompts <= 400.0:
-		return 2
-	if workload_prompts <= 5000.0:
-		return 3
-	if workload_prompts <= 500_000.0:
-		return 4
-	return 5
+	var bands: Array = location_bands(content_db)
+	var top: int = maxi(0, bands.size() - 1)
+	return clampi(job_def.tier, 0, top)
 
 
-## Where this round sits on the campaign's curve rather than on its own
-## location's calendar. Every location restarts its year at round 1, so scaling
-## an offer off the bare round number priced a garage contract like a bedroom
-## one — the same fee against three and a half times the rent, with a carried
-## rig chewing through it in a prompt. The offset continues the curve instead,
-## so moving up is a bigger game and not merely a more expensive one.
-static func campaign_round(round_number: int, run_state: RunState, content_db: Node) -> int:
-	var offsets: Dictionary = content_db.balance.get("job_scaling", {}).get("location_round_offset", {})
-	var location: String = str(run_state.build.get("dwelling", "bedroom"))
-	return round_number + int(offsets.get(location, 0))
-
-
-func _player_max_job_tier(run_state: RunState, round_number: int, content_db: Node) -> int:
+## The band above the run's own, offered at most once a board as a temptation:
+## work the location was not built for, paying enough to be worth the risk.
+## Reputation is what opens it, so the ladder still has something to climb.
+func _stretch_tier_available(run_state: RunState, content_db: Node) -> int:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
-	var round_unlocks: Array = scaling.get("tier_unlock_by_round", [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
-	var curve_round: int = campaign_round(round_number, run_state, content_db)
-	var tier_from_round: int = int(round_unlocks[mini(curve_round - 1, round_unlocks.size() - 1)])
-
-	var tier_from_rate: int = 0
-	var rate: float = float(run_state.compute.get("token_rate", 1_000_000.0))
-	for entry in scaling.get("tier_unlock_by_token_rate", []):
-		if entry is Dictionary and rate >= float(entry.get("rate", 0.0)):
-			tier_from_rate = int(entry.get("tier", 0))
-
-	var tier_from_rep: int = 0
-	var rep: float = float(run_state.business.get("reputation", 0.0))
+	var here: int = location_tier(run_state, content_db)
+	var stretch: int = here + 1
+	if stretch > maxi(0, location_bands(content_db).size() - 1):
+		return -1
+	var thresholds: Array = scaling.get("tier_unlock_by_reputation", [])
+	if stretch >= thresholds.size():
+		return -1
 	var sales_level: int = int(run_state.build.get("upgrade_levels", {}).get("upgrade.sales_investment", 0))
-	var rep_reduction: float = float(scaling.get("sales_level_rep_reduction", 2))
-	var rep_thresholds: Array = scaling.get("tier_unlock_by_reputation", [0, 5, 10, 15, 20, 25])
-	for index in range(rep_thresholds.size()):
-		var threshold: float = float(rep_thresholds[index]) - float(sales_level) * rep_reduction
-		if rep >= threshold:
-			tier_from_rep = index
-
-	return mini(5, maxi(tier_from_round, maxi(tier_from_rate, tier_from_rep)))
+	var reduction: float = float(scaling.get("sales_level_rep_reduction", 2))
+	var needed: float = float(thresholds[stretch]) - float(sales_level) * reduction
+	if float(run_state.business.get("reputation", 0.0)) < needed:
+		return -1
+	return stretch

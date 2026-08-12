@@ -41,7 +41,10 @@ func run() -> void:
 	assert_true(result.get("ok", false), "The round's work executes")
 	assert_false(sim.last_round_statement.is_empty(), "Resolving the work closes the round with the bills")
 
-	var ending_cash: float = float(sim.run_state.economy.get("cash", 0.0))
+	# Measured at the statement rather than after it: the round's random event
+	# lands on the same cash and is a separate system with its own tests, so
+	# reading the live balance made this assertion a coin toss on the draw.
+	var ending_cash: float = float(sim.last_round_statement.get("cash_after", 0.0))
 	assert_true(ending_cash > starting_cash, "Completing a job increases cash")
 
 	var refreshed_offers: Array = sim.run_state.business.get("job_offers", [])

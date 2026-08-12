@@ -87,7 +87,11 @@
     "bug_alchemy": "res://presentation/ui/icons/perks/quantised_everything.svg",
     "test_driven": "res://presentation/ui/icons/perks/stack_overflow_tab.svg",
     "middle_management": "res://presentation/ui/icons/perks/founder_mode.svg",
-    "pipeline_momentum": "res://presentation/ui/icons/perks/the_wrapper.svg"
+    "pipeline_momentum": "res://presentation/ui/icons/perks/the_wrapper.svg",
+    "bare_metal": "res://presentation/ui/icons/perks/works_on_my_machine.svg",
+    "cloud_native": "res://presentation/ui/icons/perks/cloud_baron.svg",
+    "move_fast_and_break_everything": "res://presentation/ui/icons/perks/technical_debt.svg",
+    "enterprise_grade": "res://presentation/ui/icons/perks/stack_overflow_tab.svg"
   },
   "board_scenes": {
     "bedroom": {

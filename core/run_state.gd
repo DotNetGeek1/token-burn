@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 14
+const SAVE_VERSION := 15
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -31,6 +31,11 @@ var economy: Dictionary = {
 	"round_rent": 400.0,
 	"power_base_cost_per_prompt": 10.0,
 	"power_cost_per_prompt": 10.0,
+	## What the run's cloud tier bills per prompt before anything discounts it.
+	## Upgrades write here; perks discount the derived figure below.
+	"cloud_base_cost_per_prompt": 0.0,
+	## Re-derived from the base on every recalculation, so a perk that halves it
+	## halves it once rather than once per recalculation for the rest of the run.
 	"cloud_cost_per_prompt": 0.0,
 	"costs_this_round": 0.0,
 	"last_round_costs": 0.0,
@@ -42,6 +47,11 @@ var compute: Dictionary = {
 	"cloud_burst": 0.0,
 	"cloud_burst_prompts": 0,
 	"token_rate": 1_000_000.0,
+	## The two halves of `token_rate`, split so a perk can favour owned iron over
+	## rented capacity or the other way round. Both derived every recalculation.
+	"local_rate": 1_000_000.0,
+	"cloud_rate": 0.0,
+	"cloud_share": 0.0,
 	"prompt_rate": 1_000_000.0,
 	"power_draw": 65.0,
 	## Derived by ComputeSystem from the run's location, what is installed in it
@@ -60,7 +70,12 @@ var compute: Dictionary = {
 var business: Dictionary = {
 	"reputation": 10.0,
 	"demand": 3.0,
+	## Re-seeded from the base at the top of every round, so a perk advertising
+	## "+1 demand" is worth +1 in round twelve as well as in round one.
 	"demand_modifier": 0.0,
+	## Permanent changes to demand — events, upgrades — as opposed to the
+	## per-round contributions perks make.
+	"demand_modifier_base": 0.0,
 	"advertising": 0.0,
 	"active_jobs": [],
 	"active_job": {},
@@ -97,6 +112,7 @@ var statistics: Dictionary = {
 	"lifetime_tokens": 0.0,
 	"failed_jobs": 0,
 	"completed_jobs": 0,
+	"last_job_reward": 0.0,
 	"absurdity_metrics": {},
 	"peak_token_rate": 0.0,
 	"peak_cash": 0.0,
@@ -369,6 +385,35 @@ func _migrate(from_version: int) -> void:
 		_migrate_cloud_liability_rename()
 	if from_version < 14:
 		_migrate_upgrade_counts()
+	if from_version < 15:
+		_migrate_to_derived_cloud_cost_and_demand()
+
+
+## Cloud cost and demand were both stats that read and wrote themselves: a perk
+## discounting cloud spend discounted its own last answer on every
+## recalculation, and a perk worth "+1 demand" added another +1 every round. Both
+## now derive from a base, so an old save carries a compounded figure that cannot
+## be told apart from a legitimate one. The base is rebuilt from what the run
+## demonstrably bought, and the derived value is left for the next recalculation.
+func _migrate_to_derived_cloud_cost_and_demand() -> void:
+	economy["cloud_base_cost_per_prompt"] = _cloud_cost_of_owned_tiers()
+	economy["cloud_cost_per_prompt"] = float(economy["cloud_base_cost_per_prompt"])
+	business["demand_modifier_base"] = 0.0
+	business["demand_modifier"] = 0.0
+
+
+## What the cloud shelf the run has actually bought bills per prompt, summed
+## back out of the upgrades rather than trusted from the saved figure.
+func _cloud_cost_of_owned_tiers() -> float:
+	var total: float = 0.0
+	for upgrade_id in Array(build.get("upgrades", [])):
+		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
+		if upgrade == null:
+			continue
+		for effect in upgrade.effects:
+			if effect is EffectDefinition and effect.target == "economy.cloud_base_cost_per_prompt":
+				total += float(effect.value)
+	return total
 
 
 ## The liability was always the surcharge on metered cloud spend, not cloud
@@ -541,6 +586,7 @@ func _default_economy(profile: Dictionary = {}) -> Dictionary:
 		"round_rent": float(economy_balance.get("starting_rent", 400.0)) * float(profile.get("rent_multiplier", 1.0)),
 		"power_base_cost_per_prompt": base_power,
 		"power_cost_per_prompt": base_power,
+		"cloud_base_cost_per_prompt": 0.0,
 		"cloud_cost_per_prompt": 0.0,
 		"costs_this_round": 0.0,
 		"last_round_costs": 0.0,
@@ -554,6 +600,9 @@ func _default_compute() -> Dictionary:
 		"cloud_burst": 0.0,
 		"cloud_burst_prompts": 0,
 		"token_rate": 1_000_000.0,
+		"local_rate": 1_000_000.0,
+		"cloud_rate": 0.0,
+		"cloud_share": 0.0,
 		"prompt_rate": 1_000_000.0,
 		"power_draw": 65.0,
 		"cooling": 0.0,
@@ -571,6 +620,7 @@ func _default_business() -> Dictionary:
 		"reputation": 10.0,
 		"demand": 3.0,
 		"demand_modifier": 0.0,
+		"demand_modifier_base": 0.0,
 		"advertising": 0.0,
 		"active_jobs": [],
 		"active_job": {},
@@ -604,6 +654,9 @@ func _default_statistics() -> Dictionary:
 		"lifetime_tokens": 0.0,
 		"failed_jobs": 0,
 		"completed_jobs": 0,
+		## What the last round of delivered work paid, for perks that earn a
+		## share of the fee rather than a flat sum.
+		"last_job_reward": 0.0,
 		"absurdity_metrics": {},
 		"peak_token_rate": 0.0,
 		"peak_cash": 0.0,

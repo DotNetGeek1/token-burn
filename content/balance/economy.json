@@ -19,6 +19,11 @@
     "round_end_retained": 0.5,
     "vent_ratio": 0.45
   },
+  "build": {
+    "perk_cap": 6,
+    "draft_tag_affinity": 1.5,
+    "draft_tag_affinity_cap": 4.0
+  },
   "location_order": [
     "bedroom",
     "garage",

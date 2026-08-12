@@ -203,7 +203,7 @@
     "recurring_cost_delta": 6000,
     "effects": [
       {"operation": "add", "target": "compute.cloud_capacity", "value": 300000000},
-      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 1200}
+      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 1200}
     ]
   },
   {
@@ -217,7 +217,7 @@
     "recurring_cost_delta": 30000,
     "effects": [
       {"operation": "add", "target": "compute.cloud_capacity", "value": 2000000000},
-      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 5000}
+      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 5000}
     ]
   },
   {
@@ -231,7 +231,7 @@
     "recurring_cost_delta": 200000,
     "effects": [
       {"operation": "add", "target": "compute.cloud_capacity", "value": 20000000000},
-      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 40000}
+      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 40000}
     ]
   },
   {
@@ -245,7 +245,7 @@
     "recurring_cost_delta": 80,
     "effects": [
       {"operation": "add", "target": "compute.cloud_capacity", "value": 2000000},
-      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 40}
+      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 40}
     ]
   },
   {
@@ -259,7 +259,7 @@
     "recurring_cost_delta": 40,
     "effects": [
       {"operation": "add", "target": "compute.cloud_capacity", "value": 5000000},
-      {"operation": "add", "target": "economy.cloud_cost_per_prompt", "value": 60}
+      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 60}
     ]
   },
   {

@@ -18,7 +18,9 @@ func run() -> void:
 
 func _shop(location: String = "bedroom") -> Dictionary:
 	var state := RunState.new()
-	Simulation.apply_run_location(state, location)
+	# The ledger under test counts purchases, so the machine the room comes with
+	# is left out rather than showing up as a unit nobody bought.
+	Simulation.apply_run_location(state, location, false)
 	state.economy["cash"] = 100000000.0
 	return {
 		"state": state,

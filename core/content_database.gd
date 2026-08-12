@@ -155,17 +155,33 @@ func draw_operations(
 	return picks
 
 
+## The angel's offer. `owned_tags` bends the draw towards whatever the build has
+## already committed to, so a run that has bought into local hardware keeps being
+## shown local hardware rather than three unrelated cards a round. `blocked_ids`
+## are perks the build could not take even if offered — a dead card on the table
+## is a wasted pick, so they never appear.
 func draw_perks(
 	rng: DeterministicRng,
 	count: int = 3,
 	owned_ids: Array = [],
-	rarity_bias: float = 0.0
+	rarity_bias: float = 0.0,
+	owned_tags: Array = [],
+	blocked_ids: Array = []
 ) -> Array[PerkDefinition]:
+	var affinity: float = float(_build_tuning().get("draft_tag_affinity", 1.5))
+	var affinity_cap: float = float(_build_tuning().get("draft_tag_affinity_cap", 4.0))
 	var pool: Array = []
 	for perk in perks:
-		if perk.id in owned_ids:
+		if perk.id in owned_ids or perk.id in blocked_ids:
 			continue
-		pool.append({"item": perk, "weight": _rarity_weight(perk.rarity, rarity_bias)})
+		var weight: float = _rarity_weight(perk.rarity, rarity_bias)
+		var matches: int = 0
+		for tag in perk.tags:
+			if tag in owned_tags:
+				matches += 1
+		if matches > 0:
+			weight *= minf(pow(affinity, float(matches)), affinity_cap)
+		pool.append({"item": perk, "weight": weight})
 	if pool.is_empty():
 		return []
 	var picks: Array[PerkDefinition] = []
@@ -230,8 +246,11 @@ func _load_jobs() -> void:
 		job.id = str(entry.get("id", ""))
 		job.name = str(entry.get("name", ""))
 		job.description = str(entry.get("description", ""))
-		job.reward = float(entry.get("reward", 0.0))
-		job.token_requirement = float(entry.get("token_requirement", 0.0))
+		job.tier = int(entry.get("tier", 0))
+		job.work_units = float(entry.get("work_units", 1.0))
+		job.reward_units = float(entry.get("reward_units", 1.0))
+		job.deadline_pressure = float(entry.get("deadline_pressure", 1.0))
+		job.windfall = bool(entry.get("windfall", false))
 		job.quality_threshold = float(entry.get("quality_threshold", 0.0))
 		job.deadline_days = float(entry.get("deadline_days", 0.0))
 		job.context_requirement = str(entry.get("context_requirement", ""))
@@ -346,6 +365,13 @@ func _load_achievements() -> void:
 			continue
 		achievements.append(entry)
 		_achievements_by_id[str(entry.get("id", ""))] = entry
+
+
+## Build-layer knobs: the perk cap and how hard drafts lean into owned tags.
+func _build_tuning() -> Dictionary:
+	var economy: Dictionary = balance.get("economy", {})
+	var block: Variant = economy.get("build", {})
+	return block if block is Dictionary else {}
 
 
 func _load_balance() -> void:

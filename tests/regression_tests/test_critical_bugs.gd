@@ -13,6 +13,10 @@ func run() -> void:
 	_test_multi_job_tick_counts_once()
 	_test_a_granted_module_does_not_replace_the_starters()
 	_test_previews_emit_no_domain_events()
+	_test_a_cloud_discount_does_not_eat_its_own_answer()
+	_test_a_demand_perk_is_a_bonus_not_a_ratchet()
+	_test_a_build_cannot_hold_more_than_its_cap()
+	_test_rival_keystones_cannot_share_a_build()
 
 
 func _make_sim() -> Node:
@@ -204,4 +208,75 @@ func _test_previews_emit_no_domain_events() -> void:
 
 	for pair in connections:
 		pair[0].disconnect(pair[1])
+	sim.free()
+
+
+## Cloud Baron's discount used to be written back over the number it had just
+## halved, so £5,000 became £2,500, then £1,250, and after a dozen prompts the
+## cloud was effectively free. The cost is re-seeded from the base every time.
+func _test_a_cloud_discount_does_not_eat_its_own_answer() -> void:
+	var sim := _make_sim()
+	sim.start_run(150)
+	sim.run_state.economy["cloud_base_cost_per_prompt"] = 400.0
+	sim.run_state.build["perks"] = ["perk.cloud_baron"]
+	sim._invalidate_subscriptions()
+	for _i in range(20):
+		sim._compute_system.recalculate(
+			sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
+		)
+	assert_eq(
+		sim.run_state.economy.get("cloud_cost_per_prompt", 0.0),
+		200.0,
+		"Twenty recalculations later the discount is still half of the base"
+	)
+	sim.free()
+
+
+## Founder Mode is +1 demand, not +1 demand per round for the rest of the run.
+func _test_a_demand_perk_is_a_bonus_not_a_ratchet() -> void:
+	var sim := _make_sim()
+	sim.start_run(151)
+	sim.run_state.build["perks"] = ["perk.founder_mode"]
+	sim._invalidate_subscriptions()
+	var seen: Array[float] = []
+	for _i in range(10):
+		sim._begin_round()
+		seen.append(float(sim.run_state.business.get("demand_modifier", 0.0)))
+	for value in seen:
+		assert_eq(value, 1.0, "Founder Mode contributes +1 every round, not +1 more: %s" % str(seen))
+	sim.free()
+
+
+func _test_a_build_cannot_hold_more_than_its_cap() -> void:
+	var sim := _make_sim()
+	sim.start_run(152)
+	var cap: int = sim._perk_system.perk_cap(ContentDatabase)
+	var taken: int = 0
+	for perk in ContentDatabase.perks:
+		if sim._perk_system.acquire(sim.run_state, perk.id, ContentDatabase):
+			taken += 1
+	assert_true(taken > 0, "At least some perks are acquirable from an empty build")
+	assert_true(
+		sim.run_state.build["perks"].size() <= cap,
+		"A build stops at its cap of %d, not %d" % [cap, sim.run_state.build["perks"].size()]
+	)
+	sim.free()
+
+
+## A doctrine is only a choice if picking one closes the other.
+func _test_rival_keystones_cannot_share_a_build() -> void:
+	var sim := _make_sim()
+	sim.start_run(153)
+	assert_true(
+		sim._perk_system.acquire(sim.run_state, "perk.works_on_my_machine", ContentDatabase),
+		"The local common opens the local doctrine"
+	)
+	assert_true(
+		sim._perk_system.acquire(sim.run_state, "perk.bare_metal", ContentDatabase),
+		"Bare Metal follows from owning local hardware perks"
+	)
+	assert_false(
+		sim._perk_system.acquire(sim.run_state, "perk.cloud_native", ContentDatabase),
+		"Cloud Native is closed off once the build has gone bare metal"
+	)
 	sim.free()

@@ -195,10 +195,21 @@ func _apply_effect_dict(
 ) -> Transaction:
 	var operation: String = str(effect.get("operation", "add")).to_lower()
 	var target: String = str(effect.get("target", ""))
+	# `business.demand` is derived from reputation and advertising every round,
+	# so an effect adding to it directly would be wiped. Events and upgrades
+	# mean it permanently; perks that mean it for one round target
+	# `business.demand_modifier`, which is re-seeded from this base each round.
 	if target == "business.demand" and operation == "add":
-		target = "business.demand_modifier"
+		target = "business.demand_modifier_base"
 	var raw_value: Variant = effect.get("value", 0)
 	var value: Variant = _resolve_effect_value(raw_value, eval_ctx)
+	# "A share of another stat" rather than a literal figure. A perk worth a flat
+	# £1,500 is a run-defining loan in the bedroom and a rounding error on the
+	# moon; scaled against the rent or the fee, it means the same thing in both.
+	if effect.has("value_from"):
+		value = _as_float(
+			mod_ctx.get_value(str(effect["value_from"]), 0.0)
+		) * _as_float(value, 1.0)
 	var current: Variant = mod_ctx.get_value(target, 0.0) if target != "" else null
 	var result: Variant = current
 	var metadata: Dictionary = {}
@@ -590,6 +601,16 @@ const DERIVED_PATHS := [
 	"compute.efficiency",
 	"compute.local_capacity",
 	"compute.power_draw",
+	## The two halves of the rate and the ratio between them, rebuilt from what
+	## is racked and what is rented on every recalculation.
+	"compute.local_rate",
+	"compute.cloud_rate",
+	"compute.cloud_share",
+	## What the cloud shelf bills per prompt, re-seeded from
+	## economy.cloud_base_cost_per_prompt. Persisting a discount here meant a
+	## "50% off" perk halved its own last answer every recalculation, so £5,000
+	## became £2,500, then £1,250, and eventually nothing.
+	"economy.cloud_cost_per_prompt",
 	## An upgrade's `+N cooling` is a description of the unit, not an instruction
 	## to add N to the run. ComputeSystem sums it back out of what is installed,
 	## which is what stops moving, reloading or recalculating counting it twice.

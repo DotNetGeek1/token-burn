@@ -20,7 +20,9 @@ func _make_sim(run_seed: int = 601, location: String = "garage") -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(run_seed)
-	sim.apply_run_location(sim.run_state, location)
+	# What one rack contributes, measured against a bare room: the machine the
+	# garage comes with would otherwise be folded into the delta.
+	sim.apply_run_location(sim.run_state, location, false)
 	sim.run_state.economy["cash"] = 500_000.0
 	return sim
 

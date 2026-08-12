@@ -145,8 +145,12 @@ func _bench_warning() -> Array:
 
 func _refresh_board_line() -> void:
 	var owned: int = Simulation.owned_operations().size()
-	board_label.text = "%d of %d modules in the pipeline · %d slot(s)" % [
-		Simulation.filled_slot_count(), owned, Simulation.board_slots().size()
+	# The perk count belongs next to the offers: a build is capped, so the last
+	# free perk of a run should not be taken by accident.
+	var perks: Dictionary = Simulation.perk_capacity()
+	board_label.text = "%d of %d modules in the pipeline · %d slot(s) · %d of %d perks" % [
+		Simulation.filled_slot_count(), owned, Simulation.board_slots().size(),
+		int(perks.get("owned", 0)), int(perks.get("cap", 0))
 	]
 
 

@@ -1,8 +1,9 @@
 {
   "baseline_token_rate": 1000000,
-  "min_work_prompts": 6,
+  "min_work_prompts": 3,
   "deadline_slack_prompts": 2,
   "min_reward_cost_multiplier": 7.0,
+  "min_reward_rent_share": 0.5,
   "failed_job_consolation_ratio": 0.2,
   "queue_capacity_cap": 2.0,
   "max_burst_multiplier": 8.0,
@@ -17,15 +18,15 @@
   },
   "reward_scaling": {
     "base_multiplier": 1.0,
-    "per_round_growth": 0.12
+    "per_round_growth": 0.04
   },
   "token_scaling": {
     "base_multiplier": 1.0,
-    "per_round_growth": 0.12
+    "per_round_growth": 0.03
   },
   "quality_scaling": {
     "base_threshold": 50,
-    "per_tier_increase": 8
+    "per_tier_increase": 6
   },
   "quality_payout": {
     "penalty_floor": 0.5,
@@ -40,30 +41,63 @@
     "session_gain_under": 0,
     "excellent_margin": 20
   },
-  "max_work_prompts_by_tier": [8, 10, 12, 14, 16, 20],
-  "deadline_slack_by_tier": [2, 1, 1, 1, 1, 1],
-  "revision_risk_cap_by_tier": [0.04, 0.08, 0.12, 0.16, 0.2, 0.25],
-  "bug_chance_by_tier": [0.04, 0.07, 0.1, 0.12, 0.12, 0.12],
-  "scope_creep_pct_by_tier": [0.02, 0.03, 0.04, 0.05, 0.05, 0.05],
-  "tier_unlock_by_reputation": [0, 12, 22, 32, 42, 52],
-  "sales_level_rep_reduction": 2,
-  "tier_unlock_by_round": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
-  "location_round_offset": {
-    "bedroom": 0,
-    "garage": 10,
-    "office_unit": 20,
-    "warehouse": 30,
-    "datacentre_campus": 40,
-    "private_power_grid": 50,
-    "moon_facility": 60
-  },
-  "tier_unlock_by_token_rate": [
-    {"rate": 1000000, "tier": 0},
-    {"rate": 4000000, "tier": 1},
-    {"rate": 10000000, "tier": 2},
-    {"rate": 20000000, "tier": 3},
-    {"rate": 40000000, "tier": 4},
-    {"rate": 60000000, "tier": 5}
-  ]
+  "location_bands": [
+    {
+      "location": "bedroom",
+      "expected_token_rate": 1500000,
+      "target_work_prompts": 5,
+      "base_reward": 500,
+      "major_purchase": 1200
+    },
+    {
+      "location": "garage",
+      "expected_token_rate": 8000000,
+      "target_work_prompts": 6,
+      "base_reward": 5000,
+      "major_purchase": 15000
+    },
+    {
+      "location": "office_unit",
+      "expected_token_rate": 60000000,
+      "target_work_prompts": 7,
+      "base_reward": 50000,
+      "major_purchase": 150000
+    },
+    {
+      "location": "warehouse",
+      "expected_token_rate": 600000000,
+      "target_work_prompts": 7,
+      "base_reward": 500000,
+      "major_purchase": 1500000
+    },
+    {
+      "location": "datacentre_campus",
+      "expected_token_rate": 6000000000,
+      "target_work_prompts": 8,
+      "base_reward": 6000000,
+      "major_purchase": 20000000
+    },
+    {
+      "location": "private_power_grid",
+      "expected_token_rate": 120000000000,
+      "target_work_prompts": 8,
+      "base_reward": 80000000,
+      "major_purchase": 250000000
+    },
+    {
+      "location": "moon_facility",
+      "expected_token_rate": 2500000000000,
+      "target_work_prompts": 9,
+      "base_reward": 500000000,
+      "major_purchase": 1500000000
+    }
+  ],
+  "stretch_reward_bonus": 0.35,
+  "mismatch_reward_bonus": 0.2,
+  "deadline_slack_by_tier": [3, 2, 2, 2, 2, 2, 2],
+  "revision_risk_cap_by_tier": [0.04, 0.08, 0.12, 0.16, 0.2, 0.22, 0.25],
+  "bug_chance_by_tier": [0.04, 0.07, 0.1, 0.12, 0.12, 0.12, 0.12],
+  "scope_creep_pct_by_tier": [0.02, 0.03, 0.04, 0.05, 0.05, 0.05, 0.05],
+  "tier_unlock_by_reputation": [0, 12, 22, 32, 42, 52, 62],
+  "sales_level_rep_reduction": 2
 }
-

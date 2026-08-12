@@ -261,7 +261,10 @@ func reset_run(p_seed: int = 0) -> void:
 ## Settles the run into its location. A location is a chapter, not a purchase:
 ## its rent, floor space and environmental cooling replace the defaults once,
 ## at the start, rather than being added to whatever was already there.
-func apply_run_location(state: RunState, location_id: String) -> void:
+## `grant_starter_rig` is only turned off by tests that are measuring the room
+## itself — its cooling, its floor space, its shelves — where the machine the
+## room comes with would be counted as part of the answer.
+func apply_run_location(state: RunState, location_id: String, grant_starter_rig: bool = true) -> void:
 	var dwelling_costs: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
 	var location: String = location_id
 	if not dwelling_costs.has(location):
@@ -285,11 +288,27 @@ func apply_run_location(state: RunState, location_id: String) -> void:
 	state.compute["heat_capacity"] = float(
 		stats.get("heat_capacity", state.compute.get("heat_capacity", 100.0))
 	)
+	if grant_starter_rig:
+		_grant_location_starter_rig(state, stats)
 	state.compute["cooling"] = ComputeSystem.derive_cooling(state)
 	# The contract belongs to the location, so moving the run moves the contract
 	# with it. Nothing else can set it: a run measured against the chapter it is
 	# no longer in has no way to be won.
 	_ascension_system.activate(state, ContentDatabase)
+
+
+## The machine the room comes with. Contracts are sized against the rig a
+## location expects rather than against whatever the player happens to own, so a
+## run that starts in the warehouse on a second-hand laptop would be handed work
+## a thousand times beyond it.
+func _grant_location_starter_rig(state: RunState, stats: Dictionary) -> void:
+	for upgrade_id in Array(stats.get("starting_hardware", [])):
+		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
+		if upgrade == null:
+			continue
+		if UpgradeSystem.installed_count(state, UpgradeSystem.installed_key(upgrade)) > 0:
+			continue
+		_upgrade_system.install_carried(state, str(upgrade_id), ContentDatabase, effect_resolver)
 
 
 ## Racks the machines earned through the permanent starting-rig unlock ladder.
@@ -332,11 +351,18 @@ func _begin_round() -> void:
 	run_state.calendar["prompt"] = 1
 	run_state.business["job_board_seq"] = 0
 	run_state.economy["costs_this_round"] = 0.0
-	_demand_system.refresh_demand(run_state)
+	# Perks contribute their demand during round.started, so the modifier is put
+	# back to its permanent base first. Without this a perk worth "+1 demand"
+	# added another +1 every round until the board was permanently full.
+	run_state.business["demand_modifier"] = float(
+		run_state.business.get("demand_modifier_base", 0.0)
+	)
 	effect_resolver.begin_action("round.started")
 	var mod_ctx := ModifierContext.new("round.started", run_state)
 	mod_ctx.rng = rng.derive("round.started")
 	effect_resolver.dispatch("round.started", mod_ctx, _collect_subscriptions())
+	# Read after the dispatch, so this round's board reflects this round's perks.
+	_demand_system.refresh_demand(run_state)
 	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
 	_job_system.generate_offers(run_state, rng.derive("job_offers"), ContentDatabase, tuning)
 	run_state.business["job_board_stamp"] = _board_stamp()
@@ -1178,7 +1204,9 @@ func advance_to_next_chapter() -> bool:
 	# float: the stake is a floor under the new rent, not a replacement for
 	# what the last chapter earned.
 	var cash_carried: float = float(run_state.economy.get("cash", 0.0))
-	apply_run_location(run_state, next_location)
+	# The next room's own machine is a stake for a run that starts there. A run
+	# that won its way up arrives with the rig it won on, and nothing else.
+	apply_run_location(run_state, next_location, false)
 	run_state.economy["cash"] = maxf(cash_carried, float(run_state.economy.get("cash", 0.0)))
 	# A permanent rig rung the old room had no floor for is racked now that
 	# there is a room that fits it.
@@ -1458,6 +1486,11 @@ func _end_session(reason: String) -> void:
 	for job in failed:
 		EventBus.emit_event(EventBus.EVENT_JOB_FAILED, {"job_id": job.get("id", "")})
 	run_state.statistics["completed_jobs"] = int(run_state.statistics.get("completed_jobs", 0)) + completed.size()
+	# What the last delivered work was worth, so a perk paying "a percentage of
+	# the job" has a figure to take a percentage of. A flat sum instead means the
+	# same perk is a lifeline in the bedroom and invisible on the moon.
+	if reward > 0.0:
+		run_state.statistics["last_job_reward"] = reward
 	run_state.statistics["failed_jobs"] = int(run_state.statistics.get("failed_jobs", 0)) + failed.size()
 	_achievement_system.evaluate_tick(run_state, ContentDatabase)
 	last_session_summary["reputation_delta"] = _settle_reputation(completed, failed)
@@ -1820,6 +1853,15 @@ func get_perk_description(perk_id: String) -> String:
 	return _render_perk(perk)
 
 
+## How many perks the build holds against its ceiling, for screens that need to
+## warn the player that picks are running out.
+func perk_capacity() -> Dictionary:
+	return {
+		"owned": run_state.build["perks"].size(),
+		"cap": _perk_system.perk_cap(ContentDatabase),
+	}
+
+
 func get_synergies() -> Array[String]:
 	return _perk_system.detect_synergies(run_state, ContentDatabase)
 
@@ -1844,7 +1886,15 @@ func _present_angel_offers() -> void:
 			"description": get_operation_description(operation.id),
 			"cost": 0.0,
 		})
-	for perk in ContentDatabase.draw_perks(rng.derive("angel_perks"), 2, run_state.build["perks"]):
+	var perk_draw: Array = ContentDatabase.draw_perks(
+		rng.derive("angel_perks"),
+		2,
+		run_state.build["perks"],
+		0.0,
+		_perk_system.owned_tags(run_state, ContentDatabase),
+		_perk_system.blocked_ids(run_state, ContentDatabase)
+	)
+	for perk in perk_draw:
 		pending_choices.append({"type": "perk", "id": perk.id, "label": perk.name, "description": _render_perk(perk), "cost": 0.0})
 	if pending_choices.is_empty():
 		_after_angel_round()
@@ -2085,6 +2135,16 @@ func _collect_subscriptions() -> Array:
 				copy["source_id"] = perk.id
 				copy["parameters"] = perk.parameters.duplicate(true)
 				subs.append(copy)
+	# A completed set pays out for itself. Without this a synergy was a caption
+	# on the build screen telling the player something had happened when nothing
+	# had.
+	for synergy in _perk_system.active_synergies(run_state, ContentDatabase):
+		for sub in synergy.get("subscriptions", []):
+			if sub is Dictionary:
+				var synergy_sub: Dictionary = sub.duplicate(true)
+				synergy_sub["source_id"] = "synergy.%s" % str(synergy.get("name", "set"))
+				synergy_sub["parameters"] = synergy.get("parameters", {})
+				subs.append(synergy_sub)
 	for status in run_state.build["status_effects"]:
 		if status is Dictionary:
 			for sub in status.get("subscriptions", []):

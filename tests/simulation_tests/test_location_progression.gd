@@ -89,6 +89,20 @@ func _test_a_locked_location_cannot_be_selected() -> void:
 	_restore(restore)
 
 
+## A room stakes a run that starts in it with a machine as well as a float, and
+## machines carry cooling of their own.
+func _starter_rig_cooling(stats: Dictionary) -> float:
+	var total: float = 0.0
+	for upgrade_id in Array(stats.get("starting_hardware", [])):
+		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
+		if upgrade == null:
+			continue
+		for effect in upgrade.effects:
+			if effect is EffectDefinition and effect.target == "compute.cooling":
+				total += float(effect.value)
+	return total
+
+
 func _test_a_run_starts_in_the_selected_location() -> void:
 	var restore: Dictionary = _with_scratch_profile()
 	MetaProgress.unlock_location("garage")
@@ -110,9 +124,9 @@ func _test_a_run_starts_in_the_selected_location() -> void:
 	)
 	assert_almost_eq(
 		float(sim.run_state.compute.get("cooling", 0.0)),
-		float(garage.get("cooling_capacity", 0.0)),
+		float(garage.get("cooling_capacity", 0.0)) + _starter_rig_cooling(garage),
 		0.01,
-		"With the garage's cooling and nothing else stacked underneath it"
+		"With the garage's cooling and the machine it comes with, and nothing stacked underneath"
 	)
 	assert_eq(
 		UpgradeSystem.hardware_slots_total(sim.run_state, ContentDatabase),

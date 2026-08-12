@@ -165,20 +165,25 @@ func _test_curve_stays_in_scale() -> void:
 	for upgrade in ContentDatabase.upgrades:
 		sim.buy_upgrade(upgrade.id)
 	var sustained: float = float(sim.run_state.compute.get("token_rate", 0.0))
-	var scaling: Dictionary = ContentDatabase.balance.get("job_scaling", {})
-	var top_tier_rate: float = 0.0
-	for entry in scaling.get("tier_unlock_by_token_rate", []):
-		if entry is Dictionary:
-			top_tier_rate = maxf(top_tier_rate, float(entry.get("rate", 0.0)))
+	var tier: int = JobSystem.location_tier(sim.run_state, ContentDatabase)
+	var band: Dictionary = Dictionary(JobSystem.location_bands(ContentDatabase)[tier])
+	var expected: float = float(band.get("expected_token_rate", 0.0))
 	assert_true(
-		sustained >= top_tier_rate,
-		"Owning everything reaches the top contract tier (%s of %s)" % [
+		sustained >= expected,
+		"Owning everything clears the work the room offers (%s of %s)" % [
 			NumberFormat.format_token_rate(sustained),
-			NumberFormat.format_token_rate(top_tier_rate),
+			NumberFormat.format_token_rate(expected),
 		]
 	)
+	# Contracts are sized against the bands, so a shopping trip that runs past
+	# the last rung of the ladder is a rig the game has no work left to give.
+	var bands: Array = JobSystem.location_bands(ContentDatabase)
+	var top: float = float(Dictionary(bands[bands.size() - 1]).get("expected_token_rate", 0.0))
 	assert_true(
-		sustained <= top_tier_rate * 20.0,
-		"The ladder does not overshoot the tier table by orders of magnitude (%s)" % NumberFormat.format_token_rate(sustained)
+		sustained <= top,
+		"Owning everything does not outrun the last band on the ladder (%s of %s)" % [
+			NumberFormat.format_token_rate(sustained),
+			NumberFormat.format_token_rate(top),
+		]
 	)
 	sim.free()

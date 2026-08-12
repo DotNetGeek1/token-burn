@@ -25,7 +25,9 @@ func _sim(seed_value: int, location: String = "bedroom") -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(seed_value)
-	sim.apply_run_location(sim.run_state, location)
+	# The subject is the room's own cooling budget, so the machine the room comes
+	# with — which carries cooling of its own — is left out of the sum.
+	sim.apply_run_location(sim.run_state, location, false)
 	sim.run_state.economy["cash"] = 1.0e12
 	sim._compute_system.recalculate(
 		sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng

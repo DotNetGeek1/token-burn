@@ -22,7 +22,9 @@ func run() -> void:
 
 func _shop(location: String = "bedroom") -> Dictionary:
 	var state := RunState.new()
-	Simulation.apply_run_location(state, location)
+	# These count what the shop sells and what the floor holds, so the machine
+	# the room comes with would be an extra unit nobody bought.
+	Simulation.apply_run_location(state, location, false)
 	state.economy["cash"] = 100000000.0
 	return {
 		"state": state,

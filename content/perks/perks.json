@@ -4,6 +4,7 @@
     "name": "Ship It",
     "rarity": "rare",
     "tags": ["deadline", "reward", "risk"],
+    "requires_tags": ["risk"],
     "description_template": "Jobs completed with under {threshold}% time remaining pay {multiplier}×.",
     "parameters": {"threshold": 0.05, "multiplier": 2.0},
     "subscriptions": [{
@@ -35,30 +36,29 @@
     "name": "Free Trial",
     "rarity": "rare",
     "tags": ["cloud", "risk"],
-    "description_template": "Cloud compute is free for the first {trial_prompts} prompts of a round, then costs {late_multiplier}× with deferred penalties of ${deferred_penalty}.",
+    "description_template": "Cloud compute is free for the first {trial_prompts} prompts of a round and runs {trial_rate_pct}% faster; after that it bills {late_multiplier}× the going rate.",
     "parameters": {
       "trial_prompts": 3,
       "trial_rate_bonus": 1.15,
-      "late_multiplier": 4.0,
-      "deferred_penalty": 75
+      "trial_rate_pct": 15,
+      "late_multiplier": 4.0
     },
     "subscriptions": [
       {
-        "event": "prompt.started",
+        "event": "compute.recalculate",
         "priority": 15,
         "conditions": [{"left": "calendar.prompt", "operator": "<=", "right": "$trial_prompts"}],
         "effects": [
           {"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 1.0},
-          {"operation": "multiply", "target": "compute.token_rate", "value": "$trial_rate_bonus"}
+          {"operation": "multiply", "target": "compute.cloud_rate", "value": "$trial_rate_bonus"}
         ]
       },
       {
-        "event": "prompt.started",
+        "event": "compute.recalculate",
         "priority": 16,
         "conditions": [{"left": "calendar.prompt", "operator": ">", "right": "$trial_prompts"}],
         "effects": [
-          {"operation": "multiply", "target": "economy.cloud_surcharge_liability", "value": "$late_multiplier"},
-          {"operation": "defer_cost", "target": "economy.cash", "value": "$deferred_penalty", "prompts": 2}
+          {"operation": "multiply", "target": "economy.cloud_cost_per_prompt", "value": "$late_multiplier"}
         ]
       }
     ]
@@ -68,13 +68,13 @@
     "name": "Works on My Machine",
     "rarity": "common",
     "tags": ["local", "risk"],
-    "description_template": "Local jobs gain +{bonus}% throughput.",
-    "parameters": {"bonus": 25},
+    "description_template": "Hardware you own runs +{bonus}% faster. Rented cloud gains nothing.",
+    "parameters": {"bonus": 40},
     "subscriptions": [{
       "event": "compute.recalculate",
       "priority": 10,
       "conditions": [],
-      "effects": [{"operation": "multiply", "target": "compute.token_rate", "value": 1.25}]
+      "effects": [{"operation": "multiply", "target": "compute.local_rate", "value": 1.4}]
     }]
   },
   {
@@ -82,14 +82,19 @@
     "name": "Technical Debt",
     "rarity": "uncommon",
     "tags": ["cash", "risk"],
-    "description_template": "Borrow ${cash} immediately; every batch ships one extra hidden bug and loses {bug_quality_penalty} quality.",
-    "parameters": {"cash": 1500, "bug_quality_penalty": 4, "bug_quality_delta": -4},
+    "description_template": "Borrow {rent_multiple}× the round's rent immediately; every batch ships one extra hidden bug and loses {bug_quality_penalty} quality.",
+    "parameters": {"rent_multiple": 4, "bug_quality_penalty": 4, "bug_quality_delta": -4},
     "subscriptions": [
       {
         "event": "perk.acquired",
         "priority": 5,
         "conditions": [],
-        "effects": [{"operation": "borrow", "target": "economy.cash", "value": "$cash"}]
+        "effects": [{
+          "operation": "borrow",
+          "target": "economy.cash",
+          "value_from": "economy.round_rent",
+          "value": "$rent_multiple"
+        }]
       },
       {
         "event": "board.batch_finished",
@@ -129,6 +134,7 @@
     "name": "Infinite Context",
     "rarity": "legendary",
     "tags": ["tokens", "risk"],
+    "requires_tags": ["risk"],
     "description_template": "Token rate gains {growth_multiplier}× per round elapsed, stacking up to {max_stacks} times.",
     "parameters": {"growth_multiplier": 1.25, "max_stacks": 3},
     "subscriptions": [{
@@ -148,8 +154,8 @@
     "name": "The Wrapper",
     "rarity": "rare",
     "tags": ["passive", "reward"],
-    "description_template": "Each completed job grants a {passive_ratio_pct}% clone bonus and spawns ${passive_income} of passive income every round.",
-    "parameters": {"passive_ratio": 0.15, "passive_ratio_pct": 15, "passive_income": 25},
+    "description_template": "Each completed job grants a {passive_ratio_pct}% clone bonus and turns {passive_income_pct}% of its fee into income every round.",
+    "parameters": {"passive_ratio": 0.15, "passive_ratio_pct": 15, "passive_income_ratio": 0.03, "passive_income_pct": 3},
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 20,
@@ -172,7 +178,12 @@
               "event": "round.started",
               "priority": 5,
               "conditions": [],
-              "effects": [{"operation": "add", "target": "economy.cash", "value": 25}]
+              "effects": [{
+                "operation": "add",
+                "target": "economy.cash",
+                "value_from": "statistics.last_job_reward",
+                "value": 0.03
+              }]
             }]
           }
         }
@@ -236,8 +247,9 @@
     "name": "Cloud Baron",
     "rarity": "rare",
     "tags": ["cloud", "economy"],
-    "description_template": "Cloud costs discounted by {cloud_discount_pct}%; liability grows +{liability_per_prompt} each prompt.",
-    "parameters": {"cloud_discount_pct": 50, "liability_per_prompt": 15},
+    "requires_tags": ["cloud"],
+    "description_template": "Cloud costs discounted by {cloud_discount_pct}%, against a {surcharge_pct}% surcharge on every cloud prompt at the end of the round.",
+    "parameters": {"cloud_discount_pct": 50, "surcharge_ratio": 0.2, "surcharge_pct": 20},
     "subscriptions": [
       {
         "event": "compute.recalculate",
@@ -249,7 +261,13 @@
         "event": "prompt.started",
         "priority": 15,
         "conditions": [],
-        "effects": [{"operation": "add", "target": "economy.cloud_surcharge_liability", "value": "$liability_per_prompt"}]
+        "effects": [{
+          "operation": "convert",
+          "from": "economy.cloud_cost_per_prompt",
+          "target": "economy.cloud_surcharge_liability",
+          "value": "$surcharge_ratio",
+          "consume": false
+        }]
       }
     ]
   },
@@ -278,6 +296,7 @@
     "name": "Wide Bus",
     "rarity": "rare",
     "tags": ["board", "hardware"],
+    "requires_tags": ["board"],
     "description_template": "The Burn Board gains {slots} extra pipeline slot.",
     "parameters": {"slots": 1},
     "subscriptions": [{
@@ -292,6 +311,7 @@
     "name": "Two Ways of Working",
     "rarity": "rare",
     "tags": ["board", "workflow"],
+    "requires_tags": ["board"],
     "description_template": "Room for {workflows} more workflow, so contracts can be routed through different pipelines.",
     "parameters": {"workflows": 1},
     "subscriptions": [{
@@ -350,7 +370,8 @@
     "id": "perk.thermal_paste",
     "name": "Generous Thermal Paste",
     "rarity": "common",
-    "tags": ["board", "heat"],
+    "tags": ["board", "heat", "thermal_safety"],
+    "incompatible_ids": ["perk.hot_streak"],
     "description_template": "Pipeline stages run {heat_discount_pct}% cooler.",
     "parameters": {"heat_discount": 0.4, "heat_discount_pct": 40},
     "subscriptions": [{
@@ -364,7 +385,8 @@
     "id": "perk.hot_streak",
     "name": "Thermal Runaway",
     "rarity": "rare",
-    "tags": ["board", "heat", "risk"],
+    "tags": ["board", "heat", "risk", "thermal_runaway"],
+    "incompatible_ids": ["perk.thermal_paste"],
     "description_template": "While the rig is above {threshold}% heat, batches produce {multiplier}× progress.",
     "parameters": {"threshold": 0.9, "multiplier": 3.0},
     "subscriptions": [{
@@ -379,6 +401,7 @@
     "name": "Bug Alchemy",
     "rarity": "rare",
     "tags": ["board", "bugs"],
+    "requires_tags": ["bugs"],
     "description_template": "Turns {convert_pct}% of a batch's known bugs into raw progress.",
     "parameters": {"convert": 0.3, "convert_pct": 30},
     "subscriptions": [{
@@ -436,6 +459,7 @@
     "name": "Pipeline Momentum",
     "rarity": "rare",
     "tags": ["board", "positional"],
+    "requires_tags": ["board"],
     "description_template": "Each stage makes the stage below it {bonus_pct}% stronger.",
     "parameters": {"bonus": 1.15, "bonus_pct": 15},
     "subscriptions": [{
@@ -464,6 +488,102 @@
         "priority": 8,
         "conditions": [],
         "effects": [{"operation": "discount", "target": "batch.quality", "value": 0.1}]
+      }
+    ]
+  },
+  {
+    "id": "perk.bare_metal",
+    "name": "Bare Metal",
+    "rarity": "legendary",
+    "tags": ["local", "hardware", "keystone"],
+    "requires_tags": ["local"],
+    "excludes_tags": ["cloud"],
+    "incompatible_ids": ["perk.cloud_native"],
+    "description_template": "Owned hardware runs {local_multiplier}× as fast and the power bill rises {power_pct}%. You will never rent compute again.",
+    "parameters": {"local_multiplier": 2.0, "power_multiplier": 1.6, "power_pct": 60},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 20,
+      "conditions": [],
+      "effects": [
+        {"operation": "multiply", "target": "compute.local_rate", "value": "$local_multiplier"},
+        {"operation": "multiply", "target": "economy.power_cost_per_prompt", "value": "$power_multiplier"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.cloud_native",
+    "name": "Cloud Native",
+    "rarity": "legendary",
+    "tags": ["cloud", "economy", "keystone"],
+    "requires_tags": ["cloud"],
+    "excludes_tags": ["local"],
+    "incompatible_ids": ["perk.bare_metal"],
+    "description_template": "Rented compute runs {cloud_multiplier}× as fast, but your own hardware idles at {local_pct}% of its rate.",
+    "parameters": {"cloud_multiplier": 2.25, "local_penalty": 0.5, "local_pct": 50},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 20,
+      "conditions": [],
+      "effects": [
+        {"operation": "multiply", "target": "compute.cloud_rate", "value": "$cloud_multiplier"},
+        {"operation": "multiply", "target": "compute.local_rate", "value": "$local_penalty"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.move_fast_and_break_everything",
+    "name": "Move Fast and Break Everything",
+    "rarity": "legendary",
+    "tags": ["bugs", "risk", "keystone"],
+    "requires_tags": ["bugs"],
+    "excludes_tags": ["test", "thermal_safety"],
+    "incompatible_ids": ["perk.enterprise_grade"],
+    "description_template": "Every batch ships {extra_bugs} more hidden bugs and {progress_multiplier}× the progress.",
+    "parameters": {"extra_bugs": 2, "progress_multiplier": 1.8},
+    "subscriptions": [
+      {
+        "event": "board.batch_started",
+        "priority": 20,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "batch.progress_mult", "value": "$progress_multiplier"}]
+      },
+      {
+        "event": "board.batch_finished",
+        "priority": 4,
+        "conditions": [],
+        "effects": [{"operation": "add", "target": "batch.hidden_bugs", "value": "$extra_bugs"}]
+      }
+    ]
+  },
+  {
+    "id": "perk.enterprise_grade",
+    "name": "Enterprise Grade",
+    "rarity": "legendary",
+    "tags": ["quality", "test", "keystone"],
+    "requires_tags": ["quality"],
+    "excludes_tags": ["risk"],
+    "incompatible_ids": ["perk.move_fast_and_break_everything"],
+    "description_template": "Every stage adds {stage_quality} quality and every batch buries one hidden bug, at {progress_pct}% of the throughput.",
+    "parameters": {"stage_quality": 6, "progress_multiplier": 0.75, "progress_pct": 75},
+    "subscriptions": [
+      {
+        "event": "board.stage_resolved",
+        "priority": 20,
+        "conditions": [],
+        "effects": [{"operation": "add", "target": "stage.quality", "value": "$stage_quality"}]
+      },
+      {
+        "event": "board.batch_started",
+        "priority": 20,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "batch.progress_mult", "value": "$progress_multiplier"}]
+      },
+      {
+        "event": "board.batch_finished",
+        "priority": 20,
+        "conditions": [{"left": "batch.hidden_bugs", "operator": ">", "right": 0}],
+        "effects": [{"operation": "add", "target": "batch.hidden_bugs", "value": -1}]
       }
     ]
   }
