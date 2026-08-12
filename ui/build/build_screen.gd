@@ -5,6 +5,7 @@ extends Control
 ## numbers the whole thing exists to move as readouts along the bottom.
 
 const PERK_SLOT_LIMIT := 5
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 @onready var frame: ConsoleFrame = $Margin/Frame
 
@@ -15,12 +16,16 @@ var _readouts: HBoxContainer = null
 var _token_panel: ConsolePanel = null
 var _cloud_panel: ConsolePanel = null
 var _selected: String = ""
+var _console_scale: float = 1.0
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
+	add_to_group("console_screens")
 	frame.setup("Your Build")
 	_build_console()
+	resized.connect(_fit_console)
+	visibility_changed.connect(_on_visibility_changed)
 	EventBus.perk_acquired.connect(func(_id): refresh())
 	EventBus.run_started.connect(refresh)
 	refresh()
@@ -74,6 +79,31 @@ func _build_console() -> void:
 	_cloud_panel.setup("CLOUD LIABILITY")
 
 
+func fit_console() -> void:
+	_fit_console()
+
+
+func _on_visibility_changed() -> void:
+	if visible:
+		call_deferred("_fit_console")
+
+
+func _fit_console() -> void:
+	if size.y <= 1.0:
+		return
+	_console_scale = ConsoleMetrics.compute_scale(size.y, get_viewport_rect().size.x)
+	frame.set_metrics(_console_scale)
+	if _table != null:
+		_table.set_metrics(_console_scale)
+	if _detail != null:
+		_detail.set_metrics(_console_scale)
+	if _token_panel != null:
+		_token_panel.set_metrics(_console_scale)
+	if _cloud_panel != null:
+		_cloud_panel.set_metrics(_console_scale)
+	_refresh_synergies()
+
+
 func refresh() -> void:
 	var perks: Array = Simulation.run_state.build.get("perks", [])
 	frame.set_context("PERKS %d / %d" % [perks.size(), PERK_SLOT_LIMIT])
@@ -82,6 +112,7 @@ func refresh() -> void:
 	_refresh_readouts()
 	if _selected == "" or not _table.select_meta(_selected):
 		_detail.clear("SELECT A PERK")
+	_fit_console()
 
 
 func _refresh_perks(perks: Array) -> void:
@@ -114,17 +145,25 @@ func _refresh_synergies() -> void:
 		child.queue_free()
 	var entries: Array[Dictionary] = _active_synergy_entries()
 	_synergies.add_child(
-		ConsoleStyle.label("SYNERGIES", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
+		ConsoleStyle.label(
+			"SYNERGIES",
+			ConsoleMetrics.font_tiny(_console_scale),
+			ConsoleStyle.PHOSPHOR_DIM
+		)
 	)
 	if entries.is_empty():
 		_synergies.add_child(
-			ConsoleStyle.label("NONE RECOGNISED YET", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
+			ConsoleStyle.label(
+				"NONE RECOGNISED YET",
+				ConsoleMetrics.font_tiny(_console_scale),
+				ConsoleStyle.PHOSPHOR_DIM
+			)
 		)
 		return
 	for entry in entries:
 		_synergies.add_child(ConsoleStyle.paragraph(
 			"+ %s — %s" % [str(entry.get("name", "Synergy")).to_upper(), str(entry.get("perks", ""))],
-			ConsoleStyle.FONT_SMALL,
+			ConsoleMetrics.font_small(_console_scale),
 			ConsoleStyle.PHOSPHOR
 		))
 

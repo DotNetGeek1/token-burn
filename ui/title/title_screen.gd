@@ -19,6 +19,7 @@ signal start_requested
 ## The rig's own monitor overlay, so the title's glass and the one the player
 ## works on during a run are the same piece of hardware.
 const CRT_SHADER := preload("res://ui/board/crt_screen.gdshader")
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 const PHOSPHOR := ConsoleStyle.PHOSPHOR
 const PHOSPHOR_DIM := ConsoleStyle.PHOSPHOR_DIM
@@ -255,10 +256,32 @@ func _layout_stage() -> void:
 		size.x * 0.5 - (MACHINE_UV.position.x + MACHINE_UV.size.x * 0.5) * drawn.x,
 		size.y * MACHINE_TOP - MACHINE_UV.position.y * drawn.y
 	)
+	var glass_rect := Rect2(origin + _glass_uv.position * drawn, _glass_uv.size * drawn)
+	# On a handset the painted glass is a couple of centimetres tall, so the
+	# whole machine is blown up around its screen until the menu can print at a
+	# readable size — the keyboard runs off the frame as though the player were
+	# leaning right over it. Desktop keeps the machine the artwork drew.
+	var grow: float = _glass_grow(glass_rect)
+	if grow > 1.001:
+		var focus: Vector2 = glass_rect.get_center()
+		drawn *= grow
+		origin = focus + (origin - focus) * grow
+		glass_rect = Rect2(origin + _glass_uv.position * drawn, _glass_uv.size * drawn)
+		# Keep the grown glass on the window; the machine follows it.
+		var shift := Vector2(
+			clampf(
+				glass_rect.position.x, 8.0, maxf(8.0, size.x - glass_rect.size.x - 8.0)
+			) - glass_rect.position.x,
+			clampf(
+				glass_rect.position.y,
+				size.y * 0.04,
+				maxf(size.y * 0.04, size.y - glass_rect.size.y - 8.0)
+			) - glass_rect.position.y
+		)
+		origin += shift
+		glass_rect.position += shift
 	laptop.position = origin
 	laptop.size = drawn
-
-	var glass_rect := Rect2(origin + _glass_uv.position * drawn, _glass_uv.size * drawn)
 	terminal.position = glass_rect.position
 	terminal.size = glass_rect.size
 
@@ -326,6 +349,19 @@ func _apply_metrics(new_scale: float) -> void:
 		row.set_metrics(_px(13), _px(24), _px(8))
 	for key in _panels:
 		(_panels[key] as ConsolePanel).set_metrics(_scale)
+
+
+## How far the machine has to be blown up for the menu on its glass to reach a
+## readable physical size on this screen. 1.0 wherever the artwork already
+## delivers that.
+func _glass_grow(glass_rect: Rect2) -> float:
+	var boost: float = ConsoleMetrics.stretch_compensation()
+	if boost <= 1.2 or glass_rect.size.y <= 1.0:
+		return 1.0
+	var wanted_height: float = minf(
+		REFERENCE_GLASS * clampf(boost, 1.0, MAX_SCALE), size.y * 0.88
+	)
+	return maxf(1.0, wanted_height / glass_rect.size.y)
 
 
 ## Covers the window with the room, biased up the picture so the crop keeps the

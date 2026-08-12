@@ -10,6 +10,8 @@ extends Control
 
 @onready var frame: ConsoleFrame = $Margin/Frame
 
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
+
 var _tab_row: HBoxContainer = null
 var _tabs: Dictionary = {}
 var _bills_line: Label = null
@@ -18,12 +20,16 @@ var _detail: ConsoleDetail = null
 var _active_tab: String = "hardware"
 var _selected: String = ""
 var _rows: Dictionary = {}
+var _console_scale: float = 1.0
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
+	add_to_group("console_screens")
 	frame.setup("Market")
 	_build_console()
+	resized.connect(_fit_console)
+	visibility_changed.connect(_on_visibility_changed)
 	EventBus.upgrade_purchased.connect(func(_id): refresh())
 	EventBus.run_started.connect(refresh)
 	refresh()
@@ -73,6 +79,37 @@ func _build_console() -> void:
 	_detail.action_pressed.connect(_on_detail_action)
 	content.add_child(_detail)
 	_detail.clear("SELECT AN ITEM")
+
+
+func fit_console() -> void:
+	_fit_console()
+
+
+func _on_visibility_changed() -> void:
+	if visible:
+		call_deferred("_fit_console")
+
+
+func _fit_console() -> void:
+	if size.y <= 1.0:
+		return
+	_console_scale = ConsoleMetrics.compute_scale(size.y, get_viewport_rect().size.x)
+	frame.set_metrics(_console_scale)
+	if _table != null:
+		_table.set_metrics(_console_scale)
+	if _detail != null:
+		_detail.set_metrics(_console_scale)
+	for button in _tabs.values():
+		if button is ConsoleMenuRow:
+			button.set_metrics(
+				ConsoleMetrics.font_small(_console_scale),
+				ConsoleMetrics.row_height(_console_scale),
+				ConsoleMetrics.pad_h(_console_scale)
+			)
+	if _bills_line != null:
+		_bills_line.add_theme_font_size_override(
+			"font_size", ConsoleMetrics.font_tiny(_console_scale)
+		)
 
 
 ## The counters answer to the number keys, the way the title menu does.
@@ -125,6 +162,7 @@ func refresh() -> void:
 
 	if _selected == "" or not _table.select_meta(_selected):
 		_detail.clear("SELECT AN ITEM")
+	_fit_console()
 
 
 ## The counter the player is standing at is lit; the other carries its remaining

@@ -61,6 +61,7 @@ const META_HUB := preload("res://ui/screens/meta_hub.tscn")
 const ACHIEVEMENTS := preload("res://ui/screens/achievements_screen.tscn")
 const INVESTOR_CALL := preload("res://ui/screens/investor_call.tscn")
 const TITLE_SCREEN := preload("res://ui/title/title_screen.tscn")
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 const HUD_HEIGHT := 76.0
 const CHIP_FONT_SIZE := 22
@@ -151,6 +152,13 @@ func _ready() -> void:
 	_sync_overlay_input()
 
 
+## Modal sheets are authored against the window, but the screens that open them
+## live inside the zoomed room on a handset. They mount here instead, above the
+## zoom, so a confirmation never inherits the room's transform.
+func mount_overlay(control: Control) -> void:
+	overlay_root.add_child(control)
+
+
 func _build_overlays() -> void:
 	_angel_investors = ANGEL_INVESTORS.instantiate()
 	_run_end = RUN_END.instantiate()
@@ -198,15 +206,26 @@ func _side_panel_style() -> StyleBoxFlat:
 func _layout_board() -> void:
 	var size: Vector2 = get_viewport_rect().size
 	var panel_width: float = _base_panel_width(size)
-	_place(work_column, AssetCatalog.board_region(board_dwelling(), "work_column"), size, Rect2(
-		0.0, 0.0, 1.0, 1.0
-	))
+	# On a handset the room is zoomed in around the laptop glass, so the console
+	# type — which has to grow to stay physically readable — still prints on the
+	# painted screen instead of floating past the bezel. The art, the work
+	# column and every prop take the same transform, so the picture and the
+	# furniture keep their registration; the edges of the room crop away.
+	var zoom: float = ConsoleMetrics.room_zoom()
+	var focus: Vector2 = _room_focus()
+	var full_rect: Rect2 = _zoom_rect(Rect2(0.0, 0.0, 1.0, 1.0), zoom, focus)
+	_place(board_art, full_rect, size, full_rect)
+	_place(board_art_next, full_rect, size, full_rect)
+	_place(work_column, _zoom_rect(
+		AssetCatalog.board_region(board_dwelling(), "work_column"), zoom, focus
+	), size, full_rect)
 	top_hud.offset_bottom = HUD_HEIGHT
 	side_panel.offset_left = -panel_width
 	side_panel.offset_right = 0.0
 	_apply_panel_slide(_panel_slide)
-	_layout_props(size)
+	_layout_props(size, zoom, focus)
 	_fit_hud()
+	get_tree().call_group("console_screens", "fit_console")
 	# Screens that hang off the room's own furniture rather than off the work
 	# column as a whole have to be told the room has moved.
 	get_tree().call_group("board_mounted", "relayout_on_board")
@@ -220,6 +239,10 @@ const WIDE_PANEL_TABS := ["jobs", "market", "build"]
 ## Kept back from the full window so the room is still visibly behind the slab
 ## and the player can see what they are shopping for.
 const WIDE_PANEL_RATIO := 0.62
+const WIDE_PANEL_RATIO_MOBILE := 0.82
+const MOBILE_VIEWPORT_WIDTH := 900.0
+const SHORT_VIEWPORT_HEIGHT := 400.0
+const WIDE_PANEL_RATIO_SHORT := 0.88
 
 
 ## How far the slab comes out for whatever it is currently carrying.
@@ -227,8 +250,18 @@ func _panel_width(viewport_size: Vector2) -> float:
 	var base: float = _base_panel_width(viewport_size)
 	var tab: String = _panel_tab if _panel_tab != "" else _closing_tab
 	if tab in WIDE_PANEL_TABS:
-		return maxf(base, viewport_size.x * WIDE_PANEL_RATIO)
+		return maxf(base, viewport_size.x * _wide_panel_ratio(viewport_size))
 	return base
+
+
+func _wide_panel_ratio(viewport_size: Vector2) -> float:
+	if viewport_size.y < SHORT_VIEWPORT_HEIGHT:
+		return WIDE_PANEL_RATIO_SHORT
+	# The viewport is design units, which expand past 900 on a phone; the
+	# platform is what decides this, not the canvas width.
+	if ConsoleMetrics.is_mobile() or viewport_size.x < MOBILE_VIEWPORT_WIDTH:
+		return WIDE_PANEL_RATIO_MOBILE
+	return WIDE_PANEL_RATIO
 
 
 ## The slab at rest, which is what the desk and the nav bar are laid out around.
@@ -239,6 +272,28 @@ func _base_panel_width(viewport_size: Vector2) -> float:
 	if region.size.x > 0.0:
 		return region.size.x * viewport_size.x
 	return minf(UiThemeBuilder.SIDE_PANEL_WIDTH, viewport_size.x * 0.4)
+
+
+## Scales a window-fraction rect about the room's focus point. Applying the
+## same transform to the art and to everything measured off it keeps the
+## furniture registered on the picture at any zoom.
+func _zoom_rect(rect: Rect2, zoom: float, focus: Vector2) -> Rect2:
+	if zoom <= 1.001 or rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return rect
+	return Rect2(focus + (rect.position - focus) * zoom, rect.size * zoom)
+
+
+## Where the zoom holds still: the centre of the laptop glass, which is the
+## thing the player has to be able to read.
+func _room_focus() -> Vector2:
+	var dwelling: String = board_dwelling()
+	var glass: Rect2 = AssetCatalog.board_laptop_screen(dwelling)
+	if glass.size.x > 0.0 and glass.size.y > 0.0:
+		return glass.get_center()
+	var column: Rect2 = AssetCatalog.board_region(dwelling, "work_column")
+	if column.size.x > 0.0 and column.size.y > 0.0:
+		return column.get_center()
+	return Vector2(0.5, 0.55)
 
 
 ## Anchors a control to a fractional rect of the window, falling back to a
@@ -275,12 +330,12 @@ func _build_props() -> void:
 		plan.pressed.connect(open_ascension_select)
 
 
-func _layout_props(viewport_size: Vector2) -> void:
+func _layout_props(viewport_size: Vector2, zoom: float = 1.0, focus: Vector2 = Vector2(0.5, 0.5)) -> void:
 	var dwelling: String = board_dwelling()
 	for key in _props:
 		var prop: Control = _props[key]
 		var rect: Rect2 = AssetCatalog.board_prop(dwelling, str(key))
-		_place(prop, rect, viewport_size, Rect2())
+		_place(prop, _zoom_rect(rect, zoom, focus), viewport_size, Rect2())
 		# A prop the artwork does not carry has nowhere honest to sit.
 		prop.visible = rect.size.x > 0.0
 
@@ -553,6 +608,10 @@ func _slide_panel(target: float) -> void:
 	_panel_tween = create_tween()
 	_panel_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	_panel_tween.tween_method(_apply_panel_slide, _panel_slide, target, PANEL_SLIDE_SECONDS)
+	if target <= 0.01:
+		_panel_tween.finished.connect(func() -> void:
+			get_tree().call_group("console_screens", "fit_console")
+		, CONNECT_ONE_SHOT)
 
 
 func _apply_panel_slide(value: float) -> void:
@@ -592,6 +651,8 @@ func _mount(host: Control, scenes: Dictionary, tab_name: String) -> void:
 	mounted.visible = true
 	if mounted.has_method("refresh"):
 		mounted.refresh()
+	if mounted.has_method("fit_console"):
+		mounted.call_deferred("fit_console")
 
 
 ## The panel is narrower than the screens were drawn for, so anything mounted in

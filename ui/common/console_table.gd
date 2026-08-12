@@ -1,62 +1,53 @@
 class_name ConsoleTable
 extends VBoxContainer
 
-## A column of terminal output that happens to be a list: a dim header row of
-## column names, then one touchable line per record.
-##
-## Rows are printed text until the pointer reaches them, at which point they
-## invert to a solid phosphor bar — the same affordance `ConsoleMenuRow` uses on
-## the title screen, applied to tabular data. The selected row stays lit so the
-## detail pane underneath always has a visible owner.
-
 signal row_selected(meta: Variant)
 
 const ROW_HEIGHT := 26
 const PAD_H := 8
 
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
-## One record. Cells are laid out on the same weights as the header, so the
-## columns line up down the table without a grid container in the way.
+
 class Row:
 	extends Button
 
 	var meta: Variant = null
-
 	var _labels: Array[Label] = []
 	var _dots: Array = []
 	var _accents: Array[Color] = []
 	var _lit: Color = ConsoleStyle.PHOSPHOR
 	var _selected: bool = false
+	var _margin: MarginContainer = null
+	var _row_box: HBoxContainer = null
 
-	func _init(columns: Array, cells: Array, lit: Color) -> void:
+	func _init(columns: Array, cells: Array, lit: Color, scale: float = 1.0) -> void:
 		_lit = lit
 		text = ""
 		focus_mode = Control.FOCUS_ALL
-		custom_minimum_size = Vector2(0, ConsoleTable.ROW_HEIGHT)
+		custom_minimum_size = Vector2(0, ConsoleMetrics.row_height(scale))
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var margin := MarginContainer.new()
-		margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-		margin.add_theme_constant_override("margin_left", ConsoleTable.PAD_H)
-		margin.add_theme_constant_override("margin_right", ConsoleTable.PAD_H)
-		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(margin)
-
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 10)
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		margin.add_child(row)
-
+		_margin = MarginContainer.new()
+		_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_margin.add_theme_constant_override("margin_left", ConsoleMetrics.pad_h(scale))
+		_margin.add_theme_constant_override("margin_right", ConsoleMetrics.pad_h(scale))
+		_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_margin)
+		_row_box = HBoxContainer.new()
+		_row_box.add_theme_constant_override("separation", ConsoleMetrics.px(10, scale))
+		_row_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_margin.add_child(_row_box)
 		for i in range(columns.size()):
 			var column: Dictionary = columns[i]
 			var cell: Variant = cells[i] if i < cells.size() else ""
-			row.add_child(_cell(column, cell))
+			_row_box.add_child(_cell(column, cell, scale))
 		_apply_palette()
 
-	func _cell(column: Dictionary, cell: Variant) -> Control:
+	func _cell(column: Dictionary, cell: Variant, scale: float) -> Control:
 		var alignment: int = int(column.get("align", HORIZONTAL_ALIGNMENT_LEFT))
 		var weight: float = float(column.get("weight", 1.0))
 		if cell is Dictionary and cell.has("dots"):
-			var strip := ConsoleTable.DotStrip.new()
+			var strip := ConsoleTable.DotStrip.new(scale)
 			strip.filled = int(cell["dots"])
 			strip.total = int(cell.get("max", 5))
 			strip.color = Color(cell.get("color", ConsoleStyle.PHOSPHOR))
@@ -71,7 +62,7 @@ class Row:
 			color = Color(cell.get("color", ConsoleStyle.PHOSPHOR))
 		else:
 			text_value = str(cell)
-		var label: Label = ConsoleStyle.label(text_value, ConsoleStyle.FONT_SMALL, color)
+		var label: Label = ConsoleStyle.label(text_value, ConsoleMetrics.font_small(scale), color)
 		label.clip_text = true
 		label.horizontal_alignment = alignment
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -79,6 +70,17 @@ class Row:
 		_labels.append(label)
 		_accents.append(color)
 		return label
+
+	func apply_metrics(scale: float) -> void:
+		custom_minimum_size = Vector2(0, ConsoleMetrics.row_height(scale))
+		_margin.add_theme_constant_override("margin_left", ConsoleMetrics.pad_h(scale))
+		_margin.add_theme_constant_override("margin_right", ConsoleMetrics.pad_h(scale))
+		_row_box.add_theme_constant_override("separation", ConsoleMetrics.px(10, scale))
+		var font_small: int = ConsoleMetrics.font_small(scale)
+		for label in _labels:
+			label.add_theme_font_size_override("font_size", font_small)
+		for strip in _dots:
+			(strip as ConsoleTable.DotStrip).apply_metrics(scale)
 
 	func set_selected(selected: bool) -> void:
 		_selected = selected
@@ -99,8 +101,6 @@ class Row:
 			NOTIFICATION_FOCUS_ENTER, NOTIFICATION_FOCUS_EXIT:
 				_sync_ink()
 
-	## Text on a lit bar has to flip to ink or it disappears into its own
-	## highlight.
 	func _sync_ink() -> void:
 		var inverted: bool = _selected or is_hovered() or has_focus()
 		for i in range(_labels.size()):
@@ -112,7 +112,6 @@ class Row:
 			strip.queue_redraw()
 
 
-## The red/blue pips that stand in for a rating bar on a terminal.
 class DotStrip:
 	extends Control
 
@@ -120,28 +119,35 @@ class DotStrip:
 	var total: int = 5
 	var color: Color = ConsoleStyle.PHOSPHOR
 	var inverted: bool = false
+	var _dot: float = 6.0
+	var _gap: float = 4.0
 
-	const DOT := 6.0
-	const GAP := 4.0
-
-	func _init() -> void:
+	func _init(scale: float = 1.0) -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		custom_minimum_size = Vector2(float(total) * (DOT + GAP), DOT)
+		apply_metrics(scale)
+
+	func apply_metrics(scale: float) -> void:
+		_dot = float(ConsoleMetrics.px(6, scale))
+		_gap = float(ConsoleMetrics.px(4, scale))
+		custom_minimum_size = Vector2(float(total) * (_dot + _gap), _dot)
+		queue_redraw()
 
 	func _draw() -> void:
 		var lit: Color = ConsoleStyle.INK if inverted else color
 		var unlit: Color = Color(lit.r, lit.g, lit.b, 0.25)
-		var top: float = (size.y - DOT) * 0.5
+		var top: float = (size.y - _dot) * 0.5
 		for i in range(total):
-			var rect := Rect2(float(i) * (DOT + GAP), top, DOT, DOT)
+			var rect := Rect2(float(i) * (_dot + _gap), top, _dot, _dot)
 			draw_rect(rect, lit if i < filled else unlit, i < filled)
 
 
 var _columns: Array = []
 var _header: HBoxContainer = null
+var _header_margin: MarginContainer = null
 var _rows_box: VBoxContainer = null
 var _rows: Array[Row] = []
 var _selected: Row = null
+var _scale: float = 1.0
 
 
 func _ready() -> void:
@@ -154,20 +160,42 @@ func _build() -> void:
 	_header = HBoxContainer.new()
 	_header.add_theme_constant_override("separation", 10)
 	_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", PAD_H)
-	margin.add_theme_constant_override("margin_right", PAD_H)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_child(_header)
-	add_child(margin)
+	_header_margin = MarginContainer.new()
+	_header_margin.add_theme_constant_override("margin_left", PAD_H)
+	_header_margin.add_theme_constant_override("margin_right", PAD_H)
+	_header_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_header_margin.add_child(_header)
+	add_child(_header_margin)
 	add_child(ConsoleStyle.rule(0.22))
 	_rows_box = VBoxContainer.new()
 	_rows_box.add_theme_constant_override("separation", 0)
 	add_child(_rows_box)
 
 
-## `columns` is a list of `{label, weight, align}`. Weights are stretch ratios,
-## so a table only has to say which column is the wide one.
+func set_metrics(scale: float) -> void:
+	_scale = scale
+	if _header_margin == null:
+		return
+	var pad: int = ConsoleMetrics.pad_h(scale)
+	var font_tiny: int = ConsoleMetrics.font_tiny(scale)
+	_header_margin.add_theme_constant_override("margin_left", pad)
+	_header_margin.add_theme_constant_override("margin_right", pad)
+	_header.add_theme_constant_override("separation", ConsoleMetrics.px(10, scale))
+	for child in _header.get_children():
+		if child is Label:
+			child.add_theme_font_size_override("font_size", font_tiny)
+	for row in _rows:
+		row.apply_metrics(scale)
+	for child in _rows_box.get_children():
+		if child is Row:
+			continue
+		if child is MarginContainer:
+			child.add_theme_constant_override("margin_left", pad)
+			for note_child in child.get_children():
+				if note_child is Label:
+					note_child.add_theme_font_size_override("font_size", font_tiny)
+
+
 func set_columns(columns: Array) -> void:
 	if _rows_box == null:
 		_build()
@@ -177,7 +205,7 @@ func set_columns(columns: Array) -> void:
 	for column in columns:
 		var label: Label = ConsoleStyle.label(
 			str(column.get("label", "")).to_upper(),
-			ConsoleStyle.FONT_TINY,
+			ConsoleMetrics.font_tiny(_scale),
 			ConsoleStyle.PHOSPHOR_DIM
 		)
 		label.clip_text = true
@@ -187,11 +215,10 @@ func set_columns(columns: Array) -> void:
 		_header.add_child(label)
 
 
-## Cells are strings, `{text, color}` or `{dots, max, color}`, one per column.
 func add_row(cells: Array, meta: Variant = null, lit: Color = ConsoleStyle.PHOSPHOR) -> Row:
 	if _rows_box == null:
 		_build()
-	var row := Row.new(_columns, cells, lit)
+	var row := Row.new(_columns, cells, lit, _scale)
 	row.meta = meta
 	row.pressed.connect(_on_row_pressed.bind(row))
 	row.mouse_entered.connect(func() -> void: UiSound.play("key"))
@@ -200,16 +227,14 @@ func add_row(cells: Array, meta: Variant = null, lit: Color = ConsoleStyle.PHOSP
 	return row
 
 
-## A line of output inside the table that is not a record — a section heading, or
-## "no contracts on the wire".
 func add_note(text: String, color: Color = ConsoleStyle.PHOSPHOR_DIM) -> void:
 	if _rows_box == null:
 		_build()
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", PAD_H)
-	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_left", ConsoleMetrics.pad_h(_scale))
+	margin.add_theme_constant_override("margin_top", ConsoleMetrics.px(4, _scale))
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_child(ConsoleStyle.label(text, ConsoleStyle.FONT_TINY, color))
+	margin.add_child(ConsoleStyle.label(text, ConsoleMetrics.font_tiny(_scale), color))
 	_rows_box.add_child(margin)
 
 
@@ -227,8 +252,6 @@ func rows() -> Array[Row]:
 	return _rows
 
 
-## Lights the row holding `meta` and reports it, so a screen can restore the
-## selection it had before a refresh redrew the table.
 func select_meta(meta: Variant, emit: bool = true) -> bool:
 	for row in _rows:
 		if row.meta == meta:

@@ -17,7 +17,10 @@ extends Control
 
 const DETAIL_SHEET := preload("res://ui/common/detail_sheet.tscn")
 
-const STAGE_SECONDS := 0.45
+## How long each pipeline stage holds on the console during a batch. Long
+## enough to read the stage's own line before the next one prints over it —
+## the batch is the show, not a loading bar.
+const STAGE_SECONDS := 0.9
 
 ## Prompts left at which the deadline stops reading as time in hand.
 const DEADLINE_WARNING_PROMPTS := 3
@@ -50,7 +53,7 @@ func _ready() -> void:
 	add_child(_laptop)
 	_laptop.setup("burn")
 	ConsoleNav.mount(_laptop, self)
-	add_child(_detail_sheet)
+	_mount_sheet(_detail_sheet)
 	# The rig is scenery here, so it gives up every readout it used to own.
 	rig.set_dressing_only(true)
 	rig.set_lanes([])
@@ -92,6 +95,16 @@ func _anchor(control: Control, rect: Rect2) -> void:
 	control.offset_top = 0.0
 	control.offset_right = 0.0
 	control.offset_bottom = 0.0
+
+
+## The sheet is a window-sized modal, so it goes on the shell's overlay layer
+## rather than inside this screen, which the room zoom can push off the window.
+func _mount_sheet(sheet: Control) -> void:
+	for node in get_tree().get_nodes_in_group("main_ui"):
+		if node.has_method("mount_overlay"):
+			node.mount_overlay(sheet)
+			return
+	add_child(sheet)
 
 
 func _board_dwelling() -> String:
@@ -311,7 +324,9 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 		rows.append({"headline": "JOB", "value": "the brief", "pressed": _on_job_details})
 	rows.append({
 		"headline": "EDIT PIPELINE",
-		"value": "%d of %d placed" % [
+		# Terse on purpose: the commands print two across, and "3 of 3 placed"
+		# is wider than half a laptop.
+		"value": "%d/%d" % [
 			Simulation.filled_slot_count(), Simulation.owned_operations().size(),
 		],
 		"pressed": _on_edit_pipeline,

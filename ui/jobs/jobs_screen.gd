@@ -8,6 +8,7 @@ extends Control
 ## contract is a line on a console rather than a tile on a shop front.
 
 const RiskQuips := preload("res://ui/common/risk_quips.gd")
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 @onready var frame: ConsoleFrame = $Margin/Frame
 
@@ -20,12 +21,16 @@ var _detail: ConsoleDetail = null
 var _offers: Dictionary = {}
 var _selected_id: String = ""
 var _round_cost_cache: float = 1.0
+var _console_scale: float = 1.0
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
+	add_to_group("console_screens")
 	frame.setup("Job Board")
 	_build_console()
+	resized.connect(_fit_console)
+	visibility_changed.connect(_on_visibility_changed)
 	EventBus.run_started.connect(refresh)
 	EventBus.round_started.connect(refresh)
 	EventBus.job_accepted.connect(func(_id): refresh())
@@ -80,6 +85,37 @@ func _build_console() -> void:
 	_detail.clear("SELECT A CONTRACT")
 
 
+func fit_console() -> void:
+	_fit_console()
+
+
+func _on_visibility_changed() -> void:
+	if visible:
+		call_deferred("_fit_console")
+
+
+func _fit_console() -> void:
+	if size.y <= 1.0:
+		return
+	_console_scale = ConsoleMetrics.compute_scale(size.y, get_viewport_rect().size.x)
+	frame.set_metrics(_console_scale)
+	if _table != null:
+		_table.set_metrics(_console_scale)
+	if _detail != null:
+		_detail.set_metrics(_console_scale)
+	if _ascend_row != null:
+		_ascend_row.set_metrics(
+			ConsoleMetrics.font_small(_console_scale),
+			ConsoleMetrics.row_height(_console_scale),
+			ConsoleMetrics.pad_h(_console_scale)
+		)
+	var font_tiny: int = ConsoleMetrics.font_tiny(_console_scale)
+	if _risk_line != null:
+		_risk_line.add_theme_font_size_override("font_size", font_tiny)
+	if _risk_warning != null:
+		_risk_warning.add_theme_font_size_override("font_size", font_tiny)
+
+
 func refresh() -> void:
 	if Simulation.phase == Simulation.Phase.ROUND_PREP:
 		Simulation.ensure_job_offers()
@@ -109,6 +145,7 @@ func refresh() -> void:
 	# emptying itself under the player's hand.
 	if _selected_id == "" or not _table.select_meta(_selected_id):
 		_detail.clear("SELECT A CONTRACT")
+	_fit_console()
 
 
 func _add_offer_row(offer: Dictionary, index: int, in_upgrade: bool) -> void:

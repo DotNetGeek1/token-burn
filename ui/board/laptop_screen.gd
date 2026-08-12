@@ -13,7 +13,12 @@ extends PanelContainer
 ## to stay readable on both without either scrolling or overflowing.
 
 ## Reference height the font sizes below were chosen against.
-const REFERENCE_HEIGHT := 300.0
+const REFERENCE_HEIGHT := 240.0
+const MOBILE_VIEWPORT_WIDTH := 900.0
+const MIN_SCALE_DESKTOP := 0.6
+const MIN_SCALE_MOBILE := 0.85
+
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 var _margin: MarginContainer = null
 var _body: VBoxContainer = null
@@ -22,7 +27,7 @@ var _status: Label = null
 var _blurb: Label = null
 var _scroll: ScrollContainer = null
 var _stats: VBoxContainer = null
-var _actions: VBoxContainer = null
+var _actions: GridContainer = null
 var _nav: HBoxContainer = null
 var _nav_rule: ColorRect = null
 var _nav_rows: Dictionary = {}
@@ -95,7 +100,11 @@ func _build() -> void:
 
 	_body.add_child(_rule(0.2))
 
-	_actions = VBoxContainer.new()
+	# A grid rather than a column: a busy console folds its commands two
+	# across, which halves the height the list costs and buys every line a
+	# taller, more pressable row.
+	_actions = GridContainer.new()
+	_actions.columns = 1
 	_actions.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_body.add_child(_actions)
 
@@ -174,6 +183,9 @@ func prune_stats(keep: Array) -> void:
 			continue
 		var row: Control = _stat_rows[key]
 		_stat_rows.erase(key)
+		# Detached before freeing, so the next fit does not measure a reading
+		# that is already gone.
+		_stats.remove_child(row)
 		row.queue_free()
 
 
@@ -197,7 +209,10 @@ func set_meter(key: String, caption: String, ratio: float, note: String) -> void
 func set_actions(entries: Array) -> void:
 	if _body == null:
 		_build()
+	# Detached before freeing: queue_free only takes effect at the end of the
+	# frame, and the fit below has to measure the new rows, not both sets.
 	for child in _actions.get_children():
+		_actions.remove_child(child)
 		child.queue_free()
 	var index: int = 1
 	for raw in entries:
@@ -210,8 +225,12 @@ func set_actions(entries: Array) -> void:
 		var handler: Variant = entry.get("pressed")
 		if handler is Callable:
 			row.pressed.connect(handler)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_actions.add_child(row)
 		index += 1
+	# Short lists stay one under the other, which reads as a menu; from four
+	# commands up the list folds into two columns so the rows stay large.
+	_actions.columns = 2 if entries.size() >= 4 else 1
 	_fit_to_glass()
 
 
@@ -221,7 +240,9 @@ func set_actions(entries: Array) -> void:
 func set_nav(entries: Array) -> void:
 	if _body == null:
 		_build()
+	# Detached before freeing, so the fit below measures only the new menu.
 	for child in _nav.get_children():
+		_nav.remove_child(child)
 		child.queue_free()
 	_nav_rows.clear()
 	for raw in entries:
@@ -258,7 +279,7 @@ func set_nav_flag(key: String, flagged: bool) -> void:
 
 ## How far the command rows may be squeezed before the console gives up and lets
 ## the readouts scroll instead. Below this the type stops being pressable.
-const MIN_ROW_SCALE := 0.6
+const MIN_ROW_SCALE := 0.75
 
 ## Most the readouts may claim of the glass. The commands are what the player
 ## came to press, so they are never the part that gets pushed off.
@@ -274,35 +295,58 @@ func _fit_to_glass() -> void:
 	var height: float = size.y
 	if height <= 1.0:
 		return
-	_scale = clampf(height / REFERENCE_HEIGHT, 0.6, 2.2)
+	var mobile: bool = ConsoleMetrics.is_mobile() or _viewport_width() < MOBILE_VIEWPORT_WIDTH
+	var min_scale: float = MIN_SCALE_MOBILE if mobile else MIN_SCALE_DESKTOP
+	_scale = clampf(height / REFERENCE_HEIGHT, min_scale, 2.6)
+	if mobile:
+		_scale = clampf(_scale * ConsoleMetrics.stretch_compensation(), min_scale, 2.6)
+
+	# Readability pulls the type up; the glass pulls it back down. Type that
+	# prints the nav off the bottom of the laptop is worse than type a step
+	# smaller, so the target is walked back until the whole print-out fits:
+	# first the explanatory sentence goes, then the scale.
+	var show_blurb: bool = height >= 150.0
+	while true:
+		var available: float = _apply_glass_chrome(height, show_blurb)
+		if _try_row_scale(MIN_ROW_SCALE, height, available):
+			var best: float = MIN_ROW_SCALE
+			var row_scale: float = MIN_ROW_SCALE + 0.05
+			while row_scale <= 1.0:
+				if not _try_row_scale(row_scale, height, available):
+					break
+				best = row_scale
+				row_scale += 0.05
+			_try_row_scale(best, height, available)
+			_spread_commands(best, available)
+			return
+		if show_blurb:
+			show_blurb = false
+			continue
+		if _scale <= min_scale + 0.01:
+			_try_row_scale(MIN_ROW_SCALE, height, available)
+			_spread_commands(MIN_ROW_SCALE, available)
+			return
+		_scale = maxf(min_scale, _scale - 0.15)
+
+
+## Pads, gaps and the fixed type (header, headline, blurb) at the current
+## scale. Returns the glass height left for the readouts and commands.
+func _apply_glass_chrome(height: float, show_blurb: bool) -> float:
 	var pad: int = maxi(6, int(10.0 * _scale))
 	for side in ["left", "right", "top", "bottom"]:
 		_margin.add_theme_constant_override("margin_%s" % side, pad)
 	var gap: int = maxi(2, int(5.0 * _scale))
 	_body.add_theme_constant_override("separation", gap)
 	_stats.add_theme_constant_override("separation", maxi(1, int(3.0 * _scale)))
-	_actions.add_theme_constant_override("separation", maxi(1, int(3.0 * _scale)))
+	_actions.add_theme_constant_override("v_separation", maxi(1, int(3.0 * _scale)))
+	_actions.add_theme_constant_override("h_separation", maxi(4, int(10.0 * _scale)))
 	_nav.add_theme_constant_override("separation", 0)
 
 	_apply_font(_header, ConsoleStyle.FONT_TINY)
-	_blurb.visible = height >= 150.0
+	_blurb.visible = show_blurb
 	_blurb.max_lines_visible = 3 if height >= 220.0 else 2
 	_fit_headline()
-
-	# How many commands a console shows depends on what the machine will accept
-	# right now, so the rows are sized to the room that is left rather than to a
-	# constant. Without this a burn with eight live commands prints its menu off
-	# the bottom of the laptop and onto the desk.
-	var available: float = height - float(pad) * 2.0
-	var best: float = MIN_ROW_SCALE
-	var row_scale: float = MIN_ROW_SCALE
-	while row_scale <= 1.0:
-		if not _try_row_scale(row_scale, height, available):
-			break
-		best = row_scale
-		row_scale += 0.05
-	_try_row_scale(best, height, available)
-	_spread_commands(best, available)
+	return height - float(pad) * 2.0
 
 
 ## Opens the commands out into whatever height is left over, up to half a line
@@ -319,7 +363,10 @@ func _spread_commands(row_scale: float, available: float) -> void:
 	var leftover: float = available - _body.get_combined_minimum_size().y
 	if leftover <= 0.0:
 		return
-	_apply_row_metrics(row_scale, minf(leftover / float(rows), _command_height(row_scale) * 0.5))
+	# Folded two across, the list is only as tall as its longest column, so the
+	# leftover is shared between grid lines rather than between commands.
+	var lines: int = ceili(float(rows) / float(maxi(1, _actions.columns)))
+	_apply_row_metrics(row_scale, minf(leftover / float(lines), _command_height(row_scale) * 0.5))
 
 
 func _command_height(row_scale: float) -> float:
@@ -385,7 +432,16 @@ func _apply_font(label: Label, base_size: int) -> void:
 
 
 func _font_size(base_size: int) -> int:
-	return clampi(int(round(float(base_size) * _scale)), 8, 40)
+	var min_size: int = 8
+	if base_size >= ConsoleStyle.FONT_SMALL:
+		min_size = 12
+	elif base_size >= ConsoleStyle.FONT_TINY:
+		min_size = 10
+	return clampi(int(round(float(base_size) * _scale)), min_size, 40)
+
+
+func _viewport_width() -> float:
+	return get_viewport_rect().size.x
 
 
 func _process(_delta: float) -> void:

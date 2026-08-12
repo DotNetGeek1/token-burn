@@ -1,38 +1,38 @@
 class_name ConsoleDetail
 extends PanelContainer
 
-## The pane under a `ConsoleTable` that expands the selected row.
-##
-## It reads as the machine answering a query: a prompt line naming the record,
-## the facts printed underneath it as `KEY .... VALUE`, any warnings in red, and
-## a single bracketed action at the bottom. Screens that use it never open a
-## sheet over the top of themselves — the answer arrives in place.
-
 signal action_pressed
 
 const PAD := 10
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 
-## The bracketed action line. Disabled it still prints, so a blocked action says
-## what it is rather than vanishing.
 class ActionRow:
 	extends Button
 
 	var _label: Label = null
+	var _margin: MarginContainer = null
 
 	func _init() -> void:
 		text = ""
 		focus_mode = Control.FOCUS_ALL
 		custom_minimum_size = Vector2(0, 26)
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var margin := MarginContainer.new()
-		margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-		margin.add_theme_constant_override("margin_left", 8)
-		margin.add_theme_constant_override("margin_right", 8)
-		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(margin)
+		_margin = MarginContainer.new()
+		_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_margin.add_theme_constant_override("margin_left", 8)
+		_margin.add_theme_constant_override("margin_right", 8)
+		_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_margin)
 		_label = ConsoleStyle.label("", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR)
-		margin.add_child(_label)
+		_margin.add_child(_label)
+
+	func apply_metrics(scale: float) -> void:
+		var pad: int = ConsoleMetrics.pad_h(scale)
+		custom_minimum_size = Vector2(0, ConsoleMetrics.action_height(scale))
+		_margin.add_theme_constant_override("margin_left", pad)
+		_margin.add_theme_constant_override("margin_right", pad)
+		_label.add_theme_font_size_override("font_size", ConsoleMetrics.font_small(scale))
 
 	func set_action(label: String, enabled: bool) -> void:
 		var lit: Color = ConsoleStyle.PHOSPHOR if enabled else ConsoleStyle.PHOSPHOR_DIM
@@ -56,10 +56,13 @@ class ActionRow:
 				)
 
 
+var _outer_margin: MarginContainer = null
 var _box: VBoxContainer = null
 var _headline: Label = null
+var _scroll: ScrollContainer = null
 var _lines: VBoxContainer = null
 var _action: ActionRow = null
+var _scale: float = 1.0
 
 
 func _ready() -> void:
@@ -69,23 +72,27 @@ func _ready() -> void:
 
 func _build() -> void:
 	add_theme_stylebox_override("panel", ConsoleStyle.frame_box(0.24, 0.03))
-	var margin := MarginContainer.new()
+	_outer_margin = MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, PAD)
-	add_child(margin)
-
+		_outer_margin.add_theme_constant_override("margin_%s" % side, PAD)
+	add_child(_outer_margin)
 	_box = VBoxContainer.new()
 	_box.add_theme_constant_override("separation", 4)
-	margin.add_child(_box)
-
+	_outer_margin.add_child(_box)
 	_headline = ConsoleStyle.label("", ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR)
 	_headline.clip_text = true
 	_box.add_child(_headline)
-
+	# On a phone the scaled-up description would push the action row off the
+	# bottom of the screen, leaving the player unable to press it, so the lines
+	# scroll inside a capped window instead of claiming their full height.
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_box.add_child(_scroll)
 	_lines = VBoxContainer.new()
 	_lines.add_theme_constant_override("separation", 2)
-	_box.add_child(_lines)
-
+	_lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(_lines)
+	_lines.resized.connect(func() -> void: call_deferred("_fit_lines"))
 	_action = ActionRow.new()
 	_action.pressed.connect(func() -> void:
 		UiSound.play("tap")
@@ -94,8 +101,32 @@ func _build() -> void:
 	_box.add_child(_action)
 
 
-## `lines` entries are `{text}` for prose, `{stat, value, role}` for a keyed
-## readout, and `{warn}` for a red line.
+func set_metrics(scale: float) -> void:
+	_scale = scale
+	if _outer_margin == null:
+		return
+	var pad: int = ConsoleMetrics.px(PAD, scale)
+	for side in ["left", "right", "top", "bottom"]:
+		_outer_margin.add_theme_constant_override("margin_%s" % side, pad)
+	_box.add_theme_constant_override("separation", ConsoleMetrics.px(4, scale))
+	_lines.add_theme_constant_override("separation", ConsoleMetrics.px(2, scale))
+	_headline.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
+	_action.apply_metrics(scale)
+	_apply_line_fonts()
+	call_deferred("_fit_lines")
+
+
+func _apply_line_fonts() -> void:
+	var font_small: int = ConsoleMetrics.font_small(_scale)
+	for child in _lines.get_children():
+		if child is Label:
+			child.add_theme_font_size_override("font_size", font_small)
+		elif child is HBoxContainer:
+			for label in child.get_children():
+				if label is Label:
+					label.add_theme_font_size_override("font_size", font_small)
+
+
 func show_detail(headline: String, lines: Array, action: String = "", action_enabled: bool = false) -> void:
 	if _box == null:
 		_build()
@@ -111,6 +142,8 @@ func show_detail(headline: String, lines: Array, action: String = "", action_ena
 	_action.visible = action != ""
 	if action != "":
 		_action.set_action(action, action_enabled)
+	_apply_line_fonts()
+	call_deferred("_fit_lines")
 
 
 func clear(placeholder: String = "SELECT A ROW") -> void:
@@ -121,27 +154,42 @@ func clear(placeholder: String = "SELECT A ROW") -> void:
 		_lines.remove_child(child)
 		child.queue_free()
 	_action.visible = false
+	call_deferred("_fit_lines")
+
+
+## The description window: as tall as its lines want, up to the share of the
+## screen it can take without squeezing out the table above or the action row
+## below it.
+func _fit_lines() -> void:
+	if _scroll == null:
+		return
+	var cap: float = 240.0
+	var viewport: Vector2 = get_viewport_rect().size
+	if viewport.y > 1.0:
+		cap = viewport.y * 0.38
+	var wanted: float = _lines.get_combined_minimum_size().y
+	_scroll.custom_minimum_size = Vector2(0.0, minf(wanted, cap))
 
 
 func _line(entry: Variant) -> Control:
 	if not entry is Dictionary:
-		return ConsoleStyle.paragraph(str(entry))
+		return ConsoleStyle.paragraph(str(entry), ConsoleMetrics.font_small(_scale))
 	if entry.has("warn"):
 		return ConsoleStyle.paragraph(
-			"! %s" % str(entry["warn"]), ConsoleStyle.FONT_SMALL, ConsoleStyle.DANGER
+			"! %s" % str(entry["warn"]), ConsoleMetrics.font_small(_scale), ConsoleStyle.DANGER
 		)
 	if entry.has("stat"):
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
+		row.add_theme_constant_override("separation", ConsoleMetrics.px(8, _scale))
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var key: Label = ConsoleStyle.label(
-			str(entry["stat"]).to_upper(), ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR_DIM
+			str(entry["stat"]).to_upper(), ConsoleMetrics.font_small(_scale), ConsoleStyle.PHOSPHOR_DIM
 		)
 		key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(key)
 		var value: Label = ConsoleStyle.label(
 			str(entry.get("value", "")),
-			ConsoleStyle.FONT_SMALL,
+			ConsoleMetrics.font_small(_scale),
 			Color(entry.get("color", ConsoleStyle.PHOSPHOR))
 		)
 		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -152,4 +200,4 @@ func _line(entry: Variant) -> Control:
 		text = "%s — %s" % [str(entry["rule"]), text] if text != "" else str(entry["rule"])
 	if text.strip_edges() == "":
 		return null
-	return ConsoleStyle.paragraph(text)
+	return ConsoleStyle.paragraph(text, ConsoleMetrics.font_small(_scale))

@@ -28,7 +28,7 @@ func _ready() -> void:
 	_laptop.setup("desk")
 	ConsoleNav.mount(_laptop, self)
 	_breakdown_sheet = BREAKDOWN_SHEET.instantiate()
-	add_child(_breakdown_sheet)
+	_mount_sheet(_breakdown_sheet)
 	relayout_on_board()
 	Simulation.work_tick_completed.connect(refresh)
 	Simulation.work_session_finished.connect(func(_result): refresh())
@@ -59,6 +59,16 @@ func relayout_on_board() -> void:
 	_laptop.offset_top = 0.0
 	_laptop.offset_right = 0.0
 	_laptop.offset_bottom = 0.0
+
+
+## The sheet is a window-sized modal, so it goes on the shell's overlay layer
+## rather than inside this screen, which the room zoom can push off the window.
+func _mount_sheet(sheet: Control) -> void:
+	for node in get_tree().get_nodes_in_group("main_ui"):
+		if node.has_method("mount_overlay"):
+			node.mount_overlay(sheet)
+			return
+	add_child(sheet)
 
 
 func _board_dwelling() -> String:

@@ -1,15 +1,11 @@
 class_name ConsoleFrame
 extends PanelContainer
 
-## The chrome every console screen wears: dark glass, a status line across the
-## top naming the program and the screen, a hairline under it, the screen's own
-## output below, and the CRT tube over the lot.
-##
-## The overlay is the same shader the burn rig and the title screen use, so the
-## panel the player buys hardware on is visibly the same machine they work on.
-
 const CONTENT_PAD := 10
 
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
+
+var _margin: MarginContainer = null
 var _body: VBoxContainer = null
 var _title: Label = null
 var _context: Label = null
@@ -26,14 +22,14 @@ func _ready() -> void:
 func _build() -> void:
 	add_theme_stylebox_override("panel", ConsoleStyle.glass_box())
 
-	var margin := MarginContainer.new()
+	_margin = MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, CONTENT_PAD)
-	add_child(margin)
+		_margin.add_theme_constant_override("margin_%s" % side, CONTENT_PAD)
+	add_child(_margin)
 
 	_body = VBoxContainer.new()
 	_body.add_theme_constant_override("separation", 6)
-	margin.add_child(_body)
+	_margin.add_child(_body)
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 8)
@@ -67,8 +63,19 @@ func setup(screen_name: String) -> void:
 	_refresh_title()
 
 
-## The right-hand readout: whatever number the screen is spent against, usually
-## the wallet.
+func set_metrics(scale: float) -> void:
+	if _margin == null:
+		return
+	var pad: int = ConsoleMetrics.px(CONTENT_PAD, scale)
+	for side in ["left", "right", "top", "bottom"]:
+		_margin.add_theme_constant_override("margin_%s" % side, pad)
+	_body.add_theme_constant_override("separation", ConsoleMetrics.px(6, scale))
+	_content.add_theme_constant_override("separation", ConsoleMetrics.px(8, scale))
+	var font_small: int = ConsoleMetrics.font_small(scale)
+	_title.add_theme_font_size_override("font_size", font_small)
+	_context.add_theme_font_size_override("font_size", font_small)
+
+
 func set_context(text: String, color: Color = ConsoleStyle.PHOSPHOR_DIM) -> void:
 	if _body == null:
 		_build()
@@ -76,7 +83,6 @@ func set_context(text: String, color: Color = ConsoleStyle.PHOSPHOR_DIM) -> void
 	_context.add_theme_color_override("font_color", color)
 
 
-## Where a screen prints itself.
 func content() -> VBoxContainer:
 	if _body == null:
 		_build()

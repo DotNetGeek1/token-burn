@@ -173,6 +173,11 @@ func repair_after_load() -> void:
 		Phase.IN_ROUND:
 			if run_state.business.get("active_jobs", []).is_empty():
 				phase = Phase.ROUND_PREP
+			else:
+				# The running flag is transient, but the round it belonged to is
+				# in the save. Without resuming the session the loaded board
+				# prints no BURN line and DELIVER silently refuses.
+				_work_running = _job_system.begin_work_session(run_state, ContentDatabase)
 		Phase.ROUND_END:
 			phase = Phase.ROUND_PREP
 		Phase.ANGEL_ROUND:

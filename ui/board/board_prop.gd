@@ -1,6 +1,8 @@
 class_name BoardProp
 extends Button
 
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
+
 ## A readout painted onto something standing in the room.
 ##
 ## The desk artwork carries the housing — the thermometer's case, the meter box
@@ -76,7 +78,17 @@ func _ready() -> void:
 func _fit_to_housing() -> void:
 	if _caption == null:
 		return
+	var viewport: Vector2 = get_viewport_rect().size
+	# The viewport is in design units and expands past 900 on a phone, so the
+	# platform is what decides this, not the canvas width.
+	var mobile: bool = ConsoleMetrics.is_mobile() or viewport.x < 900.0
+	var mobile_boost: float = 1.0
+	if mobile:
+		mobile_boost = maxf(1.3, ConsoleMetrics.stretch_compensation())
+	var line_floor: int = 12 if mobile else 8
 	var height: float = size.y
+	if _is_whiteboard():
+		height = maxf(height, viewport.y * 0.14)
 	var box: Control = get_node_or_null("Box")
 	if box != null:
 		var inset: float = 6.0 if height < 60.0 else 8.0
@@ -85,22 +97,25 @@ func _fit_to_housing() -> void:
 		box.offset_top = 3.0
 		box.offset_bottom = -3.0
 	_caption.visible = height >= 46.0
-	# The whiteboard is a whole wall panel rather than a meter face, so its type
-	# is allowed to grow with it instead of sitting tiny in the middle of it.
 	var caption_max: int = 20 if _is_whiteboard() else 13
-	_caption.add_theme_font_size_override("font_size", clampi(int(height * 0.16), 9, caption_max))
+	var caption_min: int = 12 if mobile and _is_whiteboard() else 9
+	_caption.add_theme_font_size_override(
+		"font_size",
+		clampi(int(height * 0.16 * mobile_boost), caption_min, caption_max)
+	)
 	_value.add_theme_font_size_override(
 		"font_size", clampi(int(height * (0.3 if _caption.visible else 0.5)), 10, 20)
 	)
-	# A plan line is fixed pitch, so how many characters the widest line has is
-	# what decides whether it fits across the board. Sizing off the height alone
-	# is what cropped "UPGRADE RIG" to "UPGRADE R".
 	var columns: int = 1
 	for child in _checklist.get_children():
 		columns = maxi(columns, (child as Label).text.length())
 	var line_size: int = clampi(
-		mini(int(height / 8.5), int((size.x - 16.0) / (float(columns) * 0.58))), 8, 20
+		mini(int(height / 8.5), int((size.x - 16.0) / (float(columns) * 0.58))),
+		line_floor,
+		20
 	)
+	if mobile and _is_whiteboard():
+		line_size = clampi(int(round(float(line_size) * mobile_boost)), line_floor, 20)
 	for child in _checklist.get_children():
 		(child as Label).add_theme_font_size_override("font_size", line_size)
 
