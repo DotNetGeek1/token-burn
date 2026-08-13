@@ -25,6 +25,10 @@ extends Resource
 ## Achievement that has to be earned before this module joins the draft pool.
 ## Blank means it is available from the first run.
 @export var unlock_achievement: String = ""
+@export var min_location_tier: int = 0
+@export var max_location_tier: int = -1
+@export var draft_weight: float = 1.0
+@export var difficulty: PackedStringArray = ["normal", "hard"]
 ## Named adjacency pairings, declared so the pipeline editor can show them
 ## before the player finds them by accident. Each entry names the modules it
 ## reacts to in `after` (the stage above) or `before` (the stage below); the
@@ -48,6 +52,10 @@ func to_dict() -> Dictionary:
 		"starter": starter,
 		"opens_pipeline": opens_pipeline,
 		"unlock_achievement": unlock_achievement,
+		"min_location_tier": min_location_tier,
+		"max_location_tier": max_location_tier,
+		"draft_weight": draft_weight,
+		"difficulty": Array(difficulty),
 		"combos": combos,
 	}
 

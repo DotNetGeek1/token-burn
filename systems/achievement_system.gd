@@ -132,6 +132,9 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.endless_rounds": int(stats.get("endless_rounds", 0)),
 		"run.heat_ratio": float(run_state.compute.get("heat", 0.0)) / heat_capacity,
 		"run.max_heat_ratio": float(stats.get("max_heat_ratio", 0.0)),
+		"run.max_cloud_share": float(stats.get("max_cloud_share", 0.0)),
+		"run.stage_repeats": int(stats.get("stage_repeats", 0)),
+		"run.location_tier": JobSystem.location_tier(run_state, ContentDatabase),
 		"run.jobs_accepted": int(stats.get("jobs_accepted", 0)),
 		"run.angel_offers_taken": int(stats.get("angel_offers_taken", 0)),
 		"run.angel_offers_declined": int(stats.get("angel_offers_declined", 0)),
@@ -139,6 +142,7 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.modules_drafted": int(stats.get("modules_drafted", 0)),
 		"run.modules_owned": Array(run_state.build.get("operations", [])).size(),
 		"run.perks_owned": Array(run_state.build.get("perks", [])).size(),
+		"run.perks_collected": Array(run_state.build.get("perk_inventory", [])).size(),
 		"run.hardware_owned": Array(run_state.build.get("hardware", [])).size(),
 		"run.board_slots": int(board.get("slot_count", 0)),
 		"run.board_filled": filled_slots,
@@ -147,9 +151,12 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.ascension_tier": int(run_state.flags.get("ascension_tier", 0)),
 		"run.rounds_survived": int(score.get("rounds_survived", run_state.calendar.get("round", 1))),
 		"run.infrastructure_tier": int(score.get("infrastructure_tier", 0)),
+		"run.difficulty": str(run_state.flags.get("difficulty", "normal")),
 		"meta.achievements": MetaProgress.achievement_count(),
 		"meta.victories": MetaProgress.victories(),
 		"meta.retirements": MetaProgress.retirements(),
+		"meta.normal_victories": MetaProgress.victories_on("normal"),
+		"meta.hard_victories": MetaProgress.victories_on("hard"),
 	}
 	for key in MetaProgress.LIFETIME_KEYS:
 		context["lifetime.%s" % key] = MetaProgress.lifetime_stat(str(key))

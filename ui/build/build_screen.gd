@@ -1,10 +1,8 @@
 extends Control
 
-## The run's engine, listed the way the machine holds it: the perks in the build
-## as a table, the combinations it has recognised printed underneath, and the two
-## numbers the whole thing exists to move as readouts along the bottom.
+## The run's engine: active perk loadout, benched collection, synergies, and
+## equip/bench controls.
 
-const PERK_SLOT_LIMIT := 5
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 @onready var frame: ConsoleFrame = $Margin/Frame
@@ -16,6 +14,10 @@ var _readouts: HBoxContainer = null
 var _token_panel: ConsolePanel = null
 var _cloud_panel: ConsolePanel = null
 var _selected: String = ""
+var _selected_active: bool = true
+## The active perk the selected bench perk would replace, set by the detail
+## sheet so the action row and its handler always mean the same swap.
+var _swap_target: String = ""
 var _console_scale: float = 1.0
 
 
@@ -28,6 +30,8 @@ func _ready() -> void:
 	visibility_changed.connect(_on_visibility_changed)
 	EventBus.perk_acquired.connect(func(_id): refresh())
 	EventBus.run_started.connect(refresh)
+	if _detail != null:
+		_detail.action_pressed.connect(_on_detail_action)
 	refresh()
 
 
@@ -52,7 +56,7 @@ func _build_console() -> void:
 		{"label": "id", "weight": 0.5},
 		{"label": "perk", "weight": 1.8},
 		{"label": "rarity", "weight": 0.9},
-		{"label": "effect", "weight": 3.0},
+		{"label": "status", "weight": 2.2},
 	])
 
 	_synergies = VBoxContainer.new()
@@ -105,40 +109,77 @@ func _fit_console() -> void:
 
 
 func refresh() -> void:
-	var perks: Array = Simulation.run_state.build.get("perks", [])
-	frame.set_context("PERKS %d / %d" % [perks.size(), PERK_SLOT_LIMIT])
-	_refresh_perks(perks)
+	var capacity: Dictionary = Simulation.perk_capacity()
+	var active: Array = Simulation.run_state.build.get("perks", [])
+	var collected: Array = Simulation.run_state.build.get("perk_inventory", [])
+	frame.set_context(
+		"ACTIVE %d / %d · COLLECTED %d" % [
+			int(capacity.get("active", 0)),
+			int(capacity.get("cap", 0)),
+			collected.size(),
+		]
+	)
+	_refresh_perks(active, collected)
 	_refresh_synergies()
 	_refresh_readouts()
 	if _selected == "" or not _table.select_meta(_selected):
 		_detail.clear("SELECT A PERK")
+	else:
+		_show_selected_detail()
 	_fit_console()
 
 
-func _refresh_perks(perks: Array) -> void:
+func _refresh_perks(active: Array, collected: Array) -> void:
 	_table.clear()
-	if perks.is_empty():
-		_table.add_note("NO PERKS INSTALLED — FINISH CONTRACTS AND PICK ONE")
+	_table.add_note("ACTIVE %d / %d" % [active.size(), Simulation.perk_capacity().get("cap", 0)])
+	if active.is_empty():
+		_table.add_note("NO ACTIVE PERKS")
+	else:
+		var index: int = 1
+		for perk_id in active:
+			_add_perk_row(perk_id, index, "ACTIVE", true)
+			index += 1
+	var benched: Array = []
+	for perk_id in collected:
+		if perk_id not in active:
+			benched.append(perk_id)
+	_table.add_note("BENCH %d" % benched.size())
+	if benched.is_empty():
+		_table.add_note("NOTHING ON THE BENCH")
+	else:
+		var bench_index: int = 1
+		for perk_id in benched:
+			_add_perk_row(perk_id, bench_index, "BENCH", false)
+			bench_index += 1
+
+
+func _add_perk_row(perk_id: String, index: int, status: String, is_active: bool) -> void:
+	var perk: PerkDefinition = ContentDatabase.get_perk(perk_id)
+	if perk == null:
 		return
-	var index: int = 1
-	for perk_id in perks:
-		var perk: PerkDefinition = ContentDatabase.get_perk(str(perk_id))
-		if perk == null:
-			continue
-		_table.add_row([
-			"[%02d]" % index,
-			perk.name,
-			{"text": perk.rarity.to_upper(), "color": AssetCatalog.rarity_color(perk.rarity)},
-			{
-				"text": Simulation.get_perk_description(str(perk_id)),
-				"color": ConsoleStyle.PHOSPHOR_DIM,
-			},
-		], str(perk_id))
-		index += 1
+	var status_text: String = status
+	if is_active:
+		# A capacity or workflow perk that cannot leave says so on its own row,
+		# rather than the player pressing BENCH and nothing happening.
+		var bench_reason: String = Simulation.perk_bench_block_reason(perk_id)
+		if bench_reason != "":
+			status_text = bench_reason
+	elif Simulation.can_equip_perk(perk_id):
+		status_text = "READY TO EQUIP"
+	else:
+		status_text = Simulation.perk_equip_block_reason(perk_id)
+		# On a full loadout the way in is a swap, so the row names that instead
+		# of only reporting that there is no room.
+		if _swap_target_for(perk_id) != "":
+			status_text = "%s · SWAP AVAILABLE" % status_text
+	_table.add_row([
+		"[%02d]" % index,
+		perk.name,
+		{"text": perk.rarity.to_upper(), "color": AssetCatalog.rarity_color(perk.rarity)},
+		{"text": status_text, "color": ConsoleStyle.PHOSPHOR_DIM},
+	], perk_id)
 
 
-## Recognised combinations, printed rather than boxed: they are something the
-## machine noticed about the build, not another thing to press.
 func _refresh_synergies() -> void:
 	for child in _synergies.get_children():
 		_synergies.remove_child(child)
@@ -180,6 +221,11 @@ func _refresh_readouts() -> void:
 
 func _on_row_selected(meta: Variant) -> void:
 	_selected = str(meta) if meta != null else ""
+	_selected_active = _selected in Simulation.run_state.build.get("perks", [])
+	_show_selected_detail()
+
+
+func _show_selected_detail() -> void:
 	var perk: PerkDefinition = ContentDatabase.get_perk(_selected)
 	if perk == null:
 		_detail.clear("SELECT A PERK")
@@ -190,9 +236,70 @@ func _on_row_selected(meta: Variant) -> void:
 	]
 	if perk.tags.size() > 0:
 		lines.append({"stat": "Tags", "value": ", ".join(perk.tags)})
-	for key in perk.parameters.keys():
-		lines.append({"stat": str(key), "value": str(perk.parameters[key])})
-	_detail.show_detail(perk.name.to_upper(), lines)
+	var action: String = ""
+	var enabled: bool = false
+	_swap_target = ""
+	if _selected_active:
+		var bench_reason: String = Simulation.perk_bench_block_reason(_selected)
+		lines.append({
+			"stat": "Status",
+			"value": "Active" if bench_reason == "" else "Active · %s" % bench_reason,
+		})
+		action = "BENCH"
+		enabled = bench_reason == ""
+	else:
+		var equip_reason: String = Simulation.perk_equip_block_reason(_selected)
+		lines.append({
+			"stat": "Equip",
+			"value": "Ready" if Simulation.can_equip_perk(_selected) else equip_reason,
+		})
+		if Simulation.can_equip_perk(_selected):
+			action = "EQUIP"
+			enabled = true
+		else:
+			# Nothing else can free a slot for this perk, so the screen offers
+			# the swap it would have to make rather than a dead EQUIP line.
+			_swap_target = _swap_target_for(_selected)
+			if _swap_target != "":
+				var outgoing: PerkDefinition = ContentDatabase.get_perk(_swap_target)
+				var outgoing_name: String = outgoing.name if outgoing != null else _swap_target
+				lines.append({"stat": "Swap out", "value": outgoing_name})
+				action = "SWAP FOR %s" % outgoing_name.to_upper()
+				enabled = true
+			else:
+				action = "EQUIP"
+				enabled = false
+	_detail.show_detail(perk.name.to_upper(), lines, action, enabled)
+
+
+## The active perk this one could replace. Only offered when exactly one active
+## perk clears the way, so a swap is never a guess about which one the player
+## meant to give up.
+func _swap_target_for(perk_id: String) -> String:
+	var candidates: Array = []
+	for active_id in Simulation.run_state.build.get("perks", []):
+		if Simulation.can_swap_perk(str(active_id), perk_id):
+			candidates.append(str(active_id))
+		if candidates.size() > 1:
+			return ""
+	return str(candidates[0]) if candidates.size() == 1 else ""
+
+
+func _on_detail_action() -> void:
+	if _selected == "":
+		return
+	if _selected_active:
+		if Simulation.bench_perk(_selected):
+			_selected = ""
+	elif _swap_target != "":
+		if Simulation.swap_perk(_swap_target, _selected):
+			_selected_active = true
+		_swap_target = ""
+	elif Simulation.equip_perk(_selected):
+		_selected_active = true
+	refresh()
+	get_tree().call_group("ui_refresh", "refresh")
+	get_tree().call_group("main_ui", "refresh_all")
 
 
 func _active_synergy_entries() -> Array[Dictionary]:

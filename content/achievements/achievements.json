@@ -420,5 +420,109 @@
       "checks": [{"stat": "lifetime.tokens_burned", "op": ">=", "value": 1000000000000000}]
     },
     "reward": {"type": "none"}
+  },
+  {
+    "id": "ach.bare_metal_purist",
+    "name": "Bare Metal Purist",
+    "category": "milestone",
+    "icon": "wrench",
+    "hidden": false,
+    "description": "You cleared a proper office without ever touching the cloud. The invoices agree.",
+    "hint": "Ascend from Office or later with zero cloud usage.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.location_tier", "op": ">=", "value": 2},
+        {"stat": "run.max_cloud_share", "op": "<=", "value": 0.01}
+      ]
+    },
+    "reward": {"type": "unlock_perk", "perk_id": "perk.rack_mount_religion"}
+  },
+  {
+    "id": "ach.cloud_renter",
+    "name": "Somebody Else's Computer",
+    "category": "milestone",
+    "icon": "cloud",
+    "hidden": false,
+    "description": "Eighty percent of your throughput lived in someone else's datacentre. Your bedroom stayed cold.",
+    "hint": "Ascend with at least 80% of compute in the cloud.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.max_cloud_share", "op": ">=", "value": 0.8}
+      ]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.egress_shield"}
+  },
+  {
+    "id": "ach.ship_it_pray_ii",
+    "name": "Ship It and Pray II",
+    "category": "milestone",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Twenty hidden bugs shipped and you still won. The postmortem is a novel.",
+    "hint": "Win a run after shipping twenty hidden bugs.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.hidden_bugs_shipped", "op": ">=", "value": 20}
+      ]
+    },
+    "reward": {"type": "unlock_perk", "perk_id": "perk.known_unknowns"}
+  },
+  {
+    "id": "ach.audit_ready",
+    "name": "Audit Ready",
+    "category": "milestone",
+    "icon": "trophy",
+    "hidden": false,
+    "description": "Five big contracts, zero bugs, quality in the nineties. The auditor cried.",
+    "hint": "Complete five tier-2+ jobs in one run with no bugs shipped and quality at 90+.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.completed_jobs", "op": ">=", "value": 5},
+        {"stat": "run.hidden_bugs_shipped", "op": "==", "value": 0},
+        {"stat": "run.ascension_tier", "op": ">=", "value": 2}
+      ]
+    },
+    "reward": {"type": "unlock_perk", "perk_id": "perk.audit_trail"}
+  },
+  {
+    "id": "ach.redline",
+    "name": "Redline",
+    "category": "milestone",
+    "icon": "flame",
+    "hidden": false,
+    "description": "You ascended with the rig pinned above ninety percent heat. The fire marshal has questions.",
+    "hint": "Ascend after hitting 90% heat capacity.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.outcome", "op": "==", "value": "ascended"},
+        {"stat": "run.max_heat_ratio", "op": ">=", "value": 0.9}
+      ]
+    },
+    "reward": {"type": "unlock_module", "operation_id": "op.heat_sink_bank"}
+  },
+  {
+    "id": "ach.recursive_business",
+    "name": "Recursive Business Model",
+    "category": "milestone",
+    "icon": "brain",
+    "hidden": false,
+    "description": "A hundred stage repeats in one run. The pipeline is a möbius strip with invoices.",
+    "hint": "Trigger one hundred stage repeats in a single run.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {"stat": "run.stage_repeats", "op": ">=", "value": 100}
+      ]
+    },
+    "reward": {"type": "unlock_perk", "perk_id": "perk.infinite_backlog"}
   }
 ]

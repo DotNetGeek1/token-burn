@@ -24,6 +24,10 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	for entry in run_state.compute.get("rate_modifiers", []):
 		if entry is Dictionary:
 			base_rate *= float(entry.get("multiplier", 1.0))
+	# Legacy throughput (Old Silicon) is kit the profile owns rather than a
+	# modifier the run applied, so it lands on the base the same way a faster
+	# machine would and everything else composes on top of it.
+	base_rate *= float(run_state.business.get("legacy_token_multiplier", 1.0))
 	# Rule-changer: heat above 60% of capacity feeds back into throughput
 	# instead of just risking a fire. A build that leans into this runs hot on
 	# purpose.
@@ -57,6 +61,10 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	run_state.compute["local_rate"] = local
 	run_state.compute["cloud_rate"] = cloud
 	run_state.compute["cloud_share"] = cloud / maxf(1.0, local + cloud)
+	run_state.statistics["max_cloud_share"] = maxf(
+		float(run_state.statistics.get("max_cloud_share", 0.0)),
+		float(run_state.compute.get("cloud_share", 0.0))
+	)
 	# `compute.token_rate` stays targetable for build-neutral perks: what they
 	# multiply is the combined rate, and whatever the split did to the two
 	# halves is folded in as a scale so throttles and heat still apply to it.

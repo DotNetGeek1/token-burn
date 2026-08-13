@@ -1092,7 +1092,10 @@ func _reach_victory(contract: Dictionary) -> void:
 	# cleared on the way up is a level-up inside the run — it banks no picks,
 	# advances no age and hands over no rule unlocks; only the summit pays.
 	if _run_is_final_chapter():
-		MetaProgress.bank_victory(maxi(1, int(contract.get("picks", 1))))
+		MetaProgress.bank_victory(
+			maxi(1, int(contract.get("picks", 1))),
+			str(run_state.flags.get("difficulty", "normal"))
+		)
 		if bool(contract.get("unlocks_age", false)):
 			MetaProgress.advance_age(Ages.max_age_index())
 		var ending_unlock: String = str(contract.get("ending_unlock", ""))
@@ -1283,7 +1286,7 @@ func workflow_count() -> int:
 
 
 func workflow_capacity() -> int:
-	return _board_system.workflow_capacity(run_state)
+	return _board_system.workflow_capacity(run_state, ContentDatabase)
 
 
 func active_workflow_index() -> int:
@@ -1304,7 +1307,7 @@ func set_active_workflow(index: int) -> bool:
 
 
 func create_workflow(name: String = "") -> Dictionary:
-	var created: Dictionary = _board_system.create_workflow(run_state, name)
+	var created: Dictionary = _board_system.create_workflow(run_state, name, ContentDatabase)
 	if created.is_empty():
 		return {}
 	_autosave()
@@ -1791,20 +1794,91 @@ func _spend_draft_pick(_offer_type: String, _offer_id: String) -> void:
 func _accept_perk(perk_id: String) -> bool:
 	if phase != Phase.ANGEL_ROUND:
 		return false
-	if not _perk_system.acquire(run_state, perk_id, ContentDatabase):
+	if not _perk_system.collect_perk(run_state, perk_id, ContentDatabase):
 		return false
+	_perk_system.apply_collect_side_effects(
+		run_state, perk_id, ContentDatabase, effect_resolver, rng
+	)
+	var equipped := false
+	if _perk_system.can_equip(run_state, perk_id, ContentDatabase):
+		equipped = _perk_system.equip_perk(run_state, perk_id, ContentDatabase)
 	run_state.statistics["angel_offers_taken"] = int(
 		run_state.statistics.get("angel_offers_taken", 0)
 	) + 1
 	_invalidate_subscriptions()
 	EventBus.emit_event(EventBus.EVENT_PERK_ACQUIRED, {"perk_id": perk_id})
 	_dispatch_perk_acquired(perk_id)
-	# A perk may have widened the board, so the slot array is resized before
-	# anything tries to place a module in the slot it just gained.
 	_board_system.ensure_board(run_state, ContentDatabase)
 	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
 	_spend_draft_pick("perk", perk_id)
 	return true
+
+
+func collect_perk(perk_id: String) -> bool:
+	if not _perk_system.collect_perk(run_state, perk_id, ContentDatabase):
+		return false
+	_perk_system.apply_collect_side_effects(
+		run_state, perk_id, ContentDatabase, effect_resolver, rng
+	)
+	_invalidate_subscriptions()
+	EventBus.emit_event(EventBus.EVENT_PERK_ACQUIRED, {"perk_id": perk_id})
+	_dispatch_perk_acquired(perk_id)
+	_board_system.ensure_board(run_state, ContentDatabase)
+	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
+	_autosave()
+	return true
+
+
+func equip_perk(perk_id: String) -> bool:
+	if not _perk_system.equip_perk(run_state, perk_id, ContentDatabase):
+		return false
+	_recalculate_after_perk_loadout_change()
+	return true
+
+
+func bench_perk(perk_id: String) -> bool:
+	if not _perk_system.bench_perk(run_state, perk_id, ContentDatabase):
+		return false
+	_recalculate_after_perk_loadout_change()
+	return true
+
+
+func swap_perk(out_id: String, in_id: String) -> bool:
+	if not _perk_system.swap_perk(run_state, out_id, in_id, ContentDatabase):
+		return false
+	_recalculate_after_perk_loadout_change()
+	return true
+
+
+func can_equip_perk(perk_id: String) -> bool:
+	return _perk_system.can_equip(run_state, perk_id, ContentDatabase)
+
+
+func perk_equip_block_reason(perk_id: String) -> String:
+	return _perk_system.equip_block_reason(run_state, perk_id, ContentDatabase)
+
+
+func perk_bench_block_reason(perk_id: String) -> String:
+	return _perk_system.bench_block_reason(run_state, perk_id, ContentDatabase)
+
+
+func can_bench_perk(perk_id: String) -> bool:
+	return _perk_system.can_bench(run_state, perk_id, ContentDatabase)
+
+
+func perk_swap_block_reason(out_id: String, in_id: String) -> String:
+	return _perk_system.swap_block_reason(run_state, out_id, in_id, ContentDatabase)
+
+
+func can_swap_perk(out_id: String, in_id: String) -> bool:
+	return _perk_system.can_swap(run_state, out_id, in_id, ContentDatabase)
+
+
+func _recalculate_after_perk_loadout_change() -> void:
+	_invalidate_subscriptions()
+	_board_system.ensure_board(run_state, ContentDatabase)
+	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
+	_autosave()
 
 
 ## Drafts a pipeline module. Unlike a perk it changes nothing on its own: it has
@@ -1902,9 +1976,14 @@ func get_perk_description(perk_id: String) -> String:
 ## How many perks the build holds against its ceiling, for screens that need to
 ## warn the player that picks are running out.
 func perk_capacity() -> Dictionary:
+	var active: int = run_state.build["perks"].size()
+	var collected: int = run_state.build.get("perk_inventory", []).size()
+	var cap: int = _perk_system.perk_capacity(run_state, ContentDatabase)
 	return {
-		"owned": run_state.build["perks"].size(),
-		"cap": _perk_system.perk_cap(ContentDatabase),
+		"owned": active,
+		"active": active,
+		"collected": collected,
+		"cap": cap,
 	}
 
 
@@ -1919,35 +1998,97 @@ func query_effect_breakdown(target_path: String, chain_id: String = "") -> Dicti
 ## The only draft there is: the round's free offer, one pick and out.
 const DRAFT_ANGEL := "angel"
 
+
+func _draft_state() -> Dictionary:
+	var state: Dictionary = run_state.build.get("draft_state", {})
+	if not state is Dictionary:
+		state = {"sequence": 0, "rerolls": 0}
+	run_state.build["draft_state"] = state
+	return state
+
+
+func _angel_draw_rng() -> DeterministicRng:
+	var draft: Dictionary = _draft_state()
+	var sequence: int = int(draft.get("sequence", 0))
+	var rerolls: int = int(draft.get("rerolls", 0))
+	return rng.derive("angel.%d.reroll.%d" % [sequence, rerolls])
+
+
+func angel_reroll_cost() -> float:
+	var draft: Dictionary = _draft_state()
+	var rerolls: int = int(draft.get("rerolls", 0))
+	var base_cost: float = maxf(
+		float(run_state.economy.get("round_rent", 0.0)) * 0.5,
+		_location_base_job_reward() * 0.10
+	)
+	return base_cost * pow(2.0, float(rerolls))
+
+
+func can_reroll_angel() -> bool:
+	if phase != Phase.ANGEL_ROUND:
+		return false
+	return _economy_system.can_afford(run_state, angel_reroll_cost())
+
+
+func reroll_angel_offers() -> bool:
+	if phase != Phase.ANGEL_ROUND:
+		return false
+	var cost: float = angel_reroll_cost()
+	if not _economy_system.purchase(run_state, cost, "angel_reroll"):
+		return false
+	var draft: Dictionary = _draft_state()
+	draft["rerolls"] = int(draft.get("rerolls", 0)) + 1
+	run_state.build["draft_state"] = draft
+	_redraw_angel_offers()
+	_autosave()
+	return true
+
+
+func _location_base_job_reward() -> float:
+	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
+	for job in ContentDatabase.jobs:
+		if str(job.id).contains(dwelling) or job.tier == 0:
+			return float(job.reward_units) * float(run_state.economy.get("cash_multiplier", 1.0)) * 100.0
+	return float(run_state.economy.get("round_rent", 400.0))
+
+
+func _redraw_angel_offers() -> void:
+	pending_choices = []
+	for offer in ContentDatabase.draw_angel_offers(
+		_angel_draw_rng(),
+		run_state,
+		3,
+		_perk_system.owned_tags(run_state, ContentDatabase),
+		0.0
+	):
+		var offer_type: String = str(offer.get("type", ""))
+		var offer_id: String = str(offer.get("id", ""))
+		var description: String = ""
+		if offer_type == "perk":
+			description = get_perk_description(offer_id)
+		elif offer_type == "operation":
+			description = get_operation_description(offer_id)
+		pending_choices.append({
+			"type": offer_type,
+			"id": offer_id,
+			"label": str(offer.get("label", "")),
+			"description": description,
+			"cost": 0.0,
+		})
+
+
 ## The round's angel draft. Everything here is free: somebody with more money
 ## than sense is handing out modules and perks. Anything with a price tag is sold
 ## on the Market tab instead, where the player goes looking for it.
 func _present_angel_offers() -> void:
-	pending_choices = []
-	for operation in ContentDatabase.draw_operations(rng.derive("operation_choice"), 2, owned_operations()):
-		pending_choices.append({
-			"type": "operation",
-			"id": operation.id,
-			"label": operation.name,
-			"description": get_operation_description(operation.id),
-			"cost": 0.0,
-		})
-	var perk_draw: Array = ContentDatabase.draw_perks(
-		rng.derive("angel_perks"),
-		2,
-		run_state.build["perks"],
-		0.0,
-		_perk_system.owned_tags(run_state, ContentDatabase),
-		_perk_system.blocked_ids(run_state, ContentDatabase)
-	)
-	for perk in perk_draw:
-		pending_choices.append({"type": "perk", "id": perk.id, "label": perk.name, "description": _render_perk(perk), "cost": 0.0})
+	var draft: Dictionary = _draft_state()
+	draft["sequence"] = int(draft.get("sequence", 0)) + 1
+	draft["rerolls"] = 0
+	run_state.build["draft_state"] = draft
+	_redraw_angel_offers()
 	if pending_choices.is_empty():
 		_after_angel_round()
 		return
-	# No persona is attached to the offers any more: there is one investor in the
-	# game and the table is his, so the screen speaks for him rather than casting
-	# a different fictional fund onto every card.
 	run_state.flags["draft_kind"] = DRAFT_ANGEL
 	phase = Phase.ANGEL_ROUND
 
@@ -2132,7 +2273,10 @@ func _end_run(victory: bool, outcome: String = "") -> void:
 			# Same rule as `_reach_victory`: only finishing the campaign's last
 			# chapter pays out anything permanent.
 			if _run_is_final_chapter():
-				MetaProgress.bank_victory(maxi(1, int(contract.get("picks", 1))))
+				MetaProgress.bank_victory(
+			maxi(1, int(contract.get("picks", 1))),
+			str(run_state.flags.get("difficulty", "normal"))
+		)
 				if bool(contract.get("unlocks_age", false)):
 					MetaProgress.advance_age(Ages.max_age_index())
 				var ending_unlock: String = str(contract.get("ending_unlock", ""))

@@ -395,12 +395,43 @@ func _apply_spawn(
 		if not _guard.can_spawn(1):
 			metadata["blocked"] = true
 			return arr
-		arr.append(value)
+		var payload: Variant = value
+		if value is Dictionary:
+			payload = _freeze_spawn_payload(value.duplicate(true), mod_ctx)
+		arr.append(payload)
 		spawn_count = 1
 	if spawn_count > 0:
 		_guard.record_spawn(spawn_count)
 	metadata["spawned"] = spawn_count
 	return arr
+
+
+## Resolves `value_from` inside a spawned status payload so each spawn freezes
+## its own numbers rather than re-reading live run state every tick.
+func _freeze_spawn_payload(payload: Dictionary, mod_ctx: ModifierContext) -> Dictionary:
+	if payload.has("subscriptions"):
+		var frozen_subs: Array = []
+		for sub in payload.get("subscriptions", []):
+			if not sub is Dictionary:
+				frozen_subs.append(sub)
+				continue
+			var copy: Dictionary = sub.duplicate(true)
+			var effects: Array = []
+			for effect in Array(copy.get("effects", [])):
+				if not effect is Dictionary:
+					effects.append(effect)
+					continue
+				var fx: Dictionary = effect.duplicate(true)
+				if fx.has("value_from"):
+					fx["value"] = _as_float(
+						mod_ctx.get_value(str(fx["value_from"]), 0.0)
+					) * _as_float(fx.get("value", 1.0), 1.0)
+					fx.erase("value_from")
+				effects.append(fx)
+			copy["effects"] = effects
+			frozen_subs.append(copy)
+		payload["subscriptions"] = frozen_subs
+	return payload
 
 
 func _apply_remove(

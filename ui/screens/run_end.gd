@@ -220,6 +220,15 @@ func _refresh_debrief() -> void:
 	for unlock in choices:
 		var card: GameCard = CARD_SCENE.instantiate()
 		var owned: int = MetaProgress.unlock_count(str(unlock.get("id", "")))
+		var ranks: Array = Array(unlock.get("ranks", []))
+		var chip_text: String = "Permanent"
+		if owned > 0:
+			chip_text = "Already kept ×%d" % owned if ranks.is_empty() else "Rank %d / %d" % [owned, ranks.size()]
+		var hard_req: Array = Array(unlock.get("hard_victories_required", []))
+		if not ranks.is_empty() and owned < ranks.size() and owned < hard_req.size():
+			var needed: int = int(hard_req[owned])
+			if needed > MetaProgress.victories_on("hard"):
+				chip_text = "%s · needs %d Hard win(s)" % [chip_text, needed]
 		card.setup(
 			str(unlock.get("name", "Unlock")),
 			"%s\n%s" % [str(unlock.get("description", "")), str(unlock.get("flavour", ""))],
@@ -228,7 +237,7 @@ func _refresh_debrief() -> void:
 			AssetCatalog.unlock_icon(str(unlock.get("kind", "")))
 		)
 		card.set_chips([{
-			"text": "Already kept ×%d" % owned if owned > 0 else "Permanent",
+			"text": chip_text,
 			"role": "perk",
 			"filled": true,
 		}])

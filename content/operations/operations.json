@@ -857,5 +857,199 @@
         ]
       }
     ]
+  },
+  {
+    "id": "op.local_cache",
+    "name": "Local Cache",
+    "category": "context",
+    "rarity": "common",
+    "starter": false,
+    "tags": ["context", "local"],
+    "min_location_tier": 0,
+    "badge": "+{quality} Q",
+    "description_template": "Keep the weights on disk. +{quality} quality for ${cost} a batch.",
+    "parameters": {"quality": 6, "cost": 2},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.edge_node",
+    "name": "Edge Node",
+    "category": "model",
+    "rarity": "rare",
+    "starter": false,
+    "tags": ["model", "local"],
+    "min_location_tier": 2,
+    "badge": "×{progress}",
+    "description_template": "Inference at the edge. ×{progress} progress, +{heat} heat.",
+    "parameters": {"progress": 1.35, "heat": 4},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"}
+    ]
+  },
+  {
+    "id": "op.spot_fleet",
+    "name": "Spot Fleet",
+    "category": "model",
+    "rarity": "common",
+    "starter": false,
+    "tags": ["model", "cloud"],
+    "min_location_tier": 1,
+    "badge": "×{progress}",
+    "description_template": "Pre-empted every thirty seconds. ×{progress} progress, ${cost} a batch.",
+    "parameters": {"progress": 1.5, "cost": 12},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.egress_shield",
+    "name": "Egress Shield",
+    "category": "context",
+    "rarity": "rare",
+    "starter": false,
+    "unlock_achievement": "ach.cloud_renter",
+    "tags": ["context", "cloud"],
+    "min_location_tier": 2,
+    "badge": "+{quality} Q",
+    "description_template": "Compress before upload. +{quality} quality, ${cost} a batch.",
+    "parameters": {"quality": 10, "cost": 3},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.liquid_loop",
+    "name": "Liquid Loop",
+    "category": "hardware",
+    "rarity": "common",
+    "starter": false,
+    "tags": ["hardware", "heat"],
+    "badge": "−{heat} H",
+    "description_template": "Closed loop on the rack. −{heat} heat for ${cost} a batch.",
+    "parameters": {"heat": -8, "cost": 6},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.heat_sink_bank",
+    "name": "Heat Sink Bank",
+    "category": "hardware",
+    "rarity": "legendary",
+    "starter": false,
+    "unlock_achievement": "ach.redline",
+    "difficulty": ["hard"],
+    "tags": ["cooling", "heat", "thermal_runaway"],
+    "min_location_tier": 3,
+    "badge": "×{progress}",
+    "description_template": "Store heat, spend it later. ×{progress} progress while above {threshold_pct}% heat.",
+    "parameters": {"progress": 1.4, "threshold": 0.9, "threshold_pct": 90},
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$progress",
+        "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": "$threshold"}]
+      }
+    ]
+  },
+  {
+    "id": "op.bug_bounty",
+    "name": "Bug Bounty",
+    "category": "test",
+    "rarity": "common",
+    "starter": false,
+    "tags": ["test", "bugs"],
+    "badge": "−{bugs} bugs",
+    "description_template": "Pay strangers to find your mistakes. −{bugs} known bugs, ${cost} a batch.",
+    "parameters": {"bugs": 1, "cost": 8},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.fix_bugs", "value": "$bugs"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.crash_dump",
+    "name": "Crash Dump",
+    "category": "test",
+    "rarity": "rare",
+    "starter": false,
+    "tags": ["test", "bugs", "risk"],
+    "badge": "+{bugs} hidden",
+    "description_template": "Ship the core file too. +{bugs} hidden bugs, ×{progress} progress.",
+    "parameters": {"bugs": 1, "progress": 1.6},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.hidden_bugs", "value": "$bugs"},
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"}
+    ]
+  },
+  {
+    "id": "op.type_checker",
+    "name": "Type Checker",
+    "category": "test",
+    "rarity": "common",
+    "starter": false,
+    "tags": ["test", "quality"],
+    "badge": "+{quality} Q",
+    "description_template": "The compiler is your friend. +{quality} quality for ${cost} a batch.",
+    "parameters": {"quality": 12, "cost": 5},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ]
+  },
+  {
+    "id": "op.gold_master",
+    "name": "Gold Master",
+    "category": "test",
+    "rarity": "legendary",
+    "starter": false,
+    "tags": ["test", "quality"],
+    "min_location_tier": 3,
+    "badge": "+{quality} Q",
+    "description_template": "Signed off by three committees. +{quality} quality, buries one hidden bug.",
+    "parameters": {"quality": 20},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.hidden_bugs", "value": -1}
+    ]
+  },
+  {
+    "id": "op.echo_chamber",
+    "name": "Echo Chamber",
+    "category": "agent",
+    "rarity": "common",
+    "starter": false,
+    "tags": ["agent", "recursion"],
+    "min_location_tier": 1,
+    "badge": "Repeat {strength_pct}%",
+    "description_template": "Ask the model what the model thinks. Repeats the stage above at {strength_pct}% strength.",
+    "parameters": {"strength": 0.4, "strength_pct": 40},
+    "slot_effects": [
+      {"operation": "set", "target": "stage.repeat_previous", "value": "$strength"}
+    ]
+  },
+  {
+    "id": "op.fractal_split",
+    "name": "Fractal Split",
+    "category": "agent",
+    "rarity": "legendary",
+    "starter": false,
+    "tags": ["agent", "recursion"],
+    "min_location_tier": 3,
+    "badge": "Repeat {strength_pct}%",
+    "description_template": "Each stage forks the one above at {strength_pct}% strength, twice.",
+    "parameters": {"strength": 0.55, "strength_pct": 55},
+    "slot_effects": [
+      {"operation": "set", "target": "stage.repeat_previous", "value": "$strength"},
+      {"operation": "multiply", "target": "stage.progress_mult", "value": 0.85}
+    ]
   }
 ]

@@ -10,7 +10,7 @@ extends Node
 
 const DEFAULT_PROFILE_PATH := "user://profile.json"
 const CATALOG_PATH := "res://content/meta/unlocks.json"
-const PROFILE_VERSION := 4
+const PROFILE_VERSION := 5
 
 ## Where a run that has unlocked nothing takes place. The campaign always has at
 ## least this rung, so no profile can ever end up with nowhere to play.
@@ -88,11 +88,102 @@ func get_unlock(unlock_id: String) -> Dictionary:
 
 ## Whether this unlock can still be bought: one-offs only once, and extra slots
 ## only until the board hits the width the resolver can lay out.
+func victories_on(difficulty_id: String) -> int:
+	_ensure_loaded()
+	return int(Dictionary(_profile.get("victories_by_difficulty", {})).get(difficulty_id, 0))
+
+
+func legacy_perk_slot_bonus() -> int:
+	var rank: int = unlock_count("unlock.rolodex")
+	if rank <= 0:
+		return 0
+	return int(_rank_value(get_unlock("unlock.rolodex"), rank))
+
+
+func completion_summary() -> Dictionary:
+	_ensure_loaded()
+	var achievements_earned: int = achievement_count()
+	var achievements_total: int = ContentDatabase.achievements.size()
+	var perks_unlocked: int = 0
+	var perks_total: int = ContentDatabase.perks.size()
+	for perk in ContentDatabase.perks:
+		if ContentDatabase.perk_is_unlocked(perk):
+			perks_unlocked += 1
+	var modules_unlocked: int = 0
+	var modules_total: int = ContentDatabase.operations.size()
+	for operation in ContentDatabase.operations:
+		if ContentDatabase.operation_is_unlocked(operation):
+			modules_unlocked += 1
+	var legacy_owned: int = 0
+	var legacy_total: int = 0
+	for unlock in _catalog:
+		var ranks: Array = Array(unlock.get("ranks", []))
+		if ranks.is_empty():
+			continue
+		legacy_total += ranks.size()
+		legacy_owned += mini(unlock_count(str(unlock.get("id", ""))), ranks.size())
+	var parts: Array[float] = []
+	if achievements_total > 0:
+		parts.append(float(achievements_earned) / float(achievements_total))
+	if perks_total > 0:
+		parts.append(float(perks_unlocked) / float(perks_total))
+	if modules_total > 0:
+		parts.append(float(modules_unlocked) / float(modules_total))
+	if legacy_total > 0:
+		parts.append(float(legacy_owned) / float(legacy_total))
+	var percent: float = 0.0
+	for part in parts:
+		percent += part
+	if not parts.is_empty():
+		percent = (percent / float(parts.size())) * 100.0
+	var overall: bool = achievements_earned >= achievements_total \
+		and perks_unlocked >= perks_total \
+		and modules_unlocked >= modules_total \
+		and legacy_owned >= legacy_total \
+		and achievements_total > 0 and perks_total > 0 and modules_total > 0 and legacy_total > 0
+	return {
+		"achievements": {"earned": achievements_earned, "total": achievements_total},
+		"perks": {"unlocked": perks_unlocked, "total": perks_total},
+		"modules": {"unlocked": modules_unlocked, "total": modules_total},
+		"legacy": {"ranks_owned": legacy_owned, "total_ranks": legacy_total},
+		"overall_complete": overall,
+		"percent": percent,
+	}
+
+
+func _legacy_rank_total(unlock_id: String) -> int:
+	var unlock: Dictionary = get_unlock(unlock_id)
+	var ranks: Array = Array(unlock.get("ranks", []))
+	if ranks.is_empty():
+		return 0
+	var owned: int = unlock_count(unlock_id)
+	var total: int = 0
+	for i in range(mini(owned, ranks.size())):
+		total += int(ranks[i])
+	return total
+
+
+func _rank_value(unlock: Dictionary, rank: int) -> float:
+	var ranks: Array = Array(unlock.get("ranks", []))
+	if ranks.is_empty():
+		return float(unlock.get("amount", 0.0))
+	var index: int = clampi(rank - 1, 0, ranks.size() - 1)
+	return float(ranks[index])
+
+
 func is_available(unlock_id: String) -> bool:
 	var unlock: Dictionary = get_unlock(unlock_id)
 	if unlock.is_empty():
 		return false
 	var owned: int = unlock_count(unlock_id)
+	var ranks: Array = Array(unlock.get("ranks", []))
+	if not ranks.is_empty():
+		if owned >= ranks.size():
+			return false
+		var required: Array = Array(unlock.get("hard_victories_required", []))
+		if owned < required.size() and int(required[owned]) > victories_on("hard"):
+			return false
+		return true
 	if not bool(unlock.get("repeatable", false)):
 		return owned == 0
 	if str(unlock.get("kind", "")) == "extra_slot":
@@ -124,11 +215,14 @@ func available_choices() -> Array:
 ## Banks `picks` unlock picks for completing the campaign's final Ascension
 ## Contract. Only the summit pays permanence: a chapter goal cleared on the way
 ## up is progress inside the run, not a source of unlocks.
-func bank_victory(picks: int = 1) -> void:
+func bank_victory(picks: int = 1, difficulty_id: String = "normal") -> void:
 	if not enabled:
 		return
 	_ensure_loaded()
 	_profile["victories"] = victories() + 1
+	var by_difficulty: Dictionary = Dictionary(_profile.get("victories_by_difficulty", {}))
+	by_difficulty[difficulty_id] = int(by_difficulty.get(difficulty_id, 0)) + 1
+	_profile["victories_by_difficulty"] = by_difficulty
 	_profile["pending_picks"] = pending_picks() + maxi(0, picks)
 	_save()
 	pick_banked.emit(pending_picks())
@@ -550,9 +644,90 @@ func apply_to_run(run_state: RunState) -> void:
 		var unlock: Dictionary = _catalog_by_id.get(unlock_id, {})
 		if unlock.is_empty():
 			continue
-		for _i in range(int(unlocks[unlock_id])):
-			_apply_one(run_state, unlock)
+		var rank: int = int(unlocks[unlock_id])
+		if rank <= 0:
+			continue
+		_apply_rank(run_state, unlock, rank)
 	_apply_age(run_state)
+	_apply_legacy_multipliers(run_state)
+
+
+## Folds one owned unlock into the run at the rank the profile has reached.
+##
+## A `ranks` table is a table of *totals*, so rank three is read once and is the
+## whole value — stacking them would compound the very thing the table exists to
+## bound. The older `amount` entries have no table and are still per-pick, so
+## those multiply out by rank to keep what an existing profile already bought.
+func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
+	var kind: String = str(unlock.get("kind", ""))
+	var ranks: Array = Array(unlock.get("ranks", []))
+	var value: float = _rank_value(unlock, rank)
+	if ranks.is_empty() and rank > 1:
+		match kind:
+			"extra_slot", "workflow_slot", "cooling", "efficiency_base", "passive_income", "starting_module":
+				value = float(unlock.get("amount", 1.0)) * float(rank)
+	match kind:
+		"extra_slot":
+			var board: Dictionary = run_state.build.get("board", {})
+			board["meta_slot_bonus"] = int(board.get("meta_slot_bonus", 0)) + int(value)
+			run_state.build["board"] = board
+		"starting_module":
+			var operation_id: String = str(unlock.get("operation_id", ""))
+			var owned: Array = run_state.build.get("operations", [])
+			if operation_id != "" and not (operation_id in owned):
+				owned.append(operation_id)
+				run_state.build["operations"] = owned
+		"cooling":
+			# Kept apart from the run's own cooling, which is derived from the
+			# location and the kit in it and would overwrite anything added here.
+			run_state.compute["meta_cooling"] = float(run_state.compute.get("meta_cooling", 0.0)) + value
+		"starting_cash":
+			run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + value
+		"efficiency_base":
+			run_state.compute["efficiency_base"] = float(run_state.compute.get("efficiency_base", 1.0)) + value
+		"starting_cloud_account":
+			_grant_cloud_account(run_state)
+		"starting_cloud":
+			# Capacity without the account would be tokens nobody is billing for,
+			# and would leave the CLOUD key dead on a run that clearly has cloud.
+			_grant_cloud_account(run_state)
+			run_state.compute["cloud_capacity"] = float(run_state.compute.get("cloud_capacity", 0.0)) + value
+			run_state.economy["cloud_cost_per_prompt"] = (
+				float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) + float(unlock.get("recurring_cost", 0.0))
+			)
+		"passive_income":
+			run_state.economy["passive_income_per_round"] = (
+				float(run_state.economy.get("passive_income_per_round", 0.0)) + value
+			)
+		"workflow_slot":
+			run_state.build["meta_workflow_bonus"] = int(run_state.build.get("meta_workflow_bonus", 0)) + maxi(1, int(value))
+		"rule_flag":
+			var flags: Array = Array(run_state.build.get("meta_unlocks", []))
+			var unlock_id: String = str(unlock.get("id", ""))
+			if unlock_id != "" and not (unlock_id in flags):
+				flags.append(unlock_id)
+				run_state.build["meta_unlocks"] = flags
+		"token_multiplier", "income_multiplier":
+			# Read straight off the profile by `_apply_legacy_multipliers`, which
+			# has to run after `_apply_age` writes the age's own multipliers.
+			pass
+		"perk_slots":
+			# Read live by `PerkSystem.perk_capacity`, so there is nothing to
+			# write onto the run.
+			pass
+		"starting_hardware":
+			# Installed by the Simulation via the upgrade pipeline, which owns
+			# hardware slots, recurring bills and effects. Nothing to do here.
+			pass
+
+
+func _apply_legacy_multipliers(run_state: RunState) -> void:
+	var token_rank: int = unlock_count("unlock.old_silicon")
+	if token_rank > 0:
+		run_state.business["legacy_token_multiplier"] = _rank_value(get_unlock("unlock.old_silicon"), token_rank)
+	var income_rank: int = unlock_count("unlock.recurring_revenue")
+	if income_rank > 0:
+		run_state.business["legacy_income_multiplier"] = _rank_value(get_unlock("unlock.recurring_revenue"), income_rank)
 
 
 ## The Compute Age is cosmetic-plus: it scales jobs a little harder and starts
@@ -566,65 +741,6 @@ func _apply_age(run_state: RunState) -> void:
 	run_state.business["age_token_multiplier"] = float(age_data.get("token_scaling_multiplier", 1.0))
 	run_state.business["age_reward_multiplier"] = float(age_data.get("reward_scaling_multiplier", 1.0))
 	run_state.business["age_name"] = str(age_data.get("name", "Bedroom Age"))
-
-
-func _apply_one(run_state: RunState, unlock: Dictionary) -> void:
-	var amount: float = float(unlock.get("amount", 0.0))
-	match str(unlock.get("kind", "")):
-		"extra_slot":
-			var board: Dictionary = run_state.build.get("board", {})
-			board["slot_count"] = mini(
-				int(board.get("slot_count", BoardSystem.DEFAULT_SLOT_COUNT)) + int(amount),
-				BoardSystem.MAX_SLOT_COUNT
-			)
-		"starting_module":
-			var operation_id: String = str(unlock.get("operation_id", ""))
-			var owned: Array = run_state.build.get("operations", [])
-			if operation_id != "" and not (operation_id in owned):
-				owned.append(operation_id)
-				run_state.build["operations"] = owned
-		"cooling":
-			# Kept apart from the run's own cooling, which is derived from the
-			# location and the kit in it and would overwrite anything added here.
-			run_state.compute["meta_cooling"] = (
-				float(run_state.compute.get("meta_cooling", 0.0)) + amount
-			)
-		"starting_cash":
-			run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + amount
-		"efficiency_base":
-			run_state.compute["efficiency_base"] = (
-				float(run_state.compute.get("efficiency_base", 1.0)) + amount
-			)
-		"starting_cloud_account":
-			_grant_cloud_account(run_state)
-		"starting_cloud":
-			# Capacity without the account would be tokens nobody is billing for,
-			# and would leave the CLOUD key dead on a run that clearly has cloud.
-			_grant_cloud_account(run_state)
-			run_state.compute["cloud_capacity"] = float(run_state.compute.get("cloud_capacity", 0.0)) + amount
-			run_state.economy["cloud_cost_per_prompt"] = (
-				float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) + float(unlock.get("recurring_cost", 0.0))
-			)
-		"passive_income":
-			run_state.economy["passive_income_per_round"] = (
-				float(run_state.economy.get("passive_income_per_round", 0.0)) + amount
-			)
-		"workflow_slot":
-			run_state.build["workflow_capacity"] = mini(
-				int(run_state.build.get("workflow_capacity", BoardSystem.DEFAULT_WORKFLOW_CAPACITY))
-					+ maxi(1, int(amount)),
-				BoardSystem.MAX_WORKFLOW_COUNT
-			)
-		"rule_flag":
-			var flags: Array = Array(run_state.build.get("meta_unlocks", []))
-			var unlock_id: String = str(unlock.get("id", ""))
-			if unlock_id != "" and not (unlock_id in flags):
-				flags.append(unlock_id)
-				run_state.build["meta_unlocks"] = flags
-		"starting_hardware":
-			# Installed by the Simulation via the upgrade pipeline, which owns
-			# hardware slots, recurring bills and effects. Nothing to do here.
-			pass
 
 
 ## Marks the cloud account as owned without charging for it. The upgrade is the
@@ -663,6 +779,7 @@ func _default_profile() -> Dictionary:
 	return {
 		"version": PROFILE_VERSION,
 		"victories": 0,
+		"victories_by_difficulty": {"normal": 0, "hard": 0},
 		"unlocks": {},
 		"pending_picks": 0,
 		"retirements": 0,
@@ -751,6 +868,7 @@ func _load_profile() -> void:
 	_profile = {
 		"version": PROFILE_VERSION,
 		"victories": int(loaded.get("victories", 0)),
+		"victories_by_difficulty": Dictionary(loaded.get("victories_by_difficulty", {"normal": 0, "hard": 0})),
 		"unlocks": unlocks,
 		"pending_picks": int(loaded.get("pending_picks", 0)),
 		"retirements": int(loaded.get("retirements", 0)),
@@ -798,6 +916,23 @@ func _migrate_profile(from_version: int) -> void:
 		var selection: Dictionary = _locations()
 		selection["selected"] = DEFAULT_LOCATION
 		_profile["locations"] = selection
+	if from_version < 5:
+		if not _profile.has("victories_by_difficulty"):
+			_profile["victories_by_difficulty"] = {"normal": 0, "hard": 0}
+		var unlocks: Dictionary = Dictionary(_profile.get("unlocks", {}))
+		var refunded: int = 0
+		for unlock in _catalog:
+			var ranks: Array = Array(unlock.get("ranks", []))
+			if ranks.is_empty():
+				continue
+			var unlock_id: String = str(unlock.get("id", ""))
+			var owned: int = int(unlocks.get(unlock_id, 0))
+			if owned > ranks.size():
+				refunded += owned - ranks.size()
+				unlocks[unlock_id] = ranks.size()
+		if refunded > 0:
+			_profile["unlocks"] = unlocks
+			_profile["pending_picks"] = int(_profile.get("pending_picks", 0)) + refunded
 	_save()
 
 

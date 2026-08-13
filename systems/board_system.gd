@@ -79,9 +79,8 @@ func ensure_board(run_state: RunState, content_db: Node) -> void:
 	var board: Variant = run_state.build.get("board", null)
 	if not board is Dictionary:
 		board = {}
-	var slot_count_value: int = clampi(
-		int(board.get("slot_count", DEFAULT_SLOT_COUNT)), 1, MAX_SLOT_COUNT
-	)
+	_migrate_legacy_board_bonuses(run_state, content_db)
+	var slot_count_value: int = derived_slot_count(run_state, content_db)
 	board["slot_count"] = slot_count_value
 	run_state.build["board"] = board
 
@@ -97,7 +96,8 @@ func ensure_board(run_state: RunState, content_db: Node) -> void:
 	run_state.build["operations"] = owned
 
 	_migrate_board_to_workflows(run_state)
-	_ensure_workflows(run_state, slot_count_value)
+	run_state.build["workflow_capacity"] = derived_workflow_capacity(run_state, content_db)
+	_ensure_workflows(run_state, slot_count_value, content_db)
 	_auto_fill_empty_workflows(run_state, content_db)
 
 
@@ -143,9 +143,9 @@ func _migrate_board_to_workflows(run_state: RunState) -> void:
 ## Normalises the list: every workflow has an id, a name and exactly
 ## `slot_count` string slots, and the run never holds more of them than its
 ## capacity allows.
-func _ensure_workflows(run_state: RunState, slot_count_value: int) -> void:
+func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: Node = null) -> void:
 	var workflows: Array = Array(run_state.build.get("workflows", []))
-	var capacity: int = workflow_capacity(run_state)
+	var capacity: int = workflow_capacity(run_state, content_db)
 	if workflows.size() > capacity:
 		workflows.resize(capacity)
 	if workflows.is_empty():
@@ -190,12 +190,52 @@ func workflow_count(run_state: RunState) -> int:
 
 ## How many workflows this run is allowed to keep. One to begin with; the rest
 ## are bought, drafted, or won.
-func workflow_capacity(run_state: RunState) -> int:
-	return clampi(
-		int(run_state.build.get("workflow_capacity", DEFAULT_WORKFLOW_CAPACITY)),
-		1,
-		MAX_WORKFLOW_COUNT
-	)
+func workflow_capacity(run_state: RunState, content_db: Node = null) -> int:
+	if content_db == null:
+		return clampi(
+			int(run_state.build.get("workflow_capacity", DEFAULT_WORKFLOW_CAPACITY)),
+			1,
+			MAX_WORKFLOW_COUNT
+		)
+	return derived_workflow_capacity(run_state, content_db)
+
+
+static func active_perk_grant_total(run_state: RunState, content_db: Node, grant_key: String) -> int:
+	var total: int = 0
+	for perk_id in run_state.build.get("perks", []):
+		var perk: PerkDefinition = content_db.get_perk(str(perk_id))
+		if perk == null:
+			continue
+		total += int(perk.grants.get(grant_key, 0))
+	return total
+
+
+func derived_slot_count(run_state: RunState, content_db: Node) -> int:
+	var board: Dictionary = run_state.build.get("board", {})
+	var meta_bonus: int = int(board.get("meta_slot_bonus", 0))
+	var perk_bonus: int = active_perk_grant_total(run_state, content_db, "board_slots")
+	return clampi(DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus, 1, MAX_SLOT_COUNT)
+
+
+func derived_workflow_capacity(run_state: RunState, content_db: Node) -> int:
+	var meta_bonus: int = int(run_state.build.get("meta_workflow_bonus", 0))
+	var perk_bonus: int = active_perk_grant_total(run_state, content_db, "workflow_capacity")
+	return clampi(DEFAULT_WORKFLOW_CAPACITY + meta_bonus + perk_bonus, 1, MAX_WORKFLOW_COUNT)
+
+
+func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> void:
+	var board: Dictionary = run_state.build.get("board", {})
+	if not board.has("meta_slot_bonus"):
+		var stored_slots: int = int(board.get("slot_count", DEFAULT_SLOT_COUNT))
+		var perk_slots: int = active_perk_grant_total(run_state, content_db, "board_slots")
+		board["meta_slot_bonus"] = maxi(0, stored_slots - DEFAULT_SLOT_COUNT - perk_slots)
+		run_state.build["board"] = board
+	if not run_state.build.has("meta_workflow_bonus"):
+		var stored_capacity: int = int(run_state.build.get("workflow_capacity", DEFAULT_WORKFLOW_CAPACITY))
+		var perk_capacity_bonus: int = active_perk_grant_total(run_state, content_db, "workflow_capacity")
+		run_state.build["meta_workflow_bonus"] = maxi(
+			0, stored_capacity - DEFAULT_WORKFLOW_CAPACITY - perk_capacity_bonus
+		)
 
 
 func active_workflow_index(run_state: RunState) -> int:
@@ -247,9 +287,9 @@ func slots_for_job(run_state: RunState, job: Dictionary) -> Array:
 
 ## Adds a workflow, copying the layout of the one currently being edited so the
 ## player starts from something that works rather than three empty slots.
-func create_workflow(run_state: RunState, name: String = "") -> Dictionary:
+func create_workflow(run_state: RunState, name: String = "", content_db: Node = null) -> Dictionary:
 	var list: Array = workflows(run_state)
-	if list.size() >= workflow_capacity(run_state):
+	if list.size() >= workflow_capacity(run_state, content_db):
 		return {}
 	var seed_layout: Array = Array(active_workflow(run_state).get("slots", [])).duplicate()
 	var index: int = list.size()
@@ -530,6 +570,7 @@ func resolve_burn(
 		var repeat: float = maxf(0.0, float(stage["repeat_previous"]))
 		if repeat > 0.0 and not previous_stage.is_empty():
 			_fold(batch, previous_stage, repeat * effective_multiplier, pending_cost_mult)
+			run_state.statistics["stage_repeats"] = int(run_state.statistics.get("stage_repeats", 0)) + 1
 		_apply_stage_rules(rules, operation, stage, batch, job, messages)
 
 		stages.append({

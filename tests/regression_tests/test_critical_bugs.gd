@@ -250,15 +250,18 @@ func _test_a_demand_perk_is_a_bonus_not_a_ratchet() -> void:
 func _test_a_build_cannot_hold_more_than_its_cap() -> void:
 	var sim := _make_sim()
 	sim.start_run(152)
-	var cap: int = sim._perk_system.perk_cap(ContentDatabase)
+	var cap: int = sim._perk_system.perk_capacity(sim.run_state, ContentDatabase)
 	var taken: int = 0
 	for perk in ContentDatabase.perks:
-		if sim._perk_system.acquire(sim.run_state, perk.id, ContentDatabase):
-			taken += 1
-	assert_true(taken > 0, "At least some perks are acquirable from an empty build")
+		if sim.run_state.build["perks"].size() >= cap:
+			break
+		if sim._perk_system.collect_perk(sim.run_state, perk.id, ContentDatabase):
+			if sim._perk_system.equip_perk(sim.run_state, perk.id, ContentDatabase):
+				taken += 1
+	assert_true(taken > 0, "At least some perks are equippable from an empty build")
 	assert_true(
 		sim.run_state.build["perks"].size() <= cap,
-		"A build stops at its cap of %d, not %d" % [cap, sim.run_state.build["perks"].size()]
+		"Active loadout stops at its cap of %d, not %d" % [cap, sim.run_state.build["perks"].size()]
 	)
 	sim.free()
 
@@ -267,16 +270,29 @@ func _test_a_build_cannot_hold_more_than_its_cap() -> void:
 func _test_rival_keystones_cannot_share_a_build() -> void:
 	var sim := _make_sim()
 	sim.start_run(153)
+	var ps = sim._perk_system
 	assert_true(
-		sim._perk_system.acquire(sim.run_state, "perk.works_on_my_machine", ContentDatabase),
+		ps.collect_perk(sim.run_state, "perk.works_on_my_machine", ContentDatabase),
+		"The local common enters the collection"
+	)
+	assert_true(
+		ps.equip_perk(sim.run_state, "perk.works_on_my_machine", ContentDatabase),
 		"The local common opens the local doctrine"
 	)
 	assert_true(
-		sim._perk_system.acquire(sim.run_state, "perk.bare_metal", ContentDatabase),
+		ps.collect_perk(sim.run_state, "perk.bare_metal", ContentDatabase),
+		"Bare Metal can be collected after local perks"
+	)
+	assert_true(
+		ps.equip_perk(sim.run_state, "perk.bare_metal", ContentDatabase),
 		"Bare Metal follows from owning local hardware perks"
 	)
+	assert_true(
+		ps.collect_perk(sim.run_state, "perk.cloud_native", ContentDatabase),
+		"Cloud Native may be collected even when Bare Metal is active"
+	)
 	assert_false(
-		sim._perk_system.acquire(sim.run_state, "perk.cloud_native", ContentDatabase),
-		"Cloud Native is closed off once the build has gone bare metal"
+		ps.can_equip(sim.run_state, "perk.cloud_native", ContentDatabase),
+		"Cloud Native cannot be equipped once the build has gone bare metal"
 	)
 	sim.free()

@@ -84,28 +84,7 @@
     "tags": ["cash", "risk"],
     "description_template": "Borrow {rent_multiple}× the round's rent immediately; every batch ships one extra hidden bug and loses {bug_quality_penalty} quality.",
     "parameters": {"rent_multiple": 4, "bug_quality_penalty": 4, "bug_quality_delta": -4},
-    "subscriptions": [
-      {
-        "event": "perk.acquired",
-        "priority": 5,
-        "conditions": [],
-        "effects": [{
-          "operation": "borrow",
-          "target": "economy.cash",
-          "value_from": "economy.round_rent",
-          "value": "$rent_multiple"
-        }]
-      },
-      {
-        "event": "board.batch_finished",
-        "priority": 3,
-        "conditions": [],
-        "effects": [
-          {"operation": "add", "target": "batch.hidden_bugs", "value": 1},
-          {"operation": "add", "target": "batch.quality", "value": "$bug_quality_delta"}
-        ]
-      }
-    ]
+    "subscriptions": []
   },
   {
     "id": "perk.founder_mode",
@@ -299,12 +278,8 @@
     "requires_tags": ["board"],
     "description_template": "The Burn Board gains {slots} extra pipeline slot.",
     "parameters": {"slots": 1},
-    "subscriptions": [{
-      "event": "perk.acquired",
-      "priority": 5,
-      "conditions": [],
-      "effects": [{"operation": "add", "target": "build.board.slot_count", "value": "$slots"}]
-    }]
+    "grants": {"board_slots": 1},
+    "subscriptions": []
   },
   {
     "id": "perk.two_ways_of_working",
@@ -314,12 +289,8 @@
     "requires_tags": ["board"],
     "description_template": "Room for {workflows} more workflow, so contracts can be routed through different pipelines.",
     "parameters": {"workflows": 1},
-    "subscriptions": [{
-      "event": "perk.acquired",
-      "priority": 5,
-      "conditions": [],
-      "effects": [{"operation": "add", "target": "build.workflow_capacity", "value": "$workflows"}]
-    }]
+    "grants": {"workflow_capacity": 1},
+    "subscriptions": []
   },
   {
     "id": "perk.free_first_stage",
@@ -492,6 +463,36 @@
     ]
   },
   {
+    "id": "perk.org_chart",
+    "name": "Org Chart",
+    "rarity": "rare",
+    "tags": ["management", "capacity"],
+    "description_template": "+{slot_bonus} active perk slots. Contract rewards pay {reward_pct}%.",
+    "parameters": {"slot_bonus": 2, "reward_multiplier": 0.95, "reward_pct": 95},
+    "grants": {"perk_slots": 2},
+    "subscriptions": [{
+      "event": "reward.calculated",
+      "priority": 40,
+      "conditions": [],
+      "effects": [{"operation": "multiply", "target": "job.reward", "value": "$reward_multiplier"}]
+    }]
+  },
+  {
+    "id": "perk.executive_committee",
+    "name": "Executive Committee",
+    "rarity": "legendary",
+    "tags": ["management", "capacity"],
+    "description_template": "+{slot_bonus} active perk slots. Recurring operating costs rise {cost_pct}%.",
+    "parameters": {"slot_bonus": 3, "cost_multiplier": 1.2, "cost_pct": 20},
+    "grants": {"perk_slots": 3},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 5,
+      "conditions": [],
+      "effects": [{"operation": "multiply", "target": "economy.recurring_costs", "value": "$cost_multiplier"}]
+    }]
+  },
+  {
     "id": "perk.bare_metal",
     "name": "Bare Metal",
     "rarity": "legendary",
@@ -586,5 +587,199 @@
         "effects": [{"operation": "add", "target": "batch.hidden_bugs", "value": -1}]
       }
     ]
+  },
+  {
+    "id": "perk.homelab_hero",
+    "name": "Homelab Hero",
+    "rarity": "common",
+    "tags": ["local", "hardware"],
+    "min_location_tier": 0,
+    "draft_weight": 1.2,
+    "description_template": "Owned hardware runs {bonus_pct}% faster.",
+    "parameters": {"bonus": 1.15, "bonus_pct": 15},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 12,
+      "conditions": [],
+      "effects": [{"operation": "multiply", "target": "compute.local_rate", "value": "$bonus"}]
+    }]
+  },
+  {
+    "id": "perk.rack_mount_religion",
+    "name": "Rack Mount Religion",
+    "rarity": "rare",
+    "tags": ["local", "hardware"],
+    "unlock_achievement": "ach.bare_metal_purist",
+    "requires_tags": ["local"],
+    "excludes_tags": ["cloud"],
+    "min_location_tier": 2,
+    "description_template": "Local throughput +{bonus_pct}%. Cloud rate −{cloud_penalty_pct}%.",
+    "parameters": {"bonus": 1.25, "bonus_pct": 25, "cloud_penalty": 0.5, "cloud_penalty_pct": 50},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 11,
+      "conditions": [],
+      "effects": [
+        {"operation": "multiply", "target": "compute.local_rate", "value": "$bonus"},
+        {"operation": "multiply", "target": "compute.cloud_rate", "value": "$cloud_penalty"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.spot_survivor",
+    "name": "Spot Survivor",
+    "rarity": "common",
+    "tags": ["cloud", "economy"],
+    "min_location_tier": 1,
+    "description_template": "First {trial_prompts} cloud prompts each round are free.",
+    "parameters": {"trial_prompts": 4},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 14,
+      "conditions": [{"left": "calendar.prompt", "operator": "<=", "right": "$trial_prompts"}],
+      "effects": [{"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 1.0}]
+    }]
+  },
+  {
+    "id": "perk.egress_panic",
+    "name": "Egress Panic",
+    "rarity": "rare",
+    "tags": ["cloud", "economy"],
+    "requires_tags": ["cloud"],
+    "min_location_tier": 2,
+    "description_template": "Cloud runs {rate_pct}% faster but bills {cost_pct}% more.",
+    "parameters": {"rate_bonus": 1.3, "rate_pct": 30, "cost_multiplier": 1.15, "cost_pct": 15},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 13,
+      "conditions": [],
+      "effects": [
+        {"operation": "multiply", "target": "compute.cloud_rate", "value": "$rate_bonus"},
+        {"operation": "multiply", "target": "economy.cloud_cost_per_prompt", "value": "$cost_multiplier"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.fan_curve_enjoyer",
+    "name": "Fan Curve Enjoyer",
+    "rarity": "common",
+    "tags": ["board", "heat", "thermal_safety"],
+    "description_template": "+{cooling} passive cooling every round.",
+    "parameters": {"cooling": 6},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 8,
+      "conditions": [],
+      "effects": [{"operation": "add", "target": "compute.cooling", "value": "$cooling"}]
+    }]
+  },
+  {
+    "id": "perk.meltdown_maestro",
+    "name": "Meltdown Maestro",
+    "rarity": "legendary",
+    "tags": ["board", "heat", "thermal_runaway"],
+    "difficulty": ["hard"],
+    "requires_tags": ["heat"],
+    "min_location_tier": 3,
+    "description_template": "Above {threshold_pct}% heat, token rate ×{bonus}.",
+    "parameters": {"threshold": 0.9, "threshold_pct": 90, "bonus": 1.5},
+    "subscriptions": [{
+      "event": "compute.recalculate",
+      "priority": 20,
+      "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": "$threshold"}],
+      "effects": [{"operation": "multiply", "target": "compute.token_rate", "value": "$bonus"}]
+    }]
+  },
+  {
+    "id": "perk.triage_culture",
+    "name": "Triage Culture",
+    "rarity": "common",
+    "tags": ["board", "bugs"],
+    "description_template": "Every batch quietly fixes its first known bug.",
+    "parameters": {},
+    "subscriptions": [{
+      "event": "board.batch_finished",
+      "priority": 85,
+      "conditions": [{"left": "batch.known_bugs", "operator": ">", "right": 0}],
+      "effects": [{"operation": "add", "target": "batch.known_bugs", "value": -1}]
+    }]
+  },
+  {
+    "id": "perk.known_unknowns",
+    "name": "Known Unknowns",
+    "rarity": "rare",
+    "tags": ["bugs", "cash"],
+    "unlock_achievement": "ach.ship_it_pray_ii",
+    "requires_tags": ["bugs"],
+    "description_template": "Each hidden bug shipped pays £{payout}.",
+    "parameters": {"payout": 250},
+    "subscriptions": [{
+      "event": "reward.calculated",
+      "priority": 30,
+      "conditions": [{"left": "job.hidden_bugs_shipped", "operator": ">", "right": 0}],
+      "effects": [{"operation": "add", "target": "economy.cash", "value": "$payout"}]
+    }]
+  },
+  {
+    "id": "perk.lint_everything",
+    "name": "Lint Everything",
+    "rarity": "common",
+    "tags": ["quality", "board"],
+    "description_template": "Every stage resolved adds +{quality} quality.",
+    "parameters": {"quality": 3},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 25,
+      "conditions": [],
+      "effects": [{"operation": "add", "target": "stage.quality", "value": "$quality"}]
+    }]
+  },
+  {
+    "id": "perk.audit_trail",
+    "name": "Audit Trail",
+    "rarity": "rare",
+    "tags": ["quality", "test"],
+    "unlock_achievement": "ach.audit_ready",
+    "requires_tags": ["quality"],
+    "description_template": "Jobs with zero bugs pay {multiplier}×.",
+    "parameters": {"multiplier": 1.2},
+    "subscriptions": [{
+      "event": "reward.calculated",
+      "priority": 45,
+      "conditions": [{"left": "job.hidden_bugs_shipped", "operator": "==", "right": 0}],
+      "effects": [{"operation": "multiply", "target": "job.reward", "value": "$multiplier"}]
+    }]
+  },
+  {
+    "id": "perk.stage_deja_vu",
+    "name": "Stage Déjà Vu",
+    "rarity": "common",
+    "tags": ["board", "recursion"],
+    "min_location_tier": 1,
+    "description_template": "Every stage repeats the one above at {strength_pct}% strength.",
+    "parameters": {"strength": 0.35, "strength_pct": 35},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 5,
+      "conditions": [],
+      "effects": [{"operation": "set", "target": "stage.repeat_previous", "value": "$strength"}]
+    }]
+  },
+  {
+    "id": "perk.infinite_backlog",
+    "name": "Infinite Backlog",
+    "rarity": "legendary",
+    "tags": ["board", "recursion", "keystone"],
+    "unlock_achievement": "ach.recursive_business",
+    "requires_tags": ["recursion"],
+    "min_location_tier": 3,
+    "description_template": "Stage repeats run at {multiplier}× strength.",
+    "parameters": {"multiplier": 1.6},
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 6,
+      "conditions": [{"left": "stage.repeat_previous", "operator": ">", "right": 0}],
+      "effects": [{"operation": "multiply", "target": "stage.repeat_previous", "value": "$multiplier"}]
+    }]
   }
 ]

@@ -42,7 +42,7 @@
     "description": "Every future run starts with the next machine of a permanent rig already racked: first the custom desktop, then the GPU rack, then the compute cluster.",
     "flavour": "The liquidators never checked the storage unit. The storage unit hums.",
     "repeatable": true,
-    "ladder": ["upgrade.custom_desktop", "upgrade.gpu_rack", "upgrade.compute_cluster"]
+    "ladder": ["upgrade.custom_desktop", "upgrade.gpu_rack", "upgrade.compute_cluster", "upgrade.garage_datacentre", "upgrade.compute_warehouse"]
   },
   {
     "id": "unlock.cooling",
@@ -55,12 +55,13 @@
   },
   {
     "id": "unlock.starting_cash",
-    "name": "Something Set Aside",
+    "name": "War Chest",
     "kind": "starting_cash",
     "description": "Every future run starts with extra cash in the account.",
     "flavour": "The last exit cleared, after fees, after taxes, after the lawyer.",
     "repeatable": true,
-    "amount": 400
+    "ranks": [500, 1000, 2000, 4000, 8000],
+    "hard_victories_required": [0, 0, 0, 1, 3]
   },
   {
     "id": "unlock.efficiency_base",
@@ -143,5 +144,35 @@
     "flavour": "You never deleted the old workflow. You just stopped explaining why.",
     "repeatable": true,
     "amount": 1
+  },
+  {
+    "id": "unlock.old_silicon",
+    "name": "Old Silicon",
+    "kind": "token_multiplier",
+    "description": "Every future run burns tokens faster on the same hardware.",
+    "flavour": "It still boots. That is the point.",
+    "repeatable": true,
+    "ranks": [1.1, 1.2, 1.35, 1.6, 2.0],
+    "hard_victories_required": [0, 0, 0, 1, 3]
+  },
+  {
+    "id": "unlock.recurring_revenue",
+    "name": "Recurring Revenue",
+    "kind": "income_multiplier",
+    "description": "Retainers and standing orders pay more every round of every future run.",
+    "flavour": "They forgot to cancel the standing order.",
+    "repeatable": true,
+    "ranks": [1.05, 1.12, 1.25, 1.5, 2.0],
+    "hard_victories_required": [0, 0, 0, 1, 3]
+  },
+  {
+    "id": "unlock.rolodex",
+    "name": "Rolodex",
+    "kind": "perk_slots",
+    "description": "Permanent active perk capacity from people who owe you.",
+    "flavour": "Everyone knows someone.",
+    "repeatable": true,
+    "ranks": [1, 2, 4, 6, 9],
+    "hard_victories_required": [0, 0, 0, 1, 3]
   }
 ]

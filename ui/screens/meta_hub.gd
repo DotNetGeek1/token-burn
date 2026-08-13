@@ -15,6 +15,8 @@ var _contracts_caption: Label = null
 var _contracts: ConsoleTable = null
 var _unlocks_caption: Label = null
 var _unlocks: ConsoleTable = null
+var _completion_caption: Label = null
+var _completion: VBoxContainer = null
 
 
 func _ready() -> void:
@@ -76,12 +78,23 @@ func _build_body() -> void:
 		{"label": "owned", "weight": 0.8, "align": HORIZONTAL_ALIGNMENT_RIGHT},
 	])
 
+	_completion_caption = ConsoleStyle.label(
+		"CAREER COMPLETION", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+	)
+	column.add_child(_completion_caption)
+
+	_completion = VBoxContainer.new()
+	_completion.add_theme_constant_override("separation", 2)
+	_completion.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_completion)
+
 
 func refresh() -> void:
 	_refresh_age()
 	_refresh_records()
 	_refresh_contracts()
 	_refresh_unlocks()
+	_refresh_completion()
 	_apply_body_metrics()
 
 
@@ -95,7 +108,7 @@ func fit_console() -> void:
 func _apply_body_metrics() -> void:
 	var scale: float = console_scale()
 	var font_tiny: int = ConsoleMetrics.font_tiny(scale)
-	for label in [_age_flavour, _records_caption, _contracts_caption, _unlocks_caption]:
+	for label in [_age_flavour, _records_caption, _contracts_caption, _unlocks_caption, _completion_caption]:
 		if label != null:
 			label.add_theme_font_size_override("font_size", font_tiny)
 	if _contracts != null:
@@ -132,6 +145,8 @@ func _refresh_records() -> void:
 		{"stat": "Best sustained throughput", "value": NumberFormat.format_token_rate(float(best.get("peak_token_rate", 0.0)))},
 		{"stat": "Ascensions completed", "value": str(_total_ascensions())},
 		{"stat": "Pending picks", "value": str(MetaProgress.pending_picks())},
+		{"stat": "Normal victories", "value": str(MetaProgress.victories_on("normal"))},
+		{"stat": "Hard victories", "value": str(MetaProgress.victories_on("hard"))},
 	]
 	# Retirement was the old calendar ending. Nothing earns it any more, so the
 	# row only appears for profiles that still carry some.
@@ -178,9 +193,57 @@ func _refresh_unlocks() -> void:
 	for unlock in catalog:
 		var unlock_id: String = str(unlock.get("id", ""))
 		var owned: int = MetaProgress.unlock_count(unlock_id)
+		var ranks: Array = Array(unlock.get("ranks", []))
 		var lit: Color = ConsoleStyle.PHOSPHOR if owned > 0 else ConsoleStyle.PHOSPHOR_DIM
+		var owned_label: String = "LOCKED"
+		if owned > 0:
+			if ranks.is_empty():
+				owned_label = "×%d" % owned
+			else:
+				owned_label = "RANK %d/%d" % [owned, ranks.size()]
 		_unlocks.add_row([
 			{"text": str(unlock.get("name", unlock_id)).to_upper(), "color": lit},
 			{"text": str(unlock.get("kind", "")).to_upper(), "color": ConsoleStyle.PHOSPHOR_DIM},
-			{"text": "×%d" % owned if owned > 0 else "LOCKED", "color": lit},
+			{"text": owned_label, "color": lit},
 		], unlock_id, lit)
+
+
+func _refresh_completion() -> void:
+	for child in _completion.get_children():
+		_completion.remove_child(child)
+		child.queue_free()
+	var summary: Dictionary = MetaProgress.completion_summary()
+	var font_small: int = ConsoleMetrics.font_small(console_scale())
+	var separation: int = ConsoleMetrics.px(8, console_scale())
+	var achievements: Dictionary = Dictionary(summary.get("achievements", {}))
+	var perks: Dictionary = Dictionary(summary.get("perks", {}))
+	var modules: Dictionary = Dictionary(summary.get("modules", {}))
+	var legacy: Dictionary = Dictionary(summary.get("legacy", {}))
+	var rows: Array = [
+		{
+			"stat": "Achievements",
+			"value": "%d / %d" % [int(achievements.get("earned", 0)), int(achievements.get("total", 0))],
+		},
+		{
+			"stat": "Perks unlocked",
+			"value": "%d / %d" % [int(perks.get("unlocked", 0)), int(perks.get("total", 0))],
+		},
+		{
+			"stat": "Modules unlocked",
+			"value": "%d / %d" % [int(modules.get("unlocked", 0)), int(modules.get("total", 0))],
+		},
+		{
+			"stat": "Legacy ranks",
+			"value": "%d / %d" % [int(legacy.get("ranks_owned", 0)), int(legacy.get("total_ranks", 0))],
+		},
+		{
+			"stat": "Overall",
+			"value": "%.0f%%" % float(summary.get("percent", 0.0)),
+		},
+	]
+	if bool(summary.get("overall_complete", false)):
+		rows.append({"stat": "Status", "value": "COMPLETE"})
+	for row in rows:
+		var line: Control = ConsoleStyle.detail_line(row, font_small, separation)
+		if line != null:
+			_completion.add_child(line)

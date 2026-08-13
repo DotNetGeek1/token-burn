@@ -327,11 +327,13 @@ func _test_the_permanent_rig_arrives_on_every_fresh_run() -> void:
 	sim.free()
 
 	# The ladder has a top: once every rung is owned it stops being offered.
-	MetaProgress.bank_victory(1)
+	MetaProgress.bank_victory(3)
 	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "The third pick buys the cluster")
+	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "The fourth buys the garage datacentre")
+	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "The fifth buys the compute warehouse")
 	assert_false(
 		MetaProgress.is_available("unlock.starting_rig"),
-		"And there is no fourth rung to sell"
+		"And there is no sixth rung to sell"
 	)
 
 	_restore(restore)

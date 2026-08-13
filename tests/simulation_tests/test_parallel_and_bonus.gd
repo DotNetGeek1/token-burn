@@ -136,7 +136,7 @@ func _test_parallel_lanes_move_two_deadlines_at_once() -> void:
 func _test_two_contracts_run_through_two_workflows_in_one_prompt() -> void:
 	var sim: Node = _sim(4105)
 	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "Two machines on the floor")
-	sim.run_state.build["workflow_capacity"] = 2
+	sim.run_state.build["meta_workflow_bonus"] = 1
 	var jobs: Array = _load_two_contracts(sim)
 	sim.run_state.build["operations"] = ["op.prompt", "op.cheap_model", "op.premium_model"]
 

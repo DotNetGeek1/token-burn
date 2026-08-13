@@ -659,7 +659,7 @@ func _test_widening_the_board_keeps_what_was_placed() -> void:
 	board.ensure_board(state, ContentDatabase)
 	var slots_before: Array = board.slots(state).duplicate()
 
-	state.build["board"]["slot_count"] = int(state.build["board"]["slot_count"]) + 1
+	state.build["board"]["meta_slot_bonus"] = int(state.build["board"].get("meta_slot_bonus", 0)) + 1
 	board.ensure_board(state, ContentDatabase)
 	var slots_after: Array = board.slots(state)
 	assert_eq(slots_after.size(), slots_before.size() + 1, "The board is one slot wider")
@@ -679,8 +679,8 @@ func _test_workflows_start_at_one_and_are_capacity_gated() -> void:
 	assert_eq(board.workflow_count(state), 1, "A fresh run has exactly one workflow")
 	assert_true(board.create_workflow(state).is_empty(), "A second one needs capacity first")
 
-	state.build["workflow_capacity"] = 2
-	var created: Dictionary = board.create_workflow(state, "The Careful One")
+	state.build["meta_workflow_bonus"] = 1
+	var created: Dictionary = board.create_workflow(state, "The Careful One", ContentDatabase)
 	assert_false(created.is_empty(), "With capacity the second workflow is created")
 	assert_eq(board.workflow_count(state), 2, "And the run now owns two")
 	assert_eq(str(created.get("name", "")), "The Careful One", "Named as asked")
@@ -743,8 +743,8 @@ func _test_deleting_a_workflow_rehomes_its_contracts() -> void:
 	var state := RunState.new()
 	var board := BoardSystem.new()
 	board.ensure_board(state, ContentDatabase)
-	state.build["workflow_capacity"] = 2
-	var second: Dictionary = board.create_workflow(state)
+	state.build["meta_workflow_bonus"] = 1
+	var second: Dictionary = board.create_workflow(state, "", ContentDatabase)
 	var job: Dictionary = {"id": "job.test", "workflow_id": str(second.get("id", ""))}
 	state.business["active_jobs"] = [job]
 

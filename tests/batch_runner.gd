@@ -367,6 +367,35 @@ func _average(values: Array) -> float:
 	return total / float(values.size())
 
 
+## Headless balance guidance: first reroll should land around 10–25% of a normal
+## contract reward at the bedroom tier.
+static func angel_reroll_cost_ratio(sim: Node) -> float:
+	var contract_reward: float = maxf(1.0, float(sim.run_state.economy.get("round_rent", 400.0)) * 4.0)
+	return sim.angel_reroll_cost() / contract_reward
+
+
+## Draw `tables` angel tables and report how many cards matched `tag`.
+static func draft_tag_hit_rate(
+	seed_value: int,
+	tag: String,
+	tables: int = 40,
+	owned_tags: Array = []
+) -> float:
+	var hits: int = 0
+	var total: int = 0
+	for i in range(tables):
+		var rng := DeterministicRng.new(seed_value + i)
+		var state := RunState.new()
+		state.reset()
+		for offer in ContentDatabase.draw_angel_offers(rng, state, 3, owned_tags, 0.0):
+			total += 1
+			for offer_tag in Array(offer.get("tags", [])):
+				if str(offer_tag) == tag:
+					hits += 1
+					break
+	return float(hits) / maxf(1.0, float(total))
+
+
 ## The best run in the sample. A contract nobody averages but the best run
 ## clears is priced as a stretch; one nothing comes near is priced wrong.
 func _maximum(values: Array) -> float:

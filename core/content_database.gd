@@ -127,6 +127,111 @@ func unlocked_operations() -> Array[OperationDefinition]:
 	return result
 
 
+func perk_is_unlocked(perk: PerkDefinition) -> bool:
+	if perk.unlock_achievement == "":
+		return true
+	return MetaProgress.has_achievement(perk.unlock_achievement)
+
+
+func draw_angel_offers(
+	rng: DeterministicRng,
+	run_state: RunState,
+	count: int = 3,
+	owned_tags: Array = [],
+	rarity_bias: float = 0.0
+) -> Array:
+	var pool: Array = []
+	var collected: Array = run_state.build.get("perk_inventory", [])
+	var owned_ops: Array = run_state.build.get("operations", [])
+	var tier: int = _location_tier_for_run(run_state)
+	var affinity: float = float(_build_tuning().get("draft_tag_affinity", 1.5))
+	var affinity_cap: float = float(_build_tuning().get("draft_tag_affinity_cap", 4.0))
+	for perk in perks:
+		if perk.id in collected:
+			continue
+		if not perk_is_unlocked(perk):
+			continue
+		if not _difficulty_allows_run(run_state, perk.difficulty):
+			continue
+		if not _location_tier_allows(tier, perk.min_location_tier, perk.max_location_tier):
+			continue
+		var weight: float = _rarity_weight(perk.rarity, rarity_bias) * maxf(perk.draft_weight, 0.01)
+		var matches: int = 0
+		for tag in perk.tags:
+			if tag in owned_tags:
+				matches += 1
+		if matches > 0:
+			weight *= minf(pow(affinity, float(matches)), affinity_cap)
+		pool.append({
+			"type": "perk",
+			"id": perk.id,
+			"label": perk.name,
+			"rarity": perk.rarity,
+			"tags": Array(perk.tags),
+			"weight": weight,
+		})
+	for operation in operations:
+		if operation.id in owned_ops:
+			continue
+		if not operation_is_unlocked(operation):
+			continue
+		if not _difficulty_allows_run(run_state, operation.difficulty):
+			continue
+		if not _location_tier_allows(tier, operation.min_location_tier, operation.max_location_tier):
+			continue
+		var op_weight: float = _rarity_weight(operation.rarity, rarity_bias) * maxf(operation.draft_weight, 0.01)
+		var op_matches: int = 0
+		for tag in operation.tags:
+			if tag in owned_tags:
+				op_matches += 1
+		if op_matches > 0:
+			op_weight *= minf(pow(affinity, float(op_matches)), affinity_cap)
+		pool.append({
+			"type": "operation",
+			"id": operation.id,
+			"label": operation.name,
+			"rarity": operation.rarity,
+			"tags": Array(operation.tags),
+			"weight": op_weight,
+		})
+	if pool.is_empty():
+		return []
+	var picks: Array = []
+	var mutable_pool: Array = pool.duplicate()
+	for _i in range(count):
+		if mutable_pool.is_empty():
+			break
+		var picked = rng.weighted_pick(mutable_pool, "weight")
+		if picked == null:
+			break
+		picks.append(picked)
+		mutable_pool.erase(picked)
+	return picks
+
+
+func _location_tier_for_run(run_state: RunState) -> int:
+	var order: Array = MetaProgress.location_order()
+	if order.is_empty():
+		order = Array(balance.get("economy", {}).get("location_order", []))
+	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
+	var index: int = order.find(dwelling)
+	return maxi(0, index)
+
+
+func _difficulty_allows_run(run_state: RunState, allowed: PackedStringArray) -> bool:
+	if allowed.is_empty():
+		return true
+	return str(run_state.flags.get("difficulty", "normal")) in allowed
+
+
+func _location_tier_allows(tier: int, min_tier: int, max_tier: int) -> bool:
+	if min_tier > 0 and tier < min_tier:
+		return false
+	if max_tier >= 0 and tier > max_tier:
+		return false
+	return true
+
+
 func draw_operations(
 	rng: DeterministicRng,
 	count: int = 2,
@@ -279,6 +384,12 @@ func _load_perks() -> void:
 		perk.excludes_tags = PackedStringArray(Array(entry.get("excludes_tags", [])))
 		perk.incompatible_ids = PackedStringArray(Array(entry.get("incompatible_ids", [])))
 		perk.stacking = entry.get("stacking", {})
+		perk.unlock_achievement = str(entry.get("unlock_achievement", ""))
+		perk.min_location_tier = int(entry.get("min_location_tier", 0))
+		perk.max_location_tier = int(entry.get("max_location_tier", -1))
+		perk.draft_weight = float(entry.get("draft_weight", 1.0))
+		perk.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
+		perk.grants = entry.get("grants", {})
 		perks.append(perk)
 		_perks_by_id[perk.id] = perk
 
@@ -354,6 +465,10 @@ func _load_operations() -> void:
 		operation.starter = bool(entry.get("starter", false))
 		operation.opens_pipeline = bool(entry.get("opens_pipeline", false))
 		operation.unlock_achievement = str(entry.get("unlock_achievement", ""))
+		operation.min_location_tier = int(entry.get("min_location_tier", 0))
+		operation.max_location_tier = int(entry.get("max_location_tier", -1))
+		operation.draft_weight = float(entry.get("draft_weight", 1.0))
+		operation.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
 		operation.combos = Array(entry.get("combos", []), TYPE_DICTIONARY, "", null)
 		operations.append(operation)
 		_operations_by_id[operation.id] = operation
@@ -450,6 +565,13 @@ func collect_validation_errors() -> Array[String]:
 
 	for perk in perks:
 		_check_unique_id(errors, seen_ids, "perk", perk.id)
+		if perk.unlock_achievement != "" and not _achievements_by_id.has(perk.unlock_achievement):
+			errors.append("perk '%s' is gated behind missing achievement '%s'" % [
+				perk.id, perk.unlock_achievement,
+			])
+		_check_draft_gates(
+			errors, "perk", perk.id, perk.difficulty, perk.min_location_tier, perk.max_location_tier
+		)
 		for sub in perk.subscriptions:
 			if sub is Dictionary:
 				_validate_effect_list(errors, known_paths, "perk '%s'" % perk.id, Array(sub.get("effects", [])))
@@ -461,6 +583,14 @@ func collect_validation_errors() -> Array[String]:
 
 	for operation in operations:
 		_check_unique_id(errors, seen_ids, "operation", operation.id)
+		_check_draft_gates(
+			errors,
+			"operation",
+			operation.id,
+			operation.difficulty,
+			operation.min_location_tier,
+			operation.max_location_tier
+		)
 		if operation.unlock_achievement != "" and not _achievements_by_id.has(operation.unlock_achievement):
 			errors.append("operation '%s' is gated behind missing achievement '%s'" % [
 				operation.id, operation.unlock_achievement,
@@ -530,12 +660,54 @@ func collect_validation_errors() -> Array[String]:
 				])
 	for achievement in achievements:
 		var reward: Dictionary = Dictionary(achievement.get("reward", {}))
-		if str(reward.get("type", "none")) != "unlock_module":
+		var reward_type: String = str(reward.get("type", "none"))
+		if reward_type == "unlock_module":
+			var operation_id: String = str(reward.get("operation_id", ""))
+			if not _operations_by_id.has(operation_id):
+				errors.append("achievement '%s' unlocks missing module '%s'" % [
+					str(achievement.get("id", "")), operation_id,
+				])
+			var operation = _operations_by_id.get(operation_id)
+			if operation != null and operation.unlock_achievement != str(achievement.get("id", "")):
+				errors.append("achievement '%s' unlocks module '%s' but the module points at '%s'" % [
+					str(achievement.get("id", "")), operation_id, operation.unlock_achievement,
+				])
+		elif reward_type == "unlock_perk":
+			var perk_id: String = str(reward.get("perk_id", ""))
+			if not _perks_by_id.has(perk_id):
+				errors.append("achievement '%s' unlocks missing perk '%s'" % [
+					str(achievement.get("id", "")), perk_id,
+				])
+			var perk = _perks_by_id.get(perk_id)
+			if perk != null and perk.unlock_achievement != str(achievement.get("id", "")):
+				errors.append("achievement '%s' unlocks perk '%s' but the perk points at '%s'" % [
+					str(achievement.get("id", "")), perk_id, perk.unlock_achievement,
+				])
+	for perk in perks:
+		if perk.unlock_achievement == "":
 			continue
-		var operation_id: String = str(reward.get("operation_id", ""))
-		if not _operations_by_id.has(operation_id):
-			errors.append("achievement '%s' unlocks missing module '%s'" % [
-				str(achievement.get("id", "")), operation_id,
+		var linked: bool = false
+		for achievement in achievements:
+			var reward: Dictionary = Dictionary(achievement.get("reward", {}))
+			if str(reward.get("type", "")) == "unlock_perk" and str(reward.get("perk_id", "")) == perk.id:
+				linked = true
+				break
+		if not linked:
+			errors.append("perk '%s' requires achievement '%s' but no achievement unlocks it" % [
+				perk.id, perk.unlock_achievement,
+			])
+	for operation in operations:
+		if operation.unlock_achievement == "":
+			continue
+		var module_linked: bool = false
+		for achievement in achievements:
+			var reward: Dictionary = Dictionary(achievement.get("reward", {}))
+			if str(reward.get("type", "")) == "unlock_module" and str(reward.get("operation_id", "")) == operation.id:
+				module_linked = true
+				break
+		if not module_linked:
+			errors.append("module '%s' requires achievement '%s' but no achievement unlocks it" % [
+				operation.id, operation.unlock_achievement,
 			])
 	_validate_ascension_contracts(errors)
 	return errors
@@ -585,6 +757,42 @@ func _check_unique_id(errors: Array[String], seen_ids: Dictionary, kind: String,
 	if seen_ids.has(key):
 		errors.append("duplicate %s id '%s'" % [kind, id])
 	seen_ids[key] = true
+
+
+## The draft gates a perk or module can author. All three fail silently at the
+## table if they are wrong — an unknown difficulty or an out-of-range tier just
+## means the card never appears, which reads as missing content rather than a
+## typo, so they are caught here instead.
+func _check_draft_gates(
+	errors: Array[String],
+	kind: String,
+	id: String,
+	difficulty: PackedStringArray,
+	min_tier: int,
+	max_tier: int
+) -> void:
+	if difficulty.is_empty():
+		errors.append("%s '%s' lists no difficulties, so it can never be drafted" % [kind, id])
+	var known_difficulties: Dictionary = balance.get("difficulty_profiles", {})
+	for entry in difficulty:
+		if not known_difficulties.has(str(entry)):
+			errors.append("%s '%s' allows unknown difficulty '%s'" % [kind, id, str(entry)])
+	var top_tier: int = maxi(0, MetaProgress.location_order().size() - 1)
+	if min_tier < 0:
+		errors.append("%s '%s' has negative min_location_tier %d" % [kind, id, min_tier])
+	if min_tier > top_tier:
+		errors.append("%s '%s' needs location tier %d, above the campaign's top tier %d" % [
+			kind, id, min_tier, top_tier,
+		])
+	if max_tier >= 0:
+		if max_tier > top_tier:
+			errors.append("%s '%s' caps at location tier %d, above the campaign's top tier %d" % [
+				kind, id, max_tier, top_tier,
+			])
+		if max_tier < min_tier:
+			errors.append("%s '%s' has max_location_tier %d below min_location_tier %d" % [
+				kind, id, max_tier, min_tier,
+			])
 
 
 ## Every campaign location the player can actually reach must have exactly

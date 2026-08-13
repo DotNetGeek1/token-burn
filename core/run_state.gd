@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 15
+const SAVE_VERSION := 16
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -88,6 +88,9 @@ var business: Dictionary = {
 
 var build: Dictionary = {
 	"perks": [],
+	"perk_inventory": [],
+	"perk_liabilities": [],
+	"draft_state": {"sequence": 0, "rerolls": 0},
 	"hardware": ["used_laptop"],
 	"upgrades": [],
 	"status_effects": [],
@@ -119,6 +122,8 @@ var statistics: Dictionary = {
 	"peak_debt": 0.0,
 	"peak_prompt_tokens": 0.0,
 	"hidden_bugs_shipped": 0,
+	"max_cloud_share": 0.0,
+	"stage_repeats": 0,
 	"max_heat_ratio": 0.0,
 	"jobs_accepted": 0,
 	"angel_offers_taken": 0,
@@ -387,6 +392,21 @@ func _migrate(from_version: int) -> void:
 		_migrate_upgrade_counts()
 	if from_version < 15:
 		_migrate_to_derived_cloud_cost_and_demand()
+	if from_version < 16:
+		_migrate_to_perk_inventory()
+
+
+## Active perks and collected perks split apart: everything the run has ever
+## picked up lives in inventory; only the equipped subset is active.
+func _migrate_to_perk_inventory() -> void:
+	var active: Array = Array(build.get("perks", []))
+	var inventory: Array = Array(build.get("perk_inventory", []))
+	if inventory.is_empty():
+		inventory = active.duplicate()
+	for perk_id in active:
+		if not (str(perk_id) in inventory):
+			inventory.append(perk_id)
+	build["perk_inventory"] = inventory
 
 
 ## Cloud cost and demand were both stats that read and wrote themselves: a perk
@@ -635,6 +655,9 @@ func _default_business() -> Dictionary:
 func _default_build() -> Dictionary:
 	return {
 		"perks": [],
+		"perk_inventory": [],
+		"perk_liabilities": [],
+	"draft_state": {"sequence": 0, "rerolls": 0},
 		"hardware": ["used_laptop"],
 		"upgrades": [],
 		"status_effects": [],
@@ -663,6 +686,8 @@ func _default_statistics() -> Dictionary:
 		"peak_debt": 0.0,
 		"peak_prompt_tokens": 0.0,
 		"hidden_bugs_shipped": 0,
+	"max_cloud_share": 0.0,
+	"stage_repeats": 0,
 		"max_heat_ratio": 0.0,
 		"jobs_accepted": 0,
 		"angel_offers_taken": 0,

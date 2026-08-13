@@ -100,12 +100,27 @@ func refresh() -> void:
 	_refresh_board_line()
 	_refresh_bills_line()
 	_deal_cards()
-	set_actions([{
+	var actions: Array = [{
 		"index": "1",
 		"headline": "TAKE NOTHING",
 		"value": "Tell him you are fine",
 		"pressed": _on_decline,
-	}])
+	}]
+	if Simulation.can_reroll_angel():
+		actions.append({
+			"index": "2",
+			"headline": "REROLL — %s" % NumberFormat.format_cash(Simulation.angel_reroll_cost()),
+			"value": "Pay for a fresh table",
+			"pressed": _on_reroll,
+		})
+	elif Simulation.phase == Simulation.Phase.ANGEL_ROUND:
+		actions.append({
+			"index": "2",
+			"headline": "REROLL — %s" % NumberFormat.format_cash(Simulation.angel_reroll_cost()),
+			"value": "Not enough cash",
+			"enabled": false,
+		})
+	set_actions(actions)
 	_apply_body_metrics()
 
 
@@ -167,6 +182,8 @@ func _deal_cards() -> void:
 		}])
 		if offer_type == "operation":
 			card.set_warnings(_bench_warning())
+		elif offer_type == "perk":
+			card.set_warnings(_perk_bench_warning())
 		card.set_action_style("perks", "perk", "BoostButton")
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.pressed.connect(_accept.bind(offer_type, offer_id))
@@ -260,6 +277,21 @@ func _accept(offer_type: String, offer_id: String) -> void:
 		refresh()
 	else:
 		hide_overlay()
+	get_tree().call_group("ui_refresh", "refresh")
+	get_tree().call_group("main_ui", "refresh_all")
+
+
+func _perk_bench_warning() -> Array:
+	var perks: Dictionary = Simulation.perk_capacity()
+	if int(perks.get("active", 0)) < int(perks.get("cap", 0)):
+		return []
+	return [{"text": "Active full · goes to the bench", "role": "warning"}]
+
+
+func _on_reroll() -> void:
+	if not Simulation.reroll_angel_offers():
+		return
+	refresh()
 	get_tree().call_group("ui_refresh", "refresh")
 	get_tree().call_group("main_ui", "refresh_all")
 

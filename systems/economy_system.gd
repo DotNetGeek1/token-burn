@@ -95,6 +95,7 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 	# Rule-changer: a client retainer or subscription line lands before the
 	# bills do, so it is real income rather than a discount on rent.
 	var passive: float = float(run_state.economy.get("passive_income_per_round", 0.0))
+	passive *= float(run_state.business.get("legacy_income_multiplier", 1.0))
 	if passive > 0.0:
 		add_income(run_state, passive, tuning)
 	var rent: float = float(run_state.economy.get("round_rent", 400.0))

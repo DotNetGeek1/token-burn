@@ -174,7 +174,7 @@ func _add_row(achievement: Dictionary) -> void:
 	var lit: Color = ConsoleStyle.PHOSPHOR if earned else ConsoleStyle.PHOSPHOR_DIM
 	# The listing only has room for the module's name; the sentence about what it
 	# does is printed on the sheet the row opens.
-	var operation: OperationDefinition = _reward_module(achievement)
+	var reward: Dictionary = _reward_entry(achievement)
 	_table.add_row([
 		{
 			"text": REDACTED_NAME if redacted else str(achievement.get("name", id)).to_upper(),
@@ -189,19 +189,42 @@ func _add_row(achievement: Dictionary) -> void:
 			"color": ConsoleStyle.PHOSPHOR_DIM,
 		},
 		{
-			"text": "" if redacted or operation == null else operation.name.to_upper(),
+			"text": "" if redacted else _reward_label(reward),
 			"color": ConsoleStyle.PHOSPHOR_DIM,
 		},
 	], id, lit)
 
 
+func _reward_entry(achievement: Dictionary) -> Dictionary:
+	return Dictionary(achievement.get("reward", {}))
+
+
+func _reward_label(reward: Dictionary) -> String:
+	match str(reward.get("type", "none")):
+		"unlock_module":
+			var operation: OperationDefinition = ContentDatabase.get_operation(str(reward.get("operation_id", "")))
+			return operation.name.to_upper() if operation != null else ""
+		"unlock_perk":
+			var perk: PerkDefinition = ContentDatabase.get_perk(str(reward.get("perk_id", "")))
+			return perk.name.to_upper() if perk != null else ""
+		_:
+			return ""
+
+
 ## The module the award puts into the draft pool, or null for the awards that
 ## are their own reward.
 func _reward_module(achievement: Dictionary) -> OperationDefinition:
-	var reward: Dictionary = Dictionary(achievement.get("reward", {}))
+	var reward: Dictionary = _reward_entry(achievement)
 	if str(reward.get("type", "none")) != "unlock_module":
 		return null
 	return ContentDatabase.get_operation(str(reward.get("operation_id", "")))
+
+
+func _reward_perk(achievement: Dictionary) -> PerkDefinition:
+	var reward: Dictionary = _reward_entry(achievement)
+	if str(reward.get("type", "none")) != "unlock_perk":
+		return null
+	return ContentDatabase.get_perk(str(reward.get("perk_id", "")))
 
 
 func _on_row_selected(meta: Variant) -> void:
@@ -218,10 +241,17 @@ func _on_row_selected(meta: Variant) -> void:
 		rows.append({"text": str(achievement.get("description", ""))})
 		rows.append({"stat": "How", "value": str(achievement.get("hint", ""))})
 	var operation: OperationDefinition = _reward_module(achievement)
+	var perk: PerkDefinition = _reward_perk(achievement)
 	if operation != null and not redacted:
 		rows.append({
 			"rule": "Reward · %s" % operation.name,
 			"text": "%s Joins the angel draft pool in every run once this award is earned." % _module_summary(operation),
+			"role": "perk",
+		})
+	elif perk != null and not redacted:
+		rows.append({
+			"rule": "Reward · %s" % perk.name,
+			"text": "%s Joins His Table in every run once this award is earned." % _perk_summary(perk),
 			"role": "perk",
 		})
 	_detail_sheet.show_detail(
@@ -237,4 +267,10 @@ func _on_row_selected(meta: Variant) -> void:
 func _module_summary(operation: OperationDefinition) -> String:
 	return ExpressionEvaluator.new().render_template(
 		operation.description_template, operation.parameters
+	)
+
+
+func _perk_summary(perk: PerkDefinition) -> String:
+	return ExpressionEvaluator.new().render_template(
+		perk.description_template, perk.parameters
 	)
