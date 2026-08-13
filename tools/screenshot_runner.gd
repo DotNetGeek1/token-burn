@@ -3,6 +3,11 @@ extends Node
 ## Dev tool: boots the main UI, waits a few frames, saves a screenshot, and
 ## quits. Pass the output path as a user arg:
 ##   godot --path . res://tools/screenshot_runner.tscn -- --out=user://shot.png
+##
+## The desk only. This mounts the shell as its own child so it can drive the
+## simulation into a state and shoot the room in it, which means it cannot follow
+## a scene change: the venues — market, job board, build, workflows, records —
+## are shot by `screenshot.tscn`, which drives the router instead.
 
 const MAIN_SCENE := "res://ui/main.tscn"
 
@@ -116,8 +121,9 @@ func _ready() -> void:
 		Simulation._end_run(true)
 		main.refresh_all()
 		# Winning also puts him on the phone about it; the shot wanted here is
-		# the report underneath the handset.
-		main._investor_call.hide_overlay()
+		# the report underneath the handset. The phone belongs to the router now,
+		# because it has to be able to ring over a venue as well as over the desk.
+		SceneRouter.hide_investor()
 	elif tab == "garage":
 		# The second room, which the campaign reaches by buying the property.
 		# Written onto the run rather than bought, because the shop route also
@@ -131,26 +137,6 @@ func _ready() -> void:
 		# speed, so the shot has to wait for the paragraph to finish arriving.
 		main.investor_says("terms")
 		settle_seconds = maxf(settle_seconds, 1.2)
-	elif tab == "achievements":
-		# A scratch profile rather than the developer's own, with a couple of
-		# awards earned so the shot shows both states side by side.
-		MetaProgress.use_scratch_profile("user://profile_screenshot.json")
-		for achievement_id in ["ach.round_one_wipeout", "ach.first_contract", "ach.nothing_ventured"]:
-			MetaProgress.grant_achievement(achievement_id)
-		main.open_achievements()
-	elif tab == "workflows":
-		# The editor is only meaningful mid-run, and the second workflow is
-		# granted outright so the shot shows the tabs rather than a single one.
-		var offers: Array = Simulation.run_state.business.get("job_offers", [])
-		for offer in offers:
-			if Simulation.accept_job(str(offer.get("id", ""))):
-				break
-		Simulation.start_work()
-		Simulation.run_state.build["workflow_capacity"] = 2
-		Simulation.create_workflow("The Careful One")
-		Simulation.set_active_workflow(0)
-		main.open_pipeline_editor()
-		main.refresh_all()
 	elif tab == "assign":
 		# The work screen with a choice of pipeline to route the contract
 		# through, which only appears once a run owns more than one.
@@ -179,7 +165,10 @@ func _ready() -> void:
 			for offer in offers:
 				if Simulation.accept_job(str(offer.get("id", ""))):
 					break
-		main.switch_tab("office" if tab.ends_with("office") else "jobs")
+		# Always a desk tab: this runner mounts the shell as its own child rather
+		# than as the current scene, so asking for a venue would swap the runner
+		# itself out from under the capture. Venues are shot by screenshot.tscn.
+		main.switch_tab("office")
 		main.refresh_all()
 	elif tab == "surged" or tab == "deliver" or tab == "burning" or tab == "jobsheet":
 		# Deck states that need a live contract plus something the player did to

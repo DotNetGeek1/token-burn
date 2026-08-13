@@ -249,8 +249,8 @@ func _format_traced(target_path: String, value: Variant) -> String:
 
 
 func _on_choose_contract() -> void:
-	get_tree().call_group("main_ui", "switch_tab", "jobs")
+	SceneRouter.open_jobs()
 
 
 func _on_open_board() -> void:
-	get_tree().call_group("main_ui", "switch_tab", "board")
+	SceneRouter.open_desk_tab("board")

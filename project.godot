@@ -27,6 +27,7 @@ EventBus="*res://core/event_bus.gd"
 ContentDatabase="*res://core/content_database.gd"
 MetaProgress="*res://core/meta_progress.gd"
 Simulation="*res://core/simulation.gd"
+SceneRouter="*res://core/scene_router.gd"
 
 [display]
 

@@ -735,11 +735,11 @@ func _activate(entry_id: String) -> void:
 			MetaProgress.set_endless_enabled(not MetaProgress.endless_enabled())
 			refresh()
 		"legacy":
-			get_tree().call_group("main_ui", "open_meta_hub")
+			SceneRouter.open_legacy()
 		"achievements":
-			get_tree().call_group("main_ui", "open_achievements")
+			SceneRouter.open_achievements()
 		"burn_lab":
-			get_tree().call_group("main_ui", "open_burn_lab")
+			SceneRouter.open_burn_lab()
 		"delete_save":
 			_confirm_delete_save()
 		"quit":

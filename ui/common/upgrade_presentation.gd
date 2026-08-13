@@ -96,11 +96,23 @@ static func effect_line(upgrade: UpgradeDefinition) -> String:
 
 
 ## Stats for whatever this upgrade installs, machine or component.
-static func _curve(upgrade: UpgradeDefinition) -> Dictionary:
+static func curve(upgrade: UpgradeDefinition) -> Dictionary:
 	var key: String = UpgradeSystem.installed_key(upgrade)
 	if key == "":
 		return {}
 	return Dictionary(ContentDatabase.balance.get("hardware_curves", {}).get(key, {}))
+
+
+static func _curve(upgrade: UpgradeDefinition) -> Dictionary:
+	return curve(upgrade)
+
+
+## Whether the thing this upgrade installs stands on the floor rather than
+## fitting inside a machine that is already there.
+static func occupies_floor(upgrade: UpgradeDefinition) -> bool:
+	return UpgradeSystem.occupies_floor(
+		ContentDatabase.balance.get("hardware_curves", {}), upgrade.hardware_key
+	)
 
 
 ## Raw curve rate plus, when modifiers are active, what that adds to the HUD.

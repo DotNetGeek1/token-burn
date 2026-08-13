@@ -20,17 +20,17 @@ const ENTRIES: Array[Dictionary] = [
 ]
 
 
-## Writes the menu onto the board. `host` is what the notes route through: it
-## only has to be inside the tree, because every destination is reached by
-## calling the shell.
-static func mount(notes: BoardNotes, host: Node) -> void:
+## Writes the menu onto the board. Every destination on it is a scene of its
+## own, so the notes hand the key to the router rather than needing to know
+## anything about where the place they name actually lives.
+static func mount(notes: BoardNotes, _host: Node) -> void:
 	var rows: Array = []
 	for entry in ENTRIES:
 		var key: String = str(entry["key"])
 		rows.append({
 			"key": key,
 			"headline": str(entry["headline"]),
-			"pressed": func() -> void: _go(host, key),
+			"pressed": func() -> void: _go(key),
 		})
 	notes.set_entries(rows)
 
@@ -48,10 +48,8 @@ static func refresh(notes: BoardNotes) -> void:
 	notes.set_flag("market", affordable)
 
 
-static func _go(host: Node, key: String) -> void:
-	if not host.is_inside_tree():
-		return
+static func _go(key: String) -> void:
 	if key == "ascend":
-		host.get_tree().call_group("main_ui", "open_ascension_select")
+		SceneRouter.open_terms()
 		return
-	host.get_tree().call_group("main_ui", "switch_tab", key)
+	SceneRouter.goto(key)

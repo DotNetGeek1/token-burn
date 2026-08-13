@@ -210,6 +210,86 @@
       "laptop_screen": [0.286, 0.339, 0.409, 0.460]
     }
   },
+  "venue_defaults": {
+    "regions": {
+      "index": [0.018, 0.049, 0.163, 0.559],
+      "board": [0.387, 0.146, 0.439, 0.615],
+      "signage": [0.852, 0.104, 0.094, 0.472],
+      "hints": [0.106, 0.842, 0.140, 0.150],
+      "notice": [0.848, 0.743, 0.082, 0.125]
+    }
+  },
+  "venue_scenes": {
+    "market": {
+      "art": "res://presentation/venues/venue_market.png"
+    },
+    "jobs": {
+      "art": "res://presentation/venues/venue_jobs.png",
+      "regions": {
+        "index": [0.022, 0.040, 0.090, 0.560],
+        "board": [0.313, 0.155, 0.455, 0.580]
+      }
+    },
+    "build": {
+      "art": "res://presentation/venues/venue_build.png",
+      "regions": {
+        "index": [0.072, 0.058, 0.086, 0.470],
+        "board": [0.322, 0.120, 0.386, 0.575],
+        "signage": [0.886, 0.235, 0.058, 0.300],
+        "notice": [0.832, 0.560, 0.104, 0.140]
+      }
+    },
+    "workflows": {
+      "art": "res://presentation/venues/venue_workflows.png",
+      "regions": {
+        "index": [0.010, 0.024, 0.186, 0.540],
+        "board": [0.478, 0.174, 0.332, 0.530],
+        "signage": [0.895, 0.044, 0.070, 0.402],
+        "notice": [0.879, 0.581, 0.076, 0.104],
+        "hints": [0.176, 0.880, 0.108, 0.108]
+      }
+    },
+    "menu": {
+      "art": "res://presentation/venues/venue_menu.png",
+      "regions": {
+        "index": [0.008, 0.040, 0.148, 0.400],
+        "board": [0.412, 0.185, 0.298, 0.470],
+        "signage": [0.900, 0.072, 0.084, 0.360],
+        "notice": [0.900, 0.485, 0.058, 0.115],
+        "hints": [0.094, 0.630, 0.146, 0.240]
+      }
+    },
+    "legacy": {
+      "art": "res://presentation/venues/venue_legacy.png",
+      "regions": {
+        "index": [0.048, 0.040, 0.128, 0.390],
+        "board": [0.418, 0.135, 0.276, 0.435],
+        "signage": [0.892, 0.040, 0.092, 0.420],
+        "notice": [0.848, 0.458, 0.086, 0.205],
+        "hints": [0.036, 0.870, 0.136, 0.120]
+      }
+    },
+    "achievements": {
+      "art": "res://presentation/venues/venue_achievements.png",
+      "regions": {
+        "index": [0.010, 0.070, 0.152, 0.492],
+        "board": [0.458, 0.172, 0.320, 0.470],
+        "signage": [0.850, 0.130, 0.070, 0.340],
+        "notice": [0.860, 0.482, 0.070, 0.166],
+        "hints": [0.098, 0.740, 0.142, 0.100]
+      }
+    },
+    "terms": {
+      "art": "res://presentation/venues/venue_terms.png",
+      "regions": {
+        "index": [0.018, 0.055, 0.208, 0.440],
+        "board": [0.442, 0.135, 0.340, 0.435],
+        "signage": [0.882, 0.140, 0.092, 0.350],
+        "notice": [0.888, 0.520, 0.070, 0.130],
+        "hints": [0.108, 0.840, 0.140, 0.150]
+      }
+    }
+  },
   "investor": {
     "portrait": "res://presentation/investor/angel_portrait.png",
     "phone_frame": "res://presentation/investor/phone_frame.png"

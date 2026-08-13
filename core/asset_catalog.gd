@@ -172,6 +172,58 @@ static func _board_rect(dwelling: String, group: String, key: String) -> Rect2:
 	return _rect_from(Array(Dictionary(group_data)[key]))
 
 
+## A venue: one of the places the player goes to that is not the desk.
+##
+## Same idea as a room, and authored the same way. The picture is the place, and
+## the panels hanging in it are blank in the art so the live screen is printed
+## into them: the market's stock board is a board on a wall, not a table
+## floating over a photograph. Rects are fractions of the picture, which is
+## drawn at the design aspect, so a region lands on the panel it was measured
+## off whatever the window is doing.
+static func venue_art(venue: String) -> Texture2D:
+	var path: String = str(_venue_scene(venue).get("art", ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	var loaded: Variant = load(path)
+	return loaded if loaded is Texture2D else null
+
+
+## Where a named panel is painted in the venue. Empty when the picture does not
+## carry one, which the venue reads as "this place has nothing to say there".
+##
+## The venue pictures are shot against one panel template, so the rects live once
+## under venue_defaults and a venue only names the ones its own picture moved.
+static func venue_region(venue: String, key: String) -> Rect2:
+	var own: Variant = _venue_scene(venue).get("regions")
+	if own is Dictionary and Dictionary(own).has(key):
+		return _rect_from(Array(Dictionary(own)[key]))
+	var shared: Variant = _venue_defaults().get("regions")
+	if shared is Dictionary and Dictionary(shared).has(key):
+		return _rect_from(Array(Dictionary(shared)[key]))
+	return Rect2()
+
+
+static func _venue_defaults() -> Dictionary:
+	_ensure_loaded()
+	var defaults: Variant = _data.get("venue_defaults")
+	return defaults if defaults is Dictionary else {}
+
+
+static func venue_keys() -> Array:
+	_ensure_loaded()
+	var scenes: Variant = _data.get("venue_scenes")
+	return Dictionary(scenes).keys() if scenes is Dictionary else []
+
+
+static func _venue_scene(venue: String) -> Dictionary:
+	_ensure_loaded()
+	var scenes: Variant = _data.get("venue_scenes")
+	if not scenes is Dictionary:
+		return {}
+	var table: Dictionary = scenes
+	return Dictionary(table[venue]) if table.has(venue) else {}
+
+
 static func investor_texture(key: String) -> Texture2D:
 	return get_texture("investor", key)
 

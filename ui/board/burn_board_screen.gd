@@ -441,7 +441,7 @@ func _done_percent(job: Dictionary) -> int:
 func _on_edit_pipeline() -> void:
 	if _burning:
 		return
-	get_tree().call_group("main_ui", "open_pipeline_editor")
+	SceneRouter.open_workflows()
 
 
 ## The brief, in full. The console prints the facts a decision needs every

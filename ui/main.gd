@@ -6,12 +6,16 @@ extends Control
 ## Nothing here is a page the player navigates to. The room the run is being
 ## played in fills the window and everything else is mounted onto it at a
 ## position authored beside the art (`board_scenes.<dwelling>` in the asset
-## catalog): the machine stands on the desk in the work column, the readouts are
-## painted into the props that carry them, and the job board, market, build and
-## menu slide in from the right over the room rather than replacing it. Moving
-## the operation to the garage repaints the room and moves every one of those
-## mounts with it. The desk is never off screen, so the player is always looking
-## at their own operation.
+## catalog): the machine stands on the desk in the work column and the readouts
+## are painted into the props that carry them. Moving the operation to the garage
+## repaints the room and moves every one of those mounts with it. The desk is
+## never off screen, so the player is always looking at their own operation.
+##
+## Everything that is not work — the job board, the market, the build sheet, the
+## workflows, the records — used to slide in on a slab bolted to the right-hand
+## edge of this scene. They are venues of their own now, each a room with its own
+## photograph, and the router takes the player to them. What is left here is the
+## desk and the reports that interrupt it.
 
 ## Screens that live on the desk, in the work column, where the machine is.
 const DESK_SCENES := {
@@ -19,47 +23,15 @@ const DESK_SCENES := {
 	"board": preload("res://ui/board/burn_board_screen.tscn"),
 }
 
-## Screens that slide in on the right-hand panel. They are reference material and
-## shopping, not work, so they never take the machine off the screen.
-const PANEL_SCENES := {
-	"jobs": preload("res://ui/jobs/jobs_screen.tscn"),
-	"build": preload("res://ui/build/build_screen.tscn"),
-	"market": preload("res://ui/market/market_screen.tscn"),
-	"menu": preload("res://ui/menu/menu_screen.tscn"),
-}
-
-## Navigation destinations to the icon each one borrows from the art kit. The
-## menu itself is printed on the laptop now; these are for the panel's own rail.
-const NAV_ICON_KEYS := {
-	"work": "office",
-	"jobs": "jobs",
-	"build": "build",
-	"market": "market",
-	"ascend": "board",
-	"more": "menu",
-}
-
-## The rail down the inside edge of the side panel, mirroring the laptop's menu
-## for the hand that is already over there.
-const RAIL_TABS: Array[String] = ["jobs", "market", "build", "menu"]
-
 ## How far the desk is dimmed. The machine is lit by its own screen, so the desk
-## behind it barely tints; a panel full of type needs the room further back.
+## behind it barely tints.
 const SCRIM_DESK := 0.10
-const SCRIM_PANEL := 0.34
-
-const PANEL_SLIDE_SECONDS := 0.22
 
 const ANGEL_INVESTORS := preload("res://ui/screens/angel_investors.tscn")
 const RUN_END := preload("res://ui/screens/run_end.tscn")
 const ROUND_DEBRIEF := preload("res://ui/screens/session_summary.tscn")
 const BILLS_SCREEN := preload("res://ui/screens/month_statement.tscn")
 const BURN_LAB := preload("res://ui/debug/burn_lab.tscn")
-const PIPELINE_EDITOR := preload("res://ui/board/pipeline_editor.tscn")
-const ASCENSION_SELECT := preload("res://ui/screens/ascension_select.tscn")
-const META_HUB := preload("res://ui/screens/meta_hub.tscn")
-const ACHIEVEMENTS := preload("res://ui/screens/achievements_screen.tscn")
-const INVESTOR_CALL := preload("res://ui/screens/investor_call.tscn")
 const TITLE_SCREEN := preload("res://ui/title/title_screen.tscn")
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
@@ -70,20 +42,9 @@ const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 @onready var prop_layer: Control = $PropLayer
 @onready var work_column: Control = $WorkColumn
 @onready var content_container: Control = $WorkColumn/ContentContainer
-@onready var side_panel: Control = $SidePanel
-@onready var panel_bg: PanelContainer = $SidePanel/PanelBg
-@onready var panel_body: Control = $SidePanel/PanelBg/PanelRow/PanelBody
-@onready var icon_rail: VBoxContainer = $SidePanel/PanelBg/PanelRow/IconRail
 @onready var overlay_root: Control = $OverlayRoot
 
 var _desk_tab: String = "office"
-## Which panel screen is loaded. Empty means the panel is shut and the desk has
-## the whole window.
-var _panel_tab: String = ""
-## The tab the slab is still carrying while it slides back out of the room.
-var _closing_tab: String = ""
-var _panel_slide: float = 1.0
-var _panel_tween: Tween = null
 var _screen_cache: Dictionary = {}
 var _props: Dictionary = {}
 var _angel_investors: Control = null
@@ -91,12 +52,6 @@ var _run_end: Control = null
 var _round_debrief: Control = null
 var _bills_screen: Control = null
 var _burn_lab: Control = null
-var _pipeline_editor: Control = null
-var _ascension_select: Control = null
-var _meta_hub: Control = null
-var _achievements: Control = null
-var _investor_call: Control = null
-var _achievement_splash: AchievementSplash = null
 var _last_angel_phase: bool = false
 var _pending_statement: Dictionary = {}
 var _board_dwelling: String = ""
@@ -128,30 +83,69 @@ var _title_active: bool = true
 
 
 func _ready() -> void:
+	# The shell is torn down and rebuilt every time the player goes somewhere
+	# else and comes back, so the half of this that starts a run only belongs to
+	# the first mount. Coming back off a venue is a return to a game already in
+	# progress: reloading the save would undo whatever was just bought, and the
+	# title would be the front door reappearing over a live run.
+	var resuming: bool = SceneRouter.booted
+	SceneRouter.booted = true
 	UiThemeBuilder.apply(self)
 	UiSound.attach(self)
 	add_to_group("main_ui")
 	background.color = UiThemeBuilder.color("bg")
 	scrim.color = UiThemeBuilder.color("bg")
-	panel_bg.add_theme_stylebox_override("panel", _side_panel_style())
 	get_viewport().size_changed.connect(_layout_board)
 	_build_props()
 	_build_wall()
 	_build_step_back()
 	_layout_board()
-	_build_icon_rail()
 	_build_overlays()
 	_show_desk_tab("office")
 	_connect_events()
-	if ContentDatabase.jobs.is_empty():
-		ContentDatabase.reload()
-	if SaveManager.has_save():
-		Simulation.load_saved_run()
+	if resuming:
+		_title_active = false
 	else:
-		Simulation.start_run()
-	_build_title_screen()
+		if ContentDatabase.jobs.is_empty():
+			ContentDatabase.reload()
+		if SaveManager.has_save():
+			Simulation.load_saved_run()
+		else:
+			Simulation.start_run()
+		_ensure_title_screen()
 	refresh_all()
 	_sync_overlay_input()
+	# Reports that came due while the player was out of the room. Drained after
+	# the overlays exist, because replaying one opens it.
+	for entry in SceneRouter.take_pending_flow():
+		_replay_pending(entry)
+
+
+## Whatever the router held onto while the desk was unloaded.
+func _replay_pending(entry: Dictionary) -> void:
+	match str(entry.get("kind", "")):
+		"tab":
+			switch_tab(str(entry.get("tab", "work")))
+		"title":
+			open_title()
+		"burn_lab":
+			open_burn_lab()
+		"session":
+			replay_work_session(Dictionary(entry.get("result", {})))
+		"statement":
+			replay_statement(Dictionary(entry.get("statement", {})))
+
+
+## The round's debrief, held over because the round ended while the player was
+## reading the market rather than watching the machine.
+func replay_work_session(result: Dictionary) -> void:
+	if not result.is_empty():
+		_on_work_session_finished(result)
+
+
+func replay_statement(statement: Dictionary) -> void:
+	if not statement.is_empty():
+		_on_bills_ready(statement)
 
 
 ## Modal sheets are authored against the window, but the screens that open them
@@ -161,43 +155,25 @@ func mount_overlay(control: Control) -> void:
 	overlay_root.add_child(control)
 
 
+## The round-end reports, which are interruptions in the loop rather than places
+## the player goes: they read as paper put down on top of the room, so they stay
+## modal on the desk while the catalogue screens have become venues of their own.
+##
+## The investor's phone and the award splash are not here. Both have to be able
+## to arrive while the player is in a venue, and this scene is not on screen
+## then, so the router owns them.
 func _build_overlays() -> void:
 	_angel_investors = ANGEL_INVESTORS.instantiate()
 	_run_end = RUN_END.instantiate()
 	_round_debrief = ROUND_DEBRIEF.instantiate()
 	_bills_screen = BILLS_SCREEN.instantiate()
 	_burn_lab = BURN_LAB.instantiate()
-	_pipeline_editor = PIPELINE_EDITOR.instantiate()
-	_ascension_select = ASCENSION_SELECT.instantiate()
-	_meta_hub = META_HUB.instantiate()
-	_achievements = ACHIEVEMENTS.instantiate()
-	_investor_call = INVESTOR_CALL.instantiate()
 	for overlay in [
 		_angel_investors, _round_debrief, _bills_screen, _run_end, _burn_lab,
-		_pipeline_editor, _ascension_select, _meta_hub, _achievements,
 	]:
 		overlay_root.add_child(overlay)
-	# The investor is the only person in the game, so he interrupts everything:
-	# his call sits above every other overlay rather than queueing behind them.
-	overlay_root.add_child(_investor_call)
-	_achievement_splash = AchievementSplash.mount(self)
 	_round_debrief.continue_pressed.connect(_on_debrief_continue)
 	_bills_screen.continue_pressed.connect(_on_bills_continue)
-
-
-## The panel is a slab bolted to the right-hand edge, not a floating card: it is
-## square against the window and only carries an edge on the side that faces
-## into the room.
-func _side_panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	var base: Color = UiThemeBuilder.color("bg")
-	# Near-opaque: the slab now covers most of the window for the catalogue
-	# screens, and at the old 0.93 the desk's own readouts showed through the
-	# job tiles behind it.
-	style.bg_color = Color(base.r, base.g, base.b, 0.99)
-	style.border_width_left = UiThemeBuilder.MODULE_BORDER
-	style.border_color = UiThemeBuilder.color("stroke_dim")
-	return style
 
 
 # --- Desk layout -------------------------------------------------------------
@@ -206,10 +182,6 @@ func _side_panel_style() -> StyleBoxFlat:
 ## repainted room moves the furniture rather than leaving the UI pinned to
 ## numbers that used to be right.
 func _layout_board() -> void:
-	var size: Vector2 = get_viewport_rect().size
-	side_panel.offset_left = -_base_panel_width(size)
-	side_panel.offset_right = 0.0
-	_apply_panel_slide(_panel_slide)
 	_apply_room_transform()
 	get_tree().call_group("console_screens", "fit_console")
 	# Screens that hang off the room's own furniture rather than off the work
@@ -246,56 +218,6 @@ func _apply_room_transform() -> void:
 		AssetCatalog.board_region(board_dwelling(), "work_column")
 	), size, full_rect)
 	_layout_props(size)
-
-
-## Screens that are catalogues rather than status readouts. On the narrow slab a
-## job offer got a column 442px wide, which wrapped its title over three lines
-## and fitted two cards on screen; given most of the window they lay out as a
-## grid of tiles, which is what the width is for.
-const WIDE_PANEL_TABS := ["jobs", "market", "build"]
-## Kept back from the full window so the room is still visibly behind the slab
-## and the player can see what they are shopping for.
-const WIDE_PANEL_RATIO := 0.62
-const WIDE_PANEL_RATIO_MOBILE := 0.82
-## On a handset the room behind the slab is a strip a few millimetres wide,
-## which is not a view of anything — and the board in front of it is a table of
-## contracts with their titles clipped. So the catalogue takes the window and
-## the room waits behind it, the same as it does when the player leans in.
-const WIDE_PANEL_RATIO_HANDSET := 1.0
-const MOBILE_VIEWPORT_WIDTH := 900.0
-const SHORT_VIEWPORT_HEIGHT := 400.0
-const WIDE_PANEL_RATIO_SHORT := 0.88
-
-
-## How far the slab comes out for whatever it is currently carrying.
-func _panel_width(viewport_size: Vector2) -> float:
-	var base: float = _base_panel_width(viewport_size)
-	var tab: String = _panel_tab if _panel_tab != "" else _closing_tab
-	if tab in WIDE_PANEL_TABS:
-		return maxf(base, viewport_size.x * _wide_panel_ratio(viewport_size))
-	return base
-
-
-func _wide_panel_ratio(viewport_size: Vector2) -> float:
-	if ConsoleMetrics.needs_focus():
-		return WIDE_PANEL_RATIO_HANDSET
-	if viewport_size.y < SHORT_VIEWPORT_HEIGHT:
-		return WIDE_PANEL_RATIO_SHORT
-	# The viewport is design units, which expand past 900 on a phone; the
-	# platform is what decides this, not the canvas width.
-	if ConsoleMetrics.is_mobile() or viewport_size.x < MOBILE_VIEWPORT_WIDTH:
-		return WIDE_PANEL_RATIO_MOBILE
-	return WIDE_PANEL_RATIO
-
-
-## The slab at rest, which is what the desk and the nav bar are laid out around.
-## The desk keeps this measure whatever the panel is doing: a wide slide-over is
-## an overlay on the room, not a resize of it.
-func _base_panel_width(viewport_size: Vector2) -> float:
-	var region: Rect2 = AssetCatalog.board_region(board_dwelling(), "side_panel")
-	if region.size.x > 0.0:
-		return region.size.x * viewport_size.x
-	return minf(UiThemeBuilder.SIDE_PANEL_WIDTH, viewport_size.x * 0.4)
 
 
 ## Puts a window-fraction rect through the room's current zoom and pan.
@@ -572,7 +494,7 @@ func _on_plan_board_pressed() -> void:
 	if ConsoleMetrics.needs_focus() and _focus_key != "board":
 		focus_room("board")
 		return
-	open_ascension_select()
+	SceneRouter.open_terms()
 
 
 ## The room measures a prop's painted surface against the whole picture; the
@@ -692,7 +614,13 @@ func _contract_lines() -> Array:
 
 ## The title sits between the shell and the overlay stack: it hides the run in
 ## progress, but The Legacy and the Burn Lab still open on top of it.
-func _build_title_screen() -> void:
+##
+## Built on demand rather than with the rest of the shell, because the shell is
+## rebuilt every time the player comes back from a venue and the front door is
+## not something a live run should be paying for on each return.
+func _ensure_title_screen() -> void:
+	if _title_screen != null:
+		return
 	_title_screen = TITLE_SCREEN.instantiate()
 	add_child(_title_screen)
 	move_child(_title_screen, overlay_root.get_index())
@@ -719,8 +647,7 @@ func dismiss_title() -> void:
 ## Returning to the front door from the menu. The run stays loaded, so Continue
 ## picks it straight back up.
 func open_title() -> void:
-	if _title_screen == null:
-		return
+	_ensure_title_screen()
 	_title_active = true
 	get_tree().call_group("flow_overlay", "hide_overlay")
 	_title_screen.open()
@@ -742,37 +669,6 @@ func _sync_overlay_input() -> void:
 
 # --- Navigation --------------------------------------------------------------
 
-## A second way into the panel's screens, down its own inside edge, for the hand
-## that is already on that side of the window.
-func _build_icon_rail() -> void:
-	for tab in RAIL_TABS:
-		var button := Button.new()
-		button.name = tab.capitalize()
-		button.flat = true
-		button.tooltip_text = tab.capitalize()
-		button.custom_minimum_size = Vector2(52, 52)
-		button.icon = AssetCatalog.nav_icon(str(NAV_ICON_KEYS.get(tab, tab)))
-		button.expand_icon = true
-		button.add_theme_constant_override("icon_max_width", 26)
-		button.pressed.connect(_on_rail_pressed.bind(tab))
-		icon_rail.add_child(button)
-	var close := Button.new()
-	close.name = "Close"
-	close.flat = true
-	close.text = "×"
-	close.tooltip_text = "Back to the desk"
-	close.custom_minimum_size = Vector2(52, 52)
-	close.add_theme_font_size_override("font_size", 28)
-	close.pressed.connect(close_panel)
-	icon_rail.add_child(close)
-	icon_rail.move_child(close, 0)
-
-
-func _on_rail_pressed(tab: String) -> void:
-	UiSound.play("tap")
-	open_panel(tab)
-
-
 ## WORK is the home button: it shows the burn board from the moment there is
 ## something to work on, and the empty desk otherwise. It used to hold the
 ## office back until the session was running, which put a screen between
@@ -785,70 +681,18 @@ func _desk_tab_now() -> String:
 
 
 ## Kept for the screens and the screenshot tool, which ask for a destination by
-## name without knowing whether it lives on the desk or in the panel.
+## name without knowing where it lives. The desk's own tabs are handled here;
+## everywhere else is a scene of its own now, so the router takes it.
 func switch_tab(tab_name: String) -> void:
 	match tab_name:
 		"work":
-			close_panel()
 			_show_desk_tab(_desk_tab_now())
 		"office", "board":
-			close_panel()
 			_show_desk_tab(tab_name)
 		"more":
-			open_panel("menu")
+			SceneRouter.open_menu()
 		_:
-			if PANEL_SCENES.has(tab_name):
-				open_panel(tab_name)
-
-
-func open_panel(tab_name: String) -> void:
-	if not PANEL_SCENES.has(tab_name):
-		return
-	# A catalogue is not furniture, so the room stands back up before one slides
-	# over it. Otherwise the player shuts the panel and finds themselves still
-	# nose to whatever they were reading when they opened it.
-	clear_room_focus()
-	# Tapping the tab you are already on shuts the panel, which is how a slab
-	# bolted to the edge of the room should behave.
-	if _panel_tab == tab_name and _panel_slide <= 0.01:
-		close_panel()
-		return
-	_panel_tab = tab_name
-	_closing_tab = ""
-	_mount(panel_body, PANEL_SCENES, tab_name)
-	_slide_panel(0.0)
-	_update_scrim()
-
-
-func close_panel() -> void:
-	if _panel_slide >= 0.99:
-		return
-	# The tab is cleared only once the slab is off screen: it decides how wide
-	# the slab is, so dropping it now would snap a wide panel to the narrow
-	# measure and slide the wrong shape out.
-	_slide_panel(1.0)
-	_closing_tab = _panel_tab
-	_panel_tab = ""
-	_update_scrim()
-
-
-func _slide_panel(target: float) -> void:
-	if _panel_tween != null and _panel_tween.is_valid():
-		_panel_tween.kill()
-	_panel_tween = create_tween()
-	_panel_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	_panel_tween.tween_method(_apply_panel_slide, _panel_slide, target, PANEL_SLIDE_SECONDS)
-	if target <= 0.01:
-		_panel_tween.finished.connect(func() -> void:
-			get_tree().call_group("console_screens", "fit_console")
-		, CONNECT_ONE_SHOT)
-
-
-func _apply_panel_slide(value: float) -> void:
-	_panel_slide = value
-	var width: float = _panel_width(get_viewport_rect().size)
-	side_panel.offset_left = -width + width * value
-	side_panel.offset_right = width * value
+			SceneRouter.goto(tab_name)
 
 
 func _show_desk_tab(tab_name: String) -> void:
@@ -868,8 +712,6 @@ func _mount(host: Control, scenes: Dictionary, tab_name: String) -> void:
 	if not _screen_cache.has(tab_name):
 		var screen: Control = scenes[tab_name].instantiate()
 		host.add_child(screen)
-		if host == panel_body:
-			_fit_to_panel(screen)
 		_screen_cache[tab_name] = screen
 	var mounted: Control = _screen_cache[tab_name]
 	if mounted.get_parent() != host:
@@ -881,45 +723,13 @@ func _mount(host: Control, scenes: Dictionary, tab_name: String) -> void:
 		mounted.call_deferred("fit_console")
 
 
-## The panel is narrower than the screens were drawn for, so anything mounted in
-## it is pinned to the slab and clipped at its edge rather than allowed to spill
-## over the desk behind it.
-func _fit_to_panel(screen: Control) -> void:
-	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	screen.clip_contents = true
-	for margin in screen.find_children("*", "MarginContainer", true, false):
-		for side in ["left", "right"]:
-			if margin.get_theme_constant("margin_" + side) > UiThemeBuilder.SPACE_MD:
-				margin.add_theme_constant_override("margin_" + side, UiThemeBuilder.SPACE_MD)
-
-
-## Every overlay takes the window off the room, so each one stands the room back
-## up on its way in. The player closes it onto the room they left, not onto the
-## inside of a whiteboard.
+## The burn lab takes the window off the room, so it stands the room back up on
+## its way in. The player closes it onto the room they left, not onto the inside
+## of a whiteboard.
 func open_burn_lab() -> void:
 	if FeatureFlags.is_enabled("burn_lab_enabled"):
 		clear_room_focus()
 		_burn_lab.open()
-
-
-func open_pipeline_editor() -> void:
-	clear_room_focus()
-	_pipeline_editor.open()
-
-
-func open_ascension_select() -> void:
-	clear_room_focus()
-	_ascension_select.open()
-
-
-func open_meta_hub() -> void:
-	clear_room_focus()
-	_meta_hub.open()
-
-
-func open_achievements() -> void:
-	clear_room_focus()
-	_achievements.open()
 
 
 # --- The desk artwork --------------------------------------------------------
@@ -950,8 +760,7 @@ func board_dwelling() -> String:
 
 func _update_scrim() -> void:
 	var base: Color = UiThemeBuilder.color("bg")
-	var alpha: float = SCRIM_PANEL if _panel_slide < 0.5 else SCRIM_DESK
-	scrim.color = Color(base.r, base.g, base.b, alpha)
+	scrim.color = Color(base.r, base.g, base.b, SCRIM_DESK)
 
 
 ## Moving premises is the reward for finishing a chapter, so the chrome steps
@@ -987,9 +796,9 @@ func _connect_events() -> void:
 	EventBus.run_started.connect(_reset_ascension_prompts)
 	Simulation.work_session_finished.connect(_on_work_session_finished)
 	Simulation.round_statement_ready.connect(_on_bills_ready)
-	# Taking a contract is done with, so the panel shuts and the desk comes back.
-	EventBus.job_accepted.connect(func(_id): switch_tab("work"))
-	EventBus.job_started.connect(func(_id): switch_tab("board"))
+	# Taking a contract and starting one both hand the window back to the desk,
+	# which is the router's call now: the press that did it may have come from a
+	# venue, and this scene is not on screen to answer for it.
 	EventBus.round_started.connect(refresh_all)
 	EventBus.reward_calculated.connect(func(_a): refresh_all())
 	EventBus.perk_acquired.connect(func(_a): refresh_all())
@@ -1001,14 +810,6 @@ func _connect_events() -> void:
 	# screen behind it.
 	EventBus.tokens_consumed.connect(func(_amount): _refresh_props())
 	EventBus.bill_due.connect(func(_type, _amount): _refresh_props())
-	EventBus.achievement_unlocked.connect(_on_achievement_unlocked)
-
-
-## Awards can land in the middle of a burn, several at once, so the splash owns a
-## queue of its own and this only has to hand them over.
-func _on_achievement_unlocked(achievement_id: String) -> void:
-	if _achievement_splash != null:
-		_achievement_splash.enqueue(achievement_id)
 
 
 func _on_work_session_finished(result: Dictionary) -> void:
@@ -1076,6 +877,7 @@ func refresh_all() -> void:
 	# A run that ends on the bills waits for the statement to be read, so the
 	# verdict never lands before the reason for it.
 	if Simulation.phase == Simulation.Phase.RUN_END and not _bills_screen.visible and _pending_statement.is_empty():
+		_clear_stage_for(_run_end)
 		_run_end.show_from_state(
 			bool(Simulation.run_state.flags.get("victory", false)),
 			str(Simulation.run_state.flags.get("loss_reason", ""))
@@ -1083,6 +885,24 @@ func refresh_all() -> void:
 	if Simulation.phase == Simulation.Phase.ROUND_PREP:
 		_maybe_call_ascension_beat()
 	_sync_overlay_input()
+
+
+## The verdict is the last word on a run and no other report may share the screen
+## with it. A loss can land while an earlier one is still standing — the angel
+## draft survives the loss check that follows a pick, and a settled ascension and
+## the collapse that follows it both end the same run — and a reward table left
+## open behind "the company collapsed" reads as winning and losing at once.
+##
+## The router's own overlays are left alone: the investor rings off over the top
+## of the verdict, which is his last word rather than a competing one. The bills
+## are not cleared either, because the caller only raises the verdict once the
+## statement behind it has been read.
+func _clear_stage_for(verdict: Control) -> void:
+	for overlay in get_tree().get_nodes_in_group("flow_overlay"):
+		if overlay == verdict or SceneRouter.is_ancestor_of(overlay):
+			continue
+		if overlay is CanvasItem and overlay.visible and overlay.has_method("hide_overlay"):
+			overlay.hide_overlay()
 
 
 ## The round the deadline stops being background reading and starts being the
@@ -1165,26 +985,26 @@ func _maybe_open_intro_call() -> void:
 		_intro_call_shown = true
 		return
 	_intro_call_shown = true
-	_investor_call.call_player("run_intro")
+	SceneRouter.investor_says("run_intro")
 
 
 ## The investor, on demand. Tapping the phone on the desk is how the player
 ## re-reads the terms they agreed to.
 func open_investor_terms() -> void:
 	clear_room_focus()
-	_investor_call.call_player("terms")
+	SceneRouter.investor_says("terms")
 
 
 ## Any beat the rest of the game wants him to weigh in on.
 func investor_says(trigger: String, context: Dictionary = {}) -> void:
-	_investor_call.call_player(trigger, context)
+	SceneRouter.investor_says(trigger, context)
 
 
 ## The beats of the run he insists on being present for. Each fires once, when
 ## the state that earns it first appears, so he interrupts the moment rather than
 ## every refresh that follows it.
 func _maybe_call_ascension_beat() -> void:
-	if _title_active or _investor_call.visible:
+	if _title_active or SceneRouter.investor_busy():
 		return
 	var progress: Dictionary = Simulation.ascension_progress()
 	if progress.is_empty():

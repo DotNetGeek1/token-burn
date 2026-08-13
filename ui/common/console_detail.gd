@@ -6,6 +6,14 @@ signal action_pressed
 signal closed
 
 const PAD := 10
+
+## The narrowest the pane can be and still read as a sheet about one thing rather
+## than a column of broken words. A venue's signage panel is often painted a tenth
+## of the picture wide, which is fine for a two-word sign and hopeless for a fee, a
+## deadline and a BUY row, so the pane asks for this and the venue's layout finds
+## it the room by shifting the panel rather than by shrinking the type.
+const MIN_WIDTH := 230
+
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 
@@ -140,6 +148,11 @@ func set_metrics(scale: float) -> void:
 	_headline.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
 	_close.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
 	_action.apply_metrics(scale)
+	# Never wider than the window, which is the one thing asking for width must
+	# not be allowed to do: in the reflowed column the pane is already as wide as
+	# the screen, and demanding more there would push the column sideways.
+	var room: float = get_viewport_rect().size.x - float(pad) * 2.0
+	custom_minimum_size.x = minf(float(ConsoleMetrics.px(MIN_WIDTH, scale)), room)
 	_apply_line_fonts()
 	call_deferred("_fit_lines")
 
@@ -211,7 +224,29 @@ func _fit_lines() -> void:
 	var floor_height: float = float(ConsoleMetrics.font_small(_scale)) * 3.0
 	var cap: float = maxf(floor_height, host * HEIGHT_SHARE - chrome - pad)
 	var wanted: float = _lines.get_combined_minimum_size().y
-	_scroll.custom_minimum_size = Vector2(0.0, minf(wanted, cap))
+	_scroll.custom_minimum_size = Vector2(0.0, _whole_lines(minf(wanted, cap)))
+
+
+## The window rounded down to a line boundary. A cap that lands mid-line leaves a
+## row of type sliced in half along the bottom edge, which reads as a fault in the
+## screen rather than as something to scroll.
+func _whole_lines(height: float) -> float:
+	var separation: float = float(_lines.get_theme_constant("separation"))
+	var used: float = 0.0
+	var last: float = 0.0
+	for child in _lines.get_children():
+		if child is not Control or not child.visible:
+			continue
+		var step: float = child.get_combined_minimum_size().y
+		if used > 0.0:
+			step += separation
+		if used + step > height:
+			break
+		used += step
+		last = used
+	# A single line taller than the window still shows, partly: better a clipped
+	# sentence than an empty pane.
+	return last if last > 0.0 else height
 
 
 func _line(entry: Variant) -> Control:

@@ -341,4 +341,4 @@ func _on_restart() -> void:
 func _on_menu() -> void:
 	hide_overlay()
 	get_tree().call_group("flow_overlay", "hide_overlay")
-	get_tree().call_group("main_ui", "open_title")
+	SceneRouter.open_title()
