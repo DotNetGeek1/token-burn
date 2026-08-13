@@ -68,7 +68,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <Terminal title="TOKEN_BURN v0.7.0 · [ THE DEAL ] · CORRIGAN SEED">
+          <Terminal title={`TOKEN_BURN v${site.version} · [ THE DEAL ] · CORRIGAN SEED`}>
             <p>&gt; Right. Here&apos;s the deal, and I&apos;m only saying it once.</p>
             <p>
               &gt; You think you can make money out of this vibe coding nonsense. Fine. Prove it.

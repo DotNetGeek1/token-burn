@@ -2,7 +2,7 @@ export const site = {
   name: "Token Burn",
   url: "https://tokenburn.dotnetgeek.co.uk",
   tagline: "Roguelike economic engine-builder about burning absurd quantities of AI tokens.",
-  version: "0.7.0",
+  version: "0.7.1",
   /** Drop the signed APK at site/public/downloads/, or point this at an external URL. */
   apkHref: "/downloads/token-burn.apk",
   apkSize: "~90 MB",
