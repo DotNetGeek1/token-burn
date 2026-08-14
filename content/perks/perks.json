@@ -10,7 +10,10 @@
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 50,
-      "conditions": [{"left": "job.time_remaining_ratio", "operator": "<", "right": "$threshold"}],
+      "conditions": [
+        {"left": "job.completed", "operator": "==", "right": true},
+        {"left": "job.time_remaining_ratio", "operator": "<", "right": "$threshold"}
+      ],
       "effects": [{"operation": "multiply", "target": "job.reward", "value": "$multiplier"}]
     }]
   },
@@ -167,7 +170,7 @@
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 20,
-      "conditions": [],
+      "conditions": [{"left": "job.completed", "operator": "==", "right": true}],
       "effects": [
         {
           "operation": "convert",
@@ -189,8 +192,8 @@
               "effects": [{
                 "operation": "add",
                 "target": "economy.cash",
-                "value_from": "statistics.last_job_reward",
-                "value": 0.03
+                "value_from": "job.reward",
+                "value": "$passive_income_ratio"
               }]
             }]
           }
@@ -289,7 +292,10 @@
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 12,
-      "conditions": [{"left": "job.quality", "operator": ">=", "right": "$quality_threshold"}],
+      "conditions": [
+        {"left": "job.completed", "operator": "==", "right": true},
+        {"left": "job.quality", "operator": ">=", "right": "$quality_threshold"}
+      ],
       "effects": [{
         "operation": "convert",
         "from": "job.quality",
@@ -745,7 +751,10 @@
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 30,
-      "conditions": [{"left": "job.hidden_bugs_shipped", "operator": ">", "right": 0}],
+      "conditions": [
+        {"left": "job.completed", "operator": "==", "right": true},
+        {"left": "job.hidden_bugs_shipped", "operator": ">", "right": 0}
+      ],
       "effects": [{
         "operation": "convert",
         "from": "job.hidden_bugs_shipped",
@@ -782,6 +791,7 @@
       "event": "reward.calculated",
       "priority": 45,
       "conditions": [
+        {"left": "job.completed", "operator": "==", "right": true},
         {"left": "job.hidden_bugs_shipped", "operator": "==", "right": 0},
         {"left": "job.known_bugs", "operator": "==", "right": 0}
       ],
@@ -817,7 +827,7 @@
       "event": "board.stage_resolved",
       "priority": 6,
       "conditions": [],
-      "effects": [{"operation": "multiply", "target": "stage.repeat_previous", "value": "$multiplier"}]
+      "effects": [{"operation": "multiply", "target": "stage.repeat_strength", "value": "$multiplier"}]
     }]
   }
 ]

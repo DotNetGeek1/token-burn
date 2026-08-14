@@ -17,6 +17,9 @@ func run() -> void:
 	_test_test_driven_changes_this_burns_tokens()
 	_test_vibe_coding_synergy_lands_on_this_burn()
 	_test_infinite_backlog_strengthens_only_real_echoes()
+	_test_infinite_backlog_scales_set_and_floor_echoes()
+	_test_gold_master_buries_a_hidden_bug()
+	_test_partial_echo_scales_reveal_and_fix()
 	_test_deja_vu_is_a_floor_not_an_override()
 	_test_fractal_split_forks_twice()
 	_test_known_unknowns_pays_per_shipped_bug()
@@ -210,14 +213,117 @@ func _test_infinite_backlog_strengthens_only_real_echoes() -> void:
 		"Agent Swarm repeats the stage above at full strength"
 	)
 	assert_almost_eq(
-		float(swarm_boosted.get("repeated_previous", 0.0)), 1.6, 0.001,
-		"Infinite Backlog runs that echo at 1.6×"
+		float(swarm_boosted.get("repeated_previous", 0.0)), 1.0, 0.001,
+		"Infinite Backlog leaves the authored echo amount alone"
+	)
+	assert_almost_eq(
+		float(swarm_boosted.get("repeat_strength", 1.0)), 1.6, 0.001,
+		"And scales the fold through repeat_strength instead"
+	)
+	assert_true(
+		float(boosted.get("progress_tokens", 0.0)) > float(plain.get("progress_tokens", 0.0)),
+		"So the echo that actually lands is stronger"
 	)
 
 	var flat: Dictionary = Build.new(["op.prompt", "op.cheap_model"], ["perk.infinite_backlog"]).burn()
 	assert_almost_eq(
 		float(_stage_named(flat, "op.cheap_model").get("repeated_previous", 1.0)), 0.0, 0.001,
 		"A pipeline with nothing to repeat is left alone"
+	)
+
+
+## `set` and `cap_min` used to ignore the legendary because they ran after
+## `multiply` on the same field. repeat_strength is a post-construction scale,
+## so Echo Chamber, Fractal Split and Déjà Vu all get the 1.6×.
+func _test_infinite_backlog_scales_set_and_floor_echoes() -> void:
+	var echo_plain: Dictionary = Build.new(["op.prompt", "op.echo_chamber"]).burn()
+	var echo_boosted: Dictionary = Build.new(
+		["op.prompt", "op.echo_chamber"], ["perk.infinite_backlog"]
+	).burn()
+	assert_almost_eq(
+		float(_stage_named(echo_plain, "op.echo_chamber").get("repeated_previous", 0.0)), 0.4, 0.001,
+		"Echo Chamber still authors a 40% repeat"
+	)
+	assert_almost_eq(
+		float(_stage_named(echo_boosted, "op.echo_chamber").get("repeat_strength", 1.0)), 1.6, 0.001,
+		"Infinite Backlog scales that 40% through strength"
+	)
+	assert_true(
+		float(echo_boosted.get("progress_tokens", 0.0)) > float(echo_plain.get("progress_tokens", 0.0)),
+		"And the set-echo actually lands harder"
+	)
+
+	var split_plain: Dictionary = Build.new(["op.foundation_model", "op.fractal_split"]).burn()
+	var split_boosted: Dictionary = Build.new(
+		["op.foundation_model", "op.fractal_split"], ["perk.infinite_backlog"]
+	).burn()
+	assert_almost_eq(
+		float(_stage_named(split_boosted, "op.fractal_split").get("repeated_previous", 0.0)), 0.55, 0.001,
+		"Fractal Split keeps its authored 55% forks"
+	)
+	assert_almost_eq(
+		float(_stage_named(split_boosted, "op.fractal_split").get("repeat_strength", 1.0)), 1.6, 0.001,
+		"And Infinite Backlog scales both forks"
+	)
+	assert_true(
+		float(split_boosted.get("quality", 0.0)) > float(split_plain.get("quality", 0.0)),
+		"So the two forks fold more of the stage above"
+	)
+
+	var floor_plain: Dictionary = Build.new(["op.prompt", "op.cheap_model"], ["perk.stage_deja_vu"]).burn()
+	var floor_boosted: Dictionary = Build.new(
+		["op.prompt", "op.cheap_model"], ["perk.stage_deja_vu", "perk.infinite_backlog"]
+	).burn()
+	assert_almost_eq(
+		float(_stage_named(floor_boosted, "op.cheap_model").get("repeated_previous", 0.0)), 0.35, 0.001,
+		"Déjà Vu still floors the authored echo at 35%"
+	)
+	assert_almost_eq(
+		float(_stage_named(floor_boosted, "op.cheap_model").get("repeat_strength", 1.0)), 1.6, 0.001,
+		"Infinite Backlog scales that floor rather than losing to it"
+	)
+	assert_true(
+		float(floor_boosted.get("progress_tokens", 0.0)) > float(floor_plain.get("progress_tokens", 0.0)),
+		"A 35% floor at 1.6× is a stronger echo than 35% alone"
+	)
+
+
+## Negative hidden-bug adds were clamped at zero. Gold Master now authors a
+## real bury, so a batch with hidden defects loses one.
+func _test_gold_master_buries_a_hidden_bug() -> void:
+	var build := Build.new(["op.gold_master"])
+	build.job["hidden_bugs"] = 3
+	var result: Dictionary = build.burn()
+	assert_eq(int(result.get("hidden_bugs", -1)), 2, "Gold Master reduces batch.hidden_bugs by 1")
+
+
+## A 35% Déjà Vu of Unit Tests used to reveal and fix at full strength.
+func _test_partial_echo_scales_reveal_and_fix() -> void:
+	var once := Build.new(["op.unit_tests"])
+	once.job["hidden_bugs"] = 4
+	once.job["known_bugs"] = 4
+	var once_burn: Dictionary = once.burn()
+
+	var echoed := Build.new(["op.unit_tests", "op.prompt"], ["perk.stage_deja_vu"])
+	echoed.job["hidden_bugs"] = 4
+	echoed.job["known_bugs"] = 4
+	var echoed_burn: Dictionary = echoed.burn()
+
+	assert_true(
+		int(echoed_burn.get("revealed", 0)) > int(once_burn.get("revealed", 0)),
+		"A 35% echo of Unit Tests still reveals something extra"
+	)
+	assert_true(
+		int(echoed_burn.get("fixed", 0)) > int(once_burn.get("fixed", 0)),
+		"And it still fixes something extra"
+	)
+	assert_true(
+		int(echoed_burn.get("revealed", 0)) < int(once_burn.get("revealed", 0)) * 2,
+		"But the echo is not a second full reveal"
+	)
+	assert_true(
+		int(echoed_burn.get("fixed", 0)) < int(once_burn.get("fixed", 0)) * 2,
+		"And not a second full fix"
 	)
 
 

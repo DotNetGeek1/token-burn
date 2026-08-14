@@ -664,7 +664,7 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 	var value: float = _rank_value(unlock, rank)
 	if ranks.is_empty() and rank > 1:
 		match kind:
-			"extra_slot", "workflow_slot", "cooling", "efficiency_base", "passive_income", "starting_module":
+			"extra_slot", "workflow_slot", "cooling", "efficiency_base", "passive_income", "starting_module", "starting_cloud":
 				value = float(unlock.get("amount", 1.0)) * float(rank)
 	match kind:
 		"extra_slot":
@@ -692,8 +692,11 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 			# and would leave the CLOUD key dead on a run that clearly has cloud.
 			_grant_cloud_account(run_state)
 			run_state.compute["cloud_capacity"] = float(run_state.compute.get("cloud_capacity", 0.0)) + value
-			run_state.economy["cloud_cost_per_prompt"] = (
-				float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) + float(unlock.get("recurring_cost", 0.0))
+			# Written to the base so the next recalculation keeps the invoice
+			# instead of overwriting it from whatever the cloud shelf bills.
+			run_state.economy["cloud_base_cost_per_prompt"] = (
+				float(run_state.economy.get("cloud_base_cost_per_prompt", 0.0))
+				+ float(unlock.get("recurring_cost", 0.0)) * float(rank)
 			)
 		"passive_income":
 			run_state.economy["passive_income_per_round"] = (

@@ -17,7 +17,10 @@
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 55,
-      "conditions": [{"left": "job.time_remaining_ratio", "operator": "<", "right": 0.2}],
+      "conditions": [
+        {"left": "job.completed", "operator": "==", "right": true},
+        {"left": "job.time_remaining_ratio", "operator": "<", "right": 0.2}
+      ],
       "effects": [{"operation": "multiply", "target": "job.reward", "value": 1.25}]
     }]
   },

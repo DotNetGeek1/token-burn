@@ -32,6 +32,7 @@ func run() -> void:
 	_test_old_silicon_speeds_the_rig_up()
 	_test_recurring_revenue_pays_the_retainer_not_the_contract()
 	_test_a_hard_gated_rank_waits_for_a_hard_win()
+	_test_starting_cloud_scales_with_rank()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -373,6 +374,39 @@ func _test_a_hard_gated_rank_waits_for_a_hard_win() -> void:
 		"Hard wins open it up"
 	)
 	assert_true(MetaProgress.spend_pick("unlock.starting_cash"), "And it can then be bought")
+
+
+## Ranks 2 and 3 used to grant the same 3M and write a cost the next recalc
+## overwrote. Capacity and the base invoice both have to scale with rank.
+func _test_starting_cloud_scales_with_rank() -> void:
+	var expected_capacity: Array = [3_000_000.0, 6_000_000.0, 9_000_000.0]
+	var expected_cost: Array = [15.0, 30.0, 45.0]
+	for rank in range(1, 4):
+		_fresh_profile()
+		MetaProgress.bank_victory(rank)
+		for _i in range(rank):
+			assert_true(
+				MetaProgress.spend_pick("unlock.starting_cloud"),
+				"Starting cloud rank %d can be kept" % rank
+			)
+		var sim: Node = _sim()
+		sim.start_run(9500 + rank)
+		sim.compute_system().recalculate(
+			sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
+		)
+		assert_almost_eq(
+			float(sim.run_state.compute.get("cloud_capacity", 0.0)),
+			float(expected_capacity[rank - 1]),
+			0.01,
+			"Rank %d starts with %s cloud capacity" % [rank, str(expected_capacity[rank - 1])]
+		)
+		assert_almost_eq(
+			float(sim.run_state.economy.get("cloud_base_cost_per_prompt", 0.0)),
+			float(expected_cost[rank - 1]),
+			0.01,
+			"Rank %d bills £%s base cloud cost after recalculate" % [rank, str(expected_cost[rank - 1])]
+		)
+		sim.free()
 
 
 ## The token requirement and fee on the run's first contract offer, for the

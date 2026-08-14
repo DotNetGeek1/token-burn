@@ -19,6 +19,11 @@ func run() -> void:
 	_test_a_build_cannot_hold_more_than_its_cap()
 	_test_rival_keystones_cannot_share_a_build()
 	_test_investor_halfway_call_survives_leaving_the_desk()
+	_test_duplicate_job_definitions_stay_independent()
+	_test_executive_committee_does_not_compound()
+	_test_wrapper_freezes_the_in_flight_fee()
+	_test_failed_jobs_do_not_fire_completion_perks()
+	_test_legacy_angel_operation_choice_is_selectable()
 
 
 func _make_sim() -> Node:
@@ -367,5 +372,211 @@ func _test_investor_halfway_call_survives_leaving_the_desk() -> void:
 	assert_false(
 		sim.run_state.investor_beat_heard("contract_halfway"),
 		"A new run has not heard it"
+	)
+	sim.free()
+
+
+## Two cards from the same JobDefinition used to share one id, so accepting,
+## focusing or laning one of them selected both.
+func _test_duplicate_job_definitions_stay_independent() -> void:
+	var sim := _make_sim()
+	sim.start_run(7701)
+	sim.run_state.economy["cash"] = 10_000_000.0
+	var job_def: JobDefinition = ContentDatabase.get_job("job.product_descriptions")
+	var jobs := JobSystem.new()
+	var first: Dictionary = jobs._scale_job(
+		job_def, 4, ContentDatabase, sim.tuning, sim.run_state, null, 0
+	)
+	var second: Dictionary = jobs._scale_job(
+		job_def, 4, ContentDatabase, sim.tuning, sim.run_state, null, 1
+	)
+	assert_true(
+		str(first.get("id", "")) != str(second.get("id", "")),
+		"Two copies of the same contract have distinct instance ids"
+	)
+	assert_eq(
+		str(first.get("definition_id", "")), job_def.id,
+		"definition_id keeps the authored id"
+	)
+	assert_eq(
+		str(second.get("definition_id", "")), job_def.id,
+		"Both copies share a definition"
+	)
+	first["token_requirement"] = 100.0
+	second["token_requirement"] = 100.0
+	first["deadline_prompts"] = 20
+	second["deadline_prompts"] = 20
+	sim.run_state.business["job_offers"] = [first, second]
+	assert_true(sim.accept_job(str(first.get("id", ""))), "First copy can be taken by instance id")
+	assert_true(sim.accept_job(str(second.get("id", ""))), "Second copy can be taken independently")
+	assert_eq(sim.run_state.business["job_queue"].size(), 2, "Both copies are on the slate")
+	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "A second machine opens a second lane")
+	sim.start_work()
+	var lanes: Array = sim.burn_lanes()
+	assert_eq(lanes.size(), 2, "Two copies can occupy two parallel lanes")
+	assert_true(
+		str(lanes[0].get("id", "")) != str(lanes[1].get("id", "")),
+		"Each lane holds a different instance"
+	)
+	sim.free()
+
+
+## Executive Committee multiplies the standing bill. Without a base it
+## multiplied its own last answer every recalculation.
+func _test_executive_committee_does_not_compound() -> void:
+	var sim := _make_sim()
+	sim.start_run(7702)
+	sim.run_state.economy["recurring_costs_base"] = 1000.0
+	sim._perk_system.collect_perk(sim.run_state, "perk.executive_committee", ContentDatabase)
+	sim._perk_system.equip_perk(sim.run_state, "perk.executive_committee", ContentDatabase)
+	sim.debug_invalidate_subscriptions()
+	var subs: Array = sim.debug_collect_subscriptions()
+	for _i in range(10):
+		sim.compute_system().recalculate(sim.run_state, sim.effect_resolver, subs, sim.rng)
+	assert_almost_eq(
+		float(sim.run_state.economy.get("recurring_costs", 0.0)), 1200.0, 0.01,
+		"Base 1000 is still exactly 1200 after ten recalculations"
+	)
+	sim.free()
+
+
+## The Wrapper used to freeze last_job_reward, which is only written after
+## finalize — first job £0 forever, later jobs cloned the previous session.
+func _test_wrapper_freezes_the_in_flight_fee() -> void:
+	var sim := _make_sim()
+	sim.start_run(7703)
+	sim._perk_system.collect_perk(sim.run_state, "perk.the_wrapper", ContentDatabase)
+	sim._perk_system.equip_perk(sim.run_state, "perk.the_wrapper", ContentDatabase)
+	sim.debug_invalidate_subscriptions()
+	var perk := ContentDatabase.get_perk("perk.the_wrapper")
+	var clone: float = 1.0 + float(perk.parameters.get("passive_ratio", 0.15))
+	var income_ratio: float = float(perk.parameters.get("passive_income_ratio", 0.03))
+	_dispatch_wrapper_reward(sim, perk, 1000.0)
+	sim.debug_invalidate_subscriptions()
+	var first_freeze: float = 1000.0 * clone * income_ratio
+	assert_almost_eq(
+		_wrapper_stream_total(sim), first_freeze, 0.01,
+		"A £1000 job freezes 3% of the in-flight fee"
+	)
+	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
+	_dispatch_round_started(sim)
+	assert_almost_eq(
+		float(sim.run_state.economy.get("cash", 0.0)) - cash_before, first_freeze, 0.01,
+		"The next round.started pays that frozen stream"
+	)
+	_dispatch_wrapper_reward(sim, perk, 2000.0)
+	sim.debug_invalidate_subscriptions()
+	var second_freeze: float = 2000.0 * clone * income_ratio
+	assert_almost_eq(
+		_wrapper_stream_total(sim), first_freeze + second_freeze, 0.01,
+		"A later £2000 job adds an independent stream"
+	)
+	cash_before = float(sim.run_state.economy.get("cash", 0.0))
+	_dispatch_round_started(sim)
+	assert_almost_eq(
+		float(sim.run_state.economy.get("cash", 0.0)) - cash_before,
+		first_freeze + second_freeze, 0.01,
+		"Both streams pay on the following round.started"
+	)
+	sim.free()
+
+
+func _dispatch_wrapper_reward(sim: Node, perk: PerkDefinition, reward: float) -> void:
+	sim.effect_resolver.begin_action("reward.wrapper")
+	var mod_ctx := ModifierContext.new("reward.calculated", sim.run_state)
+	mod_ctx.rng = sim.rng.derive("reward.wrapper")
+	mod_ctx.job = {"id": "job.wrap", "reward": reward, "completed": true}
+	mod_ctx.set_value("job.reward", reward)
+	mod_ctx.set_value("job.completed", true)
+	for sub in perk.subscriptions:
+		if str(sub.get("event", "")) != "reward.calculated":
+			continue
+		var copy: Dictionary = sub.duplicate(true)
+		copy["parameters"] = perk.parameters.duplicate(true)
+		sim.effect_resolver.dispatch("reward.calculated", mod_ctx, [copy])
+
+
+func _wrapper_stream_total(sim: Node) -> float:
+	var total: float = 0.0
+	for status in sim.run_state.build.get("status_effects", []):
+		if not status is Dictionary or str(status.get("id", "")) != "wrapper.passive":
+			continue
+		for sub in status.get("subscriptions", []):
+			for effect in Array(sub.get("effects", [])):
+				if effect is Dictionary:
+					total += float(effect.get("value", 0.0))
+	return total
+
+
+func _dispatch_round_started(sim: Node) -> void:
+	sim.effect_resolver.begin_action("round.started")
+	var mod_ctx := ModifierContext.new("round.started", sim.run_state)
+	mod_ctx.rng = sim.rng.derive("round.started")
+	sim.effect_resolver.dispatch("round.started", mod_ctx, sim.debug_collect_subscriptions())
+
+
+## Deadline failures share reward.calculated with completions. Completion-worded
+## perks have to see job.completed or they double consolation and spawn passives.
+func _test_failed_jobs_do_not_fire_completion_perks() -> void:
+	var sim := _make_sim()
+	sim.start_run(7704)
+	# Written straight onto the loadout so Ship It's requires_tags gate does not
+	# keep the completion perk off the failed-payout path this is measuring.
+	sim.run_state.build["perks"] = ["perk.ship_it", "perk.the_wrapper"]
+	sim.debug_invalidate_subscriptions()
+	var job: Dictionary = {
+		"id": "job.missed",
+		"name": "Missed",
+		"reward": 1000.0,
+		"token_requirement": 1000.0,
+		"tokens_remaining": 500.0,
+		"quality": 100.0,
+		"quality_threshold": 0.0,
+		"time_remaining_ratio": 0.0,
+		"prompts_remaining": 0,
+		"abandoned": false,
+	}
+	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
+	var messages: Array[String] = []
+	var payout: Dictionary = sim.job_system().finalize_failed_jobs(
+		sim.run_state, [job], sim.effect_resolver, sim.debug_collect_subscriptions(),
+		sim.tuning, sim.economy_system(), ContentDatabase, messages, sim.rng
+	)
+	var consolation: float = 1000.0 * 0.5 * float(
+		ContentDatabase.balance.get("job_scaling", {}).get("failed_job_consolation_ratio", 0.2)
+	)
+	assert_almost_eq(
+		float(payout.get("reward", 0.0)), consolation, 0.01,
+		"Ship It does not double a failed consolation payout"
+	)
+	assert_almost_eq(
+		float(sim.run_state.economy.get("cash", 0.0)) - cash_before, consolation, 0.01,
+		"The consolation is what actually landed"
+	)
+	assert_eq(_wrapper_stream_total(sim), 0.0, "The Wrapper does not spawn a passive from a failure")
+	sim.free()
+
+
+## Saves written when pipeline pieces were still called operations restore a
+## card accept_offer would otherwise refuse.
+func _test_legacy_angel_operation_choice_is_selectable() -> void:
+	var sim := _make_sim()
+	sim.start_run(7705)
+	sim.phase = sim.Phase.ANGEL_ROUND
+	sim.pending_choices = [{
+		"type": "operation",
+		"id": "op.whiteboard",
+		"label": "Whiteboard Session",
+		"description": "",
+		"cost": 0.0,
+	}]
+	sim._migrate_pending_choices()
+	assert_eq(
+		str(sim.pending_choices[0].get("type", "")), "module",
+		"A legacy operation choice becomes a module"
+	)
+	assert_true(
+		sim.accept_offer("module", "op.whiteboard"),
+		"And it is selectable as a module"
 	)
 	sim.free()

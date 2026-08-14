@@ -891,7 +891,7 @@
     "parameters": {"quality": 20},
     "slot_effects": [
       {"operation": "add", "target": "stage.quality", "value": "$quality"},
-      {"operation": "add", "target": "stage.hidden_bugs", "value": -1}
+      {"operation": "add", "target": "stage.fix_hidden_bugs", "value": 1}
     ]
   },
   {

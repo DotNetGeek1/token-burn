@@ -20,7 +20,7 @@ func run() -> void:
 	var starting_cash: float = float(sim.run_state.economy.get("cash", 0.0))
 	var offer: Dictionary = offers[0]
 	for candidate in offers:
-		if str(candidate.get("id", "")) == "job.product_descriptions":
+		if JobSystem.definition_id_of(candidate) == "job.product_descriptions":
 			offer = candidate
 			break
 	# Deadlines are measured in burns, not in bare prompts: a batch is worth more

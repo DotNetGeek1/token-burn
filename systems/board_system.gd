@@ -74,10 +74,15 @@ const STAGE_DEFAULTS := {
 	"hide_bugs": 0.0,
 	"quality_to_progress": 0.0,
 	"repeat_previous": 0.0,
+	## Post-construction scale on whatever actually repeats. Authored echo
+	## amounts stay authored; Infinite Backlog multiplies this instead of the
+	## echo itself, so a `set` or `cap_min` still reaches the fold.
+	"repeat_strength": 1.0,
 	## How many times the stage above is replayed, each at `repeat_previous`
 	## strength. Two 55% forks are not one 110% fork: multiplier stages fold
 	## non-linearly, so a module that says "twice" has to fold twice.
 	"repeat_count": 1.0,
+	"fix_hidden_bugs": 0.0,
 	"next_multiplier": 1.0,
 	"next_cost_mult": 1.0,
 }
@@ -578,10 +583,14 @@ func resolve_burn(
 
 		_fold(batch, stage, effective_multiplier, pending_cost_mult)
 		var repeat: float = maxf(0.0, float(stage["repeat_previous"]))
+		var repeat_strength: float = maxf(0.0, float(stage["repeat_strength"]))
 		var repeat_count: int = maxi(0, int(round(float(stage["repeat_count"]))))
 		if repeat > 0.0 and repeat_count > 0 and not previous_stage.is_empty():
 			for _fork in range(repeat_count):
-				_fold(batch, previous_stage, repeat * effective_multiplier, pending_cost_mult)
+				_fold(
+					batch, previous_stage,
+					repeat * repeat_strength * effective_multiplier, pending_cost_mult
+				)
 			run_state.statistics["stage_repeats"] = int(
 				run_state.statistics.get("stage_repeats", 0)
 			) + repeat_count
@@ -596,6 +605,7 @@ func resolve_burn(
 			"category": module.category,
 			"multiplier": effective_multiplier,
 			"repeated_previous": repeat,
+			"repeat_strength": repeat_strength,
 			"repeat_count": repeat_count,
 			"stage": stage,
 			"before": before,
@@ -911,7 +921,9 @@ func _fold(batch: Dictionary, stage: Dictionary, multiplier: float, cost_mult: f
 	batch["quality"] = float(batch["quality"]) + float(stage["quality"]) * strength
 	batch["heat"] = float(batch["heat"]) + float(stage["heat"]) * strength
 	batch["cost"] = float(batch["cost"]) + float(stage["cost"]) * strength * maxf(0.0, cost_mult)
-	batch["quality_to_progress"] = float(batch["quality_to_progress"]) + float(stage["quality_to_progress"])
+	batch["quality_to_progress"] = (
+		float(batch["quality_to_progress"]) + float(stage["quality_to_progress"]) * strength
+	)
 
 	var new_bugs: float = maxf(0.0, float(stage["bugs"]) * strength)
 	if float(batch["hide_bugs"]) > 0.0:
@@ -919,17 +931,23 @@ func _fold(batch: Dictionary, stage: Dictionary, multiplier: float, cost_mult: f
 	else:
 		batch["known_bugs"] = float(batch["known_bugs"]) + new_bugs
 	batch["hidden_bugs"] = float(batch["hidden_bugs"]) + maxf(0.0, float(stage["hidden_bugs"]) * strength)
-	batch["hide_bugs"] = float(batch["hide_bugs"]) + float(stage["hide_bugs"])
+	batch["hide_bugs"] = float(batch["hide_bugs"]) + float(stage["hide_bugs"]) * strength
 
-	var reveal: float = minf(maxf(0.0, float(stage["reveal_bugs"])), float(batch["hidden_bugs"]))
+	var reveal: float = minf(maxf(0.0, float(stage["reveal_bugs"]) * strength), float(batch["hidden_bugs"]))
 	if reveal > 0.0:
 		batch["hidden_bugs"] = float(batch["hidden_bugs"]) - reveal
 		batch["known_bugs"] = float(batch["known_bugs"]) + reveal
 		batch["revealed"] = float(batch["revealed"]) + reveal
-	var fixed: float = minf(maxf(0.0, float(stage["fix_bugs"])), float(batch["known_bugs"]))
+	var fixed: float = minf(maxf(0.0, float(stage["fix_bugs"]) * strength), float(batch["known_bugs"]))
 	if fixed > 0.0:
 		batch["known_bugs"] = float(batch["known_bugs"]) - fixed
 		batch["fixed"] = float(batch["fixed"]) + fixed
+	var hidden_fixed: float = minf(
+		maxf(0.0, float(stage["fix_hidden_bugs"]) * strength), float(batch["hidden_bugs"])
+	)
+	if hidden_fixed > 0.0:
+		batch["hidden_bugs"] = float(batch["hidden_bugs"]) - hidden_fixed
+		batch["fixed"] = float(batch["fixed"]) + hidden_fixed
 
 
 ## A multiplier applied at partial strength keeps its direction but shrinks its

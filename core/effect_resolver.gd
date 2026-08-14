@@ -420,6 +420,8 @@ func _apply_spawn(
 ## its own numbers rather than re-reading live run state every tick.
 func _freeze_spawn_payload(payload: Dictionary, mod_ctx: ModifierContext) -> Dictionary:
 	if payload.has("subscriptions"):
+		var eval_ctx: Dictionary = mod_ctx.to_eval_context()
+		eval_ctx["parameters"] = mod_ctx.parameters
 		var frozen_subs: Array = []
 		for sub in payload.get("subscriptions", []):
 			if not sub is Dictionary:
@@ -435,7 +437,7 @@ func _freeze_spawn_payload(payload: Dictionary, mod_ctx: ModifierContext) -> Dic
 				if fx.has("value_from"):
 					fx["value"] = _as_float(
 						mod_ctx.get_value(str(fx["value_from"]), 0.0)
-					) * _as_float(fx.get("value", 1.0), 1.0)
+					) * _as_float(_resolve_effect_value(fx.get("value", 1.0), eval_ctx), 1.0)
 					fx.erase("value_from")
 				effects.append(fx)
 			copy["effects"] = effects
@@ -652,6 +654,9 @@ const DERIVED_PATHS := [
 	## "50% off" perk halved its own last answer every recalculation, so £5,000
 	## became £2,500, then £1,250, and eventually nothing.
 	"economy.cloud_cost_per_prompt",
+	## Seeded from economy.recurring_costs_base. Executive Committee multiplies
+	## the bill; persisting that product here compounded it every recalculation.
+	"economy.recurring_costs",
 	## An upgrade's `+N cooling` is a description of the unit, not an instruction
 	## to add N to the run. ComputeSystem sums it back out of what is installed,
 	## which is what stops moving, reloading or recalculating counting it twice.

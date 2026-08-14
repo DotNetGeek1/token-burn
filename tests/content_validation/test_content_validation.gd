@@ -29,9 +29,11 @@ const VALID_STAGE_TARGETS := [
 	"stage.hide_bugs",
 	"stage.quality_to_progress",
 	"stage.repeat_previous",
+	"stage.repeat_strength",
 	"stage.repeat_count",
 	"stage.next_multiplier",
 	"stage.next_cost_mult",
+	"stage.fix_hidden_bugs",
 ]
 
 
@@ -262,6 +264,26 @@ func _test_validation_catches_unknown_rules_and_capabilities() -> void:
 	)
 
 
+## Module slot effects used to skip the operation-name check that perks get, so
+## a typo like `multipyl` shipped as a silent no-op.
+func _test_validation_catches_unknown_module_operation() -> void:
+	var bad := ModuleDefinition.new()
+	bad.id = "op.synthetic_multipyl"
+	bad.difficulty = PackedStringArray(["normal", "hard"])
+	bad.slot_effects = [{"operation": "multipyl", "target": "stage.quality", "value": 1}]
+	ContentDatabase.modules.append(bad)
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.modules.pop_back()
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown effect operation 'multipyl'")),
+		"Validation catches an unknown module operation"
+	)
+	assert_true(
+		ContentDatabase.collect_validation_errors().is_empty(),
+		"Removing the synthetic module restores a clean validation pass"
+	)
+
+
 ## A typo'd operation must not silently no-op when it is actually resolved,
 ## matching the load-time check above with the runtime path it guards.
 func _test_effect_resolver_errors_on_unknown_operation() -> void:
@@ -375,6 +397,7 @@ func run() -> void:
 	_test_shipped_content_passes_validation()
 	_test_validation_catches_synthetic_bad_content()
 	_test_validation_catches_unknown_rules_and_capabilities()
+	_test_validation_catches_unknown_module_operation()
 	_test_effect_resolver_errors_on_unknown_operation()
 
 	for upgrade in ContentDatabase.upgrades:

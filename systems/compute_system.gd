@@ -40,6 +40,7 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	# answer. Left in RunState after the dispatch because the charge lands per
 	# prompt, well after this, in EconomySystem.accrue_prompt_costs.
 	var base_cloud_cost: float = float(run_state.economy.get("cloud_base_cost_per_prompt", 0.0))
+	var base_recurring: float = float(run_state.economy.get("recurring_costs_base", 0.0))
 	effect_resolver.begin_action(EventBus.EVENT_COMPUTE_RECALCULATE)
 	var mod_ctx := ModifierContext.new(EventBus.EVENT_COMPUTE_RECALCULATE, run_state)
 	mod_ctx.rng = rng.derive(EventBus.EVENT_COMPUTE_RECALCULATE)
@@ -53,6 +54,7 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	mod_ctx.set_value("compute.local_rate", hardware_rate)
 	mod_ctx.set_value("compute.cloud_rate", cloud_rate)
 	mod_ctx.set_value("economy.cloud_cost_per_prompt", base_cloud_cost)
+	mod_ctx.set_value("economy.recurring_costs", base_recurring)
 	effect_resolver.dispatch(EventBus.EVENT_COMPUTE_RECALCULATE, mod_ctx, subscriptions)
 	var efficiency: float = float(mod_ctx.get_value("compute.efficiency", base_efficiency))
 	run_state.compute["efficiency"] = efficiency
@@ -75,6 +77,9 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	run_state.compute["cooling"] = maxf(0.0, float(mod_ctx.get_value("compute.cooling", base_cooling)))
 	run_state.economy["cloud_cost_per_prompt"] = maxf(
 		0.0, float(mod_ctx.get_value("economy.cloud_cost_per_prompt", base_cloud_cost))
+	)
+	run_state.economy["recurring_costs"] = maxf(
+		0.0, float(mod_ctx.get_value("economy.recurring_costs", base_recurring))
 	)
 
 

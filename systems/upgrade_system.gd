@@ -175,7 +175,9 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 	var cost: float = purchase_cost(upgrade, level)
 	if not economy_system.purchase(run_state, cost, "upgrade:%s" % upgrade_id):
 		return false
-	run_state.economy["recurring_costs"] = float(run_state.economy.get("recurring_costs", 0.0)) + upgrade.recurring_cost_delta
+	run_state.economy["recurring_costs_base"] = (
+		float(run_state.economy.get("recurring_costs_base", 0.0)) + upgrade.recurring_cost_delta
+	)
 	if upgrade.repeatable:
 		if not run_state.build.has("upgrade_levels"):
 			run_state.build["upgrade_levels"] = {}
@@ -216,8 +218,8 @@ func install_carried(
 	# rather than to the kit, and every location has at least as much as the last.
 	if hardware_space_full(run_state, upgrade, content_db):
 		return false
-	run_state.economy["recurring_costs"] = (
-		float(run_state.economy.get("recurring_costs", 0.0)) + upgrade.recurring_cost_delta
+	run_state.economy["recurring_costs_base"] = (
+		float(run_state.economy.get("recurring_costs_base", 0.0)) + upgrade.recurring_cost_delta
 	)
 	if upgrade.repeatable:
 		if not run_state.build.has("upgrade_levels"):
@@ -358,9 +360,9 @@ func sell(run_state: RunState, key: String, content_db: Node, economy_system: Ec
 	else:
 		run_state.build["upgrades"].erase(upgrade.id)
 		_set_upgrade_count(run_state, upgrade.id, 0)
-	run_state.economy["recurring_costs"] = maxf(
+	run_state.economy["recurring_costs_base"] = maxf(
 		0.0,
-		float(run_state.economy.get("recurring_costs", 0.0)) - upgrade.recurring_cost_delta
+		float(run_state.economy.get("recurring_costs_base", 0.0)) - upgrade.recurring_cost_delta
 	)
 	# Nothing is done about cooling here: it is derived from what is installed,
 	# so removing the unit has already removed its contribution.

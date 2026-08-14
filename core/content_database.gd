@@ -600,6 +600,13 @@ func collect_validation_errors() -> Array[String]:
 				errors.append("module '%s' declares a combo with missing module '%s'" % [
 					module.id, partner_id,
 				])
+		_validate_effect_list(errors, known_paths, "module '%s'" % module.id, module.slot_effects)
+		for combo in module.combos:
+			if combo is Dictionary:
+				_validate_effect_list(
+					errors, known_paths,
+					"module '%s' combo" % module.id, Array(combo.get("effects", []))
+				)
 	var demands: Dictionary = balance.get("job_demands", {})
 	# Built locally rather than as constants so this file keeps no load-time
 	# dependency on BoardSystem, which reads back from this database.

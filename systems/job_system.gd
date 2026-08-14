@@ -32,13 +32,18 @@ func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Nod
 		# Each offer gets its own rng stream so repeated definitions still
 		# differ, and so the board is reproducible for a given seed.
 		var offer_rng: DeterministicRng = rng.derive("offer_%d_%s" % [index, job_def.id])
-		offers.append(_scale_job(job_def, round_number, content_db, tuning, run_state, offer_rng))
+		offers.append(_scale_job(
+			job_def, round_number, content_db, tuning, run_state, offer_rng, offers.size()
+		))
 		windfall_placed = windfall_placed or job_def.windfall
 		# Only reuse definitions once the pool is exhausted.
 		if index % eligible.size() == 0 and offers.size() < count:
 			eligible = rng.shuffle(eligible)
 
-	var stretch: Dictionary = _stretch_offer(run_state, rng, content_db, tuning, round_number)
+	var stretch_index: int = offers.size() - 1 if offers.size() > 1 else offers.size()
+	var stretch: Dictionary = _stretch_offer(
+		run_state, rng, content_db, tuning, round_number, stretch_index
+	)
 	if not stretch.is_empty() and offers.size() > 1:
 		offers[offers.size() - 1] = stretch
 	elif not stretch.is_empty():
@@ -122,7 +127,8 @@ func _stretch_offer(
 	rng: DeterministicRng,
 	content_db: Node,
 	tuning: Dictionary,
-	round_number: int
+	round_number: int,
+	offer_index: int = 0
 ) -> Dictionary:
 	var stretch_tier: int = _stretch_tier_available(run_state, content_db)
 	if stretch_tier < 0:
@@ -137,7 +143,8 @@ func _stretch_offer(
 		return {}
 	var job_def: JobDefinition = rng.derive("stretch_pool").shuffle(pool)[0]
 	var offer: Dictionary = _scale_job(
-		job_def, round_number, content_db, tuning, run_state, rng.derive("stretch_offer")
+		job_def, round_number, content_db, tuning, run_state, rng.derive("stretch_offer"),
+		offer_index
 	)
 	var bonus: float = float(
 		content_db.balance.get("job_scaling", {}).get("stretch_reward_bonus", 0.35)
@@ -147,16 +154,42 @@ func _stretch_offer(
 	return offer
 
 
+## Authored contract id for a live offer or job. Instance `id` is unique per
+## card; content lookups still want the definition, and old saves only have `id`.
+static func definition_id_of(job: Dictionary) -> String:
+	var definition_id: String = str(job.get("definition_id", ""))
+	return definition_id if definition_id != "" else str(job.get("id", ""))
+
+
+## Finds a board offer by instance id first. A definition id matches only when
+## exactly one offer has that definition, so `accept_job("job.test_hopeless")`
+## and two copies of the same contract can both be right.
+func find_offer(run_state: RunState, job_id: String) -> Dictionary:
+	var offers: Array = run_state.business.get("job_offers", [])
+	for offer in offers:
+		if offer is Dictionary and str(offer.get("id", "")) == job_id:
+			return offer
+	var definition_matches: Array = []
+	for offer in offers:
+		if offer is Dictionary and definition_id_of(offer) == job_id:
+			definition_matches.append(offer)
+	if definition_matches.size() == 1:
+		return definition_matches[0]
+	return {}
+
+
 func accept_job(run_state: RunState, job_id: String) -> bool:
-	for i in range(run_state.business.get("job_offers", []).size()):
-		var offer: Dictionary = run_state.business["job_offers"][i]
-		if offer.get("id", "") != job_id:
-			continue
-		var queued: Dictionary = offer.duplicate(true)
-		run_state.business["job_offers"].remove_at(i)
-		run_state.business["job_queue"].append(queued)
-		return true
-	return false
+	var offer: Dictionary = find_offer(run_state, job_id)
+	if offer.is_empty():
+		return false
+	var offers: Array = run_state.business["job_offers"]
+	var index: int = offers.find(offer)
+	if index < 0:
+		return false
+	var queued: Dictionary = offer.duplicate(true)
+	offers.remove_at(index)
+	run_state.business["job_queue"].append(queued)
+	return true
 
 
 ## Everything the player accepted this round is prepared here. A round runs until
@@ -753,11 +786,15 @@ func finalize_failed_jobs(
 		var base_reward: float = float(job.get("reward", 0.0)) * progress * consolation_ratio
 		if base_reward <= 0.0:
 			continue
+		# Same event as a completed payout so the pipeline stays one place, but
+		# completion-worded perks read this flag and stay off consolation fees.
+		job["completed"] = false
 		effect_resolver.begin_action("reward.failed.%s" % job.get("id", ""))
 		var mod_ctx := ModifierContext.new("reward.calculated", run_state)
 		mod_ctx.rng = rng.derive("reward.failed.%s" % job.get("id", ""))
 		mod_ctx.job = job
 		mod_ctx.set_value("job.reward", base_reward)
+		mod_ctx.set_value("job.completed", false)
 		effect_resolver.dispatch("reward.calculated", mod_ctx, subscriptions)
 		base_reward = float(mod_ctx.get_value("job.reward", base_reward))
 		economy_system.add_income(run_state, base_reward, tuning)
@@ -785,11 +822,13 @@ func _calculate_reward(
 	# Settled first so a perk paid per undetected bug is looking at the delivery
 	# that actually happened rather than at a field nothing had written yet.
 	resolve_hidden_bugs(job, rng.derive("hidden_bugs.%s" % job.get("id", "")))
+	job["completed"] = true
 	effect_resolver.begin_action("reward.%s" % job.get("id", ""))
 	var mod_ctx := ModifierContext.new("reward.calculated", run_state)
 	mod_ctx.rng = rng.derive("reward.%s" % job.get("id", ""))
 	mod_ctx.job = job
 	mod_ctx.set_value("job.reward", reward)
+	mod_ctx.set_value("job.completed", true)
 	effect_resolver.dispatch("reward.calculated", mod_ctx, subscriptions)
 	reward = float(mod_ctx.get_value("job.reward", reward))
 	reward *= _delivery_penalty(run_state, job, rng, messages, economy_system)
@@ -1040,7 +1079,8 @@ func _scale_job(
 	content_db: Node,
 	tuning: Dictionary,
 	run_state: RunState,
-	offer_rng: DeterministicRng = null
+	offer_rng: DeterministicRng = null,
+	offer_index: int = 0
 ) -> Dictionary:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
 	# What the contract is worth and how big it is come from the band it was
@@ -1139,7 +1179,8 @@ func _scale_job(
 	var quality_threshold: float = clampf(authored, 35.0, 92.0)
 
 	return {
-		"id": job_def.id,
+		"definition_id": job_def.id,
+		"id": "%s.r%d.i%d" % [job_def.id, round_number, offer_index],
 		"name": job_def.name,
 		"description": job_def.description,
 		"reward": reward,

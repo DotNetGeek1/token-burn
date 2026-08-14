@@ -12,6 +12,7 @@ extends RefCounted
 var cash: float = RunState.DEFAULT_STARTING_CASH
 var cash_multiplier: float = 1.0
 var debt: float = 0.0
+var recurring_costs_base: float = 0.0
 var recurring_costs: float = 0.0
 var income: float = 0.0
 var cloud_surcharge_liability: float = 0.0
@@ -31,6 +32,7 @@ static func from_dict(data: Dictionary) -> EconomyState:
 	state.cash = float(data.get("cash", state.cash))
 	state.cash_multiplier = float(data.get("cash_multiplier", state.cash_multiplier))
 	state.debt = float(data.get("debt", state.debt))
+	state.recurring_costs_base = float(data.get("recurring_costs_base", state.recurring_costs_base))
 	state.recurring_costs = float(data.get("recurring_costs", state.recurring_costs))
 	state.income = float(data.get("income", state.income))
 	state.cloud_surcharge_liability = float(data.get("cloud_surcharge_liability", state.cloud_surcharge_liability))
@@ -51,6 +53,7 @@ func to_dict() -> Dictionary:
 		"cash": cash,
 		"cash_multiplier": cash_multiplier,
 		"debt": debt,
+		"recurring_costs_base": recurring_costs_base,
 		"recurring_costs": recurring_costs,
 		"income": income,
 		"cloud_surcharge_liability": cloud_surcharge_liability,

@@ -570,11 +570,7 @@ func queue_capacity_cap() -> float:
 func can_accept_offer(job_id: String) -> bool:
 	if phase != Phase.ROUND_PREP or _work_running:
 		return false
-	var offer: Dictionary = {}
-	for candidate in run_state.business.get("job_offers", []):
-		if candidate is Dictionary and str(candidate.get("id", "")) == job_id:
-			offer = candidate
-			break
+	var offer: Dictionary = _job_system.find_offer(run_state, job_id)
 	if offer.is_empty():
 		return false
 	if run_state.business.get("job_queue", []).is_empty():
@@ -1527,6 +1523,9 @@ func _end_session(reason: String) -> void:
 		round_log.append("Paid %s for delivered work." % NumberFormat.format_cash(reward))
 	elif not completed.is_empty() or not failed.is_empty():
 		round_log.append("No payout — contracts missed deadline or quality bar.")
+	# Wrapper (and anything else that spawns a status on payout) only reaches
+	# the next round.started once the cached subscription list is rebuilt.
+	_invalidate_subscriptions()
 
 	_build_session_summary(completed, failed, reward, reason)
 
@@ -2397,6 +2396,7 @@ func load_saved_run() -> bool:
 	run_state.from_dict(data.get("run_state", {}))
 	var saved_choices = data.get("pending_choices", [])
 	pending_choices = saved_choices if saved_choices is Array else []
+	_migrate_pending_choices()
 	var phase_name: String = str(data.get("phase", "IDLE"))
 	phase = _phase_from_name(phase_name)
 	_work_running = false
@@ -2416,6 +2416,15 @@ func load_saved_run() -> bool:
 		return true
 	repair_after_load()
 	return true
+
+
+## Angel drafts used to offer `type: operation`. accept_offer only understands
+## perk / module, so a save taken on that wording would present a card nothing
+## could take.
+func _migrate_pending_choices() -> void:
+	for choice in pending_choices:
+		if choice is Dictionary and str(choice.get("type", "")) == "operation":
+			choice["type"] = "module"
 
 
 func _phase_from_name(name: String) -> int:

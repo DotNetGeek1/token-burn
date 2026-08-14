@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 17
+const SAVE_VERSION := 18
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -22,6 +22,9 @@ var economy: Dictionary = {
 	"cash": DEFAULT_STARTING_CASH,
 	"cash_multiplier": 1.0,
 	"debt": 0.0,
+	## What upgrades actually bill. Recurring cost is re-derived from this on
+	## every recalculation so a perk that multiplies it multiplies it once.
+	"recurring_costs_base": 0.0,
 	"recurring_costs": 0.0,
 	"income": 0.0,
 	"cloud_surcharge_liability": 0.0,
@@ -416,11 +419,20 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_perk_inventory()
 	if from_version < 17:
 		_migrate_operations_to_modules()
+	if from_version < 18:
+		_migrate_to_derived_recurring_costs()
 
 
 ## The pipeline pieces were called operations in code and modules everywhere the
 ## player could see. The state key follows the player's word; a save written
 ## under the old name keeps its modules.
+## Recurring cost used to be one field that recalculation both read and wrote,
+## so Executive Committee compounded it every prompt. The saved figure is the
+## last derived answer; it becomes the base so a run in progress keeps its bill.
+func _migrate_to_derived_recurring_costs() -> void:
+	economy["recurring_costs_base"] = float(economy.get("recurring_costs", 0.0))
+
+
 func _migrate_operations_to_modules() -> void:
 	if not build.has("operations"):
 		return
@@ -466,6 +478,13 @@ func _cloud_cost_of_owned_tiers() -> float:
 		for effect in upgrade.effects:
 			if effect is EffectDefinition and effect.target == "economy.cloud_base_cost_per_prompt":
 				total += float(effect.value)
+	# Permanent starting cloud is not an upgrade; without this a base rebuild
+	# would drop the invoice the unlock is supposed to keep charging.
+	if MetaProgress.enabled:
+		var rank: int = MetaProgress.unlock_count("unlock.starting_cloud")
+		if rank > 0:
+			var unlock: Dictionary = MetaProgress.get_unlock("unlock.starting_cloud")
+			total += float(unlock.get("recurring_cost", 0.0)) * float(rank)
 	return total
 
 
@@ -630,6 +649,7 @@ func _default_economy(profile: Dictionary = {}) -> Dictionary:
 		# bedroom, so a hard run is short of money in the warehouse too.
 		"cash_multiplier": starting_cash / DEFAULT_STARTING_CASH,
 		"debt": 0.0,
+		"recurring_costs_base": 0.0,
 		"recurring_costs": 0.0,
 		"income": 0.0,
 		"cloud_surcharge_liability": 0.0,

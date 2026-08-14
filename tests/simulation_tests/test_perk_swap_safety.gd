@@ -87,23 +87,33 @@ func _test_wrapper_freezes_passive_value() -> void:
 	sim.start_run(8904)
 	sim._perk_system.collect_perk(sim.run_state, "perk.the_wrapper", ContentDatabase)
 	sim._perk_system.equip_perk(sim.run_state, "perk.the_wrapper", ContentDatabase)
-	sim.run_state.statistics["last_job_reward"] = 10_000.0
+	var perk := ContentDatabase.get_perk("perk.the_wrapper")
+	var first_job: Dictionary = {"id": "job.wrap_a", "reward": 10_000.0, "completed": true}
 	sim.effect_resolver.begin_action("reward.test")
 	var mod_ctx := ModifierContext.new("reward.calculated", sim.run_state)
 	mod_ctx.rng = sim.rng.derive("reward.test")
-	var perk := ContentDatabase.get_perk("perk.the_wrapper")
+	mod_ctx.job = first_job
+	mod_ctx.set_value("job.reward", 10_000.0)
+	mod_ctx.set_value("job.completed", true)
 	for sub in perk.subscriptions:
 		if str(sub.get("event", "")) != "reward.calculated":
 			continue
-		sim.effect_resolver.dispatch("reward.calculated", mod_ctx, [sub])
-	sim.run_state.statistics["last_job_reward"] = 100_000.0
+		var copy: Dictionary = sub.duplicate(true)
+		copy["parameters"] = perk.parameters.duplicate(true)
+		sim.effect_resolver.dispatch("reward.calculated", mod_ctx, [copy])
+	var second_job: Dictionary = {"id": "job.wrap_b", "reward": 100_000.0, "completed": true}
 	sim.effect_resolver.begin_action("reward.test2")
 	mod_ctx = ModifierContext.new("reward.calculated", sim.run_state)
 	mod_ctx.rng = sim.rng.derive("reward.test2")
+	mod_ctx.job = second_job
+	mod_ctx.set_value("job.reward", 100_000.0)
+	mod_ctx.set_value("job.completed", true)
 	for sub in perk.subscriptions:
 		if str(sub.get("event", "")) != "reward.calculated":
 			continue
-		sim.effect_resolver.dispatch("reward.calculated", mod_ctx, [sub])
+		var copy: Dictionary = sub.duplicate(true)
+		copy["parameters"] = perk.parameters.duplicate(true)
+		sim.effect_resolver.dispatch("reward.calculated", mod_ctx, [copy])
 	var statuses: Array = sim.run_state.build.get("status_effects", [])
 	assert_eq(statuses.size(), 2, "Each job spawns its own wrapper passive")
 	var first_value: float = float(
@@ -112,6 +122,9 @@ func _test_wrapper_freezes_passive_value() -> void:
 	var second_value: float = float(
 		statuses[1]["subscriptions"][0]["effects"][0].get("value", 0.0)
 	)
-	assert_almost_eq(first_value, 300.0, 0.01, "First wrapper passive frozen at 3% of £10k")
-	assert_almost_eq(second_value, 3000.0, 0.01, "Second wrapper passive frozen at 3% of £100k")
+	# Spawn is FINALISE, so the freeze sees the 15% clone bonus already on the fee.
+	var clone: float = 1.0 + float(perk.parameters.get("passive_ratio", 0.15))
+	var income_ratio: float = float(perk.parameters.get("passive_income_ratio", 0.03))
+	assert_almost_eq(first_value, 10_000.0 * clone * income_ratio, 0.01, "First wrapper passive frozen from the in-flight fee")
+	assert_almost_eq(second_value, 100_000.0 * clone * income_ratio, 0.01, "Second wrapper passive frozen from its own fee")
 	sim.free()
