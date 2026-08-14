@@ -1559,7 +1559,13 @@ func _end_session(reason: String) -> void:
 	# claim on is how a player gets evicted holding a new GPU.
 	_round_end_pending = false
 	_end_round()
-	_autosave()
+	# A chapter win settles the round (next calendar, maybe a draft) and then
+	# `_reach_victory` flips to RUN_END. Saving here would write a live next
+	# round under the verdict; Continue from title then resurrected a run the
+	# overlay had just called closed. The victory path saves once, after the
+	# phase is honest.
+	if not _settling_victory:
+		_autosave()
 
 
 ## What the round did to the run's standing, and the reason it did it. A missed

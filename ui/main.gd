@@ -875,13 +875,17 @@ func refresh_all() -> void:
 	if not (in_angel and report_open):
 		_last_angel_phase = in_angel
 	# A run that ends on the bills waits for the statement to be read, so the
-	# verdict never lands before the reason for it.
+	# verdict never lands before the reason for it. A leftover report covering a
+	# live round is the other direction of the same bug: hide it the moment the
+	# sim is playable again.
 	if Simulation.phase == Simulation.Phase.RUN_END and not _bills_screen.visible and _pending_statement.is_empty():
 		_clear_stage_for(_run_end)
 		_run_end.show_from_state(
 			bool(Simulation.run_state.flags.get("victory", false)),
 			str(Simulation.run_state.flags.get("loss_reason", ""))
 		)
+	elif _run_end != null and _run_end.visible:
+		_run_end.hide_overlay()
 	if Simulation.phase == Simulation.Phase.ROUND_PREP:
 		_maybe_call_ascension_beat()
 	_sync_overlay_input()

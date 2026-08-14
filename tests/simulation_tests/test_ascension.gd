@@ -26,6 +26,7 @@ func run() -> void:
 	_test_a_finished_contract_beats_the_deadline_to_it()
 	_test_there_is_no_overtime_left_to_fall_into()
 	_test_beating_the_contract_wins_the_run()
+	_test_a_victory_save_is_run_end_not_the_next_round()
 	_test_the_winning_round_is_on_the_investor()
 	_test_a_deadline_round_win_is_not_stamped_as_expired()
 	_test_the_investor_pays_more_for_finishing_early()
@@ -296,6 +297,48 @@ func _test_beating_the_contract_wins_the_run() -> void:
 		MetaProgress.ascension_completions("ascension.first_scale_up"), 1,
 		"The profile remembers which contract was completed"
 	)
+	sim.free()
+
+
+## Settling a chapter win used to autosave the next round while the overlay still
+## said the company was closed. Continue from title then loaded that live
+## snapshot. The primary save has to be RUN_END until the player picks the next
+## chapter — and the outcome has to be ascended, so the verdict cannot fall
+## through to COMPANY CLOSED.
+func _test_a_victory_save_is_run_end_not_the_next_round() -> void:
+	_fresh_profile()
+	const SCRATCH_SAVE := "user://save_test_victory_run_end.json"
+	SaveManager.use_scratch(SCRATCH_SAVE)
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = true
+	sim.start_run(5043)
+	_meet_requirement(sim, "ascension.first_scale_up")
+	sim.debug_finish_prompt({"ok": true, "messages": []})
+	assert_eq(sim.phase, sim.Phase.RUN_END, "The chapter's contract is complete")
+	assert_true(bool(sim.run_state.flags.get("victory", false)), "As a victory")
+	assert_eq(
+		str(sim.run_state.flags.get("outcome", "")), "ascended",
+		"Named as an ascension, so the Run Report cannot default to COMPANY CLOSED"
+	)
+	var data: Dictionary = SaveManager.load_run()
+	assert_false(data.is_empty(), "Victory wrote a save")
+	assert_eq(
+		str(data.get("phase", "")), "RUN_END",
+		"The primary save is the verdict, not the next round the settle had already opened"
+	)
+	assert_eq(
+		str(Dictionary(data.get("run_state", {})).get("flags", {}).get("outcome", "")),
+		"ascended",
+		"And the saved flags agree"
+	)
+	# Two writes would demote a live next-round to .bak. Continue would load
+	# that snapshot if the RUN_END write never landed.
+	assert_false(
+		FileAccess.file_exists(SCRATCH_SAVE + ".bak"),
+		"Victory writes RUN_END once; a live next-round must not sit as the backup"
+	)
+	SaveManager.delete_save()
+	SaveManager.restore_default()
 	sim.free()
 
 

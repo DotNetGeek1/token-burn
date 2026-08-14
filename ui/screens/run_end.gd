@@ -44,7 +44,6 @@ func _ready() -> void:
 	dismiss_on_scrim = false
 	set_closable(false)
 	_build_body()
-	EventBus.run_ended.connect(_on_run_ended)
 
 
 func _build_body() -> void:
@@ -74,23 +73,27 @@ func _build_body() -> void:
 	column.add_child(_pick_list)
 
 
-func _on_run_ended(victory: bool) -> void:
-	show_from_state(victory, str(Simulation.run_state.flags.get("loss_reason", "")))
-
-
-## The contract `main.gd` drives the end of a run through. It is called again on
-## every refresh while the screen is up, so a redraw must not restage the
-## report — only the pick, which the player is still changing.
+## The contract `main.gd` drives the end of a run through. The overlay used to
+## open itself on `EventBus.run_ended`, which put COMPANY CLOSED on top of a
+## round that had just succeeded and whose save was still live. Only the shell
+## may raise this, and only while the sim is actually over.
 func show_from_state(victory: bool, loss_reason: String) -> void:
+	if Simulation.phase != Simulation.Phase.RUN_END:
+		if visible:
+			hide_overlay()
+		return
 	_loss_reason = loss_reason
+	var outcome: String = str(Simulation.run_state.flags.get("outcome", ""))
+	if outcome == "" and victory:
+		outcome = "ascended"
+	_earned_this_run = outcome == "ascended"
+	# A leftover loss verdict used to stick because a redraw skipped the report
+	# and only refreshed the picks. Reprint every time: LOCATION COMPLETE must
+	# replace COMPANY CLOSED when the outcome is an ascension.
 	if visible:
-		_refresh_debrief()
+		refresh()
 		return
 	_keep_note = ""
-	var outcome: String = str(
-		Simulation.run_state.flags.get("outcome", "" if not victory else "ascended")
-	)
-	_earned_this_run = outcome == "ascended"
 	open()
 
 
@@ -134,6 +137,10 @@ func _print_report(score: Dictionary) -> void:
 
 func _apply_verdict(score: Dictionary) -> void:
 	var outcome: String = str(Simulation.run_state.flags.get("outcome", ""))
+	# A win with a blank outcome used to fall through to COMPANY CLOSED. The
+	# victory flag is the source of truth when the named outcome has not landed.
+	if outcome == "" and bool(Simulation.run_state.flags.get("victory", false)):
+		outcome = "ascended"
 	match outcome:
 		"ascended":
 			var next_location: String = Simulation.next_location_unlocked()

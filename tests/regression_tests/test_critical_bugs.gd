@@ -7,6 +7,7 @@ func run() -> void:
 	_test_hardware_upgrade()
 	_test_double_purchase()
 	_test_round_end_choice()
+	_test_a_successful_round_does_not_end_the_run()
 	_test_headless_no_autosave()
 	_test_market_purchase()
 	_test_mixed_job_finalization()
@@ -69,6 +70,47 @@ func _test_round_end_choice() -> void:
 	sim.start_work_sync()
 	assert_true(sim.phase == sim.Phase.ANGEL_ROUND, "Resolving the round's work opens the angel phase")
 	assert_true(sim.pending_choices.size() > 0, "Angel choices are presented after the bills clear")
+	sim.free()
+
+
+## Completing the round's work is not the end of the company. The save Continue
+## reloads must still be a live run — otherwise the Run Report's COMPANY CLOSED
+## overlay and a playable next round disagree, and title-then-continue looks
+## like a resurrection.
+func _test_a_successful_round_does_not_end_the_run() -> void:
+	const SCRATCH_SAVE := "user://save_test_successful_round.json"
+	SaveManager.use_scratch(SCRATCH_SAVE)
+	var sim := _make_sim()
+	sim.autosave_enabled = true
+	sim.start_run(104)
+	sim.run_state.business["job_queue"] = [{
+		"id": "job.product_descriptions",
+		"name": "Test",
+		"token_requirement": 1.0,
+		"tokens_remaining": 1.0,
+		"deadline_prompts": 99,
+		"prompts_remaining": 99,
+		"reward": 500.0,
+		"quality_threshold": 0.0,
+		"quality": 0.0,
+		"revision_risk": 0.0,
+		"bug_chance": 0.0,
+	}]
+	sim.start_work_sync()
+	assert_true(
+		sim.phase == sim.Phase.ANGEL_ROUND or sim.phase == sim.Phase.ROUND_PREP,
+		"A delivered round is still in play"
+	)
+	assert_true(sim.phase != sim.Phase.RUN_END, "It is not a run ending")
+	assert_eq(str(sim.run_state.flags.get("outcome", "")), "", "And it has no run-end outcome")
+	var data: Dictionary = SaveManager.load_run()
+	assert_false(data.is_empty(), "The round wrote a save Continue can reload")
+	assert_true(
+		str(data.get("phase", "")) != "RUN_END",
+		"That save is a live run, not a closed company"
+	)
+	SaveManager.delete_save()
+	SaveManager.restore_default()
 	sim.free()
 
 
