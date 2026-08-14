@@ -229,13 +229,27 @@ func derived_slot_count(run_state: RunState, content_db: Node) -> int:
 	var board: Dictionary = run_state.build.get("board", {})
 	var meta_bonus: int = int(board.get("meta_slot_bonus", 0))
 	var perk_bonus: int = active_perk_grant_total(run_state, content_db, "board_slots")
-	return clampi(DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus, 1, MAX_SLOT_COUNT)
+	var upgrade_bonus: int = int(UpgradeSystem.additive_effect_total(
+		run_state, content_db, "build.board.slot_count"
+	))
+	return clampi(
+		DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus + upgrade_bonus,
+		1,
+		MAX_SLOT_COUNT
+	)
 
 
 func derived_workflow_capacity(run_state: RunState, content_db: Node) -> int:
 	var meta_bonus: int = int(run_state.build.get("meta_workflow_bonus", 0))
 	var perk_bonus: int = active_perk_grant_total(run_state, content_db, "workflow_capacity")
-	return clampi(DEFAULT_WORKFLOW_CAPACITY + meta_bonus + perk_bonus, 1, MAX_WORKFLOW_COUNT)
+	var upgrade_bonus: int = int(UpgradeSystem.additive_effect_total(
+		run_state, content_db, "build.workflow_capacity"
+	))
+	return clampi(
+		DEFAULT_WORKFLOW_CAPACITY + meta_bonus + perk_bonus + upgrade_bonus,
+		1,
+		MAX_WORKFLOW_COUNT
+	)
 
 
 func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> void:
@@ -243,13 +257,23 @@ func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> voi
 	if not board.has("meta_slot_bonus"):
 		var stored_slots: int = int(board.get("slot_count", DEFAULT_SLOT_COUNT))
 		var perk_slots: int = active_perk_grant_total(run_state, content_db, "board_slots")
-		board["meta_slot_bonus"] = maxi(0, stored_slots - DEFAULT_SLOT_COUNT - perk_slots)
+		var upgrade_slots: int = int(UpgradeSystem.additive_effect_total(
+			run_state, content_db, "build.board.slot_count"
+		))
+		board["meta_slot_bonus"] = maxi(
+			0, stored_slots - DEFAULT_SLOT_COUNT - perk_slots - upgrade_slots
+		)
 		run_state.build["board"] = board
 	if not run_state.build.has("meta_workflow_bonus"):
 		var stored_capacity: int = int(run_state.build.get("workflow_capacity", DEFAULT_WORKFLOW_CAPACITY))
 		var perk_capacity_bonus: int = active_perk_grant_total(run_state, content_db, "workflow_capacity")
+		var upgrade_capacity_bonus: int = int(UpgradeSystem.additive_effect_total(
+			run_state, content_db, "build.workflow_capacity"
+		))
 		run_state.build["meta_workflow_bonus"] = maxi(
-			0, stored_capacity - DEFAULT_WORKFLOW_CAPACITY - perk_capacity_bonus
+			0,
+			stored_capacity - DEFAULT_WORKFLOW_CAPACITY \
+				- perk_capacity_bonus - upgrade_capacity_bonus
 		)
 
 

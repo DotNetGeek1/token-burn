@@ -10,6 +10,7 @@ func run() -> void:
 	_test_a_successful_round_does_not_end_the_run()
 	_test_headless_no_autosave()
 	_test_market_purchase()
+	_test_second_monitor_widens_the_pipeline_editor()
 	_test_mixed_job_finalization()
 	_test_multi_job_tick_counts_once()
 	_test_a_granted_module_does_not_replace_the_starters()
@@ -54,6 +55,20 @@ func _test_double_purchase() -> void:
 	assert_false(sim.buy_upgrade("upgrade.portable_ac"), "Second purchase rejected")
 	assert_eq(sim.run_state.economy.get("cash", 0.0), cash_after_first, "Cash not deducted twice")
 	assert_true(cash_after_first < cash_before, "First purchase cost cash")
+	sim.free()
+
+
+func _test_second_monitor_widens_the_pipeline_editor() -> void:
+	var sim := _make_sim()
+	sim.start_run(103)
+	sim.run_state.economy["cash"] = 5000.0
+	var slots_before: int = sim.board_slots().size()
+	assert_true(sim.buy_upgrade("upgrade.second_monitor"), "The second monitor can be bought")
+	assert_eq(
+		sim.board_slots().size(),
+		slots_before + 1,
+		"The pipeline editor immediately gains the slot the monitor promises"
+	)
 	sim.free()
 
 

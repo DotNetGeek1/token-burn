@@ -26,6 +26,29 @@ static func purchased_upgrade_counts(run_state: RunState) -> Dictionary:
 	return Dictionary(run_state.build.get("purchased_upgrade_counts", {}))
 
 
+## Totals additive effects contributed by upgrades the run owns. Derived state
+## uses this instead of trusting the last value an effect happened to write, so
+## recalculation and save/load cannot erase or compound permanent purchases.
+static func additive_effect_total(
+	run_state: RunState, content_db: Node, target_path: String
+) -> float:
+	var total: float = 0.0
+	var counts: Dictionary = upgrade_counts(run_state)
+	for upgrade_id in counts.keys():
+		var count: int = maxi(0, int(counts.get(upgrade_id, 0)))
+		if count == 0:
+			continue
+		var upgrade: UpgradeDefinition = content_db.get_upgrade(str(upgrade_id))
+		if upgrade == null:
+			continue
+		for effect in upgrade.effects:
+			if effect is EffectDefinition \
+				and effect.operation == "add" \
+				and effect.target == target_path:
+				total += float(effect.value) * float(count)
+	return total
+
+
 static func _set_upgrade_count(run_state: RunState, upgrade_id: String, count: int) -> void:
 	if not run_state.build.has("upgrade_counts") or not (run_state.build["upgrade_counts"] is Dictionary):
 		run_state.build["upgrade_counts"] = {}

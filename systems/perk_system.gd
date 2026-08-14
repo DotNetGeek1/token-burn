@@ -152,10 +152,13 @@ func bench_block_reason(
 		var perk_bonus: int = BoardSystem.active_perk_grant_total(
 			run_state, content_db, "board_slots"
 		) - board_slot_grant
+		var upgrade_bonus: int = int(UpgradeSystem.additive_effect_total(
+			run_state, content_db, "build.board.slot_count"
+		))
 		if incoming != null:
 			perk_bonus += int(incoming.grants.get("board_slots", 0))
 		var resulting_slots: int = clampi(
-			BoardSystem.DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus,
+			BoardSystem.DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus + upgrade_bonus,
 			1,
 			BoardSystem.MAX_SLOT_COUNT
 		)
