@@ -42,3 +42,5 @@ next-env.d.ts
 
 # playtest builds are uploaded, not committed
 public/downloads/*.apk
+public/game/*
+!public/game/README.md

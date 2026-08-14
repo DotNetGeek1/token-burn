@@ -302,6 +302,7 @@ func set_actions(entries: Array) -> void:
 		row.headline = str(entry.get("headline", ""))
 		row.value_text = str(entry.get("value", ""))
 		row.destructive = bool(entry.get("destructive", false))
+		row.warning = bool(entry.get("warning", false))
 		var handler: Variant = entry.get("pressed")
 		if handler is Callable:
 			row.pressed.connect(handler)

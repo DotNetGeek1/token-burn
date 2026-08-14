@@ -13,6 +13,9 @@ func run() -> void:
 	_test_fire_risk_clears_when_cool()
 	_test_purchase_warning()
 	_test_burn_forecast_matches_the_heat_the_bar_actually_gains()
+	_test_queued_burn_forecast_is_pure_and_matches_the_first_burn()
+	_test_queued_surges_are_included_in_the_first_burn_forecast()
+	_test_first_burn_forecast_marks_a_projected_fire_without_blocking()
 	_test_cool_forecast_matches_the_heat_the_bar_actually_loses()
 	_test_status_effects_wear_off()
 	_test_an_events_heat_spike_is_shed_like_any_other_heat()
@@ -129,6 +132,73 @@ func _test_burn_forecast_matches_the_heat_the_bar_actually_gains() -> void:
 		float(preview.get("total_heat", 0.0)), actual_delta, 0.01,
 		"The forecast heat delta matches what actually lands on the heat bar"
 	)
+	sim.free()
+
+
+func _test_queued_burn_forecast_is_pure_and_matches_the_first_burn() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(1503)
+	var offers: Array = sim.run_state.business.get("job_offers", [])
+	assert_true(sim.accept_job(str(offers[0].get("id", ""))), "A contract is queued")
+	var state_before: Dictionary = sim.run_state.to_dict()
+	var phase_before: int = sim.phase
+	var queued: Dictionary = sim.preview_next_burn()
+	assert_true(queued.get("ok", false), "The first burn is forecast before work opens")
+	assert_eq(sim.run_state.to_dict(), state_before, "Queued forecasting does not mutate live state")
+	assert_eq(sim.phase, phase_before, "Queued forecasting does not open the session")
+
+	sim.start_work()
+	var active: Dictionary = sim.preview_next_burn()
+	assert_almost_eq(float(queued.get("tokens", 0.0)), float(active.get("tokens", 0.0)), 0.01,
+		"Queued and active previews agree on tokens")
+	assert_almost_eq(float(queued.get("heat_after", 0.0)), float(active.get("heat_after", 0.0)), 0.01,
+		"Queued and active previews agree on projected heat")
+	var before_heat: float = float(sim.run_state.compute.get("heat", 0.0))
+	sim.burn_batch()
+	assert_almost_eq(
+		float(queued.get("heat_after", 0.0)),
+		before_heat + (float(sim.run_state.compute.get("heat", 0.0)) - before_heat),
+		0.01,
+		"The queued forecast matches the committed first burn"
+	)
+	sim.free()
+
+
+func _test_queued_surges_are_included_in_the_first_burn_forecast() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(1504)
+	sim.run_state.build["upgrades"].append(Simulation.CLOUD_ACCOUNT_UPGRADE)
+	sim.run_state.economy["cash"] = 1000000.0
+	var offers: Array = sim.run_state.business.get("job_offers", [])
+	sim.accept_job(str(offers[0].get("id", "")))
+	var baseline: Dictionary = sim.preview_next_burn()
+	sim.set_queued_boost(true)
+	sim.set_queued_cloud(true)
+	var surged: Dictionary = sim.preview_next_burn()
+	assert_true(
+		float(surged.get("tokens", 0.0)) > float(baseline.get("tokens", 0.0)),
+		"Queued BOOST and CLOUD increase the pre-session token forecast"
+	)
+	assert_true(
+		float(surged.get("heat_after", 0.0)) >= float(baseline.get("heat_after", 0.0)) + 11.9,
+		"Queued BOOST heat is visible before the first click"
+	)
+	sim.free()
+
+
+func _test_first_burn_forecast_marks_a_projected_fire_without_blocking() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(1505)
+	var offers: Array = sim.run_state.business.get("job_offers", [])
+	sim.accept_job(str(offers[0].get("id", "")))
+	sim.run_state.compute["heat_capacity"] = 1.0
+	sim.set_queued_boost(true)
+	var preview: Dictionary = sim.preview_next_burn()
+	assert_true(bool(preview.get("crosses_fire", false)), "The queued forecast flags a cold-start fire")
+	assert_true(sim.can_start_work(), "A fire warning remains informational rather than blocking BURN")
 	sim.free()
 
 

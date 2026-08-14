@@ -38,6 +38,7 @@ window/size/window_height_override=648
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation="landscape"
+window/dpi/allow_hidpi.web=false
 
 [gui]
 
@@ -46,4 +47,5 @@ common/default_scroll_deadzone=24
 [rendering]
 
 renderer/rendering_method="mobile"
+renderer/rendering_method.web="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true

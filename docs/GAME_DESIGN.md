@@ -79,6 +79,14 @@ Players may eventually bid on contracts, trading a higher chance of winning work
 
 Hardware increases local throughput but raises power, heat, maintenance, and space requirements.
 
+Major compute models have explicit fleet caps: four custom desktops, then two
+of each rack-scale model. A bigger room can still hold a mixed fleet and run
+more contracts in parallel; its empty floor is not permission to stack eighty
+copies of the strongest machine. When a rig reaches the next compute era, the
+board keeps one familiar local posting and uses the other default slots for
+authored work from the rig's service tier. Existing postings never resize from
+the live token rate.
+
 ### Dwelling
 
 - Bedroom
@@ -160,6 +168,18 @@ Each month contains:
 
 The final month presents a capstone contract. Winning unlocks a higher compute age and more extreme mechanics.
 
+### Pacing contract
+
+- A matched ordinary job takes roughly 4-6 burns on chapter entry and 2-3
+  after the chapter's meaningful hardware upgrades.
+- A normal fresh chapter targets 5-8 rounds; established permanent progression
+  targets 4-7 and the supported veteran profile targets 3-6.
+- Permanent power may make deliberately older postings trivial, but every board
+  must still advertise work that exercises the installed rig.
+- The authoritative thresholds and deterministic profile fixtures live in
+  `content/balance/pacing_targets.json`; `tests/run_balance.tscn` plays real
+  chapter transitions and reports pacing, heat, purchases and outcomes.
+
 ## 10. Failure states
 
 - Bankruptcy
@@ -172,6 +192,12 @@ The final month presents a capstone contract. Winning unlocks a higher compute a
 - Power-grid overload
 - Agent rebellion
 - Accidental consciousness before invoicing
+
+Hardware fire remains immediate when a committed prompt reaches the room's heat
+capacity. Before BURN, including the first click of a queued session, the board
+shows current and projected heat (`HEAT 0% -> 118% / FIRE`). This is a warning,
+not a confirmation or safety interlock: knowingly committing the burn still
+loses the run.
 
 ## 11. Meta-progression
 

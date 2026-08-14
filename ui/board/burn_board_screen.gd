@@ -254,9 +254,7 @@ func _deadline_color(prompts_left: int) -> Color:
 func _forecast_line(job: Dictionary, working: bool) -> String:
 	if job.is_empty():
 		return "--"
-	if not working:
-		return "press burn to start the round"
-	var preview: Dictionary = Simulation.preview_burn()
+	var preview: Dictionary = Simulation.preview_next_burn()
 	if not preview.get("ok", false):
 		return str(preview.get("reason", "this pipeline produces nothing"))
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
@@ -273,6 +271,7 @@ func _forecast_line(job: Dictionary, working: bool) -> String:
 		parts.append("boost")
 	if Simulation.cloud_engaged():
 		parts.append("cloud")
+	parts.append(_projected_heat_text(preview))
 	return " ".join(parts)
 
 
@@ -306,8 +305,14 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 	var rows: Array = []
 	var can_open: bool = Simulation.can_start_work()
 	if Simulation.can_burn() or can_open:
+		var burn_preview: Dictionary = Simulation.preview_next_burn()
+		var projected_fire: bool = bool(burn_preview.get("crosses_fire", false))
 		rows.append({
-			"headline": "BURN", "value": _burn_hint(can_open), "pressed": _on_burn,
+			"headline": "BURN",
+			"value": _burn_hint(can_open),
+			"warning": bool(burn_preview.get("crosses_throttle", false)) and not projected_fire,
+			"destructive": projected_fire,
+			"pressed": _on_burn,
 		})
 	if working and not job.is_empty():
 		rows.append({"headline": "COOL", "value": _cool_hint(), "pressed": _on_cool})
@@ -354,23 +359,31 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 
 
 func _burn_hint(can_open: bool) -> String:
-	if can_open and not Simulation.is_work_running():
-		return "start the round"
-	var preview: Dictionary = Simulation.preview_burn()
+	var preview: Dictionary = Simulation.preview_next_burn()
 	if not preview.get("ok", false):
-		return ""
+		return "start the round" if can_open else ""
 	var costs: PackedStringArray = []
-	var total_heat: float = float(preview.get("total_heat", preview.get("heat", 0.0)))
-	if absf(total_heat) >= 0.5:
-		costs.append("heat %+d" % int(round(total_heat)))
+	costs.append(_projected_heat_text(preview))
 	if float(preview.get("cost", 0.0)) > 0.0:
 		costs.append(NumberFormat.format_cash(float(preview.get("cost", 0.0))))
-	return " · ".join(costs)
+	return " \u00b7 ".join(costs)
 
 
-## COOL vents a share of current heat, but the ambient gain from powered-on
-## hardware lands the same prompt regardless — so the row shows the net result,
-## or a big vent on a hot rig with weak cooling can look like it did nothing.
+## The exact next-burn heat projection is visible even before a session starts.
+func _projected_heat_text(preview: Dictionary) -> String:
+	var capacity: float = maxf(1.0, float(preview.get("heat_capacity", 100.0)))
+	var before_ratio: float = float(preview.get("heat_before", 0.0)) / capacity
+	var after_ratio: float = float(preview.get("heat_ratio_after", before_ratio))
+	var text: String = "HEAT %d%% \u2192 %d%%" % [
+		int(round(before_ratio * 100.0)), int(round(after_ratio * 100.0)),
+	]
+	if bool(preview.get("crosses_fire", false)) or after_ratio >= 1.0:
+		return "%s \u00b7 FIRE" % text
+	if bool(preview.get("crosses_throttle", false)):
+		return "%s \u00b7 THROTTLE" % text
+	return text
+
+
 func _cool_hint() -> String:
 	var preview: Dictionary = Simulation.preview_cool()
 	if not preview.get("ok", false):

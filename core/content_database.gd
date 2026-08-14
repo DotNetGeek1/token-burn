@@ -496,6 +496,7 @@ func _load_balance() -> void:
 	balance["hardware_curves"] = _load_json_dict("res://content/balance/hardware_curves.json")
 	balance["difficulty_profiles"] = _load_json_dict("res://content/balance/difficulty_profiles.json")
 	balance["job_demands"] = _load_json_dict("res://content/balance/job_demands.json")
+	balance["pacing_targets"] = _load_json_dict("res://content/balance/pacing_targets.json")
 	rarity_weights = _load_json_dict("res://content/balance/rarity_weights.json")
 	comparisons = _load_json_array("res://content/balance/comparisons.json")
 	synergies = _load_json_array("res://content/balance/synergies.json")

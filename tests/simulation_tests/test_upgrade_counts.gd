@@ -14,6 +14,7 @@ func run() -> void:
 	_test_selling_decrements_and_zero_erases()
 	_test_carriable_rig_reads_the_unified_ledger()
 	_test_legacy_save_migrates_counts_from_the_split_fields()
+	_test_major_machine_caps_and_grandfathered_fleets()
 
 
 func _shop(location: String = "bedroom") -> Dictionary:
@@ -100,3 +101,31 @@ func _test_legacy_save_migrates_counts_from_the_split_fields() -> void:
 	var counts: Dictionary = UpgradeSystem.upgrade_counts(migrated)
 	assert_eq(int(counts.get("upgrade.custom_desktop", 0)), 2, "Repeatable levels migrate straight across")
 	assert_eq(int(counts.get("upgrade.dedicated_line", 0)), 1, "A one-off migrates in at a count of one")
+
+
+func _test_major_machine_caps_and_grandfathered_fleets() -> void:
+	var shop: Dictionary = _shop("garage")
+	assert_true(_buy(shop, "upgrade.gpu_rack"), "First GPU rack fits under its model cap")
+	assert_true(_buy(shop, "upgrade.gpu_rack"), "Second GPU rack reaches its model cap")
+	assert_false(_buy(shop, "upgrade.gpu_rack"), "A third GPU rack is refused even with floor space")
+
+	# A legacy save can already contain more than today's cap. Loading it must
+	# never delete paid-for hardware; it simply cannot add another copy.
+	shop["state"].build["hardware"].append("gpu_rack")
+	shop["state"].build["upgrade_levels"]["upgrade.gpu_rack"] = 3
+	shop["state"].build["upgrade_counts"]["upgrade.gpu_rack"] = 3
+	assert_eq(
+		UpgradeSystem.installed_count(shop["state"], "gpu_rack"), 3,
+		"An over-cap legacy fleet remains installed"
+	)
+	assert_false(_buy(shop, "upgrade.gpu_rack"), "An over-cap fleet cannot grow further")
+	assert_true(
+		shop["upgrades"].sell(shop["state"], "gpu_rack", ContentDatabase, shop["economy"]),
+		"A purchased over-cap rack can still be sold"
+	)
+	assert_false(_buy(shop, "upgrade.gpu_rack"), "At the cap the market still refuses another rack")
+	assert_true(
+		shop["upgrades"].sell(shop["state"], "gpu_rack", ContentDatabase, shop["economy"]),
+		"Selling below the cap is allowed"
+	)
+	assert_true(_buy(shop, "upgrade.gpu_rack"), "A rack can be bought again once below the cap")

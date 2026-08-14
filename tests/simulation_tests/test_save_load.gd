@@ -209,11 +209,11 @@ func _test_v19_repairs_recurring_costs_and_sale_provenance() -> void:
 	var economy := EconomySystem.new()
 	migrated.economy["cash"] = 1_000_000.0
 	assert_true(
-		upgrades.purchase(migrated, "upgrade.gpu_rack", ContentDatabase, EffectResolver.new(), economy),
+		upgrades.purchase(migrated, "upgrade.custom_desktop", ContentDatabase, EffectResolver.new(), economy),
 		"A purchase made after migration succeeds"
 	)
 	assert_eq(
-		int(UpgradeSystem.purchased_upgrade_counts(migrated).get("upgrade.gpu_rack", 0)),
+		int(UpgradeSystem.purchased_upgrade_counts(migrated).get("upgrade.custom_desktop", 0)),
 		1,
 		"And only that new copy becomes refundable"
 	)

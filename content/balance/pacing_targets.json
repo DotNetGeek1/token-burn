@@ -1,0 +1,57 @@
+{
+  "normal": {
+    "chapter_rounds": {
+      "fresh": [5, 8],
+      "established": [4, 7],
+      "veteran": [3, 6]
+    },
+    "matched_job_burns": {
+      "chapter_entry": [4, 6],
+      "mature_rig": [2, 3]
+    },
+    "one_burn_rate_cap": {
+      "fresh": 0.10,
+      "established": 0.10,
+      "veteran": 0.20
+    },
+    "minimum_campaign_runs_for_pacing_gate": 5,
+    "minimum_matched_jobs_for_rate_gate": 10,
+    "next_machine_acquisition_round": [3, 5]
+  },
+  "smoke": {
+    "seeds": [1000, 1001],
+    "require_no_stuck_runs": true,
+    "require_no_invalid_numbers": true,
+    "require_no_safe_policy_fires": true,
+    "require_all_locations": true,
+    "require_all_locations_cleared": true,
+    "minimum_victory_round": 2
+  },
+  "full_sweep_runs": 50,
+  "profiles": {
+    "fresh": {
+      "starting_rig_ranks": 0,
+      "efficiency_bonus": 0.0,
+      "extra_pipeline_slots": 0,
+      "cooling_bonus": 0.0,
+      "old_silicon_multiplier": 1.0,
+      "starting_cash_bonus": 0.0
+    },
+    "established": {
+      "starting_rig_ranks": 2,
+      "efficiency_bonus": 0.10,
+      "extra_pipeline_slots": 1,
+      "cooling_bonus": 16.0,
+      "old_silicon_multiplier": 1.2,
+      "starting_cash_bonus": 1000.0
+    },
+    "veteran": {
+      "starting_rig_ranks": 5,
+      "efficiency_bonus": 0.25,
+      "extra_pipeline_slots": 3,
+      "cooling_bonus": 40.0,
+      "old_silicon_multiplier": 2.0,
+      "starting_cash_bonus": 8000.0
+    }
+  }
+}

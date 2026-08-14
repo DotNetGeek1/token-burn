@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Godot HTML5 export — generated engine glue, not site source.
+    "public/game/**",
   ]),
 ]);
 

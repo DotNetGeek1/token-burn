@@ -41,7 +41,7 @@
   "private_power_grid": {
     "rent": 900000,
     "hardware_slots": 80,
-    "cooling_capacity": 60000,
+    "cooling_capacity": 120000,
     "heat_capacity": 560,
     "starting_cash": 2700000,
     "starting_hardware": ["upgrade.compute_warehouse"]
@@ -49,7 +49,7 @@
   "moon_facility": {
     "rent": 6000000,
     "hardware_slots": 160,
-    "cooling_capacity": 300000,
+    "cooling_capacity": 700000,
     "heat_capacity": 800,
     "starting_cash": 18000000,
     "starting_hardware": ["upgrade.industrial_campus"]

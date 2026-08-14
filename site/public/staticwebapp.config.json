@@ -1,7 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
   "navigationFallback": {
-    "rewrite": "/404.html"
+    "rewrite": "/404.html",
+    "exclude": ["/game/*", "/downloads/*", "/img/*", "/fonts/*"]
   },
   "responseOverrides": {
     "404": {
@@ -11,7 +12,9 @@
   "mimeTypes": {
     ".apk": "application/vnd.android.package-archive",
     ".webp": "image/webp",
-    ".ttf": "font/ttf"
+    ".ttf": "font/ttf",
+    ".wasm": "application/wasm",
+    ".pck": "application/octet-stream"
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
@@ -20,6 +23,12 @@
   "routes": [
     {
       "route": "/downloads/*.apk",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
+      "route": "/game/*",
       "headers": {
         "Cache-Control": "no-cache"
       }

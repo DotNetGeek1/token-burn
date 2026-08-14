@@ -5,12 +5,33 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "export/**"
+      - "tools/export_web.ps1"
+      - "project.godot"
+      - "content/**"
+      - "core/**"
+      - "systems/**"
+      - "ui/**"
+      - "presentation/**"
+      - "definitions/**"
+      - "config/**"
       - ".github/workflows/deploy-site.yml"
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches: [main]
     paths:
       - "site/**"
+      - "export/**"
+      - "tools/export_web.ps1"
+      - "project.godot"
+      - "content/**"
+      - "core/**"
+      - "systems/**"
+      - "ui/**"
+      - "presentation/**"
+      - "definitions/**"
+      - "config/**"
+      - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 
 permissions:
@@ -21,9 +42,25 @@ jobs:
   build_and_deploy:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     name: Build and deploy
     steps:
       - uses: actions/checkout@v4
+
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Export Godot web build
+        run: |
+          cp export/web_export_presets.cfg export_presets.cfg
+          mkdir -p site/public/game
+          godot --headless --export-release Web site/public/game/index.html
+          test -f site/public/game/index.html
+          test -f site/public/game/index.wasm
+          test -f site/public/game/index.pck
 
       - uses: actions/setup-node@v4
         with:

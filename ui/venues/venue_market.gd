@@ -420,6 +420,10 @@ func _row_title(upgrade: UpgradeDefinition, level: int) -> String:
 ## Which wall the player hit, said on the tile so a locked line explains itself
 ## without being opened.
 func _blocked_status(upgrade: UpgradeDefinition, affordable: bool) -> String:
+	if UpgradeSystem.is_maxed(Simulation.run_state, upgrade):
+		return "MAX %d/%d" % [
+			UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id), upgrade.max_level,
+		]
 	if UpgradePresentation.prerequisite_text(upgrade) != "":
 		return "LOCKED"
 	if UpgradePresentation.hardware_space_full(upgrade):
@@ -440,8 +444,6 @@ func _shelves() -> Dictionary:
 	var shelves: Dictionary = {}
 	for upgrade in ContentDatabase.upgrades:
 		if upgrade.category == "dwelling":
-			continue
-		if UpgradeSystem.is_maxed(Simulation.run_state, upgrade):
 			continue
 		if not upgrade.repeatable:
 			if upgrade.id in Simulation.run_state.build["upgrades"]:

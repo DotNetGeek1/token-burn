@@ -171,6 +171,9 @@ func _build_overlays() -> void:
 	for overlay in [
 		_angel_investors, _round_debrief, _bills_screen, _run_end, _burn_lab,
 	]:
+		if overlay == null:
+			push_error("Failed to instantiate a desk overlay")
+			continue
 		overlay_root.add_child(overlay)
 	_round_debrief.continue_pressed.connect(_on_debrief_continue)
 	_bills_screen.continue_pressed.connect(_on_bills_continue)
@@ -727,7 +730,7 @@ func _mount(host: Control, scenes: Dictionary, tab_name: String) -> void:
 ## its way in. The player closes it onto the room they left, not onto the inside
 ## of a whiteboard.
 func open_burn_lab() -> void:
-	if FeatureFlags.is_enabled("burn_lab_enabled"):
+	if _burn_lab != null and FeatureFlags.is_enabled("burn_lab_enabled"):
 		clear_room_focus()
 		_burn_lab.open()
 

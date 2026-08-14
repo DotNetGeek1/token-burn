@@ -27,6 +27,8 @@ func run() -> void:
 	_test_upgrades_are_not_matched_by_the_work(job_system)
 	_test_rewards_follow_the_hardware_ladder(job_system)
 	_test_hard_pays_less_for_more_work(job_system)
+	_test_strong_rigs_open_authored_work_without_rescaling_local_jobs(job_system)
+	_test_late_bands_have_distinct_ordinary_work(job_system)
 
 
 ## The whole point of the seven-chapter ladder: the garage must not be handed the
@@ -76,6 +78,35 @@ func _test_upgrades_are_not_matched_by_the_work(job_system: JobSystem) -> void:
 		int(weak_job.get("deadline_prompts", 0)),
 		"And allows the same time, so the fast rig delivers early"
 	)
+
+
+func _test_strong_rigs_open_authored_work_without_rescaling_local_jobs(job_system: JobSystem) -> void:
+	var state := RunState.new()
+	state.build["dwelling"] = "garage"
+	state.build["hardware"] = ["custom_desktop", "gpu_rack"]
+	state.business["demand"] = 3.0
+	state.business["reputation"] = 0.0
+	job_system.generate_offers(state, DeterministicRng.new(4040), ContentDatabase, {})
+	var offers: Array = state.business.get("job_offers", [])
+	assert_eq(offers.size(), 3, "The stronger rig still receives a full board")
+	var matched: int = 0
+	var local: int = 0
+	for offer in offers:
+		if int(offer.get("tier", -1)) == 2 and bool(offer.get("rig_matched", false)):
+			matched += 1
+		if int(offer.get("tier", -1)) <= 1:
+			local += 1
+	assert_eq(matched, 2, "Two offers come from the GPU rack's authored work tier")
+	assert_eq(local, 1, "One familiar local posting remains on the board")
+
+
+func _test_late_bands_have_distinct_ordinary_work(job_system: JobSystem) -> void:
+	for tier in [4, 5, 6]:
+		var ordinary: int = 0
+		for job_def in ContentDatabase.jobs:
+			if job_def.tier == tier and not job_def.windfall:
+				ordinary += 1
+		assert_true(ordinary >= 3, "Tier %d has at least three ordinary authored jobs" % tier)
 
 
 ## A location's ordinary work should be a meaningful chunk of its next machine,

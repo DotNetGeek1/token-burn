@@ -39,6 +39,12 @@ const PAD_H := 8
 		destructive = value
 		_apply_palette()
 
+## Warning lines use amber. Destructive always wins when both flags are set.
+@export var warning: bool = false:
+	set(value):
+		warning = value
+		_apply_palette()
+
 var _margin: MarginContainer = null
 var _row: HBoxContainer = null
 var _index: Label = null
@@ -63,7 +69,11 @@ func _ready() -> void:
 
 
 func accent() -> Color:
-	return ConsoleStyle.DANGER if destructive else PHOSPHOR
+	if destructive:
+		return ConsoleStyle.DANGER
+	if warning:
+		return UiThemeBuilder.semantic("warning")
+	return PHOSPHOR
 
 
 func _build() -> void:

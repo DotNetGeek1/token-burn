@@ -131,6 +131,7 @@ func set_actions(entries: Array) -> void:
 		row.headline = str(entry.get("headline", ""))
 		row.value_text = str(entry.get("value", ""))
 		row.destructive = bool(entry.get("destructive", false))
+		row.warning = bool(entry.get("warning", false))
 		var enabled: bool = bool(entry.get("enabled", true))
 		row.disabled = not enabled
 		row.modulate.a = 1.0 if enabled else 0.45

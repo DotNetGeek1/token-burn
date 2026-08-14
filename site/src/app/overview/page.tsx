@@ -174,9 +174,9 @@ export default function OverviewPage() {
         lead="Beat a location's contract and you move up. Keep going and the run stops being about rent: The Singularity, The Archive, The Simulation and The Ad Machine are all still on the table."
       >
         <div className="flex flex-wrap gap-3">
-          <Button href="/tutorial/">How to play</Button>
-          <Button href="/download/" variant="ghost">
-            Download now
+          <Button href="/play/">Play in browser</Button>
+          <Button href="/tutorial/" variant="ghost">
+            How to play
           </Button>
         </div>
       </Section>

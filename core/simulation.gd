@@ -217,10 +217,10 @@ func ensure_job_offers() -> void:
 	_ensure_job_offers()
 
 
-func reset_run(p_seed: int = 0) -> void:
+func reset_run(p_seed: int = 0, difficulty_override: String = "") -> void:
 	run_seed = p_seed if p_seed != 0 else int(Time.get_unix_time_from_system()) & 0x7FFFFFFF
 	rng.set_seed(run_seed)
-	var difficulty_id: String = MetaProgress.difficulty()
+	var difficulty_id: String = difficulty_override if difficulty_override != "" else MetaProgress.difficulty()
 	var difficulty_profiles: Dictionary = ContentDatabase.balance.get("difficulty_profiles", {})
 	var profile: Dictionary = difficulty_profiles.get(difficulty_id, difficulty_profiles.get("normal", {}))
 	run_state.reset(profile)
@@ -322,22 +322,44 @@ func _grant_location_starter_rig(state: RunState, stats: Dictionary) -> void:
 ## installed again.
 func _install_permanent_rig() -> void:
 	var installed: int = 0
+	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
 	for upgrade_id in MetaProgress.starting_rig():
 		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
 		if upgrade == null:
 			continue
+		# Permanent ownership does not make an industrial campus fit in a
+		# garage. The rung waits until the campaign reaches the premises it was
+		# authored for, just as a newly purchased copy would.
+		if not UpgradeSystem.prerequisites_met(run_state, upgrade, ContentDatabase):
+			continue
 		if UpgradeSystem.installed_key(upgrade) in Array(run_state.build.get("hardware", [])):
+			continue
+		var curve: Dictionary = Dictionary(
+			ContentDatabase.balance.get("hardware_curves", {}).get(upgrade.hardware_key, {})
+		)
+		var startup: Dictionary = heat_outlook(
+			float(curve.get("power_draw", 0.0)), UpgradeSystem.cooling_from(upgrade)
+		)
+		# A permanent unlock is never allowed to turn a cold chapter start into
+		# an unavoidable fire. If one prompt of ambient heat alone exceeds the
+		# room's headroom, the machine stays in storage until a later location.
+		if float(startup.get("heat_per_prompt", 0.0)) >= float(
+			run_state.compute.get("heat_capacity", 100.0)
+		):
 			continue
 		if _upgrade_system.install_carried(
 			run_state, str(upgrade_id), ContentDatabase, effect_resolver
 		):
 			installed += 1
+			_compute_system.recalculate(
+				run_state, effect_resolver, _collect_subscriptions(), rng
+			)
 	if installed > 0:
 		round_log.append("Your permanent rig is already racked: %d machine(s)." % installed)
 
 
-func start_run(p_seed: int = 0) -> void:
-	reset_run(p_seed)
+func start_run(p_seed: int = 0, difficulty_override: String = "") -> void:
+	reset_run(p_seed, difficulty_override)
 	phase = Phase.ROUND_PREP
 	EventBus.emit_event(EventBus.EVENT_RUN_STARTED)
 	_begin_round()
@@ -726,8 +748,80 @@ func preview_burn(stage_limit: int = -1) -> Dictionary:
 	var burn: Dictionary = result.get("burn", {"ok": false, "reason": "The pipeline is empty."})
 	if burn.get("ok", false):
 		burn = burn.duplicate(true)
-		burn["total_heat"] = float(clone.compute.get("heat", 0.0)) - heat_before
+		_decorate_burn_outlook(burn, heat_before, clone)
 	return burn
+
+
+## The authoritative next-click forecast. Unlike `preview_burn`, this also works
+## while accepted work is still queued, before the first BURN has opened the
+## session. The throwaway state follows the same preparation order as
+## `start_work`: recalculate, promote queued jobs, apply queued surges, burn.
+## Nothing touches the live phase, state, RNG counters, signals, trace, or save.
+func preview_next_burn(stage_limit: int = -1) -> Dictionary:
+	if phase == Phase.IN_ROUND and _work_running:
+		return preview_burn(stage_limit)
+	if not can_start_work():
+		return {"ok": false, "reason": "No queued work."}
+	var clone := RunState.new()
+	clone.from_dict(run_state.to_dict())
+	var heat_before: float = float(clone.compute.get("heat", 0.0))
+	var preview_resolver := EffectResolver.new()
+	_board_system.ensure_board(clone, ContentDatabase)
+	_compute_system.recalculate(
+		clone, preview_resolver, _collect_subscriptions(), rng
+	)
+	if not _job_system.begin_work_session(clone, ContentDatabase):
+		return {"ok": false, "reason": "No queued work."}
+	_apply_queued_preview_options(clone)
+	var result: Dictionary = _job_system.run_burn(
+		clone,
+		_burn_rng(),
+		preview_resolver,
+		_collect_subscriptions(),
+		tuning,
+		_compute_system,
+		_heat_system,
+		_economy_system,
+		_board_system,
+		stage_limit,
+		ResolveMode.PREVIEW
+	)
+	var burn: Dictionary = result.get("burn", {"ok": false, "reason": "The pipeline is empty."})
+	if burn.get("ok", false):
+		burn = burn.duplicate(true)
+		_decorate_burn_outlook(burn, heat_before, clone)
+	return burn
+
+
+func _decorate_burn_outlook(burn: Dictionary, heat_before: float, state: RunState) -> void:
+	var heat_after: float = float(state.compute.get("heat", 0.0))
+	var capacity: float = maxf(1.0, float(state.compute.get("heat_capacity", 100.0)))
+	var throttle_ratio: float = float(
+		ContentDatabase.balance.get("economy", {}).get("heat", {}).get("throttle_ratio", 0.8)
+	)
+	burn["heat_before"] = heat_before
+	burn["heat_delta"] = heat_after - heat_before
+	# Kept for callers written against the original preview contract.
+	burn["total_heat"] = heat_after - heat_before
+	burn["heat_after"] = heat_after
+	burn["heat_capacity"] = capacity
+	burn["heat_ratio_after"] = heat_after / capacity
+	burn["crosses_throttle"] = heat_before < capacity * throttle_ratio and heat_after >= capacity * throttle_ratio
+	burn["crosses_fire"] = heat_before < capacity and heat_after >= capacity
+
+
+func _apply_queued_preview_options(state: RunState) -> void:
+	if queued_boost:
+		state.add_rate_modifier(1.35, 1, "boost")
+		_heat_system.add_heat(state, 12.0)
+	if not queued_cloud or not (CLOUD_ACCOUNT_UPGRADE in state.build.get("upgrades", [])):
+		return
+	var burst: float = float(state.compute.get("local_capacity", 0.0)) * _cloud_burst_multiplier_for(state)
+	var price: float = _cloud_burst_cost_for(state)
+	if not _economy_system.purchase(state, price, "cloud_burst_preview"):
+		return
+	state.compute["cloud_burst"] = burst
+	state.compute["cloud_burst_prompts"] = 1
 
 
 ## What COOL would actually do to the heat bar right now: the vent, plus the
@@ -1627,7 +1721,11 @@ func cloud_enabled() -> bool:
 
 
 func cloud_burst_multiplier() -> float:
-	var level: int = int(run_state.build.get("upgrade_levels", {}).get(CLOUD_BURST_UPGRADE, 0))
+	return _cloud_burst_multiplier_for(run_state)
+
+
+func _cloud_burst_multiplier_for(state: RunState) -> float:
+	var level: int = int(state.build.get("upgrade_levels", {}).get(CLOUD_BURST_UPGRADE, 0))
 	return CLOUD_BURST_BASE_MULTIPLIER + float(level) * CLOUD_BURST_PER_LEVEL
 
 
@@ -1635,8 +1733,12 @@ func cloud_burst_multiplier() -> float:
 ## turning the tap on at all. The flat fee is what makes an early burst a real
 ## decision instead of loose change.
 func cloud_burst_cost() -> float:
+	return _cloud_burst_cost_for(run_state)
+
+
+func _cloud_burst_cost_for(state: RunState) -> float:
 	var economy: Dictionary = ContentDatabase.balance.get("economy", {})
-	var burst: float = float(run_state.compute["local_capacity"]) * cloud_burst_multiplier()
+	var burst: float = float(state.compute.get("local_capacity", 0.0)) * _cloud_burst_multiplier_for(state)
 	var rate: float = float(economy.get("cloud_burst_cost_per_token", 0.00008))
 	var fee: float = float(economy.get("cloud_burst_activation_fee", 0.0))
 	return burst * rate + fee

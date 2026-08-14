@@ -49,7 +49,82 @@ func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Nod
 	elif not stretch.is_empty():
 		offers.append(stretch)
 
+	# The room still advertises some familiar work, but a rig that has reached
+	# the next hardware era must not be shown a whole board it can erase in one
+	# click. These are authored contracts from a fixed band, not live-scaled
+	# copies of the local work: buying power opens a bigger market without moving
+	# the numbers on a posting that already exists.
+	var service_tier: int = rig_work_tier(run_state, content_db)
+	if service_tier > here:
+		var matched_count: int = mini(2, offers.size())
+		if offers.size() > 1:
+			matched_count = mini(matched_count, offers.size() - 1)
+		var matched: Array = _rig_matched_offers(
+			run_state, rng.derive("rig_matched"), content_db, tuning,
+			round_number, service_tier, matched_count
+		)
+		for matched_index in range(matched.size()):
+			offers[matched_index] = matched[matched_index]
+	var matched_tier: int = maxi(here, service_tier)
+	for offer in offers:
+		if offer is Dictionary:
+			offer["rig_matched"] = int(offer.get("tier", -1)) == matched_tier
+
 	run_state.business["job_offers"] = _classify_offers(offers, run_state, content_db)
+
+
+## The strongest authored band this installed fleet is meant to serve. This is
+## metadata on the machine, deliberately not inferred from the live token rate:
+## perks and throttles may change output without silently changing the market.
+static func rig_work_tier(run_state: RunState, content_db: Node) -> int:
+	var curves: Dictionary = content_db.balance.get("hardware_curves", {})
+	var tier: int = 0
+	for hardware_id in run_state.build.get("hardware", []):
+		var curve: Dictionary = Dictionary(curves.get(str(hardware_id), {}))
+		tier = maxi(tier, int(curve.get("work_tier", 0)))
+	var bands: Array = location_bands(content_db)
+	return clampi(tier, 0, maxi(0, bands.size() - 1))
+
+
+func _rig_matched_offers(
+	run_state: RunState,
+	rng: DeterministicRng,
+	content_db: Node,
+	tuning: Dictionary,
+	round_number: int,
+	tier: int,
+	count: int
+) -> Array:
+	if count <= 0:
+		return []
+	var pool: Array = []
+	for job_def in content_db.jobs:
+		if _job_tier(job_def, content_db) != tier:
+			continue
+		if round_number < 12 and job_def.id == "job.capstone_simulation":
+			continue
+		pool.append(job_def)
+	if pool.is_empty():
+		return []
+	pool = rng.shuffle(pool)
+	var result: Array = []
+	var used_windfall: bool = false
+	var cursor: int = 0
+	var attempts: int = 0
+	while result.size() < count and attempts < pool.size() * 3:
+		var job_def: JobDefinition = pool[cursor % pool.size()]
+		cursor += 1
+		attempts += 1
+		if job_def.windfall and used_windfall:
+			continue
+		var offer: Dictionary = _scale_job(
+			job_def, round_number, content_db, tuning, run_state,
+			rng.derive("offer_%d_%s" % [cursor, job_def.id]), result.size()
+		)
+		offer["rig_matched"] = true
+		result.append(offer)
+		used_windfall = used_windfall or job_def.windfall
+	return result
 
 
 ## The board is drawn from the location's own band. The capstone is a

@@ -19,6 +19,8 @@ const BENCH := "bench"
 var _kicker: Label = null
 var _index_lines: VBoxContainer = null
 var _counters: VBoxContainer = null
+var _workflow_rule: Control = null
+var _workflow_row: ConsoleMenuRow = null
 var _board_panel: VenuePanel = null
 var _board: VenueBoard = null
 var _signage_panel: VenuePanel = null
@@ -39,7 +41,10 @@ func venue_key() -> String:
 
 
 func _hint_entries() -> Array:
-	return [{"index": "ENTER", "headline": "FIT"}]
+	return [
+		{"index": "ENTER", "headline": "FIT"},
+		{"index": "W", "headline": "WORKFLOWS"},
+	]
 
 
 func _build_venue() -> void:
@@ -58,7 +63,7 @@ func _build_index() -> void:
 	var content: VBoxContainer = panel.content()
 
 	_kicker = ConsoleStyle.label(
-		"PERKS AND LOADOUT", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+		"PERKS, LOADOUT AND PIPELINES", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
 	)
 	content.add_child(_kicker)
 
@@ -72,6 +77,15 @@ func _build_index() -> void:
 	_counters.add_theme_constant_override("separation", 0)
 	_counters.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(_counters)
+
+	_workflow_rule = ConsoleStyle.rule(0.22)
+	content.add_child(_workflow_rule)
+
+	_workflow_row = ConsoleMenuRow.new()
+	_workflow_row.index_label = "W"
+	_workflow_row.headline = "WORKFLOWS"
+	_workflow_row.pressed.connect(_on_workflows_pressed)
+	content.add_child(_workflow_row)
 
 
 func _build_board() -> void:
@@ -130,6 +144,7 @@ func refresh() -> void:
 		_rack = ACTIVE if not Array(racks[ACTIVE]).is_empty() else BENCH
 	_refresh_index()
 	_refresh_counters(racks)
+	_refresh_workflows_door()
 	_refresh_board(racks)
 	_refresh_notice()
 	_refresh_detail()
@@ -225,10 +240,37 @@ func _on_counter_pressed(key: String) -> void:
 	lean_on("board")
 
 
+## A door, not a rack: the pipelines live in their own room, and this is how
+## the workshop sends you there. Hidden between runs, because there is nothing
+## to wire until one has started.
+func _refresh_workflows_door() -> void:
+	if _workflow_row == null:
+		return
+	var in_run: bool = Simulation.phase != Simulation.Phase.IDLE
+	_workflow_row.visible = in_run
+	if _workflow_rule != null:
+		_workflow_rule.visible = in_run
+	if in_run:
+		_workflow_row.value_text = "%d / %d" % [
+			Simulation.workflow_count(), Simulation.workflow_capacity(),
+		]
+	_layout_workflow_row()
+
+
+func _on_workflows_pressed() -> void:
+	if Simulation.phase == Simulation.Phase.IDLE:
+		return
+	SceneRouter.open_workflows()
+
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	if SceneRouter.investor_busy():
+		return
+	if event.keycode == KEY_W:
+		_on_workflows_pressed()
+		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 		if _selected != "":
@@ -478,6 +520,7 @@ func _on_venue_layout() -> void:
 	if _detail != null:
 		_detail.set_metrics(scale)
 	_layout_counter_rows()
+	_layout_workflow_row()
 	var font_tiny: int = ConsoleMetrics.font_tiny(scale)
 	if _kicker != null:
 		_kicker.add_theme_font_size_override("font_size", font_tiny)
@@ -506,3 +549,14 @@ func _layout_counter_rows() -> void:
 	var pad: int = ConsoleMetrics.pad_h(scale)
 	for key in _counter_rows:
 		(_counter_rows[key] as ConsoleMenuRow).set_metrics(font, height, pad)
+
+
+func _layout_workflow_row() -> void:
+	if _workflow_row == null:
+		return
+	var scale: float = console_scale()
+	_workflow_row.set_metrics(
+		ConsoleMetrics.font_small(scale),
+		ConsoleMetrics.row_height(scale),
+		ConsoleMetrics.pad_h(scale)
+	)

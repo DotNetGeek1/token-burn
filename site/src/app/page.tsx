@@ -61,9 +61,9 @@ export default function HomePage() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <Button href="/download/">Download now</Button>
-              <Button href="/overview/" variant="ghost">
-                What is this?
+              <Button href="/play/">Play in browser</Button>
+              <Button href="/download/" variant="ghost">
+                Download APK
               </Button>
             </div>
           </div>
@@ -121,10 +121,15 @@ export default function HomePage() {
           <div>
             <h2 className="heading text-3xl sm:text-4xl">Play the playtest</h2>
             <p className="mt-2 text-sm text-muted">
-              Android build, {site.apkSize}. Bring bug reports and opinions.
+              In the browser, or the Android build ({site.apkSize}). Bring bug reports and opinions.
             </p>
           </div>
-          <Button href="/download/">Download now</Button>
+          <div className="flex flex-wrap gap-3">
+            <Button href="/play/">Play in browser</Button>
+            <Button href="/download/" variant="ghost">
+              Download APK
+            </Button>
+          </div>
         </Panel>
       </section>
     </>

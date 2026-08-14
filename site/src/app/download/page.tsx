@@ -4,7 +4,7 @@ import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Download",
-  description: `Download the Token Burn v${site.version} Android playtest build and install it by sideloading the APK.`,
+  description: `Play Token Burn v${site.version} in the browser, or download the Android playtest APK.`,
 };
 
 const installSteps = [
@@ -41,6 +41,25 @@ const facts = [
 export default function DownloadPage() {
   return (
     <>
+      <Section
+        kicker="Play"
+        title="Token Burn in the browser"
+        lead="The same playtest, running as WebAssembly. Needs WebGL 2.0 — Chrome or Firefox on a desktop or laptop is the comfortable way to play. Phone browsers work in landscape; the Android APK below is still the better mobile build."
+      >
+        <Panel accent="action" className="p-8">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="kicker">Web playtest</p>
+              <p className="heading mt-1 text-4xl">
+                v{site.version} <span className="text-action">in-browser</span>
+              </p>
+              <p className="mt-2 text-sm text-muted">No install. Saves live in this browser.</p>
+            </div>
+            <Button href="/play/">Play now</Button>
+          </div>
+        </Panel>
+      </Section>
+
       <Section
         kicker="Download"
         title="Token Burn on Android"
@@ -103,8 +122,9 @@ export default function DownloadPage() {
             probably is one.
           </p>
           <p>
-            There is no analytics, no account and no network requirement — the game runs entirely on
-            your device.
+            The Android build has no analytics, no account and no network requirement — it runs
+            entirely on your device. The browser build needs a network connection to load, then
+            plays on this machine; progress is stored in this browser.
           </p>
         </Panel>
       </Section>

@@ -8,16 +8,9 @@ extends VenueScene
 ## destinations — a destination wants to say how much of itself is left to see,
 ## and a single line has nowhere to put that.
 
-## Where each destination goes, and what the card says about it. Ordered as the
-## index was: the run's own tools first, then the profile's records, then the
-## debug door.
+## Where each destination goes, and what the card says about it. The profile's
+## records first, then the debug door. Pipelines live on Build now.
 const DESTINATIONS := [
-	{
-		"id": "workflows",
-		"name": "Workflows",
-		"blurb": "The pipelines this run works its contracts through.",
-		"run_only": true,
-	},
 	{
 		"id": "legacy",
 		"name": "The Legacy",
@@ -172,16 +165,12 @@ func _refresh_board() -> void:
 	_board.set_entries(entries)
 
 
-## A destination that this profile or this run cannot use is absent rather than
-## greyed: workflows belong to a run, and the burn lab belongs to a build with
-## the flag on.
+## A destination that this profile cannot use is absent rather than greyed: the
+## burn lab belongs to a build with the flag on.
 func _destination_entry(destination: Dictionary) -> Dictionary:
 	var id: String = str(destination.get("id", ""))
 	var flag: String = str(destination.get("flag", ""))
 	if flag != "" and not FeatureFlags.is_enabled(flag):
-		return {}
-	if bool(destination.get("run_only", false)) \
-			and Simulation.phase == Simulation.Phase.IDLE:
 		return {}
 	var figure: Dictionary = _destination_figure(id)
 	return {
@@ -207,13 +196,6 @@ func _destination_figure(id: String) -> Dictionary:
 				],
 				"unit": "earned",
 			}
-		"workflows":
-			return {
-				"figure": "%d / %d" % [
-					Simulation.workflow_count(), Simulation.workflow_capacity(),
-				],
-				"unit": "defined",
-			}
 		"legacy":
 			return {
 				"figure": "%.0f%%" % float(
@@ -231,8 +213,6 @@ func _on_destination(meta: Variant) -> void:
 	# Nothing in this room stays selected: a door is pressed, not chosen.
 	_board.clear_selection()
 	match str(meta):
-		"workflows":
-			SceneRouter.open_workflows()
 		"legacy":
 			SceneRouter.open_legacy()
 		"achievements":

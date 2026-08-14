@@ -23,10 +23,11 @@ npm run build    # static export into site/out
 
 | Route        | Content                                                     |
 | ------------ | ----------------------------------------------------------- |
-| `/`          | Hero, pitch, feature teasers, download CTA                   |
+| `/`          | Hero, pitch, feature teasers, play / download CTAs           |
+| `/play/`     | Redirects to the Godot web export at `/game/` (full page, not an iframe) |
 | `/overview/` | Round loop, contracts, heat, locations, perks, the investor  |
 | `/tutorial/` | Corrigan's intro, the wall checklist, first-run walkthrough  |
-| `/download/` | Android APK download and sideloading instructions            |
+| `/download/` | Browser play CTA, Android APK download and sideloading       |
 
 ## Updating imagery
 
@@ -46,6 +47,17 @@ The download button points at `/downloads/token-burn.apk`. APKs are gitignored, 
 - drop the signed APK into `site/public/downloads/token-burn.apk` before a manual deploy, or
 - attach it to a GitHub release and change `apkHref` in [`src/lib/site.ts`](src/lib/site.ts) to that
   URL.
+
+The Play page opens `/game/index.html` as a full document (not an iframe — Godot's
+pointer mapping breaks when the canvas is nested). That HTML5 export is also
+gitignored. Produce it with:
+
+```powershell
+./tools/export_web.ps1
+```
+
+from the repo root (Godot 4.7.x plus web export templates). The site deploy workflow runs the same
+export on CI so Azure always gets a current web build.
 
 Version, size and Android requirement shown on the page also live in `src/lib/site.ts`.
 

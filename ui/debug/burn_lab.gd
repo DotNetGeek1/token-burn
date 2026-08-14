@@ -215,8 +215,14 @@ func _refresh_trace() -> void:
 
 
 func _run_batch() -> void:
-	var runner := BatchRunner.new()
-	var summary: Dictionary = runner.run(BATCH_RUNS, "random")
+	var script: Script = load("res://tests/batch_runner.gd") as Script
+	if script == null:
+		_batch_note = "BATCH RUNNER NOT IN THIS BUILD"
+		_refresh_trace()
+		_apply_body_metrics()
+		return
+	var runner: RefCounted = script.new() as RefCounted
+	var summary: Dictionary = runner.call("run", BATCH_RUNS, "random")
 	_batch_note = "BATCH: %d RUNS, WIN RATE %.1f%%" % [
 		int(summary.get("runs", 0)), float(summary.get("win_rate", 0.0)) * 100.0
 	]

@@ -28,6 +28,8 @@ desktop.ini
 site/node_modules/
 site/.next/
 site/out/
+site/public/game/*
+!site/public/game/README.md
 
 # Logs
 *.log

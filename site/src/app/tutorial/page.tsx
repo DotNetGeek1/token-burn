@@ -157,7 +157,7 @@ export default function TutorialPage() {
         </Panel>
 
         <div className="mt-8 flex flex-wrap gap-3">
-          <Button href="/download/">Download now</Button>
+          <Button href="/play/">Play in browser</Button>
           <Button href="/overview/" variant="ghost">
             Back to overview
           </Button>
