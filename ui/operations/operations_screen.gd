@@ -1,29 +1,35 @@
 extends Control
 
-## The desk with nothing burning on it, printed on the laptop standing in the
-## room.
+## The desk between burns, printed on the evolving workstation in the room.
 ##
 ## Accepting a contract lands on the burn board and the deck owns BOOST / CLOUD
 ## / START, so this is only what the operation looks like between sessions (or
 ## when the player peeks back at the room while one is running). It is drawn
-## into the laptop screen the artwork painted rather than in a card floated over
-## the picture, so the status of the business is something in the room.
+## into the workstation's primary glass rather than in a card floated over the
+## picture, so the status of the business is something in the room.
 
-var _laptop: LaptopScreen = null
+const WORKSTATION_SCENE := preload("res://ui/board/burn_rig.tscn")
+
+var _workstation: WorkstationRig = null
+var _laptop: WorkstationConsole = null
 var _breakdown_sheet: ConsoleSheet = null
 var _danger_vignette: DangerVignette = null
 
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
-	# The shell re-lays the room out whenever the operation moves premises, and
-	# the laptop is a piece of that room's furniture.
+	# The shell re-lays the room out whenever the operation moves premises.
 	add_to_group("board_mounted")
 	_danger_vignette = DangerVignette.mount(self)
-	_laptop = LaptopScreen.new()
-	_laptop.name = "Laptop"
-	add_child(_laptop)
+	_workstation = WORKSTATION_SCENE.instantiate()
+	_workstation.name = "Workstation"
+	add_child(_workstation)
+	move_child(_workstation, 0)
+	_laptop = WorkstationConsole.new()
+	_laptop.name = "PrimaryConsole"
+	_workstation.mount_primary(_laptop)
 	_laptop.setup("desk")
+	_workstation.hide_meters()
 	_breakdown_sheet = ConsoleSheet.new()
 	_mount_sheet(_breakdown_sheet)
 	relayout_on_board()
@@ -34,28 +40,24 @@ func _ready() -> void:
 	refresh()
 
 
-## Anchors the console onto the blank screen of the laptop in the current room.
-## Both rects are fractions of the window and this screen fills the work column,
-## so the laptop rect is rebased onto the column it is mounted in.
+## Anchors the complete workstation into the room's authored clear desk bay.
 func relayout_on_board() -> void:
-	if _laptop == null:
+	if _workstation == null:
 		return
 	var dwelling: String = _board_dwelling()
 	var column: Rect2 = AssetCatalog.board_region(dwelling, "work_column")
-	var screen: Rect2 = AssetCatalog.board_laptop_screen(dwelling)
-	var rect: Rect2 = AssetCatalog.board_rect_in_region(column, screen)
+	var bay: Rect2 = AssetCatalog.board_workstation_bay(dwelling)
+	var rect: Rect2 = AssetCatalog.board_rect_in_region(column, bay)
 	if rect.size.x <= 0.0:
-		# A room with no laptop authored still has to show its status, so the
-		# console takes the lower half of the column.
-		rect = Rect2(0.18, 0.45, 0.64, 0.45)
-	_laptop.anchor_left = rect.position.x
-	_laptop.anchor_top = rect.position.y
-	_laptop.anchor_right = rect.position.x + rect.size.x
-	_laptop.anchor_bottom = rect.position.y + rect.size.y
-	_laptop.offset_left = 0.0
-	_laptop.offset_top = 0.0
-	_laptop.offset_right = 0.0
-	_laptop.offset_bottom = 0.0
+		rect = Rect2(0.10, 0.05, 0.80, 0.92)
+	_workstation.anchor_left = rect.position.x
+	_workstation.anchor_top = rect.position.y
+	_workstation.anchor_right = rect.position.x + rect.size.x
+	_workstation.anchor_bottom = rect.position.y + rect.size.y
+	_workstation.offset_left = 0.0
+	_workstation.offset_top = 0.0
+	_workstation.offset_right = 0.0
+	_workstation.offset_bottom = 0.0
 
 
 ## The sheet is a window-sized modal, so it goes on the shell's overlay layer
@@ -83,7 +85,7 @@ func refresh() -> void:
 	var working: bool = Simulation.is_work_running()
 	var has_active: bool = working or active_jobs.size() > 0
 
-	_danger_vignette.set_alarming(false)
+	_refresh_workstation(queued, active_jobs)
 	_refresh_readouts()
 
 	if has_active:
@@ -106,6 +108,45 @@ func refresh() -> void:
 	_laptop.set_actions([{
 		"headline": "CHOOSE A CONTRACT", "value": "job board", "pressed": _on_choose_contract,
 	}])
+
+
+func _refresh_workstation(queued: Array, active_jobs: Array) -> void:
+	if _workstation == null:
+		return
+	_workstation.set_stage(
+		AssetCatalog.rig_stage_for_build(Simulation.run_state.build, Simulation.job_slots())
+	)
+	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
+	var heat: float = float(Simulation.run_state.compute.get("heat", 0.0))
+	var capacity: float = float(Simulation.run_state.compute.get("heat_capacity", 100.0))
+	_workstation.set_heat(
+		heat,
+		capacity,
+		float(heat_cfg.get("throttle_ratio", 0.8)),
+		bool(Simulation.run_state.flags.get("fire_risk", false))
+	)
+	var lanes: Array = []
+	lanes.append_array(active_jobs)
+	lanes.append_array(queued)
+	if lanes.is_empty():
+		_workstation.set_supporting_status([
+			{
+				"headline": "THROUGHPUT",
+				"value": NumberFormat.format_token_rate(
+					float(Simulation.run_state.compute.get("token_rate", 0.0))
+				),
+				"detail": "system ready",
+			},
+			{
+				"headline": "HEAT",
+				"value": "%d / %d" % [int(round(heat)), int(round(capacity))],
+				"detail": "queue idle",
+			},
+		])
+	else:
+		_workstation.set_lanes(lanes)
+	_workstation.hide_meters()
+	_danger_vignette.set_alarming(_workstation.alarm_active())
 
 
 func _queued_names(queued: Array) -> String:

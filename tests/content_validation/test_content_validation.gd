@@ -345,9 +345,9 @@ func _validate_ascension_contracts() -> void:
 
 
 ## The shell mounts itself onto the room art: the work column, the side panel,
-## the readouts on the wall and the laptop console are all placed from rects
+## the readouts on the wall and the workstation bay are all placed from rects
 ## authored beside each location's picture. A location that ships without them,
-## or with a laptop that falls outside the column the console is mounted in,
+## or with a bay that falls outside the column the console is mounted in,
 ## lands the player in a room where the UI does not line up with the furniture.
 func _validate_room_art() -> void:
 	var props: Array[String] = ["plan_board", "heat_readout", "power_meter", "phone"]
@@ -371,20 +371,57 @@ func _validate_room_art() -> void:
 					and rect.end.x <= 1.0 and rect.end.y <= 1.0,
 				"%s keeps its %s inside the picture" % [location, key]
 			)
-		var laptop: Rect2 = AssetCatalog.board_laptop_screen(location)
-		assert_true(laptop.size.x > 0.0, "%s stands a laptop on the desk" % location)
+		var bay: Rect2 = AssetCatalog.board_workstation_bay(location)
+		assert_true(bay.size.x > 0.0, "%s reserves a workstation bay" % location)
 		assert_true(
-			column.encloses(laptop),
-			"%s keeps its laptop inside the work column the console mounts in" % location
+			column.encloses(bay),
+			"%s keeps its workstation bay inside the work column" % location
 		)
-		# The laptop drives the whole game, so a room that paints it small enough
-		# to be scenery would leave the player squinting at the only screen they
-		# can act on. A quarter of the frame is roughly the size the art was
-		# recomposed to.
 		assert_true(
-			laptop.size.x * laptop.size.y >= 0.14,
-			"%s paints its laptop large enough to run the game from" % location
+			bay.position.x >= 0.0 and bay.position.y >= 0.0
+				and bay.end.x <= 1.0 and bay.end.y <= 1.0,
+			"%s keeps its workstation bay inside the picture" % location
 		)
+		assert_true(
+			bay.size.x * bay.size.y >= 0.55,
+			"%s leaves enough clearance for the triple-screen workstation" % location
+		)
+
+
+func _validate_workstation_art() -> void:
+	var workstation_scene: PackedScene = load("res://ui/board/burn_rig.tscn")
+	var workstation: Control = workstation_scene.instantiate()
+	assert_eq(
+		workstation.mouse_filter, Control.MOUSE_FILTER_IGNORE,
+		"Transparent workstation root does not block room furniture"
+	)
+	var bay: Control = workstation.get_node("Bay")
+	assert_eq(
+		bay.mouse_filter, Control.MOUSE_FILTER_IGNORE,
+		"Transparent workstation bay does not block the post-it navigation"
+	)
+	workstation.free()
+	var expected_screens: Array[int] = [1, 1, 2, 2, 3]
+	for stage_index in range(1, 6):
+		var data: Dictionary = AssetCatalog.rig_stage(stage_index)
+		assert_false(data.is_empty(), "Workstation stage %d has valid artwork" % stage_index)
+		assert_true(data.get("texture") is Texture2D, "Workstation stage %d loads its texture" % stage_index)
+		var screens: Array = Array(data.get("screens", []))
+		assert_eq(
+			screens.size(), expected_screens[stage_index - 1],
+			"Workstation stage %d has its expected display count" % stage_index
+		)
+		for raw_rect in screens:
+			assert_true(raw_rect is Rect2, "Stage %d screen geometry is a rectangle" % stage_index)
+			if not raw_rect is Rect2:
+				continue
+			var rect: Rect2 = raw_rect
+			assert_true(
+				rect.size.x > 0.0 and rect.size.y > 0.0
+					and rect.position.x >= 0.0 and rect.position.y >= 0.0
+					and rect.end.x <= 1.0 and rect.end.y <= 1.0,
+				"Stage %d keeps every display on its artwork" % stage_index
+			)
 
 
 func run() -> void:
@@ -394,6 +431,7 @@ func run() -> void:
 	_validate_every_machine_can_be_cooled()
 	_validate_ascension_contracts()
 	_validate_room_art()
+	_validate_workstation_art()
 	_test_shipped_content_passes_validation()
 	_test_validation_catches_synthetic_bad_content()
 	_test_validation_catches_unknown_rules_and_capabilities()

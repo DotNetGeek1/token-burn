@@ -111,7 +111,7 @@
       "prop_planes": {
         "phone": [[0.796, 0.855], [0.858, 0.851], [0.906, 0.976], [0.838, 0.980]]
       },
-      "laptop_screen": [0.306, 0.248, 0.393, 0.502]
+      "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     },
     "garage": {
       "art": "res://presentation/board/room_garage.png",
@@ -128,7 +128,7 @@
       "prop_planes": {
         "phone": [[0.792, 0.837], [0.858, 0.835], [0.905, 0.930], [0.834, 0.937]]
       },
-      "laptop_screen": [0.290, 0.269, 0.413, 0.486]
+      "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     },
     "office_unit": {
       "art": "res://presentation/board/room_office_unit.png",
@@ -145,7 +145,7 @@
       "prop_planes": {
         "phone": [[0.799, 0.876], [0.855, 0.873], [0.899, 0.966], [0.838, 0.973]]
       },
-      "laptop_screen": [0.289, 0.347, 0.416, 0.446]
+      "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     },
     "warehouse": {
       "art": "res://presentation/board/room_warehouse.png",
@@ -162,7 +162,7 @@
       "prop_planes": {
         "phone": [[0.791, 0.868], [0.848, 0.866], [0.892, 0.955], [0.832, 0.961]]
       },
-      "laptop_screen": [0.306, 0.299, 0.378, 0.465]
+      "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     },
     "datacentre_campus": {
       "art": "res://presentation/board/room_datacentre_campus.png",
@@ -179,7 +179,7 @@
       "prop_planes": {
         "phone": [[0.775, 0.832], [0.834, 0.827], [0.883, 0.926], [0.814, 0.933]]
       },
-      "laptop_screen": [0.308, 0.304, 0.384, 0.446]
+      "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     },
     "private_power_grid": {
       "art": "res://presentation/board/room_private_power_grid.png",
@@ -193,7 +193,7 @@
         "power_meter": [0.879, 0.135, 0.073, 0.064],
         "phone": [0.771, 0.877, 0.073, 0.095]
       },
-      "laptop_screen": [0.276, 0.408, 0.423, 0.443]
+      "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     },
     "moon_facility": {
       "art": "res://presentation/board/room_moon_facility.png",
@@ -207,7 +207,7 @@
         "power_meter": [0.903, 0.142, 0.059, 0.066],
         "phone": [0.796, 0.877, 0.078, 0.087]
       },
-      "laptop_screen": [0.286, 0.339, 0.409, 0.460]
+      "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     }
   },
   "venue_defaults": {
@@ -317,51 +317,48 @@
   "rig_stages": {
     "stage_01": {
       "art": "res://presentation/rig/rig_stage_01.png",
-      "crop_top": 0.03,
       "crop_height": 1.0,
-      "safe_width": 0.68,
-      "screens": [[0.2656, 0.125, 0.4583, 0.4063]],
-      "vent": [0.45, 0.58]
+      "safe_width": 0.90,
+      "screens": [[0.2135, 0.1172, 0.5729, 0.4766]],
+      "vent": [0.82, 0.70]
     },
     "stage_02": {
       "art": "res://presentation/rig/rig_stage_02.png",
-      "crop_top": 0.04,
       "crop_height": 1.0,
-      "safe_width": 0.88,
-      "screens": [[0.1563, 0.1953, 0.3542, 0.4141]],
-      "vent": [0.785, 0.095]
+      "safe_width": 0.94,
+      "screens": [[0.0781, 0.1797, 0.6406, 0.3828]],
+      "vent": [0.86, 0.52]
     },
     "stage_03": {
       "art": "res://presentation/rig/rig_stage_03.png",
-      "crop_top": 0.08,
-      "crop_height": 0.9,
-      "safe_width": 0.9,
+      "crop_height": 1.0,
+      "safe_width": 0.96,
       "screens": [
-        [0.25, 0.2969, 0.2083, 0.2813],
-        [0.5417, 0.2969, 0.2083, 0.2813]
+        [0.2292, 0.2031, 0.2396, 0.2500],
+        [0.5417, 0.2031, 0.2344, 0.2500]
       ],
-      "vent": [0.884, 0.155]
+      "vent": [0.88, 0.45]
     },
     "stage_04": {
       "art": "res://presentation/rig/rig_stage_04.png",
       "crop_height": 1.0,
-      "safe_width": 0.92,
+      "safe_width": 0.96,
       "screens": [
-        [0.0938, 0.3281, 0.3646, 0.3984],
-        [0.5469, 0.3281, 0.3646, 0.3984]
+        [0.1302, 0.1094, 0.3333, 0.3359],
+        [0.5313, 0.1094, 0.3333, 0.3359]
       ],
-      "vent": [0.5, 0.02]
+      "vent": [0.50, 0.55]
     },
     "stage_05": {
       "art": "res://presentation/rig/rig_stage_05.png",
       "crop_height": 1.0,
-      "safe_width": 0.96,
+      "safe_width": 0.98,
       "screens": [
-        [0.3646, 0.3203, 0.276, 0.2891],
-        [0.0313, 0.3203, 0.2969, 0.2891],
-        [0.6719, 0.3203, 0.2969, 0.2969]
+        [0.3698, 0.3359, 0.2552, 0.2500],
+        [0.0625, 0.3359, 0.2760, 0.2500],
+        [0.6615, 0.3359, 0.2760, 0.2500]
       ],
-      "vent": [0.5, 0.055]
+      "vent": [0.50, 0.28]
     }
   },
   "rig_stage_ladder": [
@@ -370,8 +367,16 @@
       "hardware": ["garage_datacentre", "compute_warehouse", "industrial_campus"]
     },
     {"stage": 4, "hardware": ["gpu_rack", "compute_cluster"]},
-    {"stage": 3, "machines": 2},
-    {"stage": 2, "hardware": ["custom_desktop"]}
+    {
+      "stage": 3,
+      "machines": 2,
+      "upgrades": ["upgrade.second_desk", "upgrade.standing_desk"]
+    },
+    {
+      "stage": 2,
+      "hardware": ["custom_desktop"],
+      "upgrades": ["upgrade.second_monitor"]
+    }
   ],
   "rig_instruments": {
     "dial": {

@@ -1,7 +1,7 @@
-class_name BurnRig
+class_name WorkstationRig
 extends VBoxContainer
 
-## The machine the player is actually working.
+## The evolving workstation the player is actually working at.
 ##
 ## The board used to report a batch through four identical progress bars and a
 ## line of grey text, so the most dramatic thing in the game — spending money to
@@ -37,9 +37,6 @@ const ART_ZOOM_BLEND := 0.0
 ## machine sits centred between them.
 const HEADROOM := 48.0
 
-## Height of the band that blends the room into the artwork's own dark field.
-const HORIZON_FADE := 90.0
-
 ## How wide the console has to be before the instruments are drawn at full size, and
 ## how far they are allowed to shrink on a narrow one.
 const INSTRUMENT_FULL_WIDTH := 520.0
@@ -71,6 +68,7 @@ const HEAVY_SMOKE_RATIO := 0.75
 @onready var fire: GPUParticles2D = $Bay/Stage/Fire
 @onready var screen: Control = $Bay/Stage/Screen
 @onready var glass: ColorRect = $Bay/Stage/Screen/Glass
+@onready var internal_console: MarginContainer = $Bay/Stage/Screen/Margin
 @onready var terminal: RichTextLabel = $Bay/Stage/Screen/Margin/VBox/Terminal
 @onready var forecast_line: Label = $Bay/Stage/Screen/Margin/VBox/ForecastLine
 @onready var status_line: Label = $Bay/Stage/Screen/Margin/VBox/StatusLine
@@ -89,6 +87,9 @@ var _stage_data: Dictionary = {}
 ## One per extra piece of glass the artwork has. The first screen is the terminal;
 ## the rest report the contracts the other machines are working.
 var _lane_screens: Array = []
+## The shared live console mounted into the primary piece of glass. The built-in
+## terminal remains as a compatibility fallback for isolated rig previews.
+var _primary_control: Control = null
 
 var _beacon: AlarmBeacon = null
 var _lines: Array[Dictionary] = []
@@ -126,41 +127,14 @@ func _notification(what: int) -> void:
 		_layout_rig()
 
 
-## Nothing: the bay used to be a painted alcove with a border, which drew a box
-## around the machine and made the room behind it look like wallpaper on a
-## different screen. Left bare, the office backdrop *is* the room the rig stands
-## in, and the bay is only the rectangle that clips the machine's overhang.
-##
-## What that costs is a seam. The artwork's own field is flat and darker than the
-## lit room, so its top edge ruled a line across the screen. The horizon is a band
-## of that field colour fading up into the room, laid over the join, so the room
-## sinks into the machine's shadow instead of stopping at an edge.
+## The room owns the desk and the transparent workstation art sits on it. A soft
+## shadow is rendered here so every stage registers with every regenerated room
+## without baking seven copies of each machine.
 func _style_bay() -> void:
 	bay.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	bay.custom_minimum_size.y = MIN_BAY_HEIGHT
-	horizon.texture = _horizon_gradient()
-
-
-## Reaches the artwork's field colour before the band runs out rather than only in
-## its last row: a straight ramp still had a few per cent of lit room showing where
-## it met the machine, which is all it takes to see the join as a line.
-static func _horizon_gradient() -> GradientTexture2D:
-	var field: Color = UiThemeBuilder.color("bay")
-	var texture := GradientTexture2D.new()
-	texture.gradient = UiFx.ramp(
-		[0.0, 0.5, 0.78, 1.0],
-		[
-			Color(field.r, field.g, field.b, 0.0),
-			Color(field.r, field.g, field.b, 0.4),
-			field,
-			field,
-		]
-	)
-	texture.fill_from = Vector2(0, 0)
-	texture.fill_to = Vector2(0, 1)
-	texture.width = 8
-	texture.height = 256
-	return texture
+	horizon.texture = UiFx.radial_dot()
+	horizon.modulate = Color(0.0, 0.0, 0.0, 0.48)
 
 
 func _style_screen() -> void:
@@ -276,7 +250,8 @@ func set_stage(stage_index: int) -> void:
 	# Announced only if the machine has already been printing. The board sets the
 	# stage before it boots the terminal, so a run resumed on a rack does not open
 	# by claiming its hardware just changed.
-	var upgraded: bool = _stage > 0 and wanted > _stage and not _lines.is_empty()
+	var changed: bool = _stage > 0
+	var upgraded: bool = changed and wanted > _stage and not _lines.is_empty()
 	_stage = wanted
 	_stage_data = data
 	workstation.texture = _cropped_art(data)
@@ -284,10 +259,53 @@ func set_stage(stage_index: int) -> void:
 	if upgraded:
 		push_line("$ hardware changed · rig rebuilt", "compute")
 	_layout_rig()
+	if changed:
+		_play_stage_transition()
 
 
 func stage_index() -> int:
 	return _stage
+
+
+## Places the same interactive console inside the primary screen at every stage.
+## The workstation owns fitting and effects; the console owns game interaction.
+func mount_primary(control: Control) -> void:
+	if control == null:
+		return
+	if _primary_control != null and _primary_control != control:
+		_primary_control.reparent(self)
+	_primary_control = control
+	if control.get_parent() == null:
+		screen.add_child(control)
+	elif control.get_parent() != screen:
+		control.reparent(screen)
+	control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	control.offset_left = 0.0
+	control.offset_top = 0.0
+	control.offset_right = 0.0
+	control.offset_bottom = 0.0
+	glass.visible = false
+	internal_console.visible = false
+	progress_track.visible = false
+	crt.visible = false
+	screen.visible = true
+	_layout_rig()
+
+
+func primary_control() -> Control:
+	return _primary_control
+
+
+func _play_stage_transition() -> void:
+	workstation.modulate.a = 0.18
+	if _primary_control != null:
+		_primary_control.modulate.a = 0.18
+	var tween: Tween = create_tween()
+	tween.tween_property(workstation, "modulate:a", 1.0, 0.08)
+	tween.tween_property(workstation, "modulate:a", 0.42, 0.06)
+	tween.tween_property(workstation, "modulate:a", 1.0, 0.16)
+	if _primary_control != null:
+		tween.parallel().tween_property(_primary_control, "modulate:a", 1.0, 0.22)
 
 
 func _screen_rects() -> Array:
@@ -362,12 +380,10 @@ func _layout_rig() -> void:
 	)
 	workstation.position = origin
 	workstation.size = drawn
-	# Sits on the machine's top edge and runs up into the room, so the two dark
-	# fields meet in a gradient rather than on a line. Never taller than the shelf
-	# it fades into, or it would wash the instruments out.
-	var fade: float = minf(HORIZON_FADE, origin.y)
-	horizon.position = Vector2(0.0, origin.y - fade)
-	horizon.size = Vector2(stage.size.x, fade)
+	# A controlled contact shadow keeps transparent, generated art grounded on the
+	# desk without changing any room image.
+	horizon.position = origin + Vector2(drawn.x * 0.08, drawn.y * 0.80)
+	horizon.size = Vector2(drawn.x * 0.84, drawn.y * 0.17)
 	var rects: Array = _screen_rects()
 	if not rects.is_empty():
 		var glass_rect: Rect2 = rects[0]
@@ -574,12 +590,10 @@ func hide_meters() -> void:
 	deadline_meter.visible = false
 
 
-## Reduces the rig to the machine itself: the case, its glow, the shake, the
-## smoke and fire it throws off as it heats, and the beacon. Used where the rig
-## stands behind the laptop, which is the only screen in the room and would
-## otherwise have this one's terminal ghosting through it.
+## Compatibility for old preview callers. A mounted primary console always stays
+## visible because it is now part of the workstation rather than a separate layer.
 func set_dressing_only(dressing: bool) -> void:
-	screen.visible = not dressing
+	screen.visible = _primary_control != null or not dressing
 	if dressing:
 		hide_meters()
 
@@ -598,6 +612,17 @@ func set_lanes(lanes: Array) -> void:
 		var panel: LaneScreen = _lane_screens[index]
 		if index < lanes.size():
 			panel.show_lane(index + 2, lanes[index])
+		else:
+			panel.show_idle(index + 2)
+
+
+## Supplies idle/overview readouts to spare glass when no parallel contract is
+## occupying it. Entries accept `headline`, `value`, and optional `detail`.
+func set_supporting_status(statuses: Array) -> void:
+	for index in range(_lane_screens.size()):
+		var panel: LaneScreen = _lane_screens[index]
+		if index < statuses.size() and statuses[index] is Dictionary:
+			panel.show_status(Dictionary(statuses[index]))
 		else:
 			panel.show_idle(index + 2)
 
@@ -670,6 +695,11 @@ func shake(strength: float = 6.0) -> void:
 ## not only in the text that scrolls past.
 func flash_screen(role: String = "compute") -> void:
 	var accent: Color = UiThemeBuilder.semantic(role)
+	if _primary_control != null:
+		_primary_control.self_modulate = Color.WHITE.lerp(accent, 0.32)
+		var primary_tween: Tween = create_tween()
+		primary_tween.tween_property(_primary_control, "self_modulate", Color.WHITE, 0.35)
+		return
 	glass.color = UiThemeBuilder.color("screen").lerp(accent, 0.4)
 	var tween: Tween = create_tween()
 	tween.tween_property(glass, "color", UiThemeBuilder.color("screen"), 0.35)
@@ -745,6 +775,16 @@ class LaneScreen:
 
 	func show_idle(lane_number: int) -> void:
 		_label.text = "$ lane %d\nidle" % lane_number
+
+	func show_status(status: Dictionary) -> void:
+		var lines: PackedStringArray = [
+			str(status.get("headline", "SYSTEM")).to_upper().left(COLUMNS),
+			str(status.get("value", "idle")).left(COLUMNS),
+		]
+		var detail: String = str(status.get("detail", ""))
+		if detail != "":
+			lines.append(detail.left(COLUMNS))
+		_label.text = "\n".join(lines)
 
 	func show_lane(lane_number: int, job: Dictionary) -> void:
 		var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))

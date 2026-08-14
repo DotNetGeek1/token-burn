@@ -243,8 +243,15 @@ const FOCUS_SECONDS := 0.26
 func _focus_rect(key: String) -> Rect2:
 	var dwelling: String = board_dwelling()
 	match key:
-		"laptop":
-			return AssetCatalog.board_laptop_screen(dwelling)
+		"workstation", "laptop":
+			# The bay reserves headroom for smoke and the tallest desktop rig. The
+			# generated workstation itself is bottom-aligned inside it, so mobile
+			# focus measures the occupied lower band rather than the empty headroom.
+			var bay: Rect2 = AssetCatalog.board_workstation_bay(dwelling)
+			return Rect2(
+				bay.position + Vector2(0.0, bay.size.y * 0.42),
+				Vector2(bay.size.x, bay.size.y * 0.58)
+			)
 		"board":
 			return AssetCatalog.board_prop(dwelling, "plan_board")
 	return Rect2()
@@ -806,6 +813,7 @@ func _connect_events() -> void:
 	EventBus.reward_calculated.connect(func(_a): refresh_all())
 	EventBus.perk_acquired.connect(func(_a): refresh_all())
 	EventBus.upgrade_purchased.connect(func(_a): refresh_all())
+	EventBus.hardware_sold.connect(func(_a): refresh_all())
 	EventBus.run_ended.connect(func(_victory): refresh_all())
 	EventBus.run_ended.connect(_on_run_ended_call)
 	# Burning and billing move cash mid-prompt. The board on the wall is where

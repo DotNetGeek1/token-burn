@@ -10,6 +10,7 @@ extends Node
 ## are shot by `screenshot.tscn`, which drives the router instead.
 
 const MAIN_SCENE := "res://ui/main.tscn"
+const PHONE_SIZE := Vector2i(430, 900)
 
 
 func _ready() -> void:
@@ -31,6 +32,7 @@ func _ready() -> void:
 	# Particles and looping tweens run on real time, so shots of the rig need a
 	# wall-clock settle before the capture or they land on an empty first frame.
 	var settle_seconds: float = 0.0
+	var phone: bool = false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			out_path = arg.trim_prefix("--out=")
@@ -44,6 +46,10 @@ func _ready() -> void:
 			row = int(arg.trim_prefix("--row="))
 		elif arg.begins_with("--settle="):
 			settle_seconds = float(arg.trim_prefix("--settle="))
+		elif arg == "--phone":
+			phone = true
+	if phone:
+		DisplayServer.window_set_size(PHONE_SIZE)
 	Simulation.autosave_enabled = false
 	# Stash any real save so screenshots always show a fresh run, then
 	# restore it on the way out.
@@ -199,27 +205,41 @@ func _ready() -> void:
 			# running when the capture happens, which is the only time the kill
 			# key is on the deck.
 			board._on_burn()
-	elif tab.begins_with("rig"):
+	elif tab in [
+		"rig1", "rig2", "rig3", "rig4", "rig5",
+		"desk1", "desk2", "desk3", "desk4", "desk5",
+	]:
 		# The workstation art is chosen from the hardware the run owns, so each tier
 		# needs its own shot: "rig3" is two machines, "rig4" a rack, "rig5" a
 		# datacentre. Written straight onto the run rather than bought, because the
 		# shop route also needs a dwelling, the cash and the right order. Two
 		# contracts are taken so the extra monitors have lanes to report.
-		var fleet: Array = ["used_laptop", "custom_desktop"]
-		if tab == "rig4":
+		var stage_number: int = int(tab.right(1))
+		var fleet: Array = ["used_laptop"]
+		if stage_number == 2:
+			# A location-carried desktop can be the only machine, which exercises the
+			# explicit stage-two hardware trigger without the two-machine promotion.
+			fleet = ["custom_desktop"]
+		elif stage_number >= 3:
+			fleet.append("custom_desktop")
+		if stage_number == 4:
 			fleet.append("gpu_rack")
-		elif tab == "rig5":
+		elif stage_number == 5:
 			fleet.append("garage_datacentre")
 		Simulation.run_state.build["hardware"] = fleet
+		if tab.begins_with("desk"):
+			main.switch_tab("office")
+			main.refresh_all()
+		else:
 		# Queued directly rather than through `accept_job`, which refuses a second
 		# contract whose combined throughput a fresh run cannot promise. The point
 		# of the shot is the second lane, so the slate is stacked on purpose.
-		var offers: Array = Array(Simulation.run_state.business.get("job_offers", []))
-		for index in range(mini(2, offers.size())):
-			Simulation.run_state.business["job_queue"].append(offers[index].duplicate(true))
-		Simulation.start_work()
-		main.switch_tab("board")
-		main.refresh_all()
+			var offers: Array = Array(Simulation.run_state.business.get("job_offers", []))
+			for index in range(mini(2, offers.size())):
+				Simulation.run_state.business["job_queue"].append(offers[index].duplicate(true))
+			Simulation.start_work()
+			main.switch_tab("board")
+			main.refresh_all()
 	elif tab == "hot" or tab == "working":
 		# Puts a live contract on the bench so the board is in its working state.
 		# "hot" also drives heat past the throttle line, which is the only way to

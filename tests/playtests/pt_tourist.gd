@@ -27,6 +27,16 @@ func play(harness: UiHarness) -> void:
 		await harness.set_viewport(size)
 		await harness.go_desk()
 		driver.audit_screen("desk-%s" % size.x, "desk")
+		# Use the actual room post-its, not the router API, before the broader
+		# venue audit. A transparent workstation layer once covered these buttons
+		# and direct navigation could not reveal that regression.
+		for post_it_route in ["jobs", "build", "market", "terms", "menu"]:
+			await driver.press_command(post_it_route)
+			assert_eq(
+				SceneRouter.current, post_it_route,
+				"The %s post-it opens its venue at %dpx" % [post_it_route, size.x]
+			)
+			await harness.go_desk()
 		for route in routes:
 			await dismiss_investor(harness)
 			if not SceneRouter.has_route(route):

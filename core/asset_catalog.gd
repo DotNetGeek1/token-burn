@@ -121,13 +121,22 @@ static func board_prop_plane(dwelling: String, key: String) -> PackedVector2Arra
 	return quad
 
 
-## The blank screen of the laptop standing on the desk. The office console is
-## drawn into this rather than floated over the room.
-static func board_laptop_screen(dwelling: String) -> Rect2:
+## The empty desk bay reserved for the run's staged workstation. The room art
+## deliberately carries no computer of its own; one shared foreground machine
+## is fitted into this rectangle on both the idle desk and the Burn Board.
+static func board_workstation_bay(dwelling: String) -> Rect2:
 	var scene: Dictionary = _board_scene(dwelling)
-	if not scene.has("laptop_screen"):
-		return Rect2()
-	return _rect_from(Array(scene["laptop_screen"]))
+	if scene.has("workstation_bay"):
+		return _rect_from(Array(scene["workstation_bay"]))
+	if scene.has("laptop_screen"):
+		return _rect_from(Array(scene["laptop_screen"]))
+	return Rect2()
+
+
+## Temporary compatibility alias for callers and older content authored before
+## the foreground workstation replaced the laptop baked into every room.
+static func board_laptop_screen(dwelling: String) -> Rect2:
+	return board_workstation_bay(dwelling)
 
 
 ## A room rect expressed relative to one of that room's own regions, for
@@ -303,6 +312,7 @@ static func rig_stage(stage_index: int) -> Dictionary:
 static func rig_stage_for_build(build: Dictionary, machine_count: int) -> int:
 	_ensure_loaded()
 	var owned: Array = Array(build.get("hardware", []))
+	var upgrades: Array = Array(build.get("upgrades", []))
 	for raw_rule in Array(_data.get("rig_stage_ladder", [])):
 		if not raw_rule is Dictionary:
 			continue
@@ -313,6 +323,9 @@ static func rig_stage_for_build(build: Dictionary, machine_count: int) -> int:
 			return stage
 		for key in Array(rule.get("hardware", [])):
 			if owned.has(str(key)):
+				return stage
+		for upgrade_id in Array(rule.get("upgrades", [])):
+			if upgrades.has(str(upgrade_id)):
 				return stage
 	return 1
 

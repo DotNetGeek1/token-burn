@@ -4,7 +4,8 @@
 [ext_resource type="Script" path="res://ui/board/heat_gauge.gd" id="3"]
 [ext_resource type="Script" path="res://ui/board/rig_meter.gd" id="4"]
 
-[node name="BurnRig" type="VBoxContainer"]
+[node name="Workstation" type="VBoxContainer"]
+mouse_filter = 2
 theme_override_constants/separation = 0
 script = ExtResource("1")
 
@@ -12,6 +13,7 @@ script = ExtResource("1")
 custom_minimum_size = Vector2(0, 300)
 layout_mode = 2
 size_flags_vertical = 3
+mouse_filter = 2
 clip_contents = true
 
 [node name="Stage" type="Control" parent="Bay"]

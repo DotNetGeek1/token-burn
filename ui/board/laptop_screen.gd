@@ -1,15 +1,14 @@
-class_name LaptopScreen
+class_name WorkstationConsole
 extends PanelContainer
 
-## The laptop standing on the desk, printing the state of the operation.
+## The live primary console mounted into the current workstation artwork.
 ##
-## The room art paints an open laptop with a blank screen and the catalog says
-## where that screen is, so this fills the glass rather than floating a card
-## over the picture. Everything on it is drawn in the same phosphor language as
+## The workstation stage supplies a blank primary screen, so this fills its glass
+## rather than floating a card over the room. Everything on it uses the same phosphor language as
 ## the job board and the market, because in the fiction it is the same machine.
 ##
-## Type is sized off however large the screen ended up being drawn: a garage
-## laptop is a smaller piece of glass than a moon lab one, and the console has
+## Type is sized off however large the screen ended up being drawn: a laptop
+## panel is smaller glass than an ultrawide, and the console has
 ## to stay readable on both without either scrolling or overflowing.
 
 ## Reference height the font sizes below were chosen against.
@@ -183,7 +182,7 @@ func _refresh_lean_in() -> void:
 
 func _on_lean_in_pressed() -> void:
 	UiSound.play("tap")
-	get_tree().call_group("main_ui", "focus_room", "laptop")
+	get_tree().call_group("main_ui", "focus_room", "workstation")
 
 
 ## One printed reading. Rows are addressed by key so the caller can rewrite a

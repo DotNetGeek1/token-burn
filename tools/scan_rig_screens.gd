@@ -18,6 +18,7 @@ const SCREENS := [
 	"res://presentation/rig/rig_stage_04.png",
 	"res://presentation/rig/rig_stage_05.png",
 ]
+const EXPECTED_SCREEN_COUNTS := [1, 1, 2, 2, 3]
 
 const WINDOWS := [
 	"res://presentation/rig/instrument_dial.png",
@@ -26,14 +27,23 @@ const WINDOWS := [
 
 
 func _initialize() -> void:
-	for path in SCREENS:
-		_scan(path, false)
+	var failures: int = 0
+	for index in range(SCREENS.size()):
+		var path: String = SCREENS[index]
+		var boxes: Array = _scan(path, false)
+		if boxes.size() != EXPECTED_SCREEN_COUNTS[index]:
+			push_error(
+				"%s: found %d monitor panels, expected %d" % [
+					path, boxes.size(), EXPECTED_SCREEN_COUNTS[index]
+				]
+			)
+			failures += 1
 	for path in WINDOWS:
 		_scan(path, true)
-	quit()
+	quit(failures)
 
 
-func _scan(path: String, dark_windows: bool) -> void:
+func _scan(path: String, dark_windows: bool) -> Array:
 	var image: Image = (load(path) as Texture2D).get_image()
 	var width: int = image.get_width()
 	var height: int = image.get_height()
@@ -73,6 +83,7 @@ func _scan(path: String, dark_windows: bool) -> void:
 			float(box.size.x) / float(cols),
 			float(box.size.y) / float(rows),
 		])
+	return boxes
 
 
 ## A panel is a block that is dark, almost perfectly flat, and — for screen glass —
@@ -85,6 +96,10 @@ func _is_flat_panel(image: Image, col: int, row: int, dark_windows: bool) -> boo
 	for y in range(row * CELL, row * CELL + CELL):
 		for x in range(col * CELL, col * CELL + CELL):
 			var pixel: Color = image.get_pixel(x, y)
+			# Generated workstation assets are transparent cutouts. Transparent
+			# outside pixels are not dark monitor glass even when their RGB is zero.
+			if pixel.a < 0.5:
+				return false
 			total += pixel
 			lowest = minf(lowest, pixel.v)
 			highest = maxf(highest, pixel.v)

@@ -1,19 +1,16 @@
 extends Control
 
-## The Burn Board: the work screen, printed on the laptop standing on the desk.
+## The Burn Board: the work screen, printed on the evolving workstation.
 ##
-## The laptop is the machine the operation is run from, so a burn is reported and
+## The workstation is the machine the operation is run from, so a burn is reported and
 ## driven from the same piece of glass as everything else: the contract's
 ## progress, quality, deadline and heat are printed rows, and BURN, COOL, the
 ## surges and DELIVER are command lines under them. There is no keyboard deck and
 ## no contract plate — a batch is started by typing on the machine, and the
 ## investor's terms live on the whiteboard.
 ##
-## The rig art stays behind the laptop as dressing. It is what makes a burn feel
-## like hardware being worked: the tower glows, the case shakes, smoke and fire
-## come off it as the heat climbs and the beacon spins when it is about to cook
-## itself. Its own screen and instruments are hidden — there is one screen in
-## this room and the laptop is it.
+## One shared control owns the artwork, live primary console, supporting screens,
+## shake, glow, smoke, fire and beacon. There is no second rig hidden behind it.
 
 ## How long each pipeline stage holds on the console during a batch. Long
 ## enough to read the stage's own line before the next one prints over it —
@@ -29,14 +26,9 @@ const REDLINE_RATIO := 0.9
 const DEADLINE_WARNING_PROMPTS := 3
 const DEADLINE_DANGER_PROMPTS := 1
 
-## How far the rig art spreads past the laptop, as a fraction of the window. The
-## machine has to read as standing on the same desk rather than as a picture
-## pinned behind the screen.
-const RIG_BLEED := Vector2(0.10, 0.06)
+@onready var rig: WorkstationRig = $Rig
 
-@onready var rig: BurnRig = $Rig
-
-var _laptop: LaptopScreen = null
+var _laptop: WorkstationConsole = null
 var _burning: bool = false
 var _kill_requested: bool = false
 var _stages_completed: int = 0
@@ -46,19 +38,15 @@ var _danger_vignette: DangerVignette = null
 
 func _ready() -> void:
 	add_to_group("ui_refresh")
-	# The shell re-lays the room out whenever the operation moves premises, and
-	# both the laptop and the machine behind it are furniture in that room.
+	# The shell re-lays the room out whenever the operation moves premises.
 	add_to_group("board_mounted")
 	_danger_vignette = DangerVignette.mount(self)
 	_detail_sheet = ConsoleSheet.new()
-	_laptop = LaptopScreen.new()
-	_laptop.name = "Laptop"
-	add_child(_laptop)
+	_laptop = WorkstationConsole.new()
+	_laptop.name = "PrimaryConsole"
+	rig.mount_primary(_laptop)
 	_laptop.setup("burn")
 	_mount_sheet(_detail_sheet)
-	# The rig is scenery here, so it gives up every readout it used to own.
-	rig.set_dressing_only(true)
-	rig.set_lanes([])
 	relayout_on_board()
 	Simulation.work_tick_completed.connect(refresh)
 	Simulation.work_session_finished.connect(func(_result): refresh())
@@ -68,24 +56,17 @@ func _ready() -> void:
 
 # --- Mounting ----------------------------------------------------------------
 
-## Anchors the console onto the blank screen of the laptop in the current room,
-## and stands the rig art on the desk behind it.
+## Anchors the complete workstation into the room's authored clear desk bay.
 func relayout_on_board() -> void:
-	if _laptop == null:
+	if rig == null:
 		return
 	var dwelling: String = _board_dwelling()
 	var column: Rect2 = AssetCatalog.board_region(dwelling, "work_column")
-	var screen: Rect2 = AssetCatalog.board_laptop_screen(dwelling)
-	var glass: Rect2 = AssetCatalog.board_rect_in_region(column, screen)
-	if glass.size.x <= 0.0:
-		glass = Rect2(0.30, 0.30, 0.40, 0.45)
-	_anchor(_laptop, glass)
-	_anchor(rig, Rect2(
-		maxf(0.0, glass.position.x - RIG_BLEED.x),
-		maxf(0.0, glass.position.y - RIG_BLEED.y),
-		minf(1.0, glass.size.x + RIG_BLEED.x * 2.0),
-		minf(1.0, glass.size.y + RIG_BLEED.y)
-	))
+	var bay: Rect2 = AssetCatalog.board_workstation_bay(dwelling)
+	var rect: Rect2 = AssetCatalog.board_rect_in_region(column, bay)
+	if rect.size.x <= 0.0:
+		rect = Rect2(0.10, 0.05, 0.80, 0.92)
+	_anchor(rig, rect)
 
 
 func _anchor(control: Control, rect: Rect2) -> void:
@@ -144,8 +125,7 @@ func _refresh_stage() -> void:
 	)
 
 
-## Heat is the only reading the rig still takes, because heat is what makes it
-## smoke, catch fire and set off its beacon.
+## The visible workstation carries parallel lanes and all physical feedback.
 func _refresh_rig(job: Dictionary) -> void:
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
 	rig.set_heat(
@@ -155,8 +135,26 @@ func _refresh_rig(job: Dictionary) -> void:
 		bool(Simulation.run_state.flags.get("fire_risk", false))
 	)
 	rig.set_job(job)
+	rig.set_lanes(_supporting_lanes(job))
 	rig.hide_meters()
 	_danger_vignette.set_alarming(rig.alarm_active())
+
+
+func _supporting_lanes(focused: Dictionary) -> Array:
+	var lanes: Array = []
+	var focused_id: String = str(focused.get("id", ""))
+	for source in [
+		Array(Simulation.run_state.business.get("active_jobs", [])),
+		Array(Simulation.run_state.business.get("job_queue", [])),
+	]:
+		for candidate in source:
+			if not candidate is Dictionary:
+				continue
+			var lane: Dictionary = candidate
+			if focused_id != "" and str(lane.get("id", "")) == focused_id:
+				continue
+			lanes.append(lane)
+	return lanes
 
 
 func _refresh_status(job: Dictionary, working: bool) -> void:
