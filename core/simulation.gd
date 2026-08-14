@@ -893,8 +893,8 @@ func board_slots() -> Array:
 	return _board_system.slots(run_state)
 
 
-func owned_operations() -> Array:
-	return _board_system.owned_operations(run_state)
+func owned_modules() -> Array:
+	return _board_system.owned_modules(run_state)
 
 
 func filled_slot_count() -> int:
@@ -912,8 +912,8 @@ func _editing_job() -> Dictionary:
 	return job if str(job.get("workflow_id", "")) == editing_id else {}
 
 
-func place_operation(operation_id: String, slot_index: int) -> bool:
-	if not _board_system.place_operation(run_state, _editing_job(), operation_id, slot_index):
+func place_module(module_id: String, slot_index: int) -> bool:
+	if not _board_system.place_module(run_state, _editing_job(), module_id, slot_index):
 		return false
 	_autosave()
 	return true
@@ -953,7 +953,7 @@ func auto_arrange_board(max_passes: int = 2) -> bool:
 	# Scoring a layout means resolving a burn, so skip the work entirely when
 	# neither the modules nor the contract have changed since the last pass.
 	var signature: String = "%s|%s|%s" % [
-		str(_board_system.owned_operations(run_state)), str(slots), str(job.get("id", ""))
+		str(_board_system.owned_modules(run_state)), str(slots), str(job.get("id", ""))
 	]
 	if signature == _auto_arrange_signature:
 		return false
@@ -962,26 +962,26 @@ func auto_arrange_board(max_passes: int = 2) -> bool:
 		var best_score: float = _layout_score(job)
 		var best_slot: int = -1
 		var best_module: String = ""
-		for operation_id in _board_system.owned_operations(run_state):
-			if str(operation_id) in slots:
+		for module_id in _board_system.owned_modules(run_state):
+			if str(module_id) in slots:
 				continue
 			for index in range(slots.size()):
 				if not _board_system.is_slot_usable(run_state, job, index):
 					continue
 				var displaced: String = str(slots[index])
-				slots[index] = str(operation_id)
+				slots[index] = str(module_id)
 				var score: float = _layout_score(job)
 				slots[index] = displaced
 				if score > best_score + 0.001:
 					best_score = score
 					best_slot = index
-					best_module = str(operation_id)
+					best_module = str(module_id)
 		if best_slot < 0:
 			break
 		slots[best_slot] = best_module
 		changed = true
 	_auto_arrange_signature = "%s|%s|%s" % [
-		str(_board_system.owned_operations(run_state)), str(slots), str(job.get("id", ""))
+		str(_board_system.owned_modules(run_state)), str(slots), str(job.get("id", ""))
 	]
 	if changed:
 		_autosave()
@@ -1357,11 +1357,11 @@ func job_demands(job: Dictionary) -> Array:
 	)
 
 
-func get_operation_description(operation_id: String) -> String:
-	var operation: OperationDefinition = ContentDatabase.get_operation(operation_id)
-	if operation == null:
+func get_module_description(module_id: String) -> String:
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	if module == null:
 		return ""
-	return ExpressionEvaluator.new().render_template(operation.description_template, operation.parameters)
+	return ExpressionEvaluator.new().render_template(module.description_template, module.parameters)
 
 
 ## Seeded from the run and the exact prompt, so a preview and the burn it
@@ -1769,8 +1769,8 @@ func accept_offer(offer_type: String, offer_id: String) -> bool:
 	match offer_type:
 		"perk":
 			return _accept_perk(offer_id)
-		"operation":
-			return _accept_operation(offer_id)
+		"module":
+			return _accept_module(offer_id)
 		_:
 			return false
 
@@ -1796,9 +1796,6 @@ func _accept_perk(perk_id: String) -> bool:
 		return false
 	if not _perk_system.collect_perk(run_state, perk_id, ContentDatabase):
 		return false
-	_perk_system.apply_collect_side_effects(
-		run_state, perk_id, ContentDatabase, effect_resolver, rng
-	)
 	var equipped := false
 	if _perk_system.can_equip(run_state, perk_id, ContentDatabase):
 		equipped = _perk_system.equip_perk(run_state, perk_id, ContentDatabase)
@@ -1817,9 +1814,6 @@ func _accept_perk(perk_id: String) -> bool:
 func collect_perk(perk_id: String) -> bool:
 	if not _perk_system.collect_perk(run_state, perk_id, ContentDatabase):
 		return false
-	_perk_system.apply_collect_side_effects(
-		run_state, perk_id, ContentDatabase, effect_resolver, rng
-	)
 	_invalidate_subscriptions()
 	EventBus.emit_event(EventBus.EVENT_PERK_ACQUIRED, {"perk_id": perk_id})
 	_dispatch_perk_acquired(perk_id)
@@ -1884,10 +1878,10 @@ func _recalculate_after_perk_loadout_change() -> void:
 ## Drafts a pipeline module. Unlike a perk it changes nothing on its own: it has
 ## to be placed on the board to do anything, and on a full board that means
 ## taking something else out.
-func _accept_operation(operation_id: String) -> bool:
+func _accept_module(module_id: String) -> bool:
 	if phase != Phase.ANGEL_ROUND:
 		return false
-	if not _board_system.grant_operation(run_state, operation_id):
+	if not _board_system.grant_module(run_state, module_id):
 		return false
 	run_state.statistics["angel_offers_taken"] = int(
 		run_state.statistics.get("angel_offers_taken", 0)
@@ -1895,15 +1889,20 @@ func _accept_operation(operation_id: String) -> bool:
 	run_state.statistics["modules_drafted"] = int(
 		run_state.statistics.get("modules_drafted", 0)
 	) + 1
-	EventBus.emit_event(EventBus.EVENT_OPERATION_ACQUIRED, {"operation_id": operation_id})
+	EventBus.emit_event(EventBus.EVENT_MODULE_ACQUIRED, {"module_id": module_id})
 	_achievement_system.evaluate_tick(run_state, ContentDatabase)
-	_spend_draft_pick("operation", operation_id)
+	_spend_draft_pick("module", module_id)
 	return true
 
 
+## Pickup effects: loans, permanent liabilities, anything the player owns the
+## moment they touch the card. Fired once per run, however many times the perk
+## is collected, benched, or equipped again.
 func _dispatch_perk_acquired(perk_id: String) -> void:
 	var perk := ContentDatabase.get_perk(perk_id)
 	if perk == null:
+		return
+	if PerkSystem.liability_taken(run_state, perk_id):
 		return
 	var subs: Array = []
 	for sub in perk.subscriptions:
@@ -1915,10 +1914,13 @@ func _dispatch_perk_acquired(perk_id: String) -> void:
 		subs.append(copy)
 	if subs.is_empty():
 		return
+	PerkSystem.record_liability(run_state, perk_id)
 	effect_resolver.begin_action("perk.acquired.%s" % perk_id)
 	var mod_ctx := ModifierContext.new("perk.acquired", run_state)
 	mod_ctx.rng = rng.derive("perk.acquired")
 	effect_resolver.dispatch("perk.acquired", mod_ctx, subs)
+	# A pickup effect can spawn a permanent status, which is itself a subscriber.
+	_invalidate_subscriptions()
 
 
 ## Market operations (buying, selling, and the "is the counter open" gate
@@ -2066,8 +2068,8 @@ func _redraw_angel_offers() -> void:
 		var description: String = ""
 		if offer_type == "perk":
 			description = get_perk_description(offer_id)
-		elif offer_type == "operation":
-			description = get_operation_description(offer_id)
+		elif offer_type == "module":
+			description = get_module_description(offer_id)
 		pending_choices.append({
 			"type": offer_type,
 			"id": offer_id,

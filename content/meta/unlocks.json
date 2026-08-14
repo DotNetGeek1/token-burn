@@ -15,7 +15,7 @@
     "description": "Aggressive Linter is yours from the first round of every run.",
     "flavour": "You kept the config file. It is the only thing you kept.",
     "repeatable": false,
-    "operation_id": "op.linter"
+    "module_id": "op.linter"
   },
   {
     "id": "unlock.starting_module_whiteboard",
@@ -24,7 +24,7 @@
     "description": "Whiteboard Session is yours from the first round of every run.",
     "flavour": "The whiteboard survived the liquidation because nobody wanted it.",
     "repeatable": false,
-    "operation_id": "op.whiteboard"
+    "module_id": "op.whiteboard"
   },
   {
     "id": "unlock.starting_module_distillation",
@@ -33,7 +33,7 @@
     "description": "Distilled Model is yours from the first round of every run.",
     "flavour": "Legally these are not the same weights. Spiritually they are exactly the same weights.",
     "repeatable": false,
-    "operation_id": "op.distillation"
+    "module_id": "op.distillation"
   },
   {
     "id": "unlock.starting_rig",
@@ -134,7 +134,7 @@
     "flavour": "The first module in the shed that asks a question before it does anything.",
     "repeatable": false,
     "reward_only": true,
-    "operation_id": "op.circuit_breaker"
+    "module_id": "op.circuit_breaker"
   },
   {
     "id": "unlock.parallel_lane",

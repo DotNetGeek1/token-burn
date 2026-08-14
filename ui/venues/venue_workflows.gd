@@ -63,7 +63,7 @@ func _build_venue() -> void:
 	_build_signage()
 	_build_notice()
 	Simulation.work_tick_completed.connect(refresh)
-	EventBus.operation_acquired.connect(func(_id: String) -> void: refresh())
+	EventBus.module_acquired.connect(func(_id: String) -> void: refresh())
 	EventBus.run_started.connect(refresh)
 
 
@@ -292,15 +292,15 @@ func _refresh_pipeline() -> void:
 ## spend is the part of the list they came here for.
 func _refresh_bench() -> void:
 	var slots: Array = Simulation.board_slots()
-	var owned: Array = Simulation.owned_operations()
+	var owned: Array = Simulation.owned_modules()
 	var ordered: Array = []
-	for operation_id in owned:
-		if not (str(operation_id) in slots):
-			ordered.append(str(operation_id))
+	for module_id in owned:
+		if not (str(module_id) in slots):
+			ordered.append(str(module_id))
 	var benched: int = ordered.size()
-	for operation_id in owned:
-		if str(operation_id) in slots:
-			ordered.append(str(operation_id))
+	for module_id in owned:
+		if str(module_id) in slots:
+			ordered.append(str(module_id))
 	_bench_caption.text = (
 		"MODULES · %d OWNED, %d ON THE BENCH" % [owned.size(), benched]
 		if benched > 0
@@ -308,8 +308,8 @@ func _refresh_bench() -> void:
 	)
 	var evaluator := ExpressionEvaluator.new()
 	var entries: Array = []
-	for operation_id in ordered:
-		var entry: Dictionary = _module_entry(str(operation_id), slots, evaluator)
+	for module_id in ordered:
+		var entry: Dictionary = _module_entry(str(module_id), slots, evaluator)
 		if not entry.is_empty():
 			entries.append(entry)
 	var note: String = ""
@@ -325,7 +325,7 @@ func _refresh_bench() -> void:
 func _refresh_prompt() -> void:
 	match _selection:
 		Selection.MODULE:
-			_prompt.text = "PLACING %s — PICK A SLOT" % _operation_name(
+			_prompt.text = "PLACING %s — PICK A SLOT" % _module_name(
 				_selected_module_id
 			).to_upper()
 		Selection.SLOT:
@@ -357,8 +357,8 @@ func _slot_meta(index: int) -> String:
 	return "slot:%d" % index
 
 
-func _module_meta(operation_id: String) -> String:
-	return "mod:%s" % operation_id
+func _module_meta(module_id: String) -> String:
+	return "mod:%s" % module_id
 
 
 ## One stage of the pipeline. The badge is the figure because a stage is judged on
@@ -383,8 +383,8 @@ func _slot_entry(
 			"status": "TAKEN BY THE CONTRACT",
 			"status_color": ConsoleStyle.DANGER,
 		}
-	var operation: OperationDefinition = ContentDatabase.get_operation(str(slots[index]))
-	if operation == null:
+	var module: ModuleDefinition = ContentDatabase.get_module(str(slots[index]))
+	if module == null:
 		return {
 			"meta": _slot_meta(index),
 			"name": "%s · %s" % [number, EMPTY_STAGE],
@@ -394,32 +394,32 @@ func _slot_entry(
 		}
 	return {
 		"meta": _slot_meta(index),
-		"name": "%s · %s" % [number, operation.name],
-		"figure": evaluator.render_template(operation.badge, operation.parameters),
-		"figure_color": AssetCatalog.rarity_color(operation.rarity),
-		"spec": _stage_effect(operation, slots, index, blocked, evaluator),
-		"price": operation.category.to_upper(),
+		"name": "%s · %s" % [number, module.name],
+		"figure": evaluator.render_template(module.badge, module.parameters),
+		"figure_color": AssetCatalog.rarity_color(module.rarity),
+		"spec": _stage_effect(module, slots, index, blocked, evaluator),
+		"price": module.category.to_upper(),
 		"price_color": ConsoleStyle.PHOSPHOR_DIM,
 		"status": "TAP TO MOVE",
 	}
 
 
 func _module_entry(
-	operation_id: String, slots: Array, evaluator: ExpressionEvaluator
+	module_id: String, slots: Array, evaluator: ExpressionEvaluator
 ) -> Dictionary:
-	var operation: OperationDefinition = ContentDatabase.get_operation(operation_id)
-	if operation == null:
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	if module == null:
 		return {}
-	var placed: bool = operation_id in slots
+	var placed: bool = module_id in slots
 	return {
-		"meta": _module_meta(operation_id),
-		"name": operation.name,
-		"figure": evaluator.render_template(operation.badge, operation.parameters),
-		"figure_color": AssetCatalog.rarity_color(operation.rarity),
+		"meta": _module_meta(module_id),
+		"name": module.name,
+		"figure": evaluator.render_template(module.badge, module.parameters),
+		"figure_color": AssetCatalog.rarity_color(module.rarity),
 		"spec": evaluator.render_template(
-			operation.description_template, operation.parameters
+			module.description_template, module.parameters
 		),
-		"price": operation.category.to_upper(),
+		"price": module.category.to_upper(),
 		"price_color": ConsoleStyle.PHOSPHOR_DIM,
 		"status": "IN PIPELINE" if placed else "ON THE BENCH",
 		"status_color": ConsoleStyle.PHOSPHOR_DIM if placed else ConsoleStyle.PHOSPHOR,
@@ -427,16 +427,16 @@ func _module_entry(
 
 
 func _stage_effect(
-	operation: OperationDefinition,
+	module: ModuleDefinition,
 	slots: Array,
 	index: int,
 	blocked: int,
 	evaluator: ExpressionEvaluator
 ) -> String:
 	var text: String = evaluator.render_template(
-		operation.description_template, operation.parameters
+		module.description_template, module.parameters
 	)
-	var combos: Array = operation.active_combos(
+	var combos: Array = module.active_combos(
 		_neighbour(slots, index, -1, blocked), _neighbour(slots, index, 1, blocked)
 	)
 	for combo in combos:
@@ -445,7 +445,7 @@ func _stage_effect(
 		text += "  ◆ %s — %s" % [
 			str(Dictionary(combo).get("name", "Combo")),
 			evaluator.render_template(
-				str(Dictionary(combo).get("description", "")), operation.parameters
+				str(Dictionary(combo).get("description", "")), module.parameters
 			),
 		]
 	return text
@@ -469,16 +469,16 @@ func _blocked_label(job: Dictionary) -> String:
 	return "This contract already owns the slot."
 
 
-func _operation_name(operation_id: String) -> String:
-	var operation: OperationDefinition = ContentDatabase.get_operation(operation_id)
-	return operation.name if operation != null else operation_id
+func _module_name(module_id: String) -> String:
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	return module.name if module != null else module_id
 
 
 func _slot_name(index: int) -> String:
 	var slots: Array = Simulation.board_slots()
 	if index < 0 or index >= slots.size():
 		return "module"
-	return _operation_name(str(slots[index]))
+	return _module_name(str(slots[index]))
 
 
 # --- The sheet ---------------------------------------------------------------
@@ -493,33 +493,33 @@ func _refresh_detail() -> void:
 	if not reading:
 		return
 	var evaluator := ExpressionEvaluator.new()
-	var operation_id: String = (
+	var module_id: String = (
 		_selected_module_id if _selection == Selection.MODULE
 		else str(Simulation.board_slots()[_selected_slot_index])
 	)
-	var operation: OperationDefinition = ContentDatabase.get_operation(operation_id)
-	if operation == null:
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	if module == null:
 		_clear_selection()
 		return
 	var lines: Array = [
 		{
 			"text": evaluator.render_template(
-				operation.description_template, operation.parameters
+				module.description_template, module.parameters
 			),
 		},
-		{"stat": "Type", "value": operation.category.capitalize()},
-		{"stat": "Rarity", "value": operation.rarity.capitalize()},
+		{"stat": "Type", "value": module.category.capitalize()},
+		{"stat": "Rarity", "value": module.rarity.capitalize()},
 	]
 	if _selection == Selection.MODULE:
 		lines.append({"text": "Pick a slot in the pipeline to place it."})
-		_detail.show_detail(operation.name.to_upper(), lines, "[ C ] CANCEL", false)
+		_detail.show_detail(module.name.to_upper(), lines, "[ C ] CANCEL", false)
 		return
 	lines.append({
 		"stat": "Slot", "value": "%02d" % (_selected_slot_index + 1),
 	})
 	lines.append({"text": "Pick another slot to move it, or clear this one."})
 	_detail.show_detail(
-		operation.name.to_upper(), lines, "[ R ] REMOVE FROM PIPELINE", true
+		module.name.to_upper(), lines, "[ R ] REMOVE FROM PIPELINE", true
 	)
 
 
@@ -534,7 +534,7 @@ func _on_slot_pressed(meta: Variant) -> void:
 	var index: int = int(str(meta).trim_prefix("slot:"))
 	match _selection:
 		Selection.MODULE:
-			Simulation.place_operation(_selected_module_id, index)
+			Simulation.place_module(_selected_module_id, index)
 			_clear_selection()
 		Selection.SLOT:
 			if index == _selected_slot_index:
@@ -554,12 +554,12 @@ func _on_slot_pressed(meta: Variant) -> void:
 func _on_module_pressed(meta: Variant) -> void:
 	if meta == null:
 		return
-	var operation_id: String = str(meta).trim_prefix("mod:")
-	if _selection == Selection.MODULE and _selected_module_id == operation_id:
+	var module_id: String = str(meta).trim_prefix("mod:")
+	if _selection == Selection.MODULE and _selected_module_id == module_id:
 		_clear_selection()
 		return
 	_selection = Selection.MODULE
-	_selected_module_id = operation_id
+	_selected_module_id = module_id
 	_selected_slot_index = -1
 	refresh()
 

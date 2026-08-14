@@ -14,37 +14,37 @@ extends Control
 ## from rects authored beside the picture. Getting there is a real scene change,
 ## which is why the shell is not underneath any of this.
 ##
-## Two layouts, one scene:
+## Three layouts, one scene:
 ##
 ## - **Painted.** The picture is the place and the panels land on the surfaces
 ##   the artwork drew for them. This is the composition on a monitor.
-## - **Console.** Where a design pixel is too small to read — which is every
-##   handset, and is what `ConsoleMetrics` exists to detect — a painted
-##   composition is a worse answer than the slab was, not a better one. The
-##   picture drops back to atmosphere and the same panels reflow into one
-##   scrolling column at a size a thumb can work. Nothing is authored twice.
+## - **Room.** On a handset a design pixel is too small to read, so the place is
+##   worked the way the desk is. The whole of it is on screen and every panel
+##   prints its whole screenful at the size it was authored — the monitor's
+##   composition, shrunk with the room it hangs in, so the place reads as somewhere
+##   with screens in it that are too far away to make out. Pressing one walks the
+##   camera up to it until it is at reading size. Nothing is reflowed and nothing
+##   is blanked; the player just gets nearer.
+## - **Console.** The fallback for a place the artwork cannot carry — no picture,
+##   or a panel the catalog never measured — and for a desktop window so far from
+##   the shape of the art that the painted rects no longer land on it. The panels
+##   stack into scrolling columns that fit any window. Nothing is authored twice.
 ##
 ## Subclasses name the venue, add their panels, and fill them in `refresh`.
 ## Those overriding `_ready` must call `super._ready()`.
 
-## How far the place is dimmed behind its own panels. Light in painted mode
-## because the photograph *is* the screen the player is reading; heavy in console
-## mode because there it is only mood behind a column of type.
+## How far the place is dimmed behind its own panels. Light where the picture is
+## the screen the player is reading — painted and room alike; heavy in console mode
+## because there it is only mood behind a column of type.
 const SCRIM_PAINTED := 0.20
 ## Nearly opaque. The place is still behind the column, but a practical light in
 ## the artwork showing through a gap between two panels reads as a rendering
 ## fault rather than as atmosphere.
 const SCRIM_CONSOLE := 0.93
 
-## How much wider or taller than the window the artwork may be drawn and still be
-## laid out on. The picture is cover-cropped rather than letterboxed, so a window
-## that is not the shape of the art magnifies it — and the panel rects are
-## fractions of that art, so they magnify with it and march off the window. This
-## allows the trim a 16:10 or 3:2 screen costs and refuses the 4:3, 5:4 and
-## portrait shapes, where the crop is severe enough to walk panels into each
-## other. Past it the place prints its console column instead, which fits any
-## window because a container decides the layout rather than the paint.
-const PAINTED_CROP_LIMIT := 1.2
+## How far from the shape of the artwork a window may be and still be painted on.
+## See `_shape_fits`.
+const STRETCH_LIMIT := 1.45
 
 ## Kept off the window edge, so a panel the artwork painted flush to the frame
 ## still reads as an object in a room.
@@ -68,6 +68,11 @@ const CONSOLE_COLUMN_MIN := 300.0
 ## scroll to the bottom to leave.
 const BACK_ORDER := -1000
 
+## How long the camera takes to walk up to a panel. Matches the desk's own lean-in,
+## because it is the same gesture in a different room.
+const LEAN_SECONDS := 0.26
+
+
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 var _under: ColorRect = null
@@ -90,6 +95,25 @@ var _hints: VenuePanel = null
 var _back_row: ConsoleMenuRow = null
 var _hint_rows: Array[ConsoleMenuRow] = []
 var _console_mode: bool = false
+## Whether the place is being looked at whole and leant in on, rather than read
+## where it hangs. Only ever true where `ConsoleMetrics.needs_focus()`.
+var _room_mode: bool = false
+## Which panel the player has walked up to, by region name. Empty is the whole room.
+var _leaning_on: String = ""
+## How far the camera has come forward. 1.0 is the whole place.
+var _zoom: float = 1.0
+## Where the panel being leant in on sits when the place is seen whole, and the
+## zoom that brings it up to reading size.
+var _lean_point: Vector2 = Vector2.ZERO
+var _lean_zoom: float = 1.0
+var _zoom_tween: Tween = null
+## The camera, as the transform every drawn rect goes through.
+var _cam_origin: Vector2 = Vector2.ZERO
+var _cam_zoom: float = 1.0
+## Anything the place is not: pressing it steps back out of a panel.
+var _wall: Control = null
+## The way out for a player who does not know the wall is one.
+var _step_back: Button = null
 ## Which layout the panels are currently parented for, so a resize only moves
 ## them between hosts when the answer actually changed.
 var _mounted_mode: String = ""
@@ -142,6 +166,7 @@ func _ready() -> void:
 	_build_chassis()
 	_build_venue()
 	_build_hints()
+	_follow_sheets()
 	get_viewport().size_changed.connect(_layout)
 	resized.connect(_layout)
 	_layout()
@@ -173,6 +198,19 @@ func _build_chassis() -> void:
 	_scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_scrim)
 
+	# Anything the place is not is a way out of whatever is being read, and the
+	# natural way to write that is to catch what the panels did not. But a panel
+	# leant in on fills the window and its own surface swallows presses, so the
+	# room is given a surface of its own instead: under the panels, over the
+	# picture, live only while the player is leant in on something.
+	_wall = Control.new()
+	_wall.name = "Wall"
+	_wall.mouse_filter = Control.MOUSE_FILTER_STOP
+	_wall.visible = false
+	_wall.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_wall.gui_input.connect(_on_wall_input)
+	add_child(_wall)
+
 	_stage = Control.new()
 	_stage.name = "Stage"
 	_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -196,6 +234,34 @@ func _build_chassis() -> void:
 	_column = _build_console_column("Column")
 	_column_b = _build_console_column("ColumnB")
 	_column_b.visible = false
+
+	_build_step_back()
+
+
+## The way back to the room, for a player who does not know the wall is one. Drawn
+## over the place rather than in it, which is the price of a room being somewhere
+## you can get lost in. Bottom right, because leaning in walks a panel into the
+## middle of the window and the way out should not be written over it.
+func _build_step_back() -> void:
+	_step_back = Button.new()
+	_step_back.name = "StepBack"
+	_step_back.text = "◄ ROOM"
+	_step_back.flat = true
+	_step_back.focus_mode = Control.FOCUS_NONE
+	_step_back.visible = false
+	var font: Font = UiThemeBuilder.mono_font()
+	if font != null:
+		_step_back.add_theme_font_override("font", font)
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_step_back.add_theme_color_override(state, ConsoleStyle.PHOSPHOR)
+	_step_back.pressed.connect(func() -> void:
+		UiSound.play("tap")
+		if _leaning_on != "":
+			step_back_to_room()
+			return
+		SceneRouter.back()
+	)
+	add_child(_step_back)
 
 
 func _build_console_column(node_name: String) -> VBoxContainer:
@@ -223,6 +289,7 @@ func add_panel(region: String, heading: String = "", options: Dictionary = {}) -
 	# positioned by hand, so nothing would otherwise notice that a panel had
 	# outgrown the rect it was placed in.
 	panel.minimum_size_changed.connect(_on_panel_minimum_changed)
+	panel.pressed.connect(lean_on.bind(region))
 	_stage.add_child(panel)
 	_entries.append({
 		"region": region,
@@ -258,9 +325,57 @@ func _build_hints() -> void:
 	content.add_child(_back_row)
 
 
+## Makes the room follow the sheets a venue prints.
+##
+## The detail of a chosen thing is not printed where it was chosen: a shop puts the
+## sheet on the board beside the shelf, the office puts the contract on the pad
+## beside the wire. On a monitor that is the composition — the thing and its terms
+## side by side. In room mode the player is stood at the shelf and the sheet is on a
+## panel behind them, with the one row that accepts it, so the room walks them over
+## to it and back out again when it goes.
+##
+## Watched rather than announced, because a venue already says where its sheet is by
+## putting it in a panel, and saying it twice is a thing that can disagree.
+func _follow_sheets() -> void:
+	for entry in _entries:
+		for sheet in _sheets_in(entry["panel"]):
+			sheet.visibility_changed.connect(
+				_on_sheet_shown.bind(sheet, str(entry["region"]))
+			)
+
+
+func _sheets_in(node: Node) -> Array[ConsoleDetail]:
+	var found: Array[ConsoleDetail] = []
+	if node is ConsoleDetail:
+		found.append(node)
+	for child in node.get_children():
+		found.append_array(_sheets_in(child))
+	return found
+
+
+func _on_sheet_shown(sheet: ConsoleDetail, region: String) -> void:
+	if not _room_mode:
+		return
+	if sheet.is_visible_in_tree():
+		lean_on(region)
+	elif _leaning_on == region:
+		step_back_to_room()
+
+
 func _on_back() -> void:
 	UiSound.play("tap")
 	SceneRouter.back()
+
+
+func _on_wall_input(event: InputEvent) -> void:
+	var released: bool = (
+		(event is InputEventMouseButton and not event.pressed
+			and event.button_index == MOUSE_BUTTON_LEFT)
+		or (event is InputEventScreenTouch and not event.pressed)
+	)
+	if released:
+		step_back_to_room()
+		_wall.accept_event()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -271,6 +386,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if SceneRouter.investor_busy():
 		return
 	get_viewport().set_input_as_handled()
+	# Leaning in is somewhere the player has gone, so it is what escape backs out
+	# of first. Only once they are looking at the whole place does it leave.
+	if _leaning_on != "":
+		step_back_to_room()
+		return
 	SceneRouter.back()
 
 
@@ -285,7 +405,26 @@ func console_mode() -> bool:
 	return _console_mode
 
 
+## What the type on this place is currently sized against.
+##
+## Normally the readability scale: a design pixel is a certain number of
+## millimetres on the player's screen and body text has a millimetre target to
+## hit. A place seen whole on a handset cannot honour that — the panels are a
+## centimetre across, and type at reading size in them would be three words and a
+## clipped edge — so it prints at the size it was authored, which is the
+## composition a monitor gets, shrunk with the room it is in. It reads as a shop
+## with screens in it that are too far away to make out, and that is exactly what
+## it is. Leaning in on one puts it back on the millimetre target.
 func console_scale() -> float:
+	if _room_mode:
+		return _lean_scale() if _leaning_on != "" else 1.0
+	return _scale
+
+
+## The scale for a panel the player has come up to: the millimetre target, which is
+## the whole reason for having come. The room only ever makes the panel wide enough
+## for it — a long one scrolls rather than shrinking its type back down.
+func _lean_scale() -> float:
 	return _scale
 
 
@@ -320,12 +459,24 @@ func _layout_pass() -> void:
 	if view.x <= 1.0 or view.y <= 1.0:
 		return
 	_scale = ConsoleMetrics.compute_scale(view.y, view.x)
+	# A handset gets the room rather than the reflow: the place is the thing being
+	# navigated, and it is only unreadable because it is far away, which is a
+	# problem the player can be given the means to solve rather than one the layout
+	# has to solve for them. The column is left for a place with no picture to hang
+	# the panels on, and for a window too far from the shape of the art to land
+	# them — neither of which leaning in would rescue.
+	var handset: bool = ConsoleMetrics.needs_focus()
+	var shape_fits: bool = _shape_fits(view)
+	_room_mode = handset and _painted_ready() and shape_fits
 	_console_mode = (
-		ConsoleMetrics.needs_focus()
-		or not _painted_ready()
-		or not _art_carries(view)
+		not _painted_ready()
+		or (not _room_mode and (handset or not shape_fits))
 	)
+	if not _room_mode:
+		_leaning_on = ""
+		_zoom = 1.0
 	_console_columns = _console_column_count(view) if _console_mode else 1
+	_aim_camera(view)
 	_layout_backdrop(view)
 	_scrim.color = _scrim_color()
 	_mount_panels()
@@ -334,9 +485,47 @@ func _layout_pass() -> void:
 	else:
 		_layout_painted(view)
 	for entry in _entries:
-		(entry["panel"] as VenuePanel).set_metrics(_scale)
+		(entry["panel"] as VenuePanel).set_metrics(console_scale())
 	_layout_hint_rows()
+	_layout_step_back()
+	_sync_lean_chrome()
 	_on_venue_layout()
+
+
+## Sized for the screen it is on rather than for the canvas: this is the one
+## control a player who has leant in on the wrong panel has to be able to find, so
+## it is never the smallest type in the window.
+func _layout_step_back() -> void:
+	if _step_back == null:
+		return
+	_step_back.add_theme_font_size_override(
+		"font_size", ConsoleMetrics.font_body(_scale)
+	)
+	var pad: float = float(ConsoleMetrics.pad_h(_scale))
+	for state in ["normal", "hover", "pressed"]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(0.02, 0.05, 0.04, 0.96 if state == "hover" else 0.86)
+		box.border_color = Color(
+			ConsoleStyle.PHOSPHOR.r, ConsoleStyle.PHOSPHOR.g, ConsoleStyle.PHOSPHOR.b, 0.45
+		)
+		box.set_border_width_all(1)
+		box.content_margin_left = pad
+		box.content_margin_right = pad
+		box.content_margin_top = pad * 0.6
+		box.content_margin_bottom = pad * 0.6
+		_step_back.add_theme_stylebox_override(state, box)
+	_anchor_step_back()
+
+
+func _anchor_step_back() -> void:
+	if _step_back == null:
+		return
+	_step_back.reset_size()
+	_step_back.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT, true)
+	_step_back.offset_right = -EDGE_PAD
+	_step_back.offset_bottom = -EDGE_PAD
+	_step_back.offset_left = -_step_back.size.x - EDGE_PAD
+	_step_back.offset_top = -_step_back.size.y - EDGE_PAD
 
 
 ## Whether the artwork can actually carry this venue. A place with no picture, or
@@ -354,18 +543,129 @@ func _painted_ready() -> bool:
 	return true
 
 
-## Whether this window is near enough the artwork's own shape for the painted
-## composition to mean anything. It is a question about the window rather than
-## about the screen: a tall window on a monitor crops the picture exactly as hard
-## as a handset does, and the panels pile into one corner either way.
-func _art_carries(view: Vector2) -> bool:
-	var drawn: Vector2 = _art_rect(view).size
-	if drawn.x <= 0.0 or drawn.y <= 0.0:
+## Whether the painted composition survives being stretched into this window.
+##
+## The picture is pulled to the window rather than cropped, so a window that is not
+## the shape of the artwork distorts it, and the panels with it. A handset on its
+## side and a 16:10 or 4:3 monitor all pull a 16:9 room about by a fifth to a
+## third, which reads as a slightly wider or squarer room. An upright phone would
+## pull it by three times, which reads as nothing at all: a place that far from its
+## own shape prints the console column instead, where a container decides the
+## layout rather than the paint.
+func _shape_fits(view: Vector2) -> bool:
+	if _backdrop == null or _backdrop.texture == null:
 		return false
-	return (
-		drawn.x <= view.x * PAINTED_CROP_LIMIT
-		and drawn.y <= view.y * PAINTED_CROP_LIMIT
+	var source: Vector2 = _backdrop.texture.get_size()
+	if source.x <= 0.0 or source.y <= 0.0 or view.y <= 0.0:
+		return false
+	var painted: float = source.x / source.y
+	var window: float = view.x / view.y
+	return maxf(painted / window, window / painted) <= STRETCH_LIMIT
+
+
+# --- The camera --------------------------------------------------------------
+
+## Works out where the room is drawn from, for the lean-in the player has asked
+## for. Everything drawn afterwards — the picture and every panel on it — goes
+## through `_camera`, so the panels stay registered on the photograph however far
+## forward it has come.
+func _aim_camera(view: Vector2) -> void:
+	_cam_zoom = maxf(_zoom, 1.0)
+	# The panel being read travels from where it hangs in the room to the middle of
+	# the window as the camera comes forward, so the move reads as walking up to
+	# something rather than as the picture being blown up where it stands.
+	var travel: float = 0.0
+	if _lean_zoom > 1.001:
+		travel = clampf((_cam_zoom - 1.0) / (_lean_zoom - 1.0), 0.0, 1.0)
+	var shown: Vector2 = _lean_point.lerp(view * 0.5, travel)
+	_cam_origin = shown - _lean_point * _cam_zoom
+	# The picture is the whole place, so no amount of walking up to something at
+	# the edge of it may bring the edge into the window: a panel by a wall is read
+	# from an angle rather than by stepping outside the room.
+	_cam_origin = _cam_origin.clamp(view * (1.0 - _cam_zoom), Vector2.ZERO)
+
+
+## Where something in the room is drawn, given where it sits when the place is
+## seen whole.
+func _camera(rect: Rect2) -> Rect2:
+	return Rect2(_cam_origin + rect.position * _cam_zoom, rect.size * _cam_zoom)
+
+
+## Brings the room forward until the panel mounted at `region` is at reading size.
+##
+## Called by the room when a sign is pressed, and by a venue whose panels answer
+## one another: pressing a category on the index changes what the board says, and
+## in room mode the board is a sign somewhere behind the player. Does nothing
+## outside room mode, so a venue may call it without asking which layout it is in.
+func lean_on(region: String) -> void:
+	if not _room_mode or _leaning_on == region:
+		return
+	var view: Vector2 = _view()
+	var rect: Rect2 = _region_rect(region, view)
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	_leaning_on = region
+	_lean_point = rect.get_center()
+	# `focus_zoom` brings the whole panel up to fill the window, which is the right
+	# answer for a piece of furniture. A panel is not furniture though — it is type —
+	# so a tall narrow one has to come further forward than fitting it would ask
+	# for, or the player is left reading a readable height at an unreadable width.
+	# It scrolls instead: see `VenuePanel.set_scrollable`.
+	var readable: float = float(ConsoleMetrics.px(CONSOLE_COLUMN_MIN, _scale)) / rect.size.x
+	_lean_zoom = clampf(
+		maxf(ConsoleMetrics.focus_zoom(Rect2(rect.position / view, rect.size / view)), readable),
+		1.0,
+		ConsoleMetrics.MAX_FOCUS_ZOOM
 	)
+	_tween_zoom(_lean_zoom)
+
+
+## Back to the whole place.
+func step_back_to_room() -> void:
+	if _leaning_on == "":
+		return
+	_leaning_on = ""
+	_tween_zoom(1.0)
+
+
+func _tween_zoom(target: float) -> void:
+	_sync_lean_chrome()
+	if _zoom_tween != null and _zoom_tween.is_valid():
+		_zoom_tween.kill()
+	_zoom_tween = create_tween()
+	_zoom_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	_zoom_tween.tween_method(_set_zoom, _zoom, target, LEAN_SECONDS)
+	# The panels are re-fitted once, at rest. Sizing type against a rect that is
+	# still moving costs a full layout a frame for something nobody reads.
+	_zoom_tween.finished.connect(_layout, CONNECT_ONE_SHOT)
+
+
+func _set_zoom(value: float) -> void:
+	_zoom = value
+	var view: Vector2 = _view()
+	_aim_camera(view)
+	_layout_backdrop(view)
+	_place_panels(view)
+
+
+## The chrome the room needs: something to press to get back out of a panel, and —
+## since a handset has neither an escape key nor the room to print a legend saying
+## so — something to press to leave the place altogether.
+func _sync_lean_chrome() -> void:
+	var leaning: bool = _leaning_on != ""
+	if _wall != null:
+		_wall.visible = leaning
+	if _step_back == null:
+		return
+	_step_back.visible = leaning or _room_mode
+	_step_back.text = "◄ ROOM" if leaning else "◄ BACK"
+	_anchor_step_back()
+
+
+func _view() -> Vector2:
+	if size.x > 1.0 and size.y > 1.0:
+		return size
+	return get_viewport_rect().size
 
 
 func _scrim_color() -> Color:
@@ -374,58 +674,83 @@ func _scrim_color() -> Color:
 	return Color(base.r, base.g, base.b, alpha)
 
 
-## The picture fills the window and is cropped rather than letterboxed, so a
-## place is never a photograph with bars around it. The panels are measured off
-## the drawn rect and not off the window, which is what keeps a readout on the
-## board it was painted onto when the window is not the design shape.
+## The picture fills the window, stretched to it rather than cropped or bordered.
+## The same as the desk's own room: a place is never a photograph with bars around
+## it, and nothing painted into it may be cropped away either, because the panels
+## are fractions of the picture and would go with it.
 func _layout_backdrop(view: Vector2) -> void:
 	if _backdrop == null:
 		return
 	_backdrop.visible = _backdrop.texture != null
 	if _backdrop.texture == null:
 		return
-	var drawn: Rect2 = _art_rect(view)
+	var drawn: Rect2 = _camera(Rect2(Vector2.ZERO, view))
 	_backdrop.position = drawn.position
 	_backdrop.size = drawn.size
 
 
-func _art_rect(view: Vector2) -> Rect2:
-	if _backdrop == null or _backdrop.texture == null:
-		return Rect2(Vector2.ZERO, view)
-	var source: Vector2 = _backdrop.texture.get_size()
-	if source.x <= 0.0 or source.y <= 0.0:
-		return Rect2(Vector2.ZERO, view)
-	var cover: float = maxf(view.x / source.x, view.y / source.y)
-	var drawn: Vector2 = source * cover
-	return Rect2((view - drawn) * 0.5, drawn)
+## Where the artwork put the panel mounted at `region`, in the place seen whole.
+##
+## A fraction of the window, because the picture is the window: the desk's room
+## works this way and it is what keeps a place filling the screen instead of
+## sitting in it. The catalog authored these rects against the artwork and the
+## artwork is drawn over the whole window, so the two are the same fractions.
+func _region_rect(region: String, view: Vector2) -> Rect2:
+	var authored: Rect2 = AssetCatalog.venue_region(venue_key(), region)
+	if authored.size.x <= 0.0 or authored.size.y <= 0.0:
+		return Rect2()
+	return Rect2(authored.position * view, authored.size * view)
 
 
 func _layout_painted(view: Vector2) -> void:
 	_stage.visible = true
 	_console.visible = false
-	var art: Rect2 = _art_rect(view)
+	_place_panels(view)
+
+
+## Puts every panel where the camera says it is drawn. Split from the layout pass
+## because the lean-in is animated, and re-fitting the type on the way is neither
+## cheap nor visible.
+func _place_panels(view: Vector2) -> void:
 	for entry in _entries:
 		var panel: VenuePanel = entry["panel"]
-		var region: Rect2 = AssetCatalog.venue_region(venue_key(), str(entry["region"]))
-		if region.size.x <= 0.0 or region.size.y <= 0.0:
+		var region: String = str(entry["region"])
+		var rect: Rect2 = _region_rect(region, view)
+		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			panel.visible = false
+			continue
+		# The key legend is desk furniture. A room on a handset is worked with a
+		# thumb, and its way out is the chrome button rather than a painted panel
+		# printing the names of keys the device does not have.
+		if panel == _hints and _room_mode:
 			panel.visible = false
 			continue
 		panel.visible = true
-		var rect := Rect2(
-			art.position + region.position * art.size, region.size * art.size
-		)
+		# Everything the player has not come up to is too small to aim at, so it
+		# takes a press as a request to come and read it instead.
+		var leaning: bool = region == _leaning_on
+		panel.set_far_off(_room_mode and not leaning)
+		# The one being read scrolls within whatever the room gives it; everything
+		# else reports its full height, so the layout can see what it needs.
+		panel.set_scrollable(leaning)
+		rect = _camera(rect)
 		panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
 		panel.custom_minimum_size = Vector2.ZERO
 		panel.size = rect.size
-		# A panel cannot be smaller than what is mounted in it, so the rect the
-		# artwork authored is a request rather than a guarantee: a contract sheet
-		# with a fee, a deadline and an ACCEPT row on it needs more width than a
-		# painted panel a tenth of the picture wide. Whatever it actually took is
-		# what has to be kept on screen — sizing to the region and trusting it
-		# left the accept row hanging off the right edge of the window, drawn but
-		# with most of it outside anything the player could press.
-		rect.size = rect.size.max(panel.get_combined_minimum_size())
-		rect = _clamp_to_window(rect, view)
+		# A panel the player is working is kept whole and kept on screen. It cannot
+		# be smaller than what is mounted in it, so the rect the artwork authored is
+		# a request rather than a guarantee: a contract sheet with a fee, a deadline
+		# and an ACCEPT row on it needs more width than a painted panel a tenth of
+		# the picture wide, and sizing to the region and trusting it left the accept
+		# row hanging off the right edge of the window.
+		#
+		# A panel across the room is not being worked, so it is left exactly where
+		# the artwork hung it: growing the far side of a shop to fit type nobody can
+		# read would walk the place apart, and the panels around the one being read
+		# are supposed to be off the window anyway.
+		if _cam_zoom <= 1.001 or leaning:
+			rect.size = rect.size.max(panel.get_combined_minimum_size())
+			rect = _clamp_to_window(rect, view)
 		panel.position = rect.position
 		panel.size = rect.size
 
@@ -562,12 +887,8 @@ func content_width(region: String) -> float:
 ## The rect a named region landed on, for a venue that wants to mount something
 ## of its own against the artwork rather than into a panel.
 func region_rect(region: String) -> Rect2:
-	var view: Vector2 = size if size.x > 1.0 else get_viewport_rect().size
-	var normalized: Rect2 = AssetCatalog.venue_region(venue_key(), region)
-	if normalized.size.x <= 0.0:
+	var view: Vector2 = _view()
+	var rect: Rect2 = _region_rect(region, view)
+	if rect.size.x <= 0.0:
 		return Rect2()
-	var art: Rect2 = _art_rect(view)
-	return _clamp_to_window(
-		Rect2(art.position + normalized.position * art.size, normalized.size * art.size),
-		view
-	)
+	return _clamp_to_window(_camera(rect), view)

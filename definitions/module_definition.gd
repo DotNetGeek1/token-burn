@@ -1,9 +1,9 @@
-class_name OperationDefinition
+class_name ModuleDefinition
 extends Resource
 
-## Static definition for a Burn Board operation: a module the player drops into
-## a pipeline slot. Effects target the reserved `stage.*` and `batch.*` paths
-## that BoardSystem folds into a burn result.
+## Static definition for a Burn Board module: the thing the player drops into a
+## pipeline slot. Effects target the reserved `stage.*` and `batch.*` paths that
+## BoardSystem folds into a burn result.
 
 @export var id: String = ""
 @export var name: String = ""
@@ -31,9 +31,15 @@ extends Resource
 @export var difficulty: PackedStringArray = ["normal", "hard"]
 ## Named adjacency pairings, declared so the pipeline editor can show them
 ## before the player finds them by accident. Each entry names the modules it
-## reacts to in `after` (the stage above) or `before` (the stage below); the
-## mechanical half lives in `slot_effects` behind matching `$prev_op` /
-## `$next_op` conditions.
+## reacts to in `after` (the stage above) or `before` (the stage below), and
+## carries its own `effects`.
+##
+## The combo is the single source of truth: `to_subscriptions()` compiles those
+## effects into the `$prev_module` / `$next_module` conditions the resolver gates
+## on.
+## Written the other way round — advertisement here, mechanics in `slot_effects`
+## — the tooltip could promise "works after X" while the effect checked for Y,
+## and nothing would catch it.
 @export var combos: Array[Dictionary] = []
 
 
@@ -89,7 +95,7 @@ func active_combos(previous_id: String, next_id: String) -> Array:
 	return live
 
 
-## Subscription-shaped view of the operation, so slot effects resolve through
+## Subscription-shaped view of the module, so slot effects resolve through
 ## the same dispatch path as perks and can be ordered against them.
 ##
 ## The resolver gates whole subscriptions rather than individual effects, so an
@@ -107,6 +113,34 @@ func to_subscriptions(event_name: String) -> Array:
 		subscriptions.append(_subscription(event_name, [effect.duplicate(true)], conditions))
 	if not unconditional.is_empty():
 		subscriptions.push_front(_subscription(event_name, unconditional, []))
+	subscriptions.append_array(_combo_subscriptions(event_name))
+	return subscriptions
+
+
+## Compiles the named combos into adjacency-gated subscriptions. A combo naming
+## both directions fires for either neighbour, which is the same reading
+## `active_combos()` gives the pipeline editor.
+func _combo_subscriptions(event_name: String) -> Array:
+	var subscriptions: Array = []
+	for combo in combos:
+		if not combo is Dictionary:
+			continue
+		var effects: Array = Array(combo.get("effects", []))
+		if effects.is_empty():
+			continue
+		for direction in [["after", "$prev_module"], ["before", "$next_module"]]:
+			var partners: Array = Array(combo.get(str(direction[0]), []))
+			if partners.is_empty():
+				continue
+			var copies: Array = []
+			for effect in effects:
+				if effect is Dictionary:
+					copies.append(effect.duplicate(true))
+			subscriptions.append(_subscription(event_name, copies, [{
+				"left": str(direction[1]),
+				"operator": "in",
+				"right": partners.duplicate(),
+			}]))
 	return subscriptions
 
 

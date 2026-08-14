@@ -75,24 +75,24 @@ func _test_the_catalog_is_coherent() -> void:
 		var reward: Dictionary = Dictionary(achievement.get("reward", {}))
 		if str(reward.get("type", "none")) != "unlock_module":
 			continue
-		var operation_id: String = str(reward.get("operation_id", ""))
-		assert_true(ContentDatabase.get_operation(operation_id) != null, "%s unlocks a real module" % id)
-		assert_false(rewarded_modules.has(operation_id), "%s is unlocked by exactly one award" % operation_id)
-		rewarded_modules[operation_id] = id
+		var module_id: String = str(reward.get("module_id", ""))
+		assert_true(ContentDatabase.get_module(module_id) != null, "%s unlocks a real module" % id)
+		assert_false(rewarded_modules.has(module_id), "%s is unlocked by exactly one award" % module_id)
+		rewarded_modules[module_id] = id
 
 	# A module gated behind an award has to be the module that award hands over,
 	# or it is content nobody can ever reach.
-	for operation in ContentDatabase.operations:
-		if operation.unlock_achievement == "":
+	for module in ContentDatabase.modules:
+		if module.unlock_achievement == "":
 			continue
 		assert_true(
-			seen.has(operation.unlock_achievement),
-			"%s is gated behind a real award" % operation.id
+			seen.has(module.unlock_achievement),
+			"%s is gated behind a real award" % module.id
 		)
 		assert_eq(
-			str(rewarded_modules.get(operation.id, "")),
-			operation.unlock_achievement,
-			"%s is handed over by the award that gates it" % operation.id
+			str(rewarded_modules.get(module.id, "")),
+			module.unlock_achievement,
+			"%s is handed over by the award that gates it" % module.id
 		)
 
 
@@ -145,7 +145,7 @@ func _test_a_gated_module_is_unreachable_until_its_award_is_earned() -> void:
 		"A gated module is not in the draft pool before its award"
 	)
 	assert_false(
-		_in_list(ContentDatabase.unlocked_operations(), WIPEOUT_MODULE),
+		_in_list(ContentDatabase.unlocked_modules(), WIPEOUT_MODULE),
 		"And is not counted as unlocked"
 	)
 
@@ -155,7 +155,7 @@ func _test_a_gated_module_is_unreachable_until_its_award_is_earned() -> void:
 		"Earning the award puts it in the pool for every run from then on"
 	)
 	assert_true(
-		_in_list(ContentDatabase.unlocked_operations(), WIPEOUT_MODULE),
+		_in_list(ContentDatabase.unlocked_modules(), WIPEOUT_MODULE),
 		"And the gallery can show it as reachable"
 	)
 
@@ -186,13 +186,13 @@ func _test_a_disabled_meta_layer_earns_nothing() -> void:
 ## Whether the module can turn up in an angel draft at all. Drawing two at a
 ## time from a pool of dozens will not reliably surface one module, so this asks
 ## the pool rather than gambling on the roll.
-func _can_draw(operation_id: String) -> bool:
-	var operation: OperationDefinition = ContentDatabase.get_operation(operation_id)
-	return operation != null and ContentDatabase.operation_is_unlocked(operation)
+func _can_draw(module_id: String) -> bool:
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	return module != null and ContentDatabase.module_is_unlocked(module)
 
 
-func _in_list(operations: Array, operation_id: String) -> bool:
-	for operation in operations:
-		if operation.id == operation_id:
+func _in_list(modules: Array, module_id: String) -> bool:
+	for module in modules:
+		if module.id == module_id:
 			return true
 	return false

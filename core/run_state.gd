@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 16
+const SAVE_VERSION := 17
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -94,7 +94,7 @@ var build: Dictionary = {
 	"hardware": ["used_laptop"],
 	"upgrades": [],
 	"status_effects": [],
-	"operations": [],
+	"modules": [],
 	"board": {"slot_count": BoardSystem.DEFAULT_SLOT_COUNT, "active_workflow": 0},
 	"workflows": [],
 	"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
@@ -359,7 +359,7 @@ func _migrate(from_version: int) -> void:
 		# Work used to resolve itself; it is now a pipeline the player builds.
 		# BoardSystem.ensure_board grants the starter modules and lays them out,
 		# so an old save just needs the empty structures to exist.
-		build["operations"] = []
+		build["modules"] = []
 		build["board"] = {"slots": [], "slot_count": BoardSystem.DEFAULT_SLOT_COUNT}
 		for job in business.get("active_jobs", []):
 			if job is Dictionary:
@@ -394,6 +394,19 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_derived_cloud_cost_and_demand()
 	if from_version < 16:
 		_migrate_to_perk_inventory()
+	if from_version < 17:
+		_migrate_operations_to_modules()
+
+
+## The pipeline pieces were called operations in code and modules everywhere the
+## player could see. The state key follows the player's word; a save written
+## under the old name keeps its modules.
+func _migrate_operations_to_modules() -> void:
+	if not build.has("operations"):
+		return
+	if Array(build.get("modules", [])).is_empty():
+		build["modules"] = Array(build["operations"])
+	build.erase("operations")
 
 
 ## Active perks and collected perks split apart: everything the run has ever
@@ -661,7 +674,7 @@ func _default_build() -> Dictionary:
 		"hardware": ["used_laptop"],
 		"upgrades": [],
 		"status_effects": [],
-		"operations": [],
+		"modules": [],
 		"board": {"slot_count": BoardSystem.DEFAULT_SLOT_COUNT, "active_workflow": 0},
 		"workflows": [],
 		"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,

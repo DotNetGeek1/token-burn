@@ -5,8 +5,8 @@
     "rarity": "rare",
     "tags": ["deadline", "reward", "risk"],
     "requires_tags": ["risk"],
-    "description_template": "Jobs completed with under {threshold}% time remaining pay {multiplier}×.",
-    "parameters": {"threshold": 0.05, "multiplier": 2.0},
+    "description_template": "Jobs completed with under {threshold_pct}% time remaining pay {multiplier}×.",
+    "parameters": {"threshold": 0.05, "threshold_pct": 5, "multiplier": 2.0},
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 50,
@@ -68,13 +68,13 @@
     "name": "Works on My Machine",
     "rarity": "common",
     "tags": ["local", "risk"],
-    "description_template": "Hardware you own runs +{bonus}% faster. Rented cloud gains nothing.",
-    "parameters": {"bonus": 40},
+    "description_template": "Hardware you own runs +{bonus_pct}% faster. Rented cloud gains nothing.",
+    "parameters": {"local_multiplier": 1.4, "bonus_pct": 40},
     "subscriptions": [{
       "event": "compute.recalculate",
       "priority": 10,
       "conditions": [],
-      "effects": [{"operation": "multiply", "target": "compute.local_rate", "value": 1.4}]
+      "effects": [{"operation": "multiply", "target": "compute.local_rate", "value": "$local_multiplier"}]
     }]
   },
   {
@@ -82,9 +82,38 @@
     "name": "Technical Debt",
     "rarity": "uncommon",
     "tags": ["cash", "risk"],
-    "description_template": "Borrow {rent_multiple}× the round's rent immediately; every batch ships one extra hidden bug and loses {bug_quality_penalty} quality.",
+    "description_template": "On pickup, borrow {rent_multiple}× the round's rent. From then on every batch ships one extra hidden bug and loses {bug_quality_penalty} quality, whether this is equipped or not.",
     "parameters": {"rent_multiple": 4, "bug_quality_penalty": 4, "bug_quality_delta": -4},
-    "subscriptions": []
+    "subscriptions": [{
+      "event": "perk.acquired",
+      "priority": 10,
+      "conditions": [],
+      "effects": [
+        {
+          "operation": "borrow",
+          "target": "economy.cash",
+          "value_from": "economy.round_rent",
+          "value": "$rent_multiple"
+        },
+        {
+          "operation": "spawn",
+          "target": "build.status_effects",
+          "value": {
+            "id": "technical_debt.liability",
+            "source_perk": "perk.technical_debt",
+            "subscriptions": [{
+              "event": "board.batch_finished",
+              "priority": 3,
+              "conditions": [],
+              "effects": [
+                {"operation": "add", "target": "batch.hidden_bugs", "value": 1},
+                {"operation": "add", "target": "batch.quality", "value": -4}
+              ]
+            }]
+          }
+        }
+      ]
+    }]
   },
   {
     "id": "perk.founder_mode",
@@ -204,14 +233,14 @@
     "name": "Prompt Engineer",
     "rarity": "uncommon",
     "tags": ["efficiency"],
-    "description_template": "Gain +{efficiency}% efficiency, and every pipeline stage produces +{stage_quality_bonus} quality.",
-    "parameters": {"efficiency": 0.15, "stage_quality_bonus": 2},
+    "description_template": "Gain +{efficiency_pct}% efficiency, and every pipeline stage produces +{stage_quality_bonus} quality.",
+    "parameters": {"efficiency_multiplier": 1.15, "efficiency_pct": 15, "stage_quality_bonus": 2},
     "subscriptions": [
       {
         "event": "compute.recalculate",
         "priority": 10,
         "conditions": [],
-        "effects": [{"operation": "multiply", "target": "compute.efficiency", "value": 1.15}]
+        "effects": [{"operation": "multiply", "target": "compute.efficiency", "value": "$efficiency_multiplier"}]
       },
       {
         "event": "board.stage_resolved",
@@ -358,8 +387,8 @@
     "rarity": "rare",
     "tags": ["board", "heat", "risk", "thermal_runaway"],
     "incompatible_ids": ["perk.thermal_paste"],
-    "description_template": "While the rig is above {threshold}% heat, batches produce {multiplier}× progress.",
-    "parameters": {"threshold": 0.9, "multiplier": 3.0},
+    "description_template": "Start a burn with the rig already above {threshold_pct}% heat and the batch produces {multiplier}× progress.",
+    "parameters": {"threshold": 0.9, "threshold_pct": 90, "multiplier": 3.0},
     "subscriptions": [{
       "event": "board.batch_started",
       "priority": 20,
@@ -376,7 +405,7 @@
     "description_template": "Turns {convert_pct}% of a batch's known bugs into raw progress.",
     "parameters": {"convert": 0.3, "convert_pct": 30},
     "subscriptions": [{
-      "event": "board.batch_finished",
+      "event": "board.batch_finalizing",
       "priority": 30,
       "conditions": [{"left": "batch.known_bugs", "operator": ">", "right": 0}],
       "effects": [{
@@ -396,7 +425,7 @@
     "description_template": "Every bug a batch fixes feeds {convert_pct}% more tokens back into it.",
     "parameters": {"convert": 0.12, "convert_pct": 12},
     "subscriptions": [{
-      "event": "board.batch_finished",
+      "event": "board.batch_finalizing",
       "priority": 30,
       "conditions": [{"left": "batch.fixed", "operator": ">", "right": 0}],
       "effects": [{
@@ -681,7 +710,7 @@
     "difficulty": ["hard"],
     "requires_tags": ["heat"],
     "min_location_tier": 3,
-    "description_template": "Above {threshold_pct}% heat, token rate ×{bonus}.",
+    "description_template": "While the rig sits at or above {threshold_pct}% heat, token rate ×{bonus}.",
     "parameters": {"threshold": 0.9, "threshold_pct": 90, "bonus": 1.5},
     "subscriptions": [{
       "event": "compute.recalculate",
@@ -711,13 +740,19 @@
     "tags": ["bugs", "cash"],
     "unlock_achievement": "ach.ship_it_pray_ii",
     "requires_tags": ["bugs"],
-    "description_template": "Each hidden bug shipped pays £{payout}.",
+    "description_template": "Every hidden bug that ships undetected pays £{payout}.",
     "parameters": {"payout": 250},
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 30,
       "conditions": [{"left": "job.hidden_bugs_shipped", "operator": ">", "right": 0}],
-      "effects": [{"operation": "add", "target": "economy.cash", "value": "$payout"}]
+      "effects": [{
+        "operation": "convert",
+        "from": "job.hidden_bugs_shipped",
+        "target": "economy.cash",
+        "value": "$payout",
+        "consume": false
+      }]
     }]
   },
   {
@@ -741,12 +776,15 @@
     "tags": ["quality", "test"],
     "unlock_achievement": "ach.audit_ready",
     "requires_tags": ["quality"],
-    "description_template": "Jobs with zero bugs pay {multiplier}×.",
+    "description_template": "Jobs delivered with no bugs at all pay {multiplier}×.",
     "parameters": {"multiplier": 1.2},
     "subscriptions": [{
       "event": "reward.calculated",
       "priority": 45,
-      "conditions": [{"left": "job.hidden_bugs_shipped", "operator": "==", "right": 0}],
+      "conditions": [
+        {"left": "job.hidden_bugs_shipped", "operator": "==", "right": 0},
+        {"left": "job.known_bugs", "operator": "==", "right": 0}
+      ],
       "effects": [{"operation": "multiply", "target": "job.reward", "value": "$multiplier"}]
     }]
   },
@@ -756,13 +794,13 @@
     "rarity": "common",
     "tags": ["board", "recursion"],
     "min_location_tier": 1,
-    "description_template": "Every stage repeats the one above at {strength_pct}% strength.",
+    "description_template": "Every stage repeats the one above at no less than {strength_pct}% strength.",
     "parameters": {"strength": 0.35, "strength_pct": 35},
     "subscriptions": [{
       "event": "board.stage_resolved",
       "priority": 5,
       "conditions": [],
-      "effects": [{"operation": "set", "target": "stage.repeat_previous", "value": "$strength"}]
+      "effects": [{"operation": "cap_min", "target": "stage.repeat_previous", "value": "$strength"}]
     }]
   },
   {
@@ -778,7 +816,7 @@
     "subscriptions": [{
       "event": "board.stage_resolved",
       "priority": 6,
-      "conditions": [{"left": "stage.repeat_previous", "operator": ">", "right": 0}],
+      "conditions": [],
       "effects": [{"operation": "multiply", "target": "stage.repeat_previous", "value": "$multiplier"}]
     }]
   }

@@ -11,7 +11,7 @@ const STARTER_PIPELINE := ["op.prompt", "op.cheap_model", "op.unit_tests"]
 func run() -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
-	_test_every_operation_resolves()
+	_test_every_module_resolves()
 	_test_empty_pipeline_refuses_to_burn()
 	_test_order_matters()
 	_test_cache_is_positional()
@@ -73,19 +73,19 @@ class Harness:
 			"tags": [],
 		}
 
-	func own(operation_ids: Array) -> void:
-		var owned: Array = board.owned_operations(state)
-		for id in operation_ids:
+	func own(module_ids: Array) -> void:
+		var owned: Array = board.owned_modules(state)
+		for id in module_ids:
 			if not (str(id) in owned):
 				owned.append(str(id))
-		state.build["operations"] = owned
+		state.build["modules"] = owned
 
 	## Sets the pipeline directly; placement rules are covered separately.
-	func pipeline(operation_ids: Array) -> void:
-		own(operation_ids)
+	func pipeline(module_ids: Array) -> void:
+		own(module_ids)
 		var slots: Array = board.slots(state)
 		for i in range(slots.size()):
-			slots[i] = str(operation_ids[i]) if i < operation_ids.size() else ""
+			slots[i] = str(module_ids[i]) if i < module_ids.size() else ""
 
 	func burn(subscriptions: Array = [], stage_limit: int = -1, tokens: float = 1000.0) -> Dictionary:
 		return board.resolve_burn(state, job, tokens, rng, resolver, subscriptions, stage_limit)
@@ -95,16 +95,16 @@ class Harness:
 
 ## Every module has to be able to take part in a burn without erroring or
 ## producing a batch of nothing.
-func _test_every_operation_resolves() -> void:
-	assert_true(ContentDatabase.operations.size() >= 8, "There are at least eight modules to draft")
-	for operation in ContentDatabase.operations:
+func _test_every_module_resolves() -> void:
+	assert_true(ContentDatabase.modules.size() >= 8, "There are at least eight modules to draft")
+	for module in ContentDatabase.modules:
 		var harness := Harness.new(11)
-		harness.pipeline(["op.prompt", operation.id])
+		harness.pipeline(["op.prompt", module.id])
 		var result: Dictionary = harness.burn()
-		assert_true(result.get("ok", false), "%s resolves in a pipeline" % operation.id)
+		assert_true(result.get("ok", false), "%s resolves in a pipeline" % module.id)
 		assert_true(
 			float(result.get("progress_tokens", 0.0)) > 0.0,
-			"%s leaves the batch doing some work" % operation.id
+			"%s leaves the batch doing some work" % module.id
 		)
 
 
@@ -257,11 +257,11 @@ func _test_blocked_slots_are_unusable() -> void:
 	harness.job["blocked_slots"] = 2
 
 	assert_false(
-		harness.board.place_operation(harness.state, harness.job, "op.prompt", 0),
+		harness.board.place_module(harness.state, harness.job, "op.prompt", 0),
 		"A contract's own slot cannot be overwritten"
 	)
 	assert_true(
-		harness.board.place_operation(harness.state, harness.job, "op.prompt", 2),
+		harness.board.place_module(harness.state, harness.job, "op.prompt", 2),
 		"The free slots below it still work"
 	)
 	# Anything already sitting in a blocked slot is ignored by resolution.
@@ -626,7 +626,7 @@ func _test_a_run_opens_with_a_full_working_pipeline() -> void:
 	var state := RunState.new()
 	var board := BoardSystem.new()
 	board.ensure_board(state, ContentDatabase)
-	var owned: Array = board.owned_operations(state)
+	var owned: Array = board.owned_modules(state)
 	var slots: Array = board.slots(state)
 	assert_eq(
 		owned.size(), slots.size(),
@@ -645,8 +645,8 @@ func _test_a_drafted_module_lands_on_the_bench() -> void:
 	board.ensure_board(state, ContentDatabase)
 	var slots_before: Array = board.slots(state).duplicate()
 
-	assert_true(board.grant_operation(state, "op.linter"), "A drafted module is owned")
-	assert_true("op.linter" in board.owned_operations(state), "It shows up in the tray")
+	assert_true(board.grant_module(state, "op.linter"), "A drafted module is owned")
+	assert_true("op.linter" in board.owned_modules(state), "It shows up in the tray")
 	assert_false("op.linter" in board.slots(state), "But not in the pipeline, which was full")
 	assert_eq(board.slots(state), slots_before, "And nothing already placed was displaced")
 
@@ -695,7 +695,7 @@ func _test_workflows_start_at_one_and_are_capacity_gated() -> void:
 ## on, not on an empty board.
 func _test_an_old_save_keeps_its_layout_as_the_first_workflow() -> void:
 	var state := RunState.new()
-	state.build["operations"] = ["op.prompt", "op.unit_tests"]
+	state.build["modules"] = ["op.prompt", "op.unit_tests"]
 	state.build["board"] = {
 		"slot_count": 3,
 		"slots": ["op.unit_tests", "", "op.prompt"],
@@ -811,7 +811,7 @@ func _test_a_combo_pays_more_than_the_same_modules_apart() -> void:
 	apart.pipeline(["op.unit_tests", "op.cheap_model"])
 	var separate: Dictionary = apart.burn()
 
-	var tests: OperationDefinition = ContentDatabase.get_operation("op.unit_tests")
+	var tests: ModuleDefinition = ContentDatabase.get_module("op.unit_tests")
 	assert_eq(
 		tests.active_combos("op.cheap_model", "").size(), 1,
 		"Unit Tests declares a combo with the module above it"

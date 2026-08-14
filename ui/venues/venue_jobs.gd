@@ -303,6 +303,7 @@ func _on_counter_pressed(key: String) -> void:
 	_selected_id = ""
 	_board.clear_selection()
 	refresh()
+	lean_on("board")
 
 
 func _unhandled_key_input(event: InputEvent) -> void:

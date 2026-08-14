@@ -54,19 +54,21 @@ func _test_technical_debt_loan_once() -> void:
 	sim.start_run(8903)
 	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
 	var debt_before: float = float(sim.run_state.economy.get("debt", 0.0))
-	sim._perk_system.collect_perk(sim.run_state, "perk.technical_debt", ContentDatabase)
-	sim._perk_system.apply_collect_side_effects(
-		sim.run_state, "perk.technical_debt", ContentDatabase, sim.effect_resolver, sim.rng
-	)
+	sim.collect_perk("perk.technical_debt")
 	var cash_after_first: float = float(sim.run_state.economy.get("cash", 0.0))
 	var debt_after_first: float = float(sim.run_state.economy.get("debt", 0.0))
 	assert_true(cash_after_first > cash_before, "Technical Debt grants cash on first collect")
 	assert_true(debt_after_first > debt_before, "Technical Debt records debt on first collect")
-	sim._perk_system.bench_perk(sim.run_state, "perk.technical_debt", ContentDatabase)
-	sim._perk_system.equip_perk(sim.run_state, "perk.technical_debt", ContentDatabase)
-	sim._perk_system.apply_collect_side_effects(
-		sim.run_state, "perk.technical_debt", ContentDatabase, sim.effect_resolver, sim.rng
+	var statuses: Array = Array(sim.run_state.build.get("status_effects", []))
+	assert_eq(statuses.size(), 1, "Pickup leaves one permanent liability behind")
+	sim.equip_perk("perk.technical_debt")
+	sim.bench_perk("perk.technical_debt")
+	assert_eq(
+		Array(sim.run_state.build.get("status_effects", [])).size(),
+		1,
+		"Benching Technical Debt does not remove the liability"
 	)
+	sim._dispatch_perk_acquired("perk.technical_debt")
 	assert_eq(
 		float(sim.run_state.economy.get("cash", 0.0)),
 		cash_after_first,

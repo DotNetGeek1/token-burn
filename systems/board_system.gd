@@ -19,6 +19,12 @@ extends RefCounted
 
 const EVENT_BATCH_STARTED := "board.batch_started"
 const EVENT_STAGE_RESOLVED := "board.stage_resolved"
+## Last chance to change what the batch achieves. Dispatched after every stage
+## and demand has had its say but before tokens and progress are worked out, so
+## an effect that multiplies throughput still reaches the burn it belongs to.
+const EVENT_BATCH_FINALIZING := "board.batch_finalizing"
+## After the numbers are settled: cleanup, bug manipulation, and stats. Progress
+## multipliers written here are too late to matter.
 const EVENT_BATCH_FINISHED := "board.batch_finished"
 
 ## A run starts with fewer slots than the player owns modules. Room on the board
@@ -68,6 +74,10 @@ const STAGE_DEFAULTS := {
 	"hide_bugs": 0.0,
 	"quality_to_progress": 0.0,
 	"repeat_previous": 0.0,
+	## How many times the stage above is replayed, each at `repeat_previous`
+	## strength. Two 55% forks are not one 110% fork: multiplier stages fold
+	## non-linearly, so a module that says "twice" has to fold twice.
+	"repeat_count": 1.0,
 	"next_multiplier": 1.0,
 	"next_cost_mult": 1.0,
 }
@@ -89,11 +99,11 @@ func ensure_board(run_state: RunState, content_db: Node) -> void:
 	# old "skip if anything is owned" left that run with one module and no
 	# pipeline to put it in — the reported bug where the workflow items vanish
 	# and never come back.
-	var owned: Array = Array(run_state.build.get("operations", []))
-	for starter in content_db.starter_operations():
+	var owned: Array = Array(run_state.build.get("modules", []))
+	for starter in content_db.starter_modules():
 		if not (starter in owned):
 			owned.append(starter)
-	run_state.build["operations"] = owned
+	run_state.build["modules"] = owned
 
 	_migrate_board_to_workflows(run_state)
 	run_state.build["workflow_capacity"] = derived_workflow_capacity(run_state, content_db)
@@ -341,8 +351,8 @@ func delete_workflow(run_state: RunState, index: int) -> bool:
 ## working pipeline laid out. Only the modules that declare `opens_pipeline` are
 ## placed; anything else waits on the bench, which is the point.
 func _auto_fill_empty_workflows(run_state: RunState, content_db: Node) -> void:
-	var owned: Array = Array(run_state.build.get("operations", []))
-	var opening: Array = content_db.opening_pipeline_operations()
+	var owned: Array = Array(run_state.build.get("modules", []))
+	var opening: Array = content_db.opening_pipeline_modules()
 	for workflow in workflows(run_state):
 		var layout: Array = Array(workflow.get("slots", []))
 		var filled: int = 0
@@ -396,22 +406,22 @@ func filled_count(layout: Array) -> int:
 	return count
 
 
-func owned_operations(run_state: RunState) -> Array:
-	return Array(run_state.build.get("operations", []))
+func owned_modules(run_state: RunState) -> Array:
+	return Array(run_state.build.get("modules", []))
 
 
-func grant_operation(run_state: RunState, operation_id: String) -> bool:
-	var owned: Array = owned_operations(run_state)
-	if operation_id in owned:
+func grant_module(run_state: RunState, module_id: String) -> bool:
+	var owned: Array = owned_modules(run_state)
+	if module_id in owned:
 		return false
-	owned.append(operation_id)
-	run_state.build["operations"] = owned
+	owned.append(module_id)
+	run_state.build["modules"] = owned
 	# A newly drafted module goes straight into the first free slot so it is
 	# in play without a detour through the board screen.
 	var board_slots: Array = slots(run_state)
 	for i in range(board_slots.size()):
 		if str(board_slots[i]) == "":
-			board_slots[i] = operation_id
+			board_slots[i] = module_id
 			break
 	return true
 
@@ -442,30 +452,30 @@ func compact_for_job(run_state: RunState, job: Dictionary) -> Array:
 			displaced.append(str(board_slots[i]))
 			board_slots[i] = ""
 	var homeless: Array = []
-	for operation_id in displaced:
+	for module_id in displaced:
 		var placed: bool = false
 		for i in range(blocked, board_slots.size()):
 			if str(board_slots[i]) == "":
-				board_slots[i] = operation_id
+				board_slots[i] = module_id
 				placed = true
 				break
 		if not placed:
-			homeless.append(operation_id)
+			homeless.append(module_id)
 	return homeless
 
 
-func place_operation(run_state: RunState, job: Dictionary, operation_id: String, index: int) -> bool:
+func place_module(run_state: RunState, job: Dictionary, module_id: String, index: int) -> bool:
 	if not is_slot_usable(run_state, job, index):
 		return false
-	if operation_id != "" and not (operation_id in owned_operations(run_state)):
+	if module_id != "" and not (module_id in owned_modules(run_state)):
 		return false
 	var board_slots: Array = slots(run_state)
 	# One copy of a module can only be in one place at a time.
-	if operation_id != "":
+	if module_id != "":
 		for i in range(board_slots.size()):
-			if str(board_slots[i]) == operation_id:
+			if str(board_slots[i]) == module_id:
 				board_slots[i] = ""
-	board_slots[index] = operation_id
+	board_slots[index] = module_id
 	return true
 
 
@@ -554,34 +564,39 @@ func resolve_burn(
 
 	for position in range(limit):
 		var index: int = int(order[position])
-		var operation: OperationDefinition = ContentDatabase.get_operation(str(board_slots[index]))
-		if operation == null:
+		var module: ModuleDefinition = ContentDatabase.get_module(str(board_slots[index]))
+		if module == null:
 			continue
 		var stage: Dictionary = STAGE_DEFAULTS.duplicate(true)
 		_dispatch_stage(
-			run_state, job, batch, stage, operation, rng, effect_resolver, subscriptions,
+			run_state, job, batch, stage, module, rng, effect_resolver, subscriptions,
 			board_slots, order, position, index
 		)
-		var rule_multiplier: float = _tag_bonus_for(rules, operation)
+		var rule_multiplier: float = _tag_bonus_for(rules, module)
 		var effective_multiplier: float = pending_multiplier * rule_multiplier
 		var before: Dictionary = _snapshot(batch)
 
 		_fold(batch, stage, effective_multiplier, pending_cost_mult)
 		var repeat: float = maxf(0.0, float(stage["repeat_previous"]))
-		if repeat > 0.0 and not previous_stage.is_empty():
-			_fold(batch, previous_stage, repeat * effective_multiplier, pending_cost_mult)
-			run_state.statistics["stage_repeats"] = int(run_state.statistics.get("stage_repeats", 0)) + 1
-		_apply_stage_rules(rules, operation, stage, batch, job, messages)
+		var repeat_count: int = maxi(0, int(round(float(stage["repeat_count"]))))
+		if repeat > 0.0 and repeat_count > 0 and not previous_stage.is_empty():
+			for _fork in range(repeat_count):
+				_fold(batch, previous_stage, repeat * effective_multiplier, pending_cost_mult)
+			run_state.statistics["stage_repeats"] = int(
+				run_state.statistics.get("stage_repeats", 0)
+			) + repeat_count
+		_apply_stage_rules(rules, module, stage, batch, job, messages)
 
 		stages.append({
 			"slot_index": index,
 			"position": position,
-			"operation_id": operation.id,
-			"name": operation.name,
-			"badge": operation.badge,
-			"category": operation.category,
+			"module_id": module.id,
+			"name": module.name,
+			"badge": module.badge,
+			"category": module.category,
 			"multiplier": effective_multiplier,
 			"repeated_previous": repeat,
+			"repeat_count": repeat_count,
 			"stage": stage,
 			"before": before,
 			"after": _snapshot(batch),
@@ -596,6 +611,13 @@ func resolve_burn(
 	# happened to fire, so the verdict is the one the job card advertised.
 	var demands: Array = demand_report(job, board_slots, blocked_slots(job))
 	var bug_chance_mult: float = _apply_demands(demands, batch, messages)
+
+	_dispatch_batch_event(
+		EVENT_BATCH_FINALIZING, run_state, job, batch, rng, effect_resolver, subscriptions, {
+			"stage_count": limit,
+			"slot_count": board_slots.size(),
+		}
+	)
 
 	var tokens: float = maxf(0.0, base_tokens * maxf(0.0, float(batch["token_mult"])))
 	var progress_tokens: float = tokens * maxf(0.0, float(batch["progress_mult"]))
@@ -669,16 +691,16 @@ func pipeline_capabilities(board_slots: Array, blocked: int = 0) -> Dictionary:
 	for index in range(board_slots.size()):
 		if index < blocked:
 			continue
-		var operation: OperationDefinition = ContentDatabase.get_operation(str(board_slots[index]))
-		if operation == null:
+		var module: ModuleDefinition = ContentDatabase.get_module(str(board_slots[index]))
+		if module == null:
 			continue
 		found["modules"] = int(found["modules"]) + 1
-		for effect in operation.slot_effects:
+		for effect in module.slot_effects:
 			if not effect is Dictionary:
 				continue
 			var target: String = str(effect.get("target", ""))
 			var operator: String = str(effect.get("operation", "add"))
-			var value: float = _parameter_value(effect.get("value", 0), operation.parameters)
+			var value: float = _parameter_value(effect.get("value", 0), module.parameters)
 			match target:
 				"stage.fix_bugs":
 					if value > 0.0:
@@ -803,7 +825,7 @@ func _dispatch_stage(
 	job: Dictionary,
 	batch: Dictionary,
 	stage: Dictionary,
-	operation: OperationDefinition,
+	module: ModuleDefinition,
 	rng: DeterministicRng,
 	effect_resolver: EffectResolver,
 	subscriptions: Array,
@@ -813,9 +835,13 @@ func _dispatch_stage(
 	index: int
 ) -> void:
 	var mod_ctx := ModifierContext.new(EVENT_STAGE_RESOLVED, run_state)
-	mod_ctx.rng = rng.derive("stage_%d_%s" % [index, operation.id])
+	mod_ctx.rng = rng.derive("stage_%d_%s" % [index, module.id])
 	mod_ctx.job = job
 	mod_ctx.tags = PackedStringArray(Array(job.get("tags", [])))
+	var previous_id: String = str(board_slots[int(order[position - 1])]) if position > 0 else ""
+	var next_id: String = (
+		str(board_slots[int(order[position + 1])]) if position < order.size() - 1 else ""
+	)
 	mod_ctx.extras = {
 		"slot_index": index,
 		"stage_position": position,
@@ -823,10 +849,16 @@ func _dispatch_stage(
 		"stage_count": order.size(),
 		"is_first_stage": position == 0,
 		"is_last_stage": position == order.size() - 1,
-		"prev_op": str(board_slots[int(order[position - 1])]) if position > 0 else "",
-		"next_op": str(board_slots[int(order[position + 1])]) if position < order.size() - 1 else "",
-		"op_id": operation.id,
-		"op_category": operation.category,
+		# `op` and `module` name the same thing. Content ids stayed `op.*`, so the
+		# short spelling stays authored and supported alongside the domain word.
+		"prev_op": previous_id,
+		"next_op": next_id,
+		"prev_module": previous_id,
+		"next_module": next_id,
+		"op_id": module.id,
+		"op_category": module.category,
+		"module_id": module.id,
+		"module_category": module.category,
 		"heat_ratio": _heat_ratio(run_state),
 	}
 	for key in stage.keys():
@@ -835,8 +867,8 @@ func _dispatch_stage(
 		mod_ctx.set_value("batch.%s" % key, batch[key])
 
 	var stage_subscriptions: Array = subscriptions.duplicate()
-	stage_subscriptions.append_array(operation.to_subscriptions(EVENT_STAGE_RESOLVED))
-	effect_resolver.begin_action("board.stage.%d.%s" % [index, operation.id])
+	stage_subscriptions.append_array(module.to_subscriptions(EVENT_STAGE_RESOLVED))
+	effect_resolver.begin_action("board.stage.%d.%s" % [index, module.id])
 	effect_resolver.dispatch(EVENT_STAGE_RESOLVED, mod_ctx, stage_subscriptions)
 
 	for key in stage.keys():
@@ -906,20 +938,20 @@ func _scaled_multiplier(value: float, strength: float) -> float:
 	return maxf(0.0, 1.0 + (value - 1.0) * strength)
 
 
-func _tag_bonus_for(rules: Array, operation: OperationDefinition) -> float:
+func _tag_bonus_for(rules: Array, module: ModuleDefinition) -> float:
 	var multiplier: float = 1.0
 	for rule in rules:
 		if not rule is Dictionary or str(rule.get("type", "")) != RULE_TAG_BONUS:
 			continue
 		var tag: String = str(rule.get("tag", ""))
-		if tag != "" and (tag in Array(operation.tags) or tag == operation.category):
+		if tag != "" and (tag in Array(module.tags) or tag == module.category):
 			multiplier *= float(rule.get("value", 1.0))
 	return multiplier
 
 
 func _apply_stage_rules(
 	rules: Array,
-	operation: OperationDefinition,
+	module: ModuleDefinition,
 	stage: Dictionary,
 	batch: Dictionary,
 	job: Dictionary,
@@ -931,16 +963,17 @@ func _apply_stage_rules(
 		match str(rule.get("type", "")):
 			RULE_RECURSION_RISK:
 				var repeat: float = maxf(0.0, float(stage["repeat_previous"]))
-				if repeat <= 0.0:
+				var forks: float = maxf(0.0, float(stage["repeat_count"]))
+				if repeat <= 0.0 or forks <= 0.0:
 					continue
-				batch["quality"] = float(batch["quality"]) - float(rule.get("value", 0.0)) * repeat
+				batch["quality"] = float(batch["quality"]) - float(rule.get("value", 0.0)) * repeat * forks
 				messages.append("Compliance flags the recursive stage: quality docked.")
 			RULE_AGENT_SCOPE:
-				if not ("agent" in Array(operation.tags)):
+				if not ("agent" in Array(module.tags)):
 					continue
 				var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 				batch["scope_tokens"] = float(batch["scope_tokens"]) + requirement * float(rule.get("value", 0.0))
-				messages.append("%s invented another requirement." % operation.name)
+				messages.append("%s invented another requirement." % module.name)
 
 
 func _snapshot(batch: Dictionary) -> Dictionary:

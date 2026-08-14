@@ -81,10 +81,20 @@ func dispatch(
 			continue
 		var conditions: Array = sub.get("conditions", [])
 		var all_pass := true
-		for condition in conditions:
-			if condition is Dictionary and not _evaluator.evaluate_condition(condition, eval_ctx):
-				all_pass = false
-				break
+		if not conditions.is_empty():
+			# Matched against the subscriber's own parameters, so a condition can
+			# say `$threshold` the same way its effects do. Without this a
+			# parameterised threshold resolved to null and the subscription could
+			# never match.
+			var match_ctx: Dictionary = eval_ctx
+			var sub_params: Variant = sub.get("parameters", {})
+			if sub_params is Dictionary and not sub_params.is_empty():
+				match_ctx = eval_ctx.duplicate(true)
+				match_ctx["parameters"] = sub_params
+			for condition in conditions:
+				if condition is Dictionary and not _evaluator.evaluate_condition(condition, match_ctx):
+					all_pass = false
+					break
 		if all_pass:
 			matched.append(sub)
 

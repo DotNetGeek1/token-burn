@@ -26,7 +26,7 @@
     "perks": ["perk.vibe_check", "perk.bug_alchemy"],
     "description": "Bugs are just vibes: every batch turns one more of them into progress.",
     "subscriptions": [{
-      "event": "board.batch_finished",
+      "event": "board.batch_finalizing",
       "priority": 28,
       "conditions": [{"left": "batch.known_bugs", "operator": ">", "right": 0}],
       "effects": [{"operation": "multiply", "target": "batch.progress_mult", "value": 1.15}]

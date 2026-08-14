@@ -244,6 +244,7 @@ func _on_counter_pressed(key: String) -> void:
 	_selected = ""
 	_board.clear_selection()
 	refresh()
+	lean_on("board")
 
 
 ## The counters answer to the number keys, the way the title menu does.

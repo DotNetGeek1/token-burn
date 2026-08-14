@@ -782,6 +782,9 @@ func _calculate_reward(
 	rng: DeterministicRng
 ) -> float:
 	var reward: float = float(job.get("reward", 0.0))
+	# Settled first so a perk paid per undetected bug is looking at the delivery
+	# that actually happened rather than at a field nothing had written yet.
+	resolve_hidden_bugs(job, rng.derive("hidden_bugs.%s" % job.get("id", "")))
 	effect_resolver.begin_action("reward.%s" % job.get("id", ""))
 	var mod_ctx := ModifierContext.new("reward.calculated", run_state)
 	mod_ctx.rng = rng.derive("reward.%s" % job.get("id", ""))
@@ -862,9 +865,29 @@ static func delivered_quality(job: Dictionary) -> float:
 	return maxf(0.0, quality)
 
 
+## Rolls which buried defects the client finds. Settled before the fee is
+## calculated so perks paid per bug shipped (Known Unknowns) and perks that ask
+## for a clean delivery (Audit Trail) can both read the outcome, and guarded so
+## the roll happens once per job however many times it is asked for.
+static func resolve_hidden_bugs(job: Dictionary, rng: DeterministicRng) -> void:
+	if job.has("hidden_bugs_discovered"):
+		return
+	var hidden: int = maxi(0, int(job.get("hidden_bugs", 0)))
+	var discovery_chance: float = float(
+		ContentDatabase.balance.get("job_scaling", {}).get("board", {}).get("hidden_bug_discovery_chance", 0.6)
+	)
+	var discovered: int = 0
+	for _i in range(hidden):
+		if rng.next_float() < discovery_chance:
+			discovered += 1
+	job["hidden_bugs_discovered"] = discovered
+	job["hidden_bugs_shipped"] = hidden - discovered
+
+
 ## What delivery costs: work that went out unfinished, defects the client can
-## see, and the ones nobody looked for. Hidden bugs are resolved here and only
-## here, which is what makes skipping the tests a gamble rather than a saving.
+## see, and the ones nobody looked for. Hidden bug discovery is rolled by
+## `resolve_hidden_bugs`, which is what makes skipping the tests a gamble
+## rather than a saving.
 func _delivery_penalty(
 	run_state: RunState,
 	job: Dictionary,
@@ -890,19 +913,13 @@ func _delivery_penalty(
 		messages.append("%s: shipped with %d known bug(s)." % [job_name, known])
 
 	var hidden: int = maxi(0, int(job.get("hidden_bugs", 0)))
-	var discovery_chance: float = float(
-		ContentDatabase.balance.get("job_scaling", {}).get("board", {}).get("hidden_bug_discovery_chance", 0.6)
-	)
-	var discovered: int = 0
-	for _i in range(hidden):
-		if rng.next_float() < discovery_chance:
-			discovered += 1
-	job["hidden_bugs_discovered"] = discovered
+	resolve_hidden_bugs(job, rng)
+	var discovered: int = maxi(0, int(job.get("hidden_bugs_discovered", 0)))
 	if discovered > 0:
 		multiplier *= maxf(0.25, 1.0 - 0.1 * float(discovered))
 		run_state.business["reputation"] = maxf(-10.0, float(run_state.business.get("reputation", 0.0)) - float(discovered))
 		messages.append("%s: %d bug(s) surfaced in production. The client noticed." % [job_name, discovered])
-	var shipped_undetected: int = hidden - discovered
+	var shipped_undetected: int = maxi(0, int(job.get("hidden_bugs_shipped", 0)))
 	if shipped_undetected > 0:
 		run_state.statistics["hidden_bugs_shipped"] = int(
 			run_state.statistics.get("hidden_bugs_shipped", 0)

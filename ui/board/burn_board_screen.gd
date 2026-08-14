@@ -20,6 +20,11 @@ extends Control
 ## the batch is the show, not a loading bar.
 const STAGE_SECONDS := 0.9
 
+## The heat a redline build has to be sitting at before a burn starts for its
+## conditional modules to fire, called out on the meter so entering a burn hot
+## reads as a decision rather than an accident.
+const REDLINE_RATIO := 0.9
+
 ## Prompts left at which the deadline stops reading as time in hand.
 const DEADLINE_WARNING_PROMPTS := 3
 const DEADLINE_DANGER_PROMPTS := 1
@@ -57,7 +62,7 @@ func _ready() -> void:
 	relayout_on_board()
 	Simulation.work_tick_completed.connect(refresh)
 	Simulation.work_session_finished.connect(func(_result): refresh())
-	EventBus.operation_acquired.connect(func(_id): refresh())
+	EventBus.module_acquired.connect(func(_id): refresh())
 	refresh()
 
 
@@ -215,7 +220,13 @@ func _refresh_readouts(job: Dictionary, working: bool) -> void:
 		))
 		var prompts_left: int = maxi(0, int(job.get("prompts_remaining", 0)))
 		_laptop.set_stat("time", "time", "%d prompt(s)" % prompts_left, _deadline_color(prompts_left))
-	_laptop.set_meter("heat", "heat", heat_ratio, "%d%%" % int(round(heat_ratio * 100.0)))
+	# Redline modules read the rig as a burn starts, not the heat that burn goes
+	# on to make, so the player needs to see when they are already in the band
+	# those modules are waiting for.
+	var heat_text: String = "%d%%" % int(round(heat_ratio * 100.0))
+	if heat_ratio >= REDLINE_RATIO:
+		heat_text += " redlined"
+	_laptop.set_meter("heat", "heat", heat_ratio, heat_text)
 	# Cloud bursts are bought a batch at a time out of the same account the rent
 	# comes out of, so what is left in it belongs on the deck where the spending
 	# happens rather than only on the wall behind the laptop.
@@ -333,7 +344,7 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 		# Terse on purpose: the commands print two across, and "3 of 3 placed"
 		# is wider than half a laptop.
 		"value": "%d/%d" % [
-			Simulation.filled_slot_count(), Simulation.owned_operations().size(),
+			Simulation.filled_slot_count(), Simulation.owned_modules().size(),
 		],
 		"pressed": _on_edit_pipeline,
 	})

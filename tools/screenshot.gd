@@ -163,13 +163,13 @@ class Walker:
 	## bench under its pipeline. A starting run owns just enough to fill its slots,
 	## which is the one state where the placing half of that screen is invisible.
 	func _stock_modules() -> void:
-		var owned: Array = Array(Simulation.run_state.build.get("operations", []))
-		for operation in ContentDatabase.operations:
+		var owned: Array = Array(Simulation.run_state.build.get("modules", []))
+		for module in ContentDatabase.modules:
 			if owned.size() >= MODULE_STOCK:
 				break
-			if not (operation.id in owned):
-				owned.append(operation.id)
-		Simulation.run_state.build["operations"] = owned
+			if not (module.id in owned):
+				owned.append(module.id)
+		Simulation.run_state.build["modules"] = owned
 
 	func _take_contract() -> void:
 		Simulation.ensure_job_offers()

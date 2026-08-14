@@ -15,44 +15,19 @@ func collect_perk(run_state: RunState, perk_id: String, content_db: Node) -> boo
 	return true
 
 
-func apply_collect_side_effects(
-	run_state: RunState,
-	perk_id: String,
-	content_db: Node,
-	effect_resolver: EffectResolver,
-	rng: DeterministicRng
-) -> void:
-	if perk_id != "perk.technical_debt":
-		return
+## Perks whose pickup effects have already fired. A `perk.acquired` loan or
+## permanent liability is taken once and kept: benching the card does not hand
+## the money back, so re-collecting must not hand out a second one.
+static func liability_taken(run_state: RunState, perk_id: String) -> bool:
+	return perk_id in Array(run_state.build.get("perk_liabilities", []))
+
+
+static func record_liability(run_state: RunState, perk_id: String) -> void:
 	var liabilities: Array = Array(run_state.build.get("perk_liabilities", []))
-	if "perk.technical_debt" in liabilities:
+	if perk_id in liabilities:
 		return
-	liabilities.append("perk.technical_debt")
+	liabilities.append(perk_id)
 	run_state.build["perk_liabilities"] = liabilities
-	var perk: PerkDefinition = content_db.get_perk(perk_id)
-	if perk == null:
-		return
-	var multiple: float = float(perk.parameters.get("rent_multiple", 4.0))
-	var rent: float = float(run_state.economy.get("round_rent", 0.0))
-	var loan: float = rent * multiple
-	run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + loan
-	EconomySystem.record_debt(run_state, loan, "perk.technical_debt")
-	var bug_delta: float = float(perk.parameters.get("bug_quality_delta", -4.0))
-	var statuses: Array = Array(run_state.build.get("status_effects", []))
-	statuses.append({
-		"id": "technical_debt.liability",
-		"source_perk": perk_id,
-		"subscriptions": [{
-			"event": "board.batch_finished",
-			"priority": 3,
-			"conditions": [],
-			"effects": [
-				{"operation": "add", "target": "batch.hidden_bugs", "value": 1},
-				{"operation": "add", "target": "batch.quality", "value": bug_delta},
-			],
-		}],
-	})
-	run_state.build["status_effects"] = statuses
 
 
 func equip_perk(run_state: RunState, perk_id: String, content_db: Node) -> bool:
@@ -76,7 +51,7 @@ func bench_perk(run_state: RunState, perk_id: String, content_db: Node) -> bool:
 func swap_perk(run_state: RunState, out_id: String, in_id: String, content_db: Node) -> bool:
 	if out_id == in_id:
 		return false
-	if not can_bench(run_state, out_id, content_db):
+	if not can_bench(run_state, out_id, content_db, in_id):
 		return false
 	var index: int = run_state.build["perks"].find(out_id)
 	if index < 0:
@@ -94,7 +69,7 @@ func swap_perk(run_state: RunState, out_id: String, in_id: String, content_db: N
 func swap_block_reason(run_state: RunState, out_id: String, in_id: String, content_db: Node) -> String:
 	if out_id == in_id:
 		return "Already active"
-	var bench_reason: String = bench_block_reason(run_state, out_id, content_db)
+	var bench_reason: String = bench_block_reason(run_state, out_id, content_db, in_id)
 	if bench_reason != "":
 		return bench_reason
 	var index: int = run_state.build["perks"].find(out_id)
@@ -140,11 +115,18 @@ func can_equip(run_state: RunState, perk_id: String, content_db: Node) -> bool:
 	return _active_compatibility_allows(run_state, content_db, perk)
 
 
-func can_bench(run_state: RunState, perk_id: String, content_db: Node) -> bool:
-	return bench_block_reason(run_state, perk_id, content_db) == ""
+func can_bench(
+	run_state: RunState, perk_id: String, content_db: Node, incoming_id: String = ""
+) -> bool:
+	return bench_block_reason(run_state, perk_id, content_db, incoming_id) == ""
 
 
-func bench_block_reason(run_state: RunState, perk_id: String, content_db: Node) -> String:
+## `incoming_id` is the perk taking this one's place in a swap. It covers the
+## tags it provides, so trading one risk perk for another is still legal while
+## removing the last one is not.
+func bench_block_reason(
+	run_state: RunState, perk_id: String, content_db: Node, incoming_id: String = ""
+) -> String:
 	if perk_id not in run_state.build["perks"]:
 		return "Not active"
 	var perk: PerkDefinition = content_db.get_perk(perk_id)
@@ -162,6 +144,23 @@ func bench_block_reason(run_state: RunState, perk_id: String, content_db: Node) 
 		var in_use: int = board.workflow_count(run_state)
 		if in_use > without:
 			return "Remove surplus workflows before benching this perk"
+	# `requires_tags` is checked when a perk goes in, so it has to be checked
+	# when its provider comes out too. Otherwise the loadout can be walked into
+	# a state the equip rules would have refused outright.
+	var incoming: PerkDefinition = content_db.get_perk(incoming_id) if incoming_id != "" else null
+	for tag in perk.tags:
+		if incoming != null and tag in incoming.tags:
+			continue
+		for other_id in run_state.build["perks"]:
+			if str(other_id) == perk_id:
+				continue
+			var other: PerkDefinition = content_db.get_perk(str(other_id))
+			if other == null or tag not in other.requires_tags:
+				continue
+			# The dependent is excluded from the search as well, because a perk
+			# never counted as its own provider when it was equipped.
+			if not _owned_has_tag(run_state, content_db, tag, perk_id, str(other_id)):
+				return "%s needs this for: %s" % [other.name, tag]
 	return ""
 
 
@@ -217,8 +216,13 @@ func collected_ids(run_state: RunState) -> Array:
 	return _ensure_inventory(run_state)
 
 
-## Every tag the active loadout has committed to, for draft weighting and tag
-## thresholds.
+## Every tag the build has committed to, for draft weighting and tag thresholds.
+##
+## Modules count as well as perks, and owning one is enough: drafting three
+## recursion modules is a declaration of intent, and steering only on active
+## perks made build-building a one-way street where the pipeline could never ask
+## the angel for more of what it was already doing. Benched modules count for the
+## same reason a benched module still cost a pick.
 func owned_tags(run_state: RunState, content_db: Node) -> Array:
 	var tags: Array = []
 	for owned_id in run_state.build["perks"]:
@@ -226,6 +230,13 @@ func owned_tags(run_state: RunState, content_db: Node) -> Array:
 		if owned == null:
 			continue
 		for tag in owned.tags:
+			if tag not in tags:
+				tags.append(tag)
+	for module_id in Array(run_state.build.get("modules", [])):
+		var module: ModuleDefinition = content_db.get_module(str(module_id))
+		if module == null:
+			continue
+		for tag in module.tags:
 			if tag not in tags:
 				tags.append(tag)
 	return tags
@@ -287,10 +298,27 @@ func _ensure_inventory(run_state: RunState) -> Array:
 	return run_state.build["perk_inventory"]
 
 
-func _owned_has_tag(run_state: RunState, content_db: Node, tag: String) -> bool:
+## Whether anything in the build provides `tag`, counting the modules the run
+## owns as well as the perks it has equipped. `excludes_tags` deliberately does
+## not read modules: a requirement is something the build can satisfy, but a
+## cooling module quietly banning a thermal keystone is a rule the player cannot
+## see coming.
+func _owned_has_tag(
+	run_state: RunState,
+	content_db: Node,
+	tag: String,
+	ignored_perk_id: String = "",
+	also_ignored_perk_id: String = ""
+) -> bool:
 	for owned_id in run_state.build["perks"]:
+		if str(owned_id) == ignored_perk_id or str(owned_id) == also_ignored_perk_id:
+			continue
 		var owned: PerkDefinition = content_db.get_perk(str(owned_id))
 		if owned != null and tag in owned.tags:
+			return true
+	for module_id in Array(run_state.build.get("modules", [])):
+		var module: ModuleDefinition = content_db.get_module(str(module_id))
+		if module != null and tag in module.tags:
 			return true
 	return false
 

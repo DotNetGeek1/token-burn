@@ -59,7 +59,7 @@
         {"stat": "run.ascension_tier", "op": ">=", "value": 3}
       ]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.foundation_model"}
+    "reward": {"type": "unlock_module", "module_id": "op.foundation_model"}
   },
   {
     "id": "ach.full_board",
@@ -73,7 +73,7 @@
       "trigger": "tick",
       "checks": [{"stat": "run.board_filled", "op": ">=", "value": 8}]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.crunch_mode"}
+    "reward": {"type": "unlock_module", "module_id": "op.crunch_mode"}
   },
   {
     "id": "ach.trillion_burn",
@@ -87,7 +87,7 @@
       "trigger": "run_end",
       "checks": [{"stat": "run.tokens_burned", "op": ">=", "value": 1000000000000}]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.quantum_annealer"}
+    "reward": {"type": "unlock_module", "module_id": "op.quantum_annealer"}
   },
   {
     "id": "ach.retired",
@@ -104,7 +104,7 @@
         {"stat": "run.round", "op": ">=", "value": 12}
       ]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.rubber_duck"}
+    "reward": {"type": "unlock_module", "module_id": "op.rubber_duck"}
   },
   {
     "id": "ach.deep_pockets",
@@ -118,7 +118,7 @@
       "trigger": "run_end",
       "checks": [{"stat": "run.peak_cash", "op": ">=", "value": 1000000}]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.the_intern"}
+    "reward": {"type": "unlock_module", "module_id": "op.the_intern"}
   },
   {
     "id": "ach.spotless",
@@ -149,7 +149,7 @@
       "trigger": "tick",
       "checks": [{"stat": "run.endless_rounds", "op": ">=", "value": 10}]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.agi_prototype"}
+    "reward": {"type": "unlock_module", "module_id": "op.agi_prototype"}
   },
   {
     "id": "ach.round_one_wipeout",
@@ -166,7 +166,7 @@
         {"stat": "run.rounds_survived", "op": "<=", "value": 1}
       ]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.stack_overflow"}
+    "reward": {"type": "unlock_module", "module_id": "op.stack_overflow"}
   },
   {
     "id": "ach.datacentre_flambe",
@@ -183,7 +183,7 @@
         {"stat": "run.infrastructure_tier", "op": ">=", "value": 3}
       ]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.chaos_monkey"}
+    "reward": {"type": "unlock_module", "module_id": "op.chaos_monkey"}
   },
   {
     "id": "ach.bug_farm",
@@ -197,7 +197,7 @@
       "trigger": "run_end",
       "checks": [{"stat": "run.hidden_bugs_shipped", "op": ">=", "value": 10}]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.vibe_coder"}
+    "reward": {"type": "unlock_module", "module_id": "op.vibe_coder"}
   },
   {
     "id": "ach.evicted",
@@ -301,7 +301,7 @@
       "trigger": "run_end",
       "checks": [{"stat": "lifetime.losses", "op": ">=", "value": 10}]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.blameless_postmortem"}
+    "reward": {"type": "unlock_module", "module_id": "op.blameless_postmortem"}
   },
   {
     "id": "ach.so_close",
@@ -454,7 +454,7 @@
         {"stat": "run.max_cloud_share", "op": ">=", "value": 0.8}
       ]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.egress_shield"}
+    "reward": {"type": "unlock_module", "module_id": "op.egress_shield"}
   },
   {
     "id": "ach.ship_it_pray_ii",
@@ -507,7 +507,7 @@
         {"stat": "run.max_heat_ratio", "op": ">=", "value": 0.9}
       ]
     },
-    "reward": {"type": "unlock_module", "operation_id": "op.heat_sink_bank"}
+    "reward": {"type": "unlock_module", "module_id": "op.heat_sink_bank"}
   },
   {
     "id": "ach.recursive_business",

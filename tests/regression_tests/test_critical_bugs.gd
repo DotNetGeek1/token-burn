@@ -149,12 +149,12 @@ func _test_multi_job_tick_counts_once() -> void:
 func _test_a_granted_module_does_not_replace_the_starters() -> void:
 	var state := RunState.new()
 	state.reset()
-	var granted: String = str(ContentDatabase.operations[0].id)
-	state.build["operations"] = [granted]
+	var granted: String = str(ContentDatabase.modules[0].id)
+	state.build["modules"] = [granted]
 	BoardSystem.new().ensure_board(state, ContentDatabase)
-	var owned: Array = Array(state.build.get("operations", []))
+	var owned: Array = Array(state.build.get("modules", []))
 	assert_true(granted in owned, "The granted module is still there")
-	for starter in ContentDatabase.starter_operations():
+	for starter in ContentDatabase.starter_modules():
 		assert_true(str(starter) in owned, "And so is starter %s" % str(starter))
 
 

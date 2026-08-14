@@ -209,6 +209,7 @@ func _on_counter_pressed(key: String) -> void:
 		return
 	_shelf = key
 	refresh()
+	lean_on("board")
 
 
 func _refresh_board() -> void:

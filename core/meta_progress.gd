@@ -110,9 +110,9 @@ func completion_summary() -> Dictionary:
 		if ContentDatabase.perk_is_unlocked(perk):
 			perks_unlocked += 1
 	var modules_unlocked: int = 0
-	var modules_total: int = ContentDatabase.operations.size()
-	for operation in ContentDatabase.operations:
-		if ContentDatabase.operation_is_unlocked(operation):
+	var modules_total: int = ContentDatabase.modules.size()
+	for module in ContentDatabase.modules:
+		if ContentDatabase.module_is_unlocked(module):
 			modules_unlocked += 1
 	var legacy_owned: int = 0
 	var legacy_total: int = 0
@@ -672,11 +672,11 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 			board["meta_slot_bonus"] = int(board.get("meta_slot_bonus", 0)) + int(value)
 			run_state.build["board"] = board
 		"starting_module":
-			var operation_id: String = str(unlock.get("operation_id", ""))
-			var owned: Array = run_state.build.get("operations", [])
-			if operation_id != "" and not (operation_id in owned):
-				owned.append(operation_id)
-				run_state.build["operations"] = owned
+			var module_id: String = str(unlock.get("module_id", ""))
+			var owned: Array = run_state.build.get("modules", [])
+			if module_id != "" and not (module_id in owned):
+				owned.append(module_id)
+				run_state.build["modules"] = owned
 		"cooling":
 			# Kept apart from the run's own cooling, which is derived from the
 			# location and the kit in it and would overwrite anything added here.

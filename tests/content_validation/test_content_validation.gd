@@ -10,10 +10,11 @@ const VALID_EVENTS := [
 	"perk.acquired",
 	"board.batch_started",
 	"board.stage_resolved",
+	"board.batch_finalizing",
 	"board.batch_finished",
 ]
 
-## Contributions the Burn Board knows how to fold. An operation writing anywhere
+## Contributions the Burn Board knows how to fold. A module writing anywhere
 ## else silently does nothing, which is the worst kind of content bug.
 const VALID_STAGE_TARGETS := [
 	"stage.progress_mult",
@@ -28,6 +29,7 @@ const VALID_STAGE_TARGETS := [
 	"stage.hide_bugs",
 	"stage.quality_to_progress",
 	"stage.repeat_previous",
+	"stage.repeat_count",
 	"stage.next_multiplier",
 	"stage.next_cost_mult",
 ]
@@ -35,18 +37,64 @@ const VALID_STAGE_TARGETS := [
 
 ## A declared combo is a promise printed in the pipeline editor, so its partners
 ## have to exist and its text has to render with the module's own numbers.
-func _validate_combos(operation: OperationDefinition, evaluator: ExpressionEvaluator) -> void:
-	for combo in operation.combos:
-		assert_true(str(combo.get("name", "")) != "", "Combo on %s is named" % operation.id)
+func _validate_combos(module: ModuleDefinition, evaluator: ExpressionEvaluator) -> void:
+	for combo in module.combos:
+		assert_true(str(combo.get("name", "")) != "", "Combo on %s is named" % module.id)
 		var partners: Array = Array(combo.get("after", [])) + Array(combo.get("before", []))
 		assert_true(partners.size() > 0, "Combo '%s' names something to pair with" % str(combo.get("name", "")))
 		for partner_id in partners:
 			assert_true(
-				ContentDatabase.get_operation(str(partner_id)) != null,
-				"Combo on %s pairs with a real module, not '%s'" % [operation.id, str(partner_id)]
+				ContentDatabase.get_module(str(partner_id)) != null,
+				"Combo on %s pairs with a real module, not '%s'" % [module.id, str(partner_id)]
 			)
-		var text: String = evaluator.render_template(str(combo.get("description", "")), operation.parameters)
+		var text: String = evaluator.render_template(str(combo.get("description", "")), module.parameters)
 		assert_false(text.contains("{"), "Combo '%s' resolves every parameter" % str(combo.get("name", "")))
+		# The combo is what the editor advertises, so it has to be what the
+		# board actually resolves. An advertised pairing with no effects is a
+		# tooltip promising something nothing implements.
+		var effects: Array = Array(combo.get("effects", []))
+		assert_true(
+			effects.size() > 0,
+			"Combo '%s' on %s carries the effects it advertises" % [str(combo.get("name", "")), module.id]
+		)
+		for effect in effects:
+			var target: String = str(effect.get("target", ""))
+			assert_true(
+				target in VALID_STAGE_TARGETS,
+				"Combo '%s' targets a real stage field, not '%s'" % [str(combo.get("name", "")), target]
+			)
+
+	# Adjacency belongs to the combos, so a slot effect testing its neighbours
+	# is a second source of truth for the same pairing.
+	for effect in module.slot_effects:
+		for condition in Array(effect.get("conditions", [])):
+			var left: String = str(condition.get("left", ""))
+			assert_false(
+				left in ["$prev_op", "$next_op", "$prev_module", "$next_module"],
+				"%s declares adjacency in its combos rather than in slot_effects" % module.id
+			)
+
+
+## Percentages are printed exactly as authored, so a display parameter has to
+## already be a whole percent. A `convert_pct` of 0.45 renders as "0.45%" beside
+## a mechanic doing 45%, which is the card lying about the build.
+func _validate_percent_parameters(source_id: String, parameters: Dictionary) -> void:
+	for key in parameters.keys():
+		var name: String = str(key)
+		if not (name.ends_with("_pct") or name.ends_with("_percent")):
+			continue
+		var value: Variant = parameters[key]
+		if not (value is int or value is float):
+			continue
+		var percent: float = float(value)
+		assert_false(
+			percent > 0.0 and percent < 1.0,
+			"%s writes %s as a whole percent, not the ratio %s" % [source_id, name, str(percent)]
+		)
+		assert_true(
+			percent >= 0.0 and percent <= 200.0,
+			"%s keeps %s in a range a card can print: %s" % [source_id, name, str(percent)]
+		)
 
 
 ## Cooling a machine should cost less than a couple of the machine. Above this
@@ -340,25 +388,31 @@ func run() -> void:
 	for event_name in ContentDatabase.get_all_subscription_events():
 		assert_true(event_name in VALID_EVENTS, "Unknown subscription event: %s" % event_name)
 
-	assert_true(ContentDatabase.operations.size() >= 8, "Burn Board ships a starting set of operations")
-	assert_true(ContentDatabase.starter_operations().size() >= 2, "A new run owns enough modules to fill a pipeline")
+	assert_true(ContentDatabase.modules.size() >= 8, "Burn Board ships a starting set of modules")
+	assert_true(ContentDatabase.starter_modules().size() >= 2, "A new run owns enough modules to fill a pipeline")
 	var evaluator := ExpressionEvaluator.new()
-	for operation in ContentDatabase.operations:
-		assert_true(operation.id.begins_with("op."), "Operation id is namespaced: %s" % operation.id)
-		assert_true(operation.slot_effects.size() > 0, "Operation %s does something" % operation.id)
-		for effect in operation.slot_effects:
+	for module in ContentDatabase.modules:
+		assert_true(module.id.begins_with("op."), "Module id is namespaced: %s" % module.id)
+		assert_true(module.slot_effects.size() > 0, "Module %s does something" % module.id)
+		for effect in module.slot_effects:
 			var target: String = str(effect.get("target", ""))
-			assert_true(target in VALID_STAGE_TARGETS, "Operation %s targets a real stage field, not '%s'" % [operation.id, target])
-		var rendered: String = evaluator.render_template(operation.description_template, operation.parameters)
-		assert_false(rendered.contains("{"), "Operation %s description resolves every parameter" % operation.id)
-		_validate_combos(operation, evaluator)
+			assert_true(target in VALID_STAGE_TARGETS, "Module %s targets a real stage field, not '%s'" % [module.id, target])
+		var rendered: String = evaluator.render_template(module.description_template, module.parameters)
+		assert_false(rendered.contains("{"), "Module %s description resolves every parameter" % module.id)
+		_validate_percent_parameters(module.id, module.parameters)
+		_validate_combos(module, evaluator)
+
+	for perk in ContentDatabase.perks:
+		_validate_percent_parameters(perk.id, perk.parameters)
+		var perk_text: String = evaluator.render_template(perk.description_template, perk.parameters)
+		assert_false(perk_text.contains("{"), "Perk %s description resolves every parameter" % perk.id)
 
 	assert_true(ContentDatabase.achievements.size() > 0, "Content loads the achievement catalogue")
 	# The draft pool has to reward a long game as well as a first run, so every
 	# rarity band needs somebody in it.
 	var rarities: Dictionary = {}
-	for operation in ContentDatabase.operations:
-		rarities[operation.rarity] = int(rarities.get(operation.rarity, 0)) + 1
+	for module in ContentDatabase.modules:
+		rarities[module.rarity] = int(rarities.get(module.rarity, 0)) + 1
 	for rarity in ["common", "uncommon", "rare", "legendary"]:
 		assert_true(int(rarities.get(rarity, 0)) > 0, "The module pool has %s entries" % rarity)
 		assert_true(
@@ -395,8 +449,8 @@ func run() -> void:
 		if not match_spec.has("capability"):
 			continue
 		var answered: bool = false
-		for operation in ContentDatabase.operations:
-			if bool(board.pipeline_capabilities([operation.id]).get(str(match_spec["capability"]), false)):
+		for module in ContentDatabase.modules:
+			if bool(board.pipeline_capabilities([module.id]).get(str(match_spec["capability"]), false)):
 				answered = true
 				break
 		assert_true(answered, "Some module can answer demand %s" % demand_id)

@@ -380,9 +380,9 @@ func _reward_text(achievement: Dictionary) -> String:
 	var reward: Dictionary = Dictionary(achievement.get("reward", {}))
 	if str(reward.get("type", "none")) != "unlock_module":
 		return ""
-	var operation: OperationDefinition = ContentDatabase.get_operation(
-		str(reward.get("operation_id", ""))
+	var module: ModuleDefinition = ContentDatabase.get_module(
+		str(reward.get("module_id", ""))
 	)
-	if operation == null:
+	if module == null:
 		return ""
-	return "New module in the draft pool · %s" % operation.name
+	return "New module in the draft pool · %s" % module.name

@@ -434,7 +434,7 @@ func _test_advancing_to_the_next_chapter_carries_the_whole_business() -> void:
 	sim.run_state.economy["cash"] = 987654.0
 	sim.run_state.business["reputation"] = 17.0
 	sim.run_state.build["perks"] = ["perk.test_marker"]
-	sim.run_state.build["operations"] = [{"id": "op.test_marker"}]
+	sim.run_state.build["modules"] = [{"id": "op.test_marker"}]
 	_meet_requirement(sim, "ascension.first_scale_up")
 	sim.debug_finish_prompt({"ok": true, "messages": []})
 	assert_eq(sim.phase, sim.Phase.RUN_END, "The chapter's contract is complete")
@@ -461,7 +461,7 @@ func _test_advancing_to_the_next_chapter_carries_the_whole_business() -> void:
 	)
 	assert_true("perk.test_marker" in Array(sim.run_state.build.get("perks", [])), "Perks carry")
 	assert_eq(
-		Array(sim.run_state.build.get("operations", [])).size(), 1,
+		Array(sim.run_state.build.get("modules", [])).size(), 1,
 		"Modules carry"
 	)
 	assert_eq(

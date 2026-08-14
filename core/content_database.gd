@@ -6,7 +6,7 @@ var jobs: Array[JobDefinition] = []
 var perks: Array[PerkDefinition] = []
 var upgrades: Array[UpgradeDefinition] = []
 var events: Array[EventDefinition] = []
-var operations: Array[OperationDefinition] = []
+var modules: Array[ModuleDefinition] = []
 var balance: Dictionary = {}
 var comparisons: Array = []
 var rarity_weights: Dictionary = {}
@@ -23,7 +23,7 @@ var _jobs_by_id: Dictionary = {}
 var _perks_by_id: Dictionary = {}
 var _upgrades_by_id: Dictionary = {}
 var _events_by_id: Dictionary = {}
-var _operations_by_id: Dictionary = {}
+var _modules_by_id: Dictionary = {}
 
 
 func _ready() -> void:
@@ -35,7 +35,7 @@ func reload() -> void:
 	perks.clear()
 	upgrades.clear()
 	events.clear()
-	operations.clear()
+	modules.clear()
 	synergies.clear()
 	ascension_contracts.clear()
 	achievements.clear()
@@ -44,13 +44,13 @@ func reload() -> void:
 	_perks_by_id.clear()
 	_upgrades_by_id.clear()
 	_events_by_id.clear()
-	_operations_by_id.clear()
+	_modules_by_id.clear()
 	_ascension_contracts_by_id.clear()
 	_load_jobs()
 	_load_perks()
 	_load_upgrades()
 	_load_events()
-	_load_operations()
+	_load_modules()
 	_load_ascension_contracts()
 	_load_achievements()
 	_load_balance()
@@ -73,8 +73,8 @@ func get_event(id: String) -> EventDefinition:
 	return _events_by_id.get(id, null)
 
 
-func get_operation(id: String) -> OperationDefinition:
-	return _operations_by_id.get(id, null)
+func get_module(id: String) -> ModuleDefinition:
+	return _modules_by_id.get(id, null)
 
 
 func get_ascension_contract(id: String) -> Dictionary:
@@ -85,45 +85,45 @@ func get_achievement(id: String) -> Dictionary:
 	return Dictionary(_achievements_by_id.get(id, {})).duplicate(true)
 
 
-## The achievement that has to be earned before an operation can appear in a
-## draft, or "" for the modules everybody starts with access to.
-func operation_unlock_achievement(operation_id: String) -> String:
-	var operation: OperationDefinition = get_operation(operation_id)
-	return operation.unlock_achievement if operation != null else ""
+## The achievement that has to be earned before a module can appear in a draft,
+## or "" for the modules everybody starts with access to.
+func module_unlock_achievement(module_id: String) -> String:
+	var module: ModuleDefinition = get_module(module_id)
+	return module.unlock_achievement if module != null else ""
 
 
-func starter_operations() -> Array[String]:
+func starter_modules() -> Array[String]:
 	var ids: Array[String] = []
-	for operation in operations:
-		if operation.starter:
-			ids.append(operation.id)
+	for module in modules:
+		if module.starter:
+			ids.append(module.id)
 	return ids
 
 
 ## The modules a run begins with already placed. The rest of the starters wait
 ## on the bench, which is the first decision the board asks for.
-func opening_pipeline_operations() -> Array[String]:
+func opening_pipeline_modules() -> Array[String]:
 	var ids: Array[String] = []
-	for operation in operations:
-		if operation.starter and operation.opens_pipeline:
-			ids.append(operation.id)
+	for module in modules:
+		if module.starter and module.opens_pipeline:
+			ids.append(module.id)
 	return ids
 
 
 ## An achievement-gated module is not in the pool until its award has been
 ## earned, which is the whole point of earning it: the draft itself gets deeper
 ## rather than the player getting a one-off handout.
-func operation_is_unlocked(operation: OperationDefinition) -> bool:
-	if operation.unlock_achievement == "":
+func module_is_unlocked(module: ModuleDefinition) -> bool:
+	if module.unlock_achievement == "":
 		return true
-	return MetaProgress.has_achievement(operation.unlock_achievement)
+	return MetaProgress.has_achievement(module.unlock_achievement)
 
 
-func unlocked_operations() -> Array[OperationDefinition]:
-	var result: Array[OperationDefinition] = []
-	for operation in operations:
-		if operation_is_unlocked(operation):
-			result.append(operation)
+func unlocked_modules() -> Array[ModuleDefinition]:
+	var result: Array[ModuleDefinition] = []
+	for module in modules:
+		if module_is_unlocked(module):
+			result.append(module)
 	return result
 
 
@@ -142,7 +142,7 @@ func draw_angel_offers(
 ) -> Array:
 	var pool: Array = []
 	var collected: Array = run_state.build.get("perk_inventory", [])
-	var owned_ops: Array = run_state.build.get("operations", [])
+	var owned_modules: Array = run_state.build.get("modules", [])
 	var tier: int = _location_tier_for_run(run_state)
 	var affinity: float = float(_build_tuning().get("draft_tag_affinity", 1.5))
 	var affinity_cap: float = float(_build_tuning().get("draft_tag_affinity_cap", 4.0))
@@ -170,29 +170,29 @@ func draw_angel_offers(
 			"tags": Array(perk.tags),
 			"weight": weight,
 		})
-	for operation in operations:
-		if operation.id in owned_ops:
+	for module in modules:
+		if module.id in owned_modules:
 			continue
-		if not operation_is_unlocked(operation):
+		if not module_is_unlocked(module):
 			continue
-		if not _difficulty_allows_run(run_state, operation.difficulty):
+		if not _difficulty_allows_run(run_state, module.difficulty):
 			continue
-		if not _location_tier_allows(tier, operation.min_location_tier, operation.max_location_tier):
+		if not _location_tier_allows(tier, module.min_location_tier, module.max_location_tier):
 			continue
-		var op_weight: float = _rarity_weight(operation.rarity, rarity_bias) * maxf(operation.draft_weight, 0.01)
-		var op_matches: int = 0
-		for tag in operation.tags:
+		var module_weight: float = _rarity_weight(module.rarity, rarity_bias) * maxf(module.draft_weight, 0.01)
+		var module_matches: int = 0
+		for tag in module.tags:
 			if tag in owned_tags:
-				op_matches += 1
-		if op_matches > 0:
-			op_weight *= minf(pow(affinity, float(op_matches)), affinity_cap)
+				module_matches += 1
+		if module_matches > 0:
+			module_weight *= minf(pow(affinity, float(module_matches)), affinity_cap)
 		pool.append({
-			"type": "operation",
-			"id": operation.id,
-			"label": operation.name,
-			"rarity": operation.rarity,
-			"tags": Array(operation.tags),
-			"weight": op_weight,
+			"type": "module",
+			"id": module.id,
+			"label": module.name,
+			"rarity": module.rarity,
+			"tags": Array(module.tags),
+			"weight": module_weight,
 		})
 	if pool.is_empty():
 		return []
@@ -232,22 +232,22 @@ func _location_tier_allows(tier: int, min_tier: int, max_tier: int) -> bool:
 	return true
 
 
-func draw_operations(
+func draw_modules(
 	rng: DeterministicRng,
 	count: int = 2,
 	owned_ids: Array = [],
 	rarity_bias: float = 0.0
-) -> Array[OperationDefinition]:
+) -> Array[ModuleDefinition]:
 	var pool: Array = []
-	for operation in operations:
-		if operation.id in owned_ids:
+	for module in modules:
+		if module.id in owned_ids:
 			continue
-		if not operation_is_unlocked(operation):
+		if not module_is_unlocked(module):
 			continue
-		pool.append({"item": operation, "weight": _rarity_weight(operation.rarity, rarity_bias)})
+		pool.append({"item": module, "weight": _rarity_weight(module.rarity, rarity_bias)})
 	if pool.is_empty():
 		return []
-	var picks: Array[OperationDefinition] = []
+	var picks: Array[ModuleDefinition] = []
 	var mutable_pool: Array = pool.duplicate()
 	for _i in range(count):
 		if mutable_pool.is_empty():
@@ -448,30 +448,30 @@ func _load_events() -> void:
 		_events_by_id[event.id] = event
 
 
-func _load_operations() -> void:
-	var data: Array = _load_json_array("res://content/operations/operations.json")
+func _load_modules() -> void:
+	var data: Array = _load_json_array("res://content/modules/modules.json")
 	for entry in data:
-		var operation := OperationDefinition.new()
-		operation.id = str(entry.get("id", ""))
-		operation.name = str(entry.get("name", ""))
-		operation.category = str(entry.get("category", ""))
-		operation.rarity = str(entry.get("rarity", "common"))
-		operation.tags = PackedStringArray(Array(entry.get("tags", [])))
-		operation.description_template = str(entry.get("description_template", ""))
-		operation.badge = str(entry.get("badge", ""))
-		operation.parameters = entry.get("parameters", {})
-		operation.slot_effects = Array(entry.get("slot_effects", []), TYPE_DICTIONARY, "", null)
-		operation.priority = int(entry.get("priority", 50))
-		operation.starter = bool(entry.get("starter", false))
-		operation.opens_pipeline = bool(entry.get("opens_pipeline", false))
-		operation.unlock_achievement = str(entry.get("unlock_achievement", ""))
-		operation.min_location_tier = int(entry.get("min_location_tier", 0))
-		operation.max_location_tier = int(entry.get("max_location_tier", -1))
-		operation.draft_weight = float(entry.get("draft_weight", 1.0))
-		operation.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
-		operation.combos = Array(entry.get("combos", []), TYPE_DICTIONARY, "", null)
-		operations.append(operation)
-		_operations_by_id[operation.id] = operation
+		var module := ModuleDefinition.new()
+		module.id = str(entry.get("id", ""))
+		module.name = str(entry.get("name", ""))
+		module.category = str(entry.get("category", ""))
+		module.rarity = str(entry.get("rarity", "common"))
+		module.tags = PackedStringArray(Array(entry.get("tags", [])))
+		module.description_template = str(entry.get("description_template", ""))
+		module.badge = str(entry.get("badge", ""))
+		module.parameters = entry.get("parameters", {})
+		module.slot_effects = Array(entry.get("slot_effects", []), TYPE_DICTIONARY, "", null)
+		module.priority = int(entry.get("priority", 50))
+		module.starter = bool(entry.get("starter", false))
+		module.opens_pipeline = bool(entry.get("opens_pipeline", false))
+		module.unlock_achievement = str(entry.get("unlock_achievement", ""))
+		module.min_location_tier = int(entry.get("min_location_tier", 0))
+		module.max_location_tier = int(entry.get("max_location_tier", -1))
+		module.draft_weight = float(entry.get("draft_weight", 1.0))
+		module.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
+		module.combos = Array(entry.get("combos", []), TYPE_DICTIONARY, "", null)
+		modules.append(module)
+		_modules_by_id[module.id] = module
 
 
 func _load_achievements() -> void:
@@ -581,24 +581,24 @@ func collect_validation_errors() -> Array[String]:
 		for effect in event.effects:
 			_validate_effect(errors, known_paths, "event '%s'" % event.id, effect.operation, effect.target)
 
-	for operation in operations:
-		_check_unique_id(errors, seen_ids, "operation", operation.id)
+	for module in modules:
+		_check_unique_id(errors, seen_ids, "module", module.id)
 		_check_draft_gates(
 			errors,
-			"operation",
-			operation.id,
-			operation.difficulty,
-			operation.min_location_tier,
-			operation.max_location_tier
+			"module",
+			module.id,
+			module.difficulty,
+			module.min_location_tier,
+			module.max_location_tier
 		)
-		if operation.unlock_achievement != "" and not _achievements_by_id.has(operation.unlock_achievement):
-			errors.append("operation '%s' is gated behind missing achievement '%s'" % [
-				operation.id, operation.unlock_achievement,
+		if module.unlock_achievement != "" and not _achievements_by_id.has(module.unlock_achievement):
+			errors.append("module '%s' is gated behind missing achievement '%s'" % [
+				module.id, module.unlock_achievement,
 			])
-		for partner_id in operation.combo_partners():
-			if not _operations_by_id.has(partner_id):
-				errors.append("operation '%s' declares a combo with missing module '%s'" % [
-					operation.id, partner_id,
+		for partner_id in module.combo_partners():
+			if not _modules_by_id.has(partner_id):
+				errors.append("module '%s' declares a combo with missing module '%s'" % [
+					module.id, partner_id,
 				])
 	var demands: Dictionary = balance.get("job_demands", {})
 	# Built locally rather than as constants so this file keeps no load-time
@@ -662,15 +662,15 @@ func collect_validation_errors() -> Array[String]:
 		var reward: Dictionary = Dictionary(achievement.get("reward", {}))
 		var reward_type: String = str(reward.get("type", "none"))
 		if reward_type == "unlock_module":
-			var operation_id: String = str(reward.get("operation_id", ""))
-			if not _operations_by_id.has(operation_id):
+			var module_id: String = str(reward.get("module_id", ""))
+			if not _modules_by_id.has(module_id):
 				errors.append("achievement '%s' unlocks missing module '%s'" % [
-					str(achievement.get("id", "")), operation_id,
+					str(achievement.get("id", "")), module_id,
 				])
-			var operation = _operations_by_id.get(operation_id)
-			if operation != null and operation.unlock_achievement != str(achievement.get("id", "")):
+			var module = _modules_by_id.get(module_id)
+			if module != null and module.unlock_achievement != str(achievement.get("id", "")):
 				errors.append("achievement '%s' unlocks module '%s' but the module points at '%s'" % [
-					str(achievement.get("id", "")), operation_id, operation.unlock_achievement,
+					str(achievement.get("id", "")), module_id, module.unlock_achievement,
 				])
 		elif reward_type == "unlock_perk":
 			var perk_id: String = str(reward.get("perk_id", ""))
@@ -696,18 +696,18 @@ func collect_validation_errors() -> Array[String]:
 			errors.append("perk '%s' requires achievement '%s' but no achievement unlocks it" % [
 				perk.id, perk.unlock_achievement,
 			])
-	for operation in operations:
-		if operation.unlock_achievement == "":
+	for module in modules:
+		if module.unlock_achievement == "":
 			continue
 		var module_linked: bool = false
 		for achievement in achievements:
 			var reward: Dictionary = Dictionary(achievement.get("reward", {}))
-			if str(reward.get("type", "")) == "unlock_module" and str(reward.get("operation_id", "")) == operation.id:
+			if str(reward.get("type", "")) == "unlock_module" and str(reward.get("module_id", "")) == module.id:
 				module_linked = true
 				break
 		if not module_linked:
 			errors.append("module '%s' requires achievement '%s' but no achievement unlocks it" % [
-				operation.id, operation.unlock_achievement,
+				module.id, module.unlock_achievement,
 			])
 	_validate_ascension_contracts(errors)
 	return errors

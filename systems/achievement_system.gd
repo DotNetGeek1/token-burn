@@ -140,7 +140,7 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.angel_offers_declined": int(stats.get("angel_offers_declined", 0)),
 		"run.hardware_sold": int(stats.get("hardware_sold", 0)),
 		"run.modules_drafted": int(stats.get("modules_drafted", 0)),
-		"run.modules_owned": Array(run_state.build.get("operations", [])).size(),
+		"run.modules_owned": Array(run_state.build.get("modules", [])).size(),
 		"run.perks_owned": Array(run_state.build.get("perks", [])).size(),
 		"run.perks_collected": Array(run_state.build.get("perk_inventory", [])).size(),
 		"run.hardware_owned": Array(run_state.build.get("hardware", [])).size(),

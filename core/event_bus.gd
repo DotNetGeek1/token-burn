@@ -23,7 +23,7 @@ const EVENT_BILL_DUE := "bill.due"
 const EVENT_UPGRADE_PURCHASED := "upgrade.purchased"
 const EVENT_HARDWARE_SOLD := "hardware.sold"
 const EVENT_PERK_ACQUIRED := "perk.acquired"
-const EVENT_OPERATION_ACQUIRED := "operation.acquired"
+const EVENT_MODULE_ACQUIRED := "module.acquired"
 const EVENT_HEAT_THRESHOLD_CROSSED := "heat.threshold_crossed"
 const EVENT_ACHIEVEMENT_UNLOCKED := "achievement.unlocked"
 const EVENT_RUN_ENDED := "run.ended"
@@ -51,7 +51,7 @@ signal bill_due(bill_type: String, amount: float)
 signal upgrade_purchased(upgrade_id: String)
 signal hardware_sold(hardware_key: String)
 signal perk_acquired(perk_id: String)
-signal operation_acquired(operation_id: String)
+signal module_acquired(module_id: String)
 signal heat_threshold_crossed(level: float)
 signal achievement_unlocked(achievement_id: String)
 signal run_ended(victory: bool)
@@ -91,8 +91,8 @@ func emit_event(event_name: String, payload: Dictionary = {}) -> void:
 			hardware_sold.emit(payload.get("hardware_key", ""))
 		EVENT_PERK_ACQUIRED:
 			perk_acquired.emit(payload.get("perk_id", ""))
-		EVENT_OPERATION_ACQUIRED:
-			operation_acquired.emit(payload.get("operation_id", ""))
+		EVENT_MODULE_ACQUIRED:
+			module_acquired.emit(payload.get("module_id", ""))
 		EVENT_HEAT_THRESHOLD_CROSSED:
 			heat_threshold_crossed.emit(payload.get("level", 0.0))
 		EVENT_ACHIEVEMENT_UNLOCKED:

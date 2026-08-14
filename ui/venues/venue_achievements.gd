@@ -224,6 +224,7 @@ func _on_counter_pressed(key: String) -> void:
 	_selected = ""
 	_board.clear_selection()
 	refresh()
+	lean_on("board")
 
 
 func _refresh_board() -> void:
@@ -270,10 +271,10 @@ func _reward_label(achievement: Dictionary) -> String:
 	var reward: Dictionary = Dictionary(achievement.get("reward", {}))
 	match str(reward.get("type", "none")):
 		"unlock_module":
-			var operation: OperationDefinition = ContentDatabase.get_operation(
-				str(reward.get("operation_id", ""))
+			var module: ModuleDefinition = ContentDatabase.get_module(
+				str(reward.get("module_id", ""))
 			)
-			return operation.name if operation != null else ""
+			return module.name if module != null else ""
 		"unlock_perk":
 			var perk: PerkDefinition = ContentDatabase.get_perk(
 				str(reward.get("perk_id", ""))
@@ -329,16 +330,16 @@ func _reward_lines(achievement: Dictionary) -> Array:
 	var evaluator := ExpressionEvaluator.new()
 	match str(reward.get("type", "none")):
 		"unlock_module":
-			var operation: OperationDefinition = ContentDatabase.get_operation(
-				str(reward.get("operation_id", ""))
+			var module: ModuleDefinition = ContentDatabase.get_module(
+				str(reward.get("module_id", ""))
 			)
-			if operation == null:
+			if module == null:
 				return []
 			return [
-				{"stat": "Hands over", "value": operation.name},
+				{"stat": "Hands over", "value": module.name},
 				{
 					"text": "%s Joins the angel draft pool in every run once this award is earned." % evaluator.render_template(
-						operation.description_template, operation.parameters
+						module.description_template, module.parameters
 					),
 				},
 			]

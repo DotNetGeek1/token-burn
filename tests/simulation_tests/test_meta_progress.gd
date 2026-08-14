@@ -147,12 +147,12 @@ func _test_a_starting_module_arrives_owned() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(9005)
-	assert_false("op.linter" in sim.owned_operations(), "The linter is not a starter by default")
+	assert_false("op.linter" in sim.owned_modules(), "The linter is not a starter by default")
 
 	MetaProgress.bank_victory()
 	assert_true(MetaProgress.spend_pick("unlock.starting_module_linter"), "It can be kept")
 	sim.start_run(9005)
-	assert_true("op.linter" in sim.owned_operations(), "And the next run starts owning it")
+	assert_true("op.linter" in sim.owned_modules(), "And the next run starts owning it")
 	assert_false(
 		MetaProgress.is_available("unlock.starting_module_linter"),
 		"Keeping the same module twice would do nothing, so it is not offered again"

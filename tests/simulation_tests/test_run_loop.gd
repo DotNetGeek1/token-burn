@@ -175,7 +175,7 @@ func _test_angels_call_only_once_the_rent_has_cleared() -> void:
 	for offer in paid.pending_choices:
 		assert_almost_eq(float(offer.get("cost", 0.0)), 0.0, 0.001, "Angel offers are free")
 		assert_true(
-			str(offer.get("type", "")) in ["perk", "operation"],
+			str(offer.get("type", "")) in ["perk", "module"],
 			"An angel offers perks and modules, not purchases (%s)" % str(offer.get("type", ""))
 		)
 		assert_true(

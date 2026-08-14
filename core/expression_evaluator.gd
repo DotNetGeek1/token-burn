@@ -68,15 +68,13 @@ func render_template(template: String, parameters: Dictionary) -> String:
 			if value is float and is_equal_approx(float(value), roundf(float(value)))
 			else str(value)
 		)
-		if key.ends_with("_pct") or key.ends_with("_percent") or key == "threshold":
-			if value is float or value is int:
-				display = str(int(round(float(value) * 100.0)))
-		elif key == "multiplier" and (value is float or value is int):
+		# No conversion happens here. A parameter is either a ratio the engine
+		# multiplies by or a whole percent the card prints, and which one it is
+		# has to be visible in the content: `convert: 0.45` alongside
+		# `convert_pct: 45`. Guessing from the suffix meant a card could say
+		# "0.45%" or "1500%" depending on how its author happened to write it.
+		if key == "multiplier" and (value is float or value is int):
 			display = str(value)
-		elif key == "efficiency" and (value is float or value is int):
-			display = str(int(round(float(value) * 100.0)))
-		elif key == "bonus" and (value is float or value is int) and float(value) <= 1.0:
-			display = str(int(round(float(value) * 100.0)))
 		result = result.replace("{%s}" % key, display)
 	return result
 
@@ -85,6 +83,15 @@ func _resolve_path(path: String, context: Dictionary) -> Variant:
 	var parts: PackedStringArray = path.split(".")
 	if parts.is_empty():
 		return null
+	# A dispatch keeps its working values under their full dotted name
+	# (`batch.known_bugs`, `stage.repeat_previous`), so the whole path is looked
+	# up before it is treated as a path to walk. Without this, a condition on the
+	# batch or the stage resolved to null and the subscription silently never
+	# matched.
+	if context.has("values") and context["values"] is Dictionary:
+		var values: Dictionary = context["values"]
+		if values.has(path):
+			return values[path]
 	if parts[0] == "job" and context.has("job"):
 		var current: Variant = context["job"]
 		for i in range(1, parts.size()):

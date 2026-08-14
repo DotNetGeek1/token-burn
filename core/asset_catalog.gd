@@ -406,8 +406,8 @@ static func category_icon(category: String) -> Texture2D:
 
 
 ## Burn Board modules reuse the existing kit: a module's category maps onto the
-## nearest stat or category glyph rather than needing bespoke art per operation.
-static func operation_icon(category: String) -> Texture2D:
+## nearest stat or category glyph rather than needing bespoke art per module.
+static func module_icon(category: String) -> Texture2D:
 	match category.to_lower():
 		"model", "prompt", "context":
 			return get_texture("category_icons", "local")

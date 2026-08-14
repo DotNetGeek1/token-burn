@@ -180,7 +180,7 @@ func _deal_cards() -> void:
 			"role": "perk",
 			"filled": true,
 		}])
-		if offer_type == "operation":
+		if offer_type == "module":
 			card.set_warnings(_bench_warning())
 		elif offer_type == "perk":
 			card.set_warnings(_perk_bench_warning())
@@ -200,7 +200,7 @@ func _refresh_heading() -> void:
 
 
 func _kind_chip_text(offer_type: String) -> String:
-	return "Free %s" % ("module" if offer_type == "operation" else "perk")
+	return "Free %s" % ("module" if offer_type == "module" else "perk")
 
 
 func _show_offer_detail(offer: Dictionary, patter: String) -> void:
@@ -220,7 +220,7 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 		rows.append({"rule": str(warning.get("text", "")), "text": "", "role": "warning"})
 	_sheet.show_detail(
 		str(offer.get("label", "Offer")),
-		"Free module" if offer_type == "operation" else "Free perk",
+		"Free module" if offer_type == "module" else "Free perk",
 		rows,
 		[],
 		"TAKE IT",
@@ -249,7 +249,7 @@ func _bench_warning() -> Array:
 
 
 func _refresh_board_line() -> void:
-	var owned: int = Simulation.owned_operations().size()
+	var owned: int = Simulation.owned_modules().size()
 	# The perk count belongs next to the offers: a build is capped, so the last
 	# free perk of a run should not be taken by accident.
 	var perks: Dictionary = Simulation.perk_capacity()
@@ -306,5 +306,5 @@ func _on_decline() -> void:
 func _offer_icon(offer_type: String, offer_id: String) -> Texture2D:
 	if offer_type == "perk":
 		return AssetCatalog.perk_icon(offer_id)
-	var operation: OperationDefinition = ContentDatabase.get_operation(offer_id)
-	return AssetCatalog.operation_icon(operation.category) if operation != null else null
+	var module: ModuleDefinition = ContentDatabase.get_module(offer_id)
+	return AssetCatalog.module_icon(module.category) if module != null else null

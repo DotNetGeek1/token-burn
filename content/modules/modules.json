@@ -14,24 +14,16 @@
       {
         "name": "Read the Docs",
         "after": ["op.prompt_library"],
-        "description": "Straight after the Prompt Library: ×{combo_progress} progress and +{combo_quality} quality on top."
+        "description": "Straight after the Prompt Library: ×{combo_progress} progress and +{combo_quality} quality on top.",
+        "effects": [
+          {"operation": "multiply", "target": "stage.progress_mult", "value": "$combo_progress"},
+          {"operation": "add", "target": "stage.quality", "value": "$combo_quality"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
-      {"operation": "add", "target": "stage.quality", "value": "$quality"},
-      {
-        "operation": "multiply",
-        "target": "stage.progress_mult",
-        "value": "$combo_progress",
-        "conditions": [{"left": "$prev_op", "operator": "in", "right": ["op.prompt_library"]}]
-      },
-      {
-        "operation": "add",
-        "target": "stage.quality",
-        "value": "$combo_quality",
-        "conditions": [{"left": "$prev_op", "operator": "in", "right": ["op.prompt_library"]}]
-      }
+      {"operation": "add", "target": "stage.quality", "value": "$quality"}
     ]
   },
   {
@@ -64,25 +56,16 @@
       {
         "name": "Something to Copy",
         "after": ["op.distillation", "op.premium_model", "op.foundation_model"],
-        "description": "Placed under a proper model it has good output to imitate, and writes no bug at all."
+        "description": "Placed under a proper model it has good output to imitate, and writes no bug at all.",
+        "effects": [
+          {"operation": "add", "target": "stage.bugs", "value": "$combo_bugs"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
       {"operation": "add", "target": "stage.bugs", "value": "$bugs"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"},
-      {
-        "operation": "add",
-        "target": "stage.bugs",
-        "value": "$combo_bugs",
-        "conditions": [
-          {
-            "left": "$prev_op",
-            "operator": "in",
-            "right": ["op.distillation", "op.premium_model", "op.foundation_model"]
-          }
-        ]
-      }
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
     ]
   },
   {
@@ -115,25 +98,16 @@
       {
         "name": "Briefed First",
         "after": ["op.whiteboard", "op.rubber_duck", "op.large_context"],
-        "description": "Agents given the context up front need less supervising: {combo_heat} heat."
+        "description": "Agents given the context up front need less supervising: {combo_heat} heat.",
+        "effects": [
+          {"operation": "add", "target": "stage.heat", "value": "$combo_heat"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "add", "target": "stage.repeat_previous", "value": "$repeat"},
       {"operation": "add", "target": "stage.heat", "value": "$heat"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"},
-      {
-        "operation": "add",
-        "target": "stage.heat",
-        "value": "$combo_heat",
-        "conditions": [
-          {
-            "left": "$prev_op",
-            "operator": "in",
-            "right": ["op.whiteboard", "op.rubber_duck", "op.large_context"]
-          }
-        ]
-      }
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
     ]
   },
   {
@@ -147,7 +121,7 @@
     "description_template": "The stage below this one costs {discount_pct}% less. Placed last there is nothing below it, so it banks output instead: +{stored_quality} quality.",
     "parameters": {
       "cost_mult": 0.6,
-      "discount_pct": 0.4,
+      "discount_pct": 40,
       "stored_quality": 7,
       "combo_cost_mult": 0.5
     },
@@ -155,7 +129,10 @@
       {
         "name": "Warm Cache",
         "before": ["op.premium_model", "op.foundation_model", "op.quantum_annealer", "op.agi_prototype"],
-        "description": "Above one of the expensive models, the discount doubles down: another ×{combo_cost_mult} on its bill."
+        "description": "Above one of the expensive models, the discount doubles down: another ×{combo_cost_mult} on its bill.",
+        "effects": [
+          {"operation": "multiply", "target": "stage.next_cost_mult", "value": "$combo_cost_mult"}
+        ]
       }
     ],
     "slot_effects": [
@@ -164,18 +141,6 @@
         "target": "stage.next_cost_mult",
         "value": "$cost_mult",
         "conditions": []
-      },
-      {
-        "operation": "multiply",
-        "target": "stage.next_cost_mult",
-        "value": "$combo_cost_mult",
-        "conditions": [
-          {
-            "left": "$next_op",
-            "operator": "in",
-            "right": ["op.premium_model", "op.foundation_model", "op.quantum_annealer", "op.agi_prototype"]
-          }
-        ]
       },
       {
         "operation": "add",
@@ -207,38 +172,18 @@
       {
         "name": "Caught in Review",
         "after": ["op.cheap_model", "op.stack_overflow", "op.tech_debt_collector", "op.vibe_coder"],
-        "description": "Testing whatever the stage above just wrote: +{combo_fix} more fixes and +{combo_quality} more quality."
+        "description": "Testing whatever the stage above just wrote: +{combo_fix} more fixes and +{combo_quality} more quality.",
+        "effects": [
+          {"operation": "add", "target": "stage.fix_bugs", "value": "$combo_fix"},
+          {"operation": "add", "target": "stage.quality", "value": "$combo_quality"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "add", "target": "stage.reveal_bugs", "value": "$reveal"},
       {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
       {"operation": "add", "target": "stage.quality", "value": "$quality"},
-      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
-      {
-        "operation": "add",
-        "target": "stage.fix_bugs",
-        "value": "$combo_fix",
-        "conditions": [
-          {
-            "left": "$prev_op",
-            "operator": "in",
-            "right": ["op.cheap_model", "op.stack_overflow", "op.tech_debt_collector", "op.vibe_coder"]
-          }
-        ]
-      },
-      {
-        "operation": "add",
-        "target": "stage.quality",
-        "value": "$combo_quality",
-        "conditions": [
-          {
-            "left": "$prev_op",
-            "operator": "in",
-            "right": ["op.cheap_model", "op.stack_overflow", "op.tech_debt_collector", "op.vibe_coder"]
-          }
-        ]
-      }
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"}
     ]
   },
   {
@@ -266,29 +211,20 @@
     "badge": "Q→P",
     "tags": ["deploy", "risk", "positional"],
     "description_template": "Converts {convert_pct}% of this batch's quality straight into progress. Every bug written below it stays hidden.",
-    "parameters": {"convert": 1.0, "convert_pct": 1.0, "combo_progress": 1.5},
+    "parameters": {"convert": 1.0, "convert_pct": 100, "combo_progress": 1.5},
     "combos": [
       {
         "name": "Nobody Stopped Us",
         "after": ["op.vibe_coder", "op.launch_party", "op.tech_debt_collector"],
-        "description": "Following another shortcut, the whole batch runs at ×{combo_progress} progress."
+        "description": "Following another shortcut, the whole batch runs at ×{combo_progress} progress.",
+        "effects": [
+          {"operation": "multiply", "target": "stage.progress_mult", "value": "$combo_progress"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "add", "target": "stage.quality_to_progress", "value": "$convert"},
-      {"operation": "add", "target": "stage.hide_bugs", "value": 1},
-      {
-        "operation": "multiply",
-        "target": "stage.progress_mult",
-        "value": "$combo_progress",
-        "conditions": [
-          {
-            "left": "$prev_op",
-            "operator": "in",
-            "right": ["op.vibe_coder", "op.launch_party", "op.tech_debt_collector"]
-          }
-        ]
-      }
+      {"operation": "add", "target": "stage.hide_bugs", "value": 1}
     ]
   },
   {
@@ -305,29 +241,17 @@
       {
         "name": "Style Guide Enforcement",
         "after": ["op.cheap_model", "op.stack_overflow"],
-        "description": "Cheap output is easy to lint: +{combo_fix} more fixes and ×{combo_progress} progress back."
+        "description": "Cheap output is easy to lint: +{combo_fix} more fixes and ×{combo_progress} progress back.",
+        "effects": [
+          {"operation": "add", "target": "stage.fix_bugs", "value": "$combo_fix"},
+          {"operation": "multiply", "target": "stage.progress_mult", "value": "$combo_progress"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
       {"operation": "add", "target": "stage.quality", "value": "$quality"},
-      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
-      {
-        "operation": "add",
-        "target": "stage.fix_bugs",
-        "value": "$combo_fix",
-        "conditions": [
-          {"left": "$prev_op", "operator": "in", "right": ["op.cheap_model", "op.stack_overflow"]}
-        ]
-      },
-      {
-        "operation": "multiply",
-        "target": "stage.progress_mult",
-        "value": "$combo_progress",
-        "conditions": [
-          {"left": "$prev_op", "operator": "in", "right": ["op.cheap_model", "op.stack_overflow"]}
-        ]
-      }
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"}
     ]
   },
   {
@@ -381,7 +305,10 @@
       {
         "name": "Indexed",
         "after": ["op.large_context", "op.whiteboard"],
-        "description": "Somebody explained the repository first: ×{combo_progress} progress on top."
+        "description": "Somebody explained the repository first: ×{combo_progress} progress on top.",
+        "effects": [
+          {"operation": "multiply", "target": "stage.progress_mult", "value": "$combo_progress"}
+        ]
       }
     ],
     "slot_effects": [
@@ -391,14 +318,6 @@
         "target": "stage.progress_mult",
         "value": "$long_bonus",
         "conditions": [{"left": "$stage_count", "operator": ">=", "right": "$long_stages"}]
-      },
-      {
-        "operation": "multiply",
-        "target": "stage.progress_mult",
-        "value": "$combo_progress",
-        "conditions": [
-          {"left": "$prev_op", "operator": "in", "right": ["op.large_context", "op.whiteboard"]}
-        ]
       },
       {"operation": "add", "target": "stage.quality", "value": "$quality"},
       {"operation": "add", "target": "stage.cost", "value": "$cost"}
@@ -435,29 +354,17 @@
       {
         "name": "Already Talked It Through",
         "after": ["op.rubber_duck", "op.whiteboard"],
-        "description": "With the problem already stated out loud: +{combo_repeat} more echo and -{combo_fix} more bug."
+        "description": "With the problem already stated out loud: +{combo_repeat} more echo and -{combo_fix} more bug.",
+        "effects": [
+          {"operation": "add", "target": "stage.repeat_previous", "value": "$combo_repeat"},
+          {"operation": "add", "target": "stage.fix_bugs", "value": "$combo_fix"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "add", "target": "stage.repeat_previous", "value": "$repeat"},
       {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"},
-      {
-        "operation": "add",
-        "target": "stage.repeat_previous",
-        "value": "$combo_repeat",
-        "conditions": [
-          {"left": "$prev_op", "operator": "in", "right": ["op.rubber_duck", "op.whiteboard"]}
-        ]
-      },
-      {
-        "operation": "add",
-        "target": "stage.fix_bugs",
-        "value": "$combo_fix",
-        "conditions": [
-          {"left": "$prev_op", "operator": "in", "right": ["op.rubber_duck", "op.whiteboard"]}
-        ]
-      }
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
     ]
   },
   {
@@ -495,7 +402,7 @@
     "badge": "×{progress}",
     "tags": ["model", "economy"],
     "description_template": "×{progress} progress at ${cost} a batch, and the stage below it costs {discount_pct}% less.",
-    "parameters": {"progress": 1.45, "cost": 18, "cost_mult": 0.7, "discount_pct": 0.3},
+    "parameters": {"progress": 1.45, "cost": 18, "cost_mult": 0.7, "discount_pct": 30},
     "slot_effects": [
       {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
       {"operation": "multiply", "target": "stage.next_cost_mult", "value": "$cost_mult"},
@@ -522,37 +429,17 @@
       {
         "name": "Loop Under Load",
         "before": ["op.overclock", "op.quantum_annealer", "op.crunch_mode", "op.foundation_model"],
-        "description": "Plumbed straight into something that runs hot: {combo_heat} more heat and ×{combo_boost} more on the stage below."
+        "description": "Plumbed straight into something that runs hot: {combo_heat} more heat and ×{combo_boost} more on the stage below.",
+        "effects": [
+          {"operation": "add", "target": "stage.heat", "value": "$combo_heat"},
+          {"operation": "multiply", "target": "stage.next_multiplier", "value": "$combo_boost"}
+        ]
       }
     ],
     "slot_effects": [
       {"operation": "add", "target": "stage.heat", "value": -14},
       {"operation": "multiply", "target": "stage.next_multiplier", "value": "$boost"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"},
-      {
-        "operation": "add",
-        "target": "stage.heat",
-        "value": "$combo_heat",
-        "conditions": [
-          {
-            "left": "$next_op",
-            "operator": "in",
-            "right": ["op.overclock", "op.quantum_annealer", "op.crunch_mode", "op.foundation_model"]
-          }
-        ]
-      },
-      {
-        "operation": "multiply",
-        "target": "stage.next_multiplier",
-        "value": "$combo_boost",
-        "conditions": [
-          {
-            "left": "$next_op",
-            "operator": "in",
-            "right": ["op.overclock", "op.quantum_annealer", "op.crunch_mode", "op.foundation_model"]
-          }
-        ]
-      }
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
     ]
   },
   {
@@ -563,7 +450,7 @@
     "starter": false,
     "badge": "Cond.",
     "tags": ["hardware", "cooling", "conditional"],
-    "description_template": "Below {trip}% heat: ×{progress} progress. At or above it the breaker trips and sheds {shed} heat instead.",
+    "description_template": "Reads the rig as the burn starts. Below {trip}% heat: ×{progress} progress. At or above it the breaker trips and sheds {shed} heat instead. Heat this burn makes on its own arrives too late to count.",
     "parameters": {"trip": 70, "progress": 1.15, "shed": 20},
     "slot_effects": [
       {
@@ -589,7 +476,7 @@
     "badge": "Q→P {convert_pct}%",
     "tags": ["deploy", "risk", "positional"],
     "description_template": "Converts {convert_pct}% of the batch's quality into progress for ${cost}, and buries {hidden} bug in the aftermath.",
-    "parameters": {"convert": 0.6, "convert_pct": 0.6, "hidden": 1, "cost": 90},
+    "parameters": {"convert": 0.6, "convert_pct": 60, "hidden": 1, "cost": 90},
     "slot_effects": [
       {"operation": "add", "target": "stage.quality_to_progress", "value": "$convert"},
       {"operation": "add", "target": "stage.hidden_bugs", "value": "$hidden"},
@@ -712,7 +599,7 @@
     "badge": "Q→P {convert_pct}%",
     "tags": ["deploy", "risk", "positional"],
     "description_template": "Did not read it. Felt right. Turns {convert_pct}% of quality into progress, adds +{quality} quality of its own, and hides {hidden} bug on the way out.",
-    "parameters": {"convert": 0.45, "convert_pct": 0.45, "hidden": 1, "quality": 5},
+    "parameters": {"convert": 0.45, "convert_pct": 45, "hidden": 1, "quality": 5},
     "slot_effects": [
       {"operation": "add", "target": "stage.quality_to_progress", "value": "$convert"},
       {"operation": "add", "target": "stage.hidden_bugs", "value": "$hidden"},
@@ -741,7 +628,10 @@
       {
         "name": "Everything Is On the Board",
         "after": ["op.compliance_review", "op.chaos_monkey"],
-        "description": "Following a stage that surfaced everything, it fixes {combo_fix} more."
+        "description": "Following a stage that surfaced everything, it fixes {combo_fix} more.",
+        "effects": [
+          {"operation": "add", "target": "stage.fix_bugs", "value": "$combo_fix"}
+        ]
       }
     ],
     "slot_effects": [
@@ -749,15 +639,7 @@
       {"operation": "add", "target": "stage.fix_bugs", "value": "$fix"},
       {"operation": "add", "target": "stage.quality", "value": "$quality"},
       {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"},
-      {
-        "operation": "add",
-        "target": "stage.fix_bugs",
-        "value": "$combo_fix",
-        "conditions": [
-          {"left": "$prev_op", "operator": "in", "right": ["op.compliance_review", "op.chaos_monkey"]}
-        ]
-      }
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
     ]
   },
   {
@@ -835,7 +717,10 @@
       {
         "name": "It Supervises Itself",
         "before": ["op.agent_swarm", "op.crunch_mode", "op.pair_programmer", "op.the_intern"],
-        "description": "Handing the echo stage below it a plan: another ×{combo_boost} on top of the boost."
+        "description": "Handing the echo stage below it a plan: another ×{combo_boost} on top of the boost.",
+        "effects": [
+          {"operation": "multiply", "target": "stage.next_multiplier", "value": "$combo_boost"}
+        ]
       }
     ],
     "slot_effects": [
@@ -843,19 +728,7 @@
       {"operation": "multiply", "target": "stage.next_multiplier", "value": "$boost"},
       {"operation": "add", "target": "stage.heat", "value": "$heat"},
       {"operation": "add", "target": "stage.hidden_bugs", "value": "$hidden"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"},
-      {
-        "operation": "multiply",
-        "target": "stage.next_multiplier",
-        "value": "$combo_boost",
-        "conditions": [
-          {
-            "left": "$next_op",
-            "operator": "in",
-            "right": ["op.agent_swarm", "op.crunch_mode", "op.pair_programmer", "op.the_intern"]
-          }
-        ]
-      }
+      {"operation": "add", "target": "stage.cost", "value": "$cost"}
     ]
   },
   {
@@ -949,7 +822,7 @@
     "tags": ["cooling", "heat", "thermal_runaway"],
     "min_location_tier": 3,
     "badge": "×{progress}",
-    "description_template": "Store heat, spend it later. ×{progress} progress while above {threshold_pct}% heat.",
+    "description_template": "Store heat, spend it later. ×{progress} progress on any burn the rig starts at or above {threshold_pct}% heat — you have to be redlined before the burn, not by it.",
     "parameters": {"progress": 1.4, "threshold": 0.9, "threshold_pct": 90},
     "slot_effects": [
       {
@@ -1044,11 +917,12 @@
     "starter": false,
     "tags": ["agent", "recursion"],
     "min_location_tier": 3,
-    "badge": "Repeat {strength_pct}%",
-    "description_template": "Each stage forks the one above at {strength_pct}% strength, twice.",
-    "parameters": {"strength": 0.55, "strength_pct": 55},
+    "badge": "Repeat {strength_pct}% ×{forks}",
+    "description_template": "Each stage forks the one above at {strength_pct}% strength, {forks} times over.",
+    "parameters": {"strength": 0.55, "strength_pct": 55, "forks": 2},
     "slot_effects": [
       {"operation": "set", "target": "stage.repeat_previous", "value": "$strength"},
+      {"operation": "set", "target": "stage.repeat_count", "value": "$forks"},
       {"operation": "multiply", "target": "stage.progress_mult", "value": 0.85}
     ]
   }
