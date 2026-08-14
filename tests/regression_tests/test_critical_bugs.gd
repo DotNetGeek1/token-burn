@@ -11,6 +11,7 @@ func run() -> void:
 	_test_headless_no_autosave()
 	_test_market_purchase()
 	_test_second_monitor_widens_the_pipeline_editor()
+	_test_capacity_perks_apply_when_taken_from_the_angel()
 	_test_mixed_job_finalization()
 	_test_multi_job_tick_counts_once()
 	_test_a_granted_module_does_not_replace_the_starters()
@@ -70,6 +71,38 @@ func _test_second_monitor_widens_the_pipeline_editor() -> void:
 		"The pipeline editor immediately gains the slot the monitor promises"
 	)
 	sim.free()
+
+
+func _test_capacity_perks_apply_when_taken_from_the_angel() -> void:
+	var slot_sim := _make_sim()
+	slot_sim.start_run(105)
+	var slots_before: int = slot_sim.board_slots().size()
+	slot_sim.phase = slot_sim.Phase.ANGEL_ROUND
+	assert_true(
+		slot_sim.accept_offer("perk", "perk.wide_bus"),
+		"The angel can grant Wide Bus"
+	)
+	assert_eq(
+		slot_sim.board_slots().size(),
+		slots_before + 1,
+		"Taking Wide Bus immediately adds its pipeline slot"
+	)
+	slot_sim.free()
+
+	var workflow_sim := _make_sim()
+	workflow_sim.start_run(106)
+	var capacity_before: int = workflow_sim.workflow_capacity()
+	workflow_sim.phase = workflow_sim.Phase.ANGEL_ROUND
+	assert_true(
+		workflow_sim.accept_offer("perk", "perk.two_ways_of_working"),
+		"The angel can grant Two Ways of Working"
+	)
+	assert_eq(
+		workflow_sim.workflow_capacity(),
+		capacity_before + 1,
+		"Taking Two Ways of Working immediately adds workflow capacity"
+	)
+	workflow_sim.free()
 
 
 func _test_round_end_choice() -> void:
