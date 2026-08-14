@@ -1,0 +1,104 @@
+extends PlaytestCase
+
+## Quits to title from the menu mid-run and resumes through CONTINUE. The
+## rebuilt shell has to show the same round and the same cash — a continue
+## that silently starts a new game, or one that loads the developer's real
+## save, is the failure this guards. Isolation already pointed SaveManager
+## at the scratch file; this persona turns autosave back on and writes
+## there itself, because _autosave is private and isolate() had it off.
+
+
+const SEED := 17
+
+
+func play(harness: UiHarness) -> void:
+	await harness.boot(SEED)
+	var driver: UiDriver = harness.driver
+
+	Simulation.autosave_enabled = true
+	await accept_first_job(harness)
+
+	var saved_round: int = int(Simulation.run_state.calendar.get("round", 1))
+	var saved_cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
+	# Accepting a contract already autosaves when the flag is on. Write
+	# explicitly anyway so the title's CONTINUE has something to read even
+	# if that path did not fire.
+	SaveManager.save_run(
+		Simulation.run_state,
+		"ROUND_PREP",
+		Simulation.run_seed,
+		Simulation.pending_choices
+	)
+	assert_true(SaveManager.has_save(), "A scratch save exists before quitting")
+
+	await dismiss_investor(harness)
+	await harness.goto_route("menu")
+	driver.audit_screen("menu", "menu")
+	await driver.press_command("QUIT TO TITLE")
+	await _wait_for_desk(harness)
+
+	assert_true(SaveManager.has_save(), "QUIT TO TITLE left the scratch save")
+	var continue_row: Control = await _wait_title_continue(harness)
+	assert_true(continue_row != null, "Title shows CONTINUE when a save exists")
+	if continue_row != null:
+		await driver.press(continue_row)
+	await _wait_title_gone(harness)
+
+	assert_eq(
+		int(Simulation.run_state.calendar.get("round", 0)),
+		saved_round,
+		"CONTINUE restored the same round"
+	)
+	assert_almost_eq(
+		float(Simulation.run_state.economy.get("cash", 0.0)),
+		saved_cash,
+		0.01,
+		"CONTINUE restored the same cash"
+	)
+	driver.audit_screen("desk", "desk")
+
+
+func _wait_title_continue(harness: UiHarness) -> Control:
+	# Boot animation ignores clicks until _booted; any click skips it, but
+	# the rows stay mouse_filter IGNORE until then, so press() would fail.
+	# Wait until CONTINUE is actually hittable.
+	var deadline: int = Time.get_ticks_msec() + 8000
+	while Time.get_ticks_msec() < deadline:
+		var row: Control = harness.driver.command("CONTINUE")
+		if (
+			row != null
+			and row.mouse_filter != Control.MOUSE_FILTER_IGNORE
+			and not (row is BaseButton and row.disabled)
+		):
+			return row
+		await harness.get_tree().process_frame
+	return harness.driver.command("CONTINUE")
+
+
+func _wait_title_gone(harness: UiHarness) -> void:
+	var deadline: int = Time.get_ticks_msec() + 8000
+	while Time.get_ticks_msec() < deadline:
+		if not _title_visible(harness):
+			await harness.get_tree().process_frame
+			await harness.get_tree().process_frame
+			return
+		await harness.get_tree().process_frame
+
+
+func _title_visible(harness: UiHarness) -> bool:
+	if not harness.is_inside_tree():
+		return false
+	for node in harness.get_tree().get_nodes_in_group("title_screen"):
+		if node is CanvasItem and node.is_visible_in_tree():
+			return true
+	return false
+
+
+func _wait_for_desk(harness: UiHarness) -> void:
+	var deadline: int = Time.get_ticks_msec() + 8000
+	while SceneRouter.current != SceneRouter.DESK and Time.get_ticks_msec() < deadline:
+		await harness.get_tree().process_frame
+	# Title's cursor blink is a looping tween; settle() would sit on the
+	# deadline. Frames are enough for the desk to mount and the menu to print.
+	for _frame in 8:
+		await harness.get_tree().process_frame

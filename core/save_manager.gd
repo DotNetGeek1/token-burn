@@ -6,6 +6,25 @@ const SAVE_TMP_PATH := "user://savegame.json.tmp"
 const SAVE_BAK_PATH := "user://savegame.json.bak"
 const CURRENT_SAVE_VERSION := 2
 
+## Redirected by playtests onto a scratch file, so the suite never writes the
+## save the developer is actually playing.
+static var _path: String = SAVE_PATH
+static var _tmp_path: String = SAVE_TMP_PATH
+static var _bak_path: String = SAVE_BAK_PATH
+
+
+static func use_scratch(path: String) -> void:
+	_path = path
+	_tmp_path = path + ".tmp"
+	_bak_path = path + ".bak"
+	delete_save()
+
+
+static func restore_default() -> void:
+	_path = SAVE_PATH
+	_tmp_path = SAVE_TMP_PATH
+	_bak_path = SAVE_BAK_PATH
+
 
 ## Writes to a temp file and verifies it parses back before it ever touches
 ## the real save — a crash or a full disk mid-write must never leave the
@@ -24,23 +43,23 @@ static func save_run(run_state: RunState, phase: String, run_seed: int, pending_
 	}
 	var text: String = JSON.stringify(payload, "\t")
 
-	var tmp_file := FileAccess.open(SAVE_TMP_PATH, FileAccess.WRITE)
+	var tmp_file := FileAccess.open(_tmp_path, FileAccess.WRITE)
 	if tmp_file == null:
 		push_warning("SaveManager: could not open temp save file for writing")
 		return false
 	tmp_file.store_string(text)
 	tmp_file.close()
 
-	if not _verify_parses(SAVE_TMP_PATH):
+	if not _verify_parses(_tmp_path):
 		push_warning("SaveManager: temp save failed to verify, aborting save")
 		return false
 
-	if FileAccess.file_exists(SAVE_PATH):
-		if FileAccess.file_exists(SAVE_BAK_PATH):
-			DirAccess.remove_absolute(SAVE_BAK_PATH)
-		DirAccess.rename_absolute(SAVE_PATH, SAVE_BAK_PATH)
+	if FileAccess.file_exists(_path):
+		if FileAccess.file_exists(_bak_path):
+			DirAccess.remove_absolute(_bak_path)
+		DirAccess.rename_absolute(_path, _bak_path)
 
-	var err: Error = DirAccess.rename_absolute(SAVE_TMP_PATH, SAVE_PATH)
+	var err: Error = DirAccess.rename_absolute(_tmp_path, _path)
 	if err != OK:
 		push_warning("SaveManager: failed to move temp save into place (%s)" % err)
 		return false
@@ -60,12 +79,12 @@ static func _verify_parses(path: String) -> bool:
 
 
 static func load_run() -> Dictionary:
-	var primary: Dictionary = _load_from(SAVE_PATH)
+	var primary: Dictionary = _load_from(_path)
 	if not primary.is_empty():
 		return primary
-	if FileAccess.file_exists(SAVE_PATH):
+	if FileAccess.file_exists(_path):
 		push_warning("SaveManager: primary save unreadable, falling back to backup")
-	return _load_from(SAVE_BAK_PATH)
+	return _load_from(_bak_path)
 
 
 static func _load_from(path: String) -> Dictionary:
@@ -87,13 +106,13 @@ static func _load_from(path: String) -> Dictionary:
 
 
 static func has_save() -> bool:
-	return FileAccess.file_exists(SAVE_PATH) or FileAccess.file_exists(SAVE_BAK_PATH)
+	return FileAccess.file_exists(_path) or FileAccess.file_exists(_bak_path)
 
 
 static func delete_save() -> void:
-	if FileAccess.file_exists(SAVE_PATH):
-		DirAccess.remove_absolute(SAVE_PATH)
-	if FileAccess.file_exists(SAVE_BAK_PATH):
-		DirAccess.remove_absolute(SAVE_BAK_PATH)
-	if FileAccess.file_exists(SAVE_TMP_PATH):
-		DirAccess.remove_absolute(SAVE_TMP_PATH)
+	if FileAccess.file_exists(_path):
+		DirAccess.remove_absolute(_path)
+	if FileAccess.file_exists(_bak_path):
+		DirAccess.remove_absolute(_bak_path)
+	if FileAccess.file_exists(_tmp_path):
+		DirAccess.remove_absolute(_tmp_path)

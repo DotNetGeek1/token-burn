@@ -28,6 +28,39 @@ On a fresh clone, import the project once before the first run:
 godot --headless --import
 ```
 
+### UI playtests
+
+Slower suite that boots the real `ui/main.tscn` shell. Separate from the
+fast headless tests.
+
+```bash
+godot --headless res://tests/run_playtests.tscn
+```
+
+Or `./tools/run_playtests.ps1`, which tees output to `build/playtests.log`
+and also fails if the log contains `SCRIPT ERROR`. Godot does not fail a
+test when a UI callback throws.
+
+Must be launched as a scene, same as the fast suite: autoloads are not
+registered under `--script`.
+
+Uses a scratch MetaProgress profile and a scratch save. Never writes the
+developer's files.
+
+Optional flags after `--`. `--shots` writes a PNG per audited screen into
+`build/playtests/` and only works when not headless:
+
+```bash
+godot res://tests/run_playtests.tscn -- --shots --scale=8
+```
+
+Headless skips hover reachability (`gui_get_hovered_control` is null).
+For those checks, run windowed with the dummy rendering driver:
+
+```powershell
+./tools/run_playtests.ps1 -Windowed
+```
+
 ## Documentation
 
 See [docs/README.md](docs/README.md) for the full design overview and linked specs:
