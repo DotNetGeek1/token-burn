@@ -439,6 +439,37 @@ func _test_executive_committee_does_not_compound() -> void:
 	)
 	sim.free()
 
+	var migrated_sim := _make_sim()
+	migrated_sim.run_state.from_dict({
+		"save_version": 17,
+		"economy": {"recurring_costs": 1440.0},
+		"build": {
+			"hardware": ["used_laptop", "gpu_rack", "gpu_rack"],
+			"upgrade_levels": {"upgrade.gpu_rack": 2},
+			"upgrade_counts": {"upgrade.gpu_rack": 2},
+		},
+	})
+	migrated_sim._perk_system.collect_perk(
+		migrated_sim.run_state, "perk.executive_committee", ContentDatabase
+	)
+	migrated_sim._perk_system.equip_perk(
+		migrated_sim.run_state, "perk.executive_committee", ContentDatabase
+	)
+	migrated_sim.debug_invalidate_subscriptions()
+	migrated_sim.compute_system().recalculate(
+		migrated_sim.run_state,
+		migrated_sim.effect_resolver,
+		migrated_sim.debug_collect_subscriptions(),
+		migrated_sim.rng
+	)
+	assert_almost_eq(
+		float(migrated_sim.run_state.economy.get("recurring_costs", 0.0)),
+		120.0,
+		0.01,
+		"A legacy 1440 bill rebuilds to the two racks' 100 base, then takes one 20% penalty"
+	)
+	migrated_sim.free()
+
 
 ## The Wrapper used to freeze last_job_reward, which is only written after
 ## finalize — first job £0 forever, later jobs cloned the previous session.

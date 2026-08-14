@@ -48,6 +48,8 @@ func run() -> void:
 	_test_round_end_pending_survives_load(sim_script)
 	_test_a_pre_round_save_keeps_its_progress()
 	_test_a_pre_workflow_save_keeps_its_pipelines()
+	_test_v19_repairs_recurring_costs_and_sale_provenance()
+	_test_v19_gives_legacy_jobs_unique_instance_ids()
 	_test_corrupt_primary_save_recovers_from_backup()
 
 
@@ -166,6 +168,106 @@ func _test_a_pre_workflow_save_keeps_its_pipelines() -> void:
 	)
 	assert_eq(board.active_workflow_index(migrated), 1, "The run resumes on the lane it was left on")
 	assert_true(str(board.workflow_at(migrated, 0).get("name", "")) != "", "Every workflow arrives named")
+
+
+func _test_v19_repairs_recurring_costs_and_sale_provenance() -> void:
+	var legacy: Dictionary = {
+		"save_version": 18,
+		"economy": {
+			"recurring_costs_base": 1440.0,
+			"recurring_costs": 1440.0,
+		},
+		"build": {
+			"dwelling": "office_unit",
+			"hardware": ["used_laptop", "gpu_rack", "gpu_rack"],
+			"upgrade_levels": {"upgrade.gpu_rack": 2},
+			"upgrade_counts": {"upgrade.gpu_rack": 2},
+			"purchased_upgrade_counts": {"upgrade.gpu_rack": 2},
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	var rack: UpgradeDefinition = ContentDatabase.get_upgrade("upgrade.gpu_rack")
+	assert_almost_eq(
+		float(migrated.economy.get("recurring_costs_base", 0.0)),
+		rack.recurring_cost_delta * 2.0,
+		0.01,
+		"v19 rebuilds the true recurring base from owned upgrades"
+	)
+	assert_true(
+		UpgradeSystem.purchased_upgrade_counts(migrated).is_empty(),
+		"Pre-v19 hardware is conservatively migrated as non-refundable"
+	)
+	assert_almost_eq(
+		UpgradeSystem.sell_refund(migrated, "gpu_rack", ContentDatabase),
+		0.0,
+		0.01,
+		"The old save cannot cash out hardware whose provenance is unknown"
+	)
+
+	var upgrades := UpgradeSystem.new()
+	var economy := EconomySystem.new()
+	migrated.economy["cash"] = 1_000_000.0
+	assert_true(
+		upgrades.purchase(migrated, "upgrade.gpu_rack", ContentDatabase, EffectResolver.new(), economy),
+		"A purchase made after migration succeeds"
+	)
+	assert_eq(
+		int(UpgradeSystem.purchased_upgrade_counts(migrated).get("upgrade.gpu_rack", 0)),
+		1,
+		"And only that new copy becomes refundable"
+	)
+
+
+func _test_v19_gives_legacy_jobs_unique_instance_ids() -> void:
+	var active_a: Dictionary = {
+		"id": "job.marketplace", "tokens_remaining": 100.0, "prompts_remaining": 5,
+	}
+	var active_b: Dictionary = {
+		"id": "job.marketplace", "tokens_remaining": 100.0, "prompts_remaining": 6,
+	}
+	var legacy: Dictionary = {
+		"save_version": 18,
+		"business": {
+			"job_offers": [{"id": "job.marketplace"}],
+			"job_queue": [{"id": "job.marketplace"}],
+			"active_jobs": [active_a, active_b],
+			"focused_job_id": "job.marketplace",
+		},
+		"build": {
+			"hardware": ["used_laptop", "custom_desktop"],
+			"upgrade_levels": {"upgrade.custom_desktop": 1},
+			"upgrade_counts": {"upgrade.custom_desktop": 1},
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	var ids: Dictionary = {}
+	for collection in ["job_offers", "job_queue", "active_jobs"]:
+		for job in migrated.business.get(collection, []):
+			assert_eq(
+				str(job.get("definition_id", "")),
+				"job.marketplace",
+				"Legacy jobs retain their authored definition id"
+			)
+			var instance_id: String = str(job.get("id", ""))
+			assert_false(ids.has(instance_id), "Every migrated live job has a unique instance id")
+			ids[instance_id] = true
+	var active_jobs: Array = Array(migrated.business.get("active_jobs", []))
+	assert_eq(
+		str(migrated.business.get("focused_job_id", "")),
+		str(active_jobs[0].get("id", "")),
+		"Legacy focus deterministically follows the first matching active job"
+	)
+	assert_true(
+		Dictionary(migrated.business.get("active_job", {})).is_empty(),
+		"The single-job compatibility field is empty when two jobs are active"
+	)
+	assert_eq(
+		JobSystem.new().burn_lane_jobs(migrated).size(),
+		2,
+		"Both formerly duplicate active jobs can now occupy parallel lanes"
+	)
 
 
 ## Saving is what produces the `.bak` in the first place: a truncated write to

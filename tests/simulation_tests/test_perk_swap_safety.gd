@@ -4,6 +4,7 @@ extends TestCase
 func run() -> void:
 	_test_wide_bus_slots_derive_from_active_perk()
 	_test_benching_wide_bus_shrinks_slots()
+	_test_benching_wide_bus_refuses_to_truncate_a_module()
 	_test_technical_debt_loan_once()
 	_test_wrapper_freezes_passive_value()
 
@@ -46,6 +47,40 @@ func _test_benching_wide_bus_shrinks_slots() -> void:
 	sim._board_system.ensure_board(sim.run_state, ContentDatabase)
 	var without_bus: int = BoardSystem.new().derived_slot_count(sim.run_state, ContentDatabase)
 	assert_eq(without_bus, with_bus - 1, "Benching Wide Bus removes its slot bonus")
+	sim.free()
+
+
+func _test_benching_wide_bus_refuses_to_truncate_a_module() -> void:
+	var sim := _sim()
+	sim.start_run(8905)
+	sim._perk_system.collect_perk(sim.run_state, "perk.stack_overflow_tab", ContentDatabase)
+	sim._perk_system.equip_perk(sim.run_state, "perk.stack_overflow_tab", ContentDatabase)
+	sim._perk_system.collect_perk(sim.run_state, "perk.wide_bus", ContentDatabase)
+	sim._perk_system.equip_perk(sim.run_state, "perk.wide_bus", ContentDatabase)
+	sim._board_system.ensure_board(sim.run_state, ContentDatabase)
+	var workflow: Dictionary = sim._board_system.active_workflow(sim.run_state)
+	var layout: Array = Array(workflow.get("slots", []))
+	var tail: int = layout.size() - 1
+	layout[tail] = "op.prompt"
+	workflow["slots"] = layout
+
+	var reason: String = sim.perk_bench_block_reason("perk.wide_bus")
+	assert_true(reason.contains("Clear the extra pipeline slot"), "The refusal explains what to clear")
+	assert_false(sim.bench_perk("perk.wide_bus"), "Wide Bus cannot be benched over an occupied tail")
+	assert_eq(
+		str(Array(workflow.get("slots", []))[tail]),
+		"op.prompt",
+		"A refused bench leaves the pipeline placement untouched"
+	)
+
+	layout[tail] = ""
+	workflow["slots"] = layout
+	assert_true(sim.bench_perk("perk.wide_bus"), "Clearing the extra slot permits the bench")
+	assert_eq(
+		sim.board_slots().size(),
+		tail,
+		"The board then shrinks by exactly the slot Wide Bus provided"
+	)
 	sim.free()
 
 

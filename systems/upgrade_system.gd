@@ -20,6 +20,12 @@ static func upgrade_counts(run_state: RunState) -> Dictionary:
 	return Dictionary(run_state.build.get("upgrade_counts", {}))
 
 
+## The paid subset of upgrade_counts. A granted machine is still installed and
+## contributes to upgrade level, but there is no purchase to refund.
+static func purchased_upgrade_counts(run_state: RunState) -> Dictionary:
+	return Dictionary(run_state.build.get("purchased_upgrade_counts", {}))
+
+
 static func _set_upgrade_count(run_state: RunState, upgrade_id: String, count: int) -> void:
 	if not run_state.build.has("upgrade_counts") or not (run_state.build["upgrade_counts"] is Dictionary):
 		run_state.build["upgrade_counts"] = {}
@@ -33,11 +39,36 @@ static func _increment_upgrade_count(run_state: RunState, upgrade_id: String) ->
 	_set_upgrade_count(run_state, upgrade_id, int(upgrade_counts(run_state).get(upgrade_id, 0)) + 1)
 
 
+static func _set_purchased_upgrade_count(run_state: RunState, upgrade_id: String, count: int) -> void:
+	if not run_state.build.has("purchased_upgrade_counts") \
+			or not (run_state.build["purchased_upgrade_counts"] is Dictionary):
+		run_state.build["purchased_upgrade_counts"] = {}
+	var owned: int = int(upgrade_counts(run_state).get(upgrade_id, 0))
+	var safe_count: int = clampi(count, 0, owned)
+	if safe_count <= 0:
+		run_state.build["purchased_upgrade_counts"].erase(upgrade_id)
+	else:
+		run_state.build["purchased_upgrade_counts"][upgrade_id] = safe_count
+
+
+static func _increment_purchased_upgrade_count(run_state: RunState, upgrade_id: String) -> void:
+	_set_purchased_upgrade_count(
+		run_state, upgrade_id,
+		int(purchased_upgrade_counts(run_state).get(upgrade_id, 0)) + 1
+	)
+
+
 ## For the rare grant that is not a purchase — a meta unlock handing over an
 ## upgrade for free — so the ledger still knows about kit the run owns
 ## without pretending `EconomySystem` ever charged for it.
-static func record_free_grant(run_state: RunState, upgrade_id: String) -> void:
+static func record_free_grant(run_state: RunState, upgrade_id: String, content_db: Node) -> void:
 	_increment_upgrade_count(run_state, upgrade_id)
+	var upgrade: UpgradeDefinition = content_db.get_upgrade(upgrade_id)
+	if upgrade != null:
+		run_state.economy["recurring_costs_base"] = (
+			float(run_state.economy.get("recurring_costs_base", 0.0))
+			+ upgrade.recurring_cost_delta
+		)
 
 
 static func purchase_cost(upgrade: UpgradeDefinition, level: int) -> float:
@@ -196,6 +227,7 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 	if not upgrade.repeatable:
 		run_state.build["upgrades"].append(upgrade_id)
 	_increment_upgrade_count(run_state, upgrade_id)
+	_increment_purchased_upgrade_count(run_state, upgrade_id)
 	effect_resolver.apply_effects(run_state, upgrade.effects, "upgrade.%s" % upgrade_id)
 	return true
 
@@ -306,6 +338,8 @@ static func sell_refund(run_state: RunState, key: String, content_db: Node) -> f
 	var upgrade: UpgradeDefinition = upgrade_for_installed(content_db, key)
 	if upgrade == null:
 		return 0.0
+	if int(purchased_upgrade_counts(run_state).get(upgrade.id, 0)) <= 0:
+		return 0.0
 	var level: int = maxi(0, upgrade_level(run_state, upgrade.id) - 1)
 	return purchase_cost(upgrade, level) * SELL_REFUND_RATIO
 
@@ -317,6 +351,8 @@ static func sell_reason(run_state: RunState, key: String, content_db: Node) -> S
 	var upgrade: UpgradeDefinition = upgrade_for_installed(content_db, key)
 	if upgrade == null:
 		return "That came with the run. Nobody will take it off your hands."
+	if int(purchased_upgrade_counts(run_state).get(upgrade.id, 0)) <= 0:
+		return "That machine was granted with the run and cannot be sold."
 	var curves: Dictionary = content_db.balance.get("hardware_curves", {})
 	if occupies_floor(curves, key):
 		if hardware_slots_used(run_state, content_db) <= 1:
@@ -360,6 +396,10 @@ func sell(run_state: RunState, key: String, content_db: Node, economy_system: Ec
 	else:
 		run_state.build["upgrades"].erase(upgrade.id)
 		_set_upgrade_count(run_state, upgrade.id, 0)
+	_set_purchased_upgrade_count(
+		run_state, upgrade.id,
+		int(purchased_upgrade_counts(run_state).get(upgrade.id, 0)) - 1
+	)
 	run_state.economy["recurring_costs_base"] = maxf(
 		0.0,
 		float(run_state.economy.get("recurring_costs_base", 0.0)) - upgrade.recurring_cost_delta

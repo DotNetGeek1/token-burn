@@ -23,6 +23,7 @@ func run() -> void:
 	_test_an_extra_slot_widens_the_next_run()
 	_test_the_slot_cap_holds()
 	_test_a_starting_module_arrives_owned()
+	_test_the_permanent_rig_is_not_refundable()
 	_test_the_profile_survives_a_restart()
 	_test_a_disabled_meta_layer_leaves_a_run_alone()
 	_test_difficulty_choice_carries_into_a_new_run()
@@ -158,6 +159,27 @@ func _test_a_starting_module_arrives_owned() -> void:
 		MetaProgress.is_available("unlock.starting_module_linter"),
 		"Keeping the same module twice would do nothing, so it is not offered again"
 	)
+	sim.free()
+
+
+func _test_the_permanent_rig_is_not_refundable() -> void:
+	_fresh_profile()
+	MetaProgress.bank_victory()
+	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "A permanent rig rung can be kept")
+	var sim: Node = _sim()
+	sim.start_run(9008)
+	assert_eq(
+		UpgradeSystem.installed_count(sim.run_state, "custom_desktop"),
+		1,
+		"The permanent desktop is racked in the next run"
+	)
+	assert_almost_eq(
+		sim.hardware_sale_refund("custom_desktop"),
+		0.0,
+		0.01,
+		"Permanent-rig hardware has no refund"
+	)
+	assert_false(sim.can_sell_hardware("custom_desktop"), "The permanent copy cannot be sold")
 	sim.free()
 
 

@@ -712,7 +712,7 @@ func pipeline_capabilities(board_slots: Array, blocked: int = 0) -> Dictionary:
 			var operator: String = str(effect.get("operation", "add"))
 			var value: float = _parameter_value(effect.get("value", 0), module.parameters)
 			match target:
-				"stage.fix_bugs":
+				"stage.fix_bugs", "stage.fix_hidden_bugs":
 					if value > 0.0:
 						found[CAPABILITY_FIX_BUGS] = true
 				"stage.reveal_bugs":

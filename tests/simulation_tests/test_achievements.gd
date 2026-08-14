@@ -13,6 +13,8 @@ const SCRATCH_PROFILE := "user://profile_achievements_test.json"
 ## The award for losing in the very first round, and the module it hands over.
 const WIPEOUT := "ach.round_one_wipeout"
 const WIPEOUT_MODULE := "op.stack_overflow"
+const FULL_BOARD := "ach.full_board"
+const THERMAL_EVENT := "ach.thermal_event"
 
 
 func run() -> void:
@@ -29,6 +31,8 @@ func run() -> void:
 	_test_a_gated_module_is_unreachable_until_its_award_is_earned()
 	_test_lifetime_counters_accumulate_across_runs()
 	_test_a_disabled_meta_layer_earns_nothing()
+	_test_maximum_pipeline_reads_the_fullest_workflow()
+	_test_a_fatal_heat_prompt_earns_thermal_event()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -181,6 +185,55 @@ func _test_a_disabled_meta_layer_earns_nothing() -> void:
 	assert_almost_eq(MetaProgress.lifetime_stat("runs"), 0.0, 0.01, "Not even the run count")
 	sim.free()
 	MetaProgress.enabled = true
+
+
+func _test_maximum_pipeline_reads_the_fullest_workflow() -> void:
+	_fresh_profile()
+	var state := RunState.new()
+	state.build["board"] = {"slot_count": 8, "active_workflow": 0}
+	state.build["workflows"] = [
+		{
+			"id": "workflow.1", "name": "First half",
+			"slots": ["op.prompt", "op.prompt", "op.prompt", "op.prompt", "", "", "", ""],
+		},
+		{
+			"id": "workflow.2", "name": "Second half",
+			"slots": ["", "", "", "", "op.prompt", "op.prompt", "op.prompt", "op.prompt"],
+		},
+	]
+	AchievementSystem.new().evaluate_tick(state, ContentDatabase)
+	assert_false(
+		MetaProgress.has_achievement(FULL_BOARD),
+		"Two half-filled workflows do not add up to Maximum Pipeline"
+	)
+	state.build["workflows"] = [{
+		"id": "workflow.1", "name": "Full",
+		"slots": [
+			"op.prompt", "op.prompt", "op.prompt", "op.prompt",
+			"op.prompt", "op.prompt", "op.prompt", "op.prompt",
+		],
+	}]
+	AchievementSystem.new().evaluate_tick(state, ContentDatabase)
+	assert_true(
+		MetaProgress.has_achievement(FULL_BOARD),
+		"One workflow with all eight slots filled earns Maximum Pipeline"
+	)
+	assert_true(_can_draw("op.crunch_mode"), "Maximum Pipeline unlocks Crunch Mode")
+
+
+func _test_a_fatal_heat_prompt_earns_thermal_event() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(7021)
+	sim.run_state.flags["fire_risk"] = true
+	sim.run_state.compute["heat"] = float(sim.run_state.compute.get("heat_capacity", 100.0))
+	sim._finish_prompt({"ok": true, "messages": []})
+	assert_eq(sim.phase, sim.Phase.RUN_END, "Full heat ends the run as a hardware fire")
+	assert_true(
+		MetaProgress.has_achievement(THERMAL_EVENT),
+		"The run-end award sees the peak recorded by the fatal prompt"
+	)
+	sim.free()
 
 
 ## Whether the module can turn up in an angel draft at all. Drawing two at a

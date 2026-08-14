@@ -132,6 +132,7 @@ func bench_block_reason(
 	var perk: PerkDefinition = content_db.get_perk(perk_id)
 	if perk == null:
 		return "Unknown perk"
+	var incoming: PerkDefinition = content_db.get_perk(incoming_id) if incoming_id != "" else null
 	var slot_grant: int = int(perk.grants.get("perk_slots", 0))
 	if slot_grant > 0:
 		var without: int = perk_capacity(run_state, content_db) - slot_grant
@@ -144,10 +145,30 @@ func bench_block_reason(
 		var in_use: int = board.workflow_count(run_state)
 		if in_use > without:
 			return "Remove surplus workflows before benching this perk"
+	var board_slot_grant: int = int(perk.grants.get("board_slots", 0))
+	if board_slot_grant > 0:
+		var board := BoardSystem.new()
+		var meta_bonus: int = int(Dictionary(run_state.build.get("board", {})).get("meta_slot_bonus", 0))
+		var perk_bonus: int = BoardSystem.active_perk_grant_total(
+			run_state, content_db, "board_slots"
+		) - board_slot_grant
+		if incoming != null:
+			perk_bonus += int(incoming.grants.get("board_slots", 0))
+		var resulting_slots: int = clampi(
+			BoardSystem.DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus,
+			1,
+			BoardSystem.MAX_SLOT_COUNT
+		)
+		for workflow in board.workflows(run_state):
+			if not workflow is Dictionary:
+				continue
+			var layout: Array = Array(workflow.get("slots", []))
+			for index in range(resulting_slots, layout.size()):
+				if str(layout[index]) != "":
+					return "Clear the extra pipeline slot before benching this perk"
 	# `requires_tags` is checked when a perk goes in, so it has to be checked
 	# when its provider comes out too. Otherwise the loadout can be walked into
 	# a state the equip rules would have refused outright.
-	var incoming: PerkDefinition = content_db.get_perk(incoming_id) if incoming_id != "" else null
 	for tag in perk.tags:
 		if incoming != null and tag in incoming.tags:
 			continue

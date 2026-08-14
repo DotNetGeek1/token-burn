@@ -114,9 +114,13 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 	var heat_capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 	var board: Dictionary = run_state.build.get("board", {})
 	var filled_slots: int = 0
-	for slot in Array(board.get("slots", [])):
-		if str(slot) != "":
-			filled_slots += 1
+	var board_system := BoardSystem.new()
+	for workflow in board_system.workflows(run_state):
+		if workflow is Dictionary:
+			filled_slots = maxi(
+				filled_slots,
+				board_system.filled_count(Array(workflow.get("slots", [])))
+			)
 	var context: Dictionary = {
 		"run.round": int(run_state.calendar.get("round", 1)),
 		"run.cash": float(run_state.economy.get("cash", 0.0)),

@@ -79,38 +79,29 @@ func _collect_eligible_jobs(content_db: Node, round_number: int, tier: int) -> A
 ## Mismatched work now pays for the trouble and says so on the card.
 func _classify_offers(offers: Array, run_state: RunState, content_db: Node) -> Array:
 	var board := BoardSystem.new()
-	# The best any of the run's lanes can do: a contract is only mismatched if
-	# no workflow the player owns could answer it.
-	var capabilities: Dictionary = {}
-	for workflow in board.workflows(run_state):
-		if not workflow is Dictionary:
-			continue
-		var lane: Dictionary = board.pipeline_capabilities(Array(workflow.get("slots", [])))
-		for key in lane:
-			var value: Variant = lane[key]
-			if value is bool:
-				capabilities[key] = bool(capabilities.get(key, false)) or value
-			elif key == "cost":
-				capabilities[key] = minf(float(capabilities.get(key, INF)), float(value))
-	var definitions: Dictionary = BoardSystem.demand_definitions()
+	var available_workflows: Array = board.workflows(run_state)
 	var bonus_per_gap: float = float(
 		content_db.balance.get("job_scaling", {}).get("mismatch_reward_bonus", 0.2)
 	)
 	for offer in offers:
 		if not offer is Dictionary:
 			continue
-		var unmet: int = 0
-		for demand_id in Array(offer.get("demands", [])):
-			var definition: Variant = definitions.get(str(demand_id), null)
-			if not definition is Dictionary:
+		# A contract runs through one workflow. Capabilities from different lanes
+		# cannot be combined into a fictional perfect pipeline on the job card.
+		var unmet: int = -1
+		for workflow in available_workflows:
+			if not workflow is Dictionary:
 				continue
-			var match_spec: Dictionary = Dictionary(Dictionary(definition).get("match", {}))
-			if match_spec.has("capability"):
-				if not bool(capabilities.get(str(match_spec["capability"]), false)):
-					unmet += 1
-			elif match_spec.has("max_cost"):
-				if float(capabilities.get("cost", 0.0)) > float(match_spec["max_cost"]):
-					unmet += 1
+			var match_summary: Dictionary = board.workflow_match(run_state, offer, workflow)
+			var workflow_unmet: int = int(match_summary.get("total", 0)) - int(
+				match_summary.get("met", 0)
+			)
+			unmet = workflow_unmet if unmet < 0 else mini(unmet, workflow_unmet)
+		if unmet < 0:
+			var empty_match: Dictionary = board.workflow_match(
+				run_state, offer, {"id": "", "name": "", "slots": []}
+			)
+			unmet = int(empty_match.get("total", 0)) - int(empty_match.get("met", 0))
 		offer["unmet_demands"] = unmet
 		if unmet == 0:
 			offer["fit"] = "bread_and_butter"

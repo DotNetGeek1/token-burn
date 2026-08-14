@@ -17,6 +17,7 @@ func run() -> void:
 	_test_a_component_needs_a_machine_to_go_in()
 	_test_duplicates_add_up_to_throughput()
 	_test_selling_frees_the_slot_and_pays_back()
+	_test_granted_hardware_is_not_refundable()
 	_test_what_cannot_be_sold()
 
 
@@ -187,6 +188,42 @@ func _test_selling_frees_the_slot_and_pays_back() -> void:
 	)
 
 
+func _test_granted_hardware_is_not_refundable() -> void:
+	var shop: Dictionary = _shop("office_unit")
+	Simulation.apply_run_location(shop["state"], "office_unit", true)
+	assert_eq(
+		UpgradeSystem.installed_count(shop["state"], "gpu_rack"),
+		1,
+		"Starting an office run grants its GPU rack"
+	)
+	assert_almost_eq(
+		UpgradeSystem.sell_refund(shop["state"], "gpu_rack", ContentDatabase),
+		0.0,
+		0.01,
+		"Granted hardware has no cash refund"
+	)
+	assert_false(_sell(shop, "gpu_rack"), "And the granted copy cannot be sold")
+
+	shop["state"].economy["cash"] = 100_000_000.0
+	assert_true(_buy(shop, "upgrade.gpu_rack"), "A second GPU rack can still be bought for cash")
+	assert_eq(
+		int(UpgradeSystem.purchased_upgrade_counts(shop["state"]).get("upgrade.gpu_rack", 0)),
+		1,
+		"Only the cash-bought copy is recorded as refundable"
+	)
+	assert_true(
+		UpgradeSystem.sell_refund(shop["state"], "gpu_rack", ContentDatabase) > 0.0,
+		"The paid copy has a normal refund"
+	)
+	assert_true(_sell(shop, "gpu_rack"), "The paid copy can be sold")
+	assert_eq(
+		UpgradeSystem.installed_count(shop["state"], "gpu_rack"),
+		1,
+		"The granted rack remains installed"
+	)
+	assert_false(_sell(shop, "gpu_rack"), "Once only the grant remains, selling is blocked again")
+
+
 func _test_what_cannot_be_sold() -> void:
 	var shop: Dictionary = _shop()
 	assert_true(
@@ -198,6 +235,8 @@ func _test_what_cannot_be_sold() -> void:
 	var only := _shop()
 	only["state"].build["hardware"] = ["custom_desktop"]
 	only["state"].build["upgrade_levels"] = {"upgrade.custom_desktop": 1}
+	only["state"].build["upgrade_counts"] = {"upgrade.custom_desktop": 1}
+	only["state"].build["purchased_upgrade_counts"] = {"upgrade.custom_desktop": 1}
 	assert_true(
 		UpgradeSystem.sell_reason(only["state"], "custom_desktop", ContentDatabase) != "",
 		"The last machine in the room stays: selling it leaves nothing to burn with"

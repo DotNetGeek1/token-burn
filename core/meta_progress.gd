@@ -754,7 +754,7 @@ func _grant_cloud_account(run_state: RunState) -> void:
 	if not (Simulation.CLOUD_ACCOUNT_UPGRADE in owned):
 		owned.append(Simulation.CLOUD_ACCOUNT_UPGRADE)
 		run_state.build["upgrades"] = owned
-		UpgradeSystem.record_free_grant(run_state, Simulation.CLOUD_ACCOUNT_UPGRADE)
+		UpgradeSystem.record_free_grant(run_state, Simulation.CLOUD_ACCOUNT_UPGRADE, ContentDatabase)
 	run_state.build["cloud_tier"] = Simulation.CLOUD_ACCOUNT_UPGRADE
 
 

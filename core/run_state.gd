@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 18
+const SAVE_VERSION := 19
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -112,6 +112,9 @@ var build: Dictionary = {
 	## `UpgradeSystem.upgrade_counts()` — rather than removed outright, since
 	## UI and save data still address them directly.
 	"upgrade_counts": {},
+	## The subset of upgrade_counts that was actually bought for cash. Location
+	## starters and permanent grants are owned and billable, but cannot be sold.
+	"purchased_upgrade_counts": {},
 }
 
 var statistics: Dictionary = {
@@ -421,16 +424,86 @@ func _migrate(from_version: int) -> void:
 		_migrate_operations_to_modules()
 	if from_version < 18:
 		_migrate_to_derived_recurring_costs()
+	if from_version < 19:
+		_migrate_to_v19()
 
 
 ## The pipeline pieces were called operations in code and modules everywhere the
 ## player could see. The state key follows the player's word; a save written
 ## under the old name keeps its modules.
 ## Recurring cost used to be one field that recalculation both read and wrote,
-## so Executive Committee compounded it every prompt. The saved figure is the
-## last derived answer; it becomes the base so a run in progress keeps its bill.
+## so Executive Committee compounded it every prompt. Rebuild from owned
+## upgrades instead of trusting that derived (and possibly compounded) value.
 func _migrate_to_derived_recurring_costs() -> void:
-	economy["recurring_costs_base"] = float(economy.get("recurring_costs", 0.0))
+	var counts: Dictionary = UpgradeSystem.upgrade_counts(self)
+	var base: float = 0.0
+	for upgrade_id in counts.keys():
+		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
+		if upgrade == null:
+			continue
+		base += upgrade.recurring_cost_delta * maxf(0.0, float(counts.get(upgrade_id, 0)))
+	economy["recurring_costs_base"] = base
+	# ComputeSystem applies active modifiers on load. Until then the derived
+	# field is an honest unmodified answer rather than stale inflation.
+	economy["recurring_costs"] = base
+
+
+## v19 adds sale provenance and finishes the instance-id migration for jobs
+## already alive in a v18 save. Existing hardware cannot be classified safely,
+## so it is deliberately treated as granted; only later purchases are refundable.
+func _migrate_to_v19() -> void:
+	build["purchased_upgrade_counts"] = {}
+	# A v18 save may already have persisted the bad v17-derived base, so every
+	# pre-v19 save gets the authoritative rebuild, not only saves older than v18.
+	_migrate_to_derived_recurring_costs()
+	_migrate_job_instance_ids()
+
+
+## Gives every live contract an authored definition id plus a unique instance
+## id. Modern unique ids survive unchanged; legacy or duplicate ids are replaced
+## deterministically so save/load never changes which contract is focused.
+func _migrate_job_instance_ids() -> void:
+	var seen: Dictionary = {}
+	var old_focus: String = str(business.get("focused_job_id", ""))
+	var migrated_focus: String = ""
+	var collection_labels: Dictionary = {
+		"job_offers": "offer",
+		"job_queue": "queue",
+		"active_jobs": "active",
+	}
+	for collection in ["job_offers", "job_queue", "active_jobs"]:
+		var jobs: Array = Array(business.get(collection, []))
+		for index in range(jobs.size()):
+			var job: Variant = jobs[index]
+			if not job is Dictionary:
+				continue
+			var old_id: String = str(job.get("id", ""))
+			var definition_id: String = str(job.get("definition_id", ""))
+			var legacy: bool = definition_id == ""
+			if definition_id == "":
+				definition_id = old_id
+			job["definition_id"] = definition_id
+			var instance_id: String = old_id
+			if legacy or instance_id == "" or seen.has(instance_id):
+				var stem: String = definition_id if definition_id != "" else "job.legacy"
+				instance_id = "%s.legacy.%s.%d" % [
+					stem, str(collection_labels[collection]), index,
+				]
+				var collision: int = 1
+				while seen.has(instance_id):
+					instance_id = "%s.legacy.%s.%d.%d" % [
+						stem, str(collection_labels[collection]), index, collision,
+					]
+					collision += 1
+			job["id"] = instance_id
+			seen[instance_id] = true
+			jobs[index] = job
+			if collection == "active_jobs" and migrated_focus == "" and old_id == old_focus:
+				migrated_focus = instance_id
+		business[collection] = jobs
+	business["focused_job_id"] = migrated_focus
+	var active_jobs: Array = Array(business.get("active_jobs", []))
+	business["active_job"] = active_jobs[0] if active_jobs.size() == 1 else {}
 
 
 func _migrate_operations_to_modules() -> void:
@@ -722,6 +795,8 @@ func _default_build() -> Dictionary:
 		"cloud_tier": "none",
 		"advertising_tier": "none",
 		"upgrade_levels": {},
+		"upgrade_counts": {},
+		"purchased_upgrade_counts": {},
 	}
 
 

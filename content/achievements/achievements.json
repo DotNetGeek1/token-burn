@@ -270,8 +270,8 @@
     "description": "One hundred percent heat. The official term is a thermal event. The unofficial term is what the neighbours shouted.",
     "hint": "Push the rig to full heat.",
     "condition": {
-      "trigger": "tick",
-      "checks": [{"stat": "run.heat_ratio", "op": ">=", "value": 0.99}]
+      "trigger": "run_end",
+      "checks": [{"stat": "run.max_heat_ratio", "op": ">=", "value": 0.99}]
     },
     "reward": {"type": "none"}
   },
