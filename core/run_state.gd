@@ -161,6 +161,10 @@ var flags: Dictionary = {
 	## back by job scaling rather than re-reading the profile mid-run — so a
 	## difficulty change in the menu cannot reach into a run already going.
 	"difficulty": "normal",
+	## Set-piece investor calls already delivered this run. The desk is torn
+	## down on every venue trip, so this has to live on the run rather than
+	## on the shell that showed the phone.
+	"investor_beats": {},
 }
 
 
@@ -265,6 +269,22 @@ func has_queued_jobs() -> bool:
 
 func has_pending_work() -> bool:
 	return has_queued_jobs() or has_active_job()
+
+
+## Vince's halfway and last-call beats fire once per run. Remembered here so a
+## trip to the market — which unloads the desk — cannot ring the same call again.
+func investor_beat_heard(trigger: String) -> bool:
+	var beats: Variant = flags.get("investor_beats", {})
+	return beats is Dictionary and beats.has(trigger)
+
+
+func mark_investor_beat(trigger: String) -> void:
+	var stored: Variant = flags.get("investor_beats", {})
+	var beats: Dictionary = {}
+	if stored is Dictionary:
+		beats = stored
+	beats[trigger] = true
+	flags["investor_beats"] = beats
 
 
 func update_peaks() -> void:
@@ -736,6 +756,7 @@ func _default_flags() -> Dictionary:
 		"next_location": "",
 		"draft_kind": "",
 		"difficulty": "normal",
+		"investor_beats": {},
 	}
 
 

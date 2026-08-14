@@ -917,8 +917,6 @@ const INVESTOR_FINAL_CALL_ROUNDS := 3
 
 ## The investor introduces himself once per run, not once per load.
 var _intro_call_shown: bool = false
-## Which of his set-piece calls this run has already heard.
-var _investor_beats: Dictionary = {}
 
 
 ## Everything the board is kept in the corner of the eye for. What the company
@@ -972,7 +970,6 @@ func _ascension_urgency_line(round_number: int) -> String:
 
 func _reset_ascension_prompts() -> void:
 	_intro_call_shown = false
-	_investor_beats.clear()
 
 
 # --- The investor ------------------------------------------------------------
@@ -1006,7 +1003,8 @@ func investor_says(trigger: String, context: Dictionary = {}) -> void:
 
 ## The beats of the run he insists on being present for. Each fires once, when
 ## the state that earns it first appears, so he interrupts the moment rather than
-## every refresh that follows it.
+## every refresh that follows it. Remembered on the run, not on this scene: the
+## shell is torn down every time the player leaves the desk.
 func _maybe_call_ascension_beat() -> void:
 	if _title_active or SceneRouter.investor_busy():
 		return
@@ -1016,12 +1014,12 @@ func _maybe_call_ascension_beat() -> void:
 	# The last rounds take precedence: being behind with the year nearly gone is
 	# the more urgent of the two things he could be ringing about.
 	var rounds_left: int = int(progress.get("rounds_remaining", 99))
-	if rounds_left <= INVESTOR_FINAL_CALL_ROUNDS and not _investor_beats.has("contract_final_call"):
-		_investor_beats["contract_final_call"] = true
+	if rounds_left <= INVESTOR_FINAL_CALL_ROUNDS and not Simulation.run_state.investor_beat_heard("contract_final_call"):
+		Simulation.run_state.mark_investor_beat("contract_final_call")
 		investor_says("contract_final_call", {"rounds_remaining": rounds_left})
 		return
-	if float(progress.get("burn_ratio", 0.0)) >= 0.5 and not _investor_beats.has("contract_halfway"):
-		_investor_beats["contract_halfway"] = true
+	if float(progress.get("burn_ratio", 0.0)) >= 0.5 and not Simulation.run_state.investor_beat_heard("contract_halfway"):
+		Simulation.run_state.mark_investor_beat("contract_halfway")
 		investor_says("contract_halfway")
 
 

@@ -18,6 +18,7 @@ func run() -> void:
 	_test_a_demand_perk_is_a_bonus_not_a_ratchet()
 	_test_a_build_cannot_hold_more_than_its_cap()
 	_test_rival_keystones_cannot_share_a_build()
+	_test_investor_halfway_call_survives_leaving_the_desk()
 
 
 func _make_sim() -> Node:
@@ -336,5 +337,35 @@ func _test_rival_keystones_cannot_share_a_build() -> void:
 	assert_false(
 		ps.can_equip(sim.run_state, "perk.cloud_native", ContentDatabase),
 		"Cloud Native cannot be equipped once the build has gone bare metal"
+	)
+	sim.free()
+
+
+## The desk is unloaded on every venue trip. The halfway call used to live on
+## that scene, so coming back from the market rang Vince again. It belongs on
+## the run, which is what survives the trip — and a save, and a Continue.
+func _test_investor_halfway_call_survives_leaving_the_desk() -> void:
+	var sim := _make_sim()
+	sim.start_run(160)
+	assert_false(
+		sim.run_state.investor_beat_heard("contract_halfway"),
+		"A fresh run has not heard the halfway call"
+	)
+	sim.run_state.mark_investor_beat("contract_halfway")
+	assert_true(
+		sim.run_state.investor_beat_heard("contract_halfway"),
+		"Marking remembers it for the rest of the run"
+	)
+	var snapshot: Dictionary = sim.run_state.to_dict()
+	var restored := RunState.new()
+	restored.from_dict(snapshot)
+	assert_true(
+		restored.investor_beat_heard("contract_halfway"),
+		"Coming back to the desk — or Continue — still remembers"
+	)
+	sim.start_run(161)
+	assert_false(
+		sim.run_state.investor_beat_heard("contract_halfway"),
+		"A new run has not heard it"
 	)
 	sim.free()
