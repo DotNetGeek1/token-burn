@@ -89,7 +89,8 @@ var _column: VBoxContainer = null
 var _column_b: VBoxContainer = null
 ## How many columns the reflow is currently using.
 var _console_columns: int = 1
-## `{"region", "panel", "surface", "order", "console_hide", "console_min", "grow"}`
+## `{"region", "panel", "surface", "order", "console_hide", "painted_hide",
+## "console_min", "grow"}`
 var _entries: Array[Dictionary] = []
 var _hints: VenuePanel = null
 var _back_row: ConsoleMenuRow = null
@@ -153,6 +154,12 @@ func _on_venue_layout() -> void:
 ## `{"index": "ENTER", "headline": "VIEW"}`.
 func _hint_entries() -> Array:
 	return []
+
+
+## Whether the artwork contains a physical screen for the key legend. Venues
+## without one still keep BACK in the reflowed phone/console column.
+func _painted_hints() -> bool:
+	return true
 
 
 # --- Chassis ----------------------------------------------------------------
@@ -304,6 +311,7 @@ func add_panel(region: String, heading: String = "", options: Dictionary = {}) -
 		"surface": surface,
 		"order": int(options.get("console_order", _entries.size())),
 		"console_hide": bool(options.get("console_hide", false)),
+		"painted_hide": bool(options.get("painted_hide", false)),
 		"console_min": float(options.get("console_min", 120.0)),
 		"grow": bool(options.get("grow", false)),
 	})
@@ -314,7 +322,9 @@ func add_panel(region: String, heading: String = "", options: Dictionary = {}) -
 ## into the artwork's own hint panel where there is one.
 func _build_hints() -> void:
 	_hints = add_panel("hints", "", {
-		"console_order": BACK_ORDER, "console_min": 0.0,
+		"console_order": BACK_ORDER,
+		"console_min": 0.0,
+		"painted_hide": not _painted_hints(),
 	})
 	var content: VBoxContainer = _hints.content()
 	for entry in _hint_entries():
@@ -545,6 +555,8 @@ func _painted_ready() -> bool:
 	for entry in _entries:
 		if bool(entry["console_hide"]):
 			continue
+		if bool(entry["painted_hide"]):
+			continue
 		var rect: Rect2 = AssetCatalog.venue_region(venue_key(), str(entry["region"]))
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			return false
@@ -723,6 +735,10 @@ func _place_panels(view: Vector2) -> void:
 	for entry in _entries:
 		var panel: VenuePanel = entry["panel"]
 		var region: String = str(entry["region"])
+		if bool(entry["painted_hide"]):
+			panel.visible = false
+			(entry["surface"] as CanvasItem).visible = false
+			continue
 		var rect: Rect2 = _region_rect(region, view)
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			panel.visible = false

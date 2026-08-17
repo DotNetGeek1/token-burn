@@ -41,10 +41,11 @@ func venue_key() -> String:
 
 
 func _hint_entries() -> Array:
-	return [
-		{"index": "ENTER", "headline": "FIT"},
-		{"index": "W", "headline": "WORKFLOWS"},
-	]
+	return []
+
+
+func _painted_hints() -> bool:
+	return false
 
 
 func _build_venue() -> void:

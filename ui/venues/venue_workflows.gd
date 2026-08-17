@@ -52,9 +52,7 @@ func venue_key() -> String:
 
 
 func _hint_entries() -> Array:
-	# Placing is a tap on the board rather than a key, so the only keys worth
-	# printing are the two that undo a selection and leave.
-	return [{"index": "C", "headline": "CANCEL"}]
+	return []
 
 
 func _build_venue() -> void:
