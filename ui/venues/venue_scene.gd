@@ -89,7 +89,7 @@ var _column: VBoxContainer = null
 var _column_b: VBoxContainer = null
 ## How many columns the reflow is currently using.
 var _console_columns: int = 1
-## `{"region", "panel", "order", "console_hide", "console_min", "grow"}`
+## `{"region", "panel", "surface", "order", "console_hide", "console_min", "grow"}`
 var _entries: Array[Dictionary] = []
 var _hints: VenuePanel = null
 var _back_row: ConsoleMenuRow = null
@@ -284,16 +284,24 @@ func add_panel(region: String, heading: String = "", options: Dictionary = {}) -
 	var panel := VenuePanel.new()
 	panel.name = region.capitalize()
 	panel.set_heading(heading)
+	# A measured photographed surface gets a live four-corner texture mount. A
+	# venue without those measurements keeps the ordinary flat mount. In console
+	# mode the panel is reparented out of either mount and into the normal column.
+	var measured: PackedVector2Array = AssetCatalog.venue_plane(venue_key(), region)
+	var surface: Node = VenueSurface.new() if measured.size() == 4 else Node2D.new()
+	surface.name = "%sSurface" % region.capitalize()
+	_stage.add_child(surface)
 	# What a panel needs changes while the venue is open — opening a contract
 	# sheet in the signage panel is the loud case — and the painted layout is
 	# positioned by hand, so nothing would otherwise notice that a panel had
 	# outgrown the rect it was placed in.
 	panel.minimum_size_changed.connect(_on_panel_minimum_changed)
 	panel.pressed.connect(lean_on.bind(region))
-	_stage.add_child(panel)
+	surface.add_child(panel)
 	_entries.append({
 		"region": region,
 		"panel": panel,
+		"surface": surface,
 		"order": int(options.get("console_order", _entries.size())),
 		"console_hide": bool(options.get("console_hide", false)),
 		"console_min": float(options.get("console_min", 120.0)),
@@ -718,14 +726,17 @@ func _place_panels(view: Vector2) -> void:
 		var rect: Rect2 = _region_rect(region, view)
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			panel.visible = false
+			(entry["surface"] as CanvasItem).visible = false
 			continue
 		# The key legend is desk furniture. A room on a handset is worked with a
 		# thumb, and its way out is the chrome button rather than a painted panel
 		# printing the names of keys the device does not have.
 		if panel == _hints and _room_mode:
 			panel.visible = false
+			(entry["surface"] as CanvasItem).visible = false
 			continue
 		panel.visible = true
+		(entry["surface"] as CanvasItem).visible = true
 		# Everything the player has not come up to is too small to aim at, so it
 		# takes a press as a request to come and read it instead.
 		var leaning: bool = region == _leaning_on
@@ -733,6 +744,10 @@ func _place_panels(view: Vector2) -> void:
 		# The one being read scrolls within whatever the room gives it; everything
 		# else reports its full height, so the layout can see what it needs.
 		panel.set_scrollable(leaning)
+		var plane: PackedVector2Array = AssetCatalog.venue_plane(venue_key(), region)
+		if plane.size() == 4:
+			_place_panel_on_plane(entry, panel, plane, view)
+			continue
 		rect = _camera(rect)
 		panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
 		panel.custom_minimum_size = Vector2.ZERO
@@ -753,6 +768,31 @@ func _place_panels(view: Vector2) -> void:
 			rect = _clamp_to_window(rect, view)
 		panel.position = rect.position
 		panel.size = rect.size
+
+
+## Fits a panel into the photographed quadrilateral without allowing its
+## contents to push the housing wider or longer. The four-corner mount can
+## follow a trapezoid rather than approximating it as a parallelogram; if the
+## content needs more room, its texture scales into the physical surface instead
+## of overflowing it.
+func _place_panel_on_plane(
+	entry: Dictionary,
+	panel: VenuePanel,
+	plane: PackedVector2Array,
+	view: Vector2
+) -> void:
+	var points := PackedVector2Array()
+	for corner in plane:
+		points.append(_camera(Rect2(corner * view, Vector2.ZERO)).position)
+	var across: Vector2 = ((points[1] - points[0]) + (points[2] - points[3])) * 0.5
+	var down: Vector2 = ((points[3] - points[0]) + (points[2] - points[1])) * 0.5
+	if across.length() < 1.0 or down.length() < 1.0:
+		return
+	var face := Vector2(across.length(), down.length())
+	panel.custom_minimum_size = Vector2.ZERO
+	var local_size: Vector2 = face.max(panel.get_combined_minimum_size())
+	var surface: VenueSurface = entry["surface"]
+	surface.set_surface(panel, points, local_size)
 
 
 ## Keeps a panel inside the window: a rect that would hang over an edge is pulled
@@ -819,7 +859,11 @@ func _mount_panels() -> void:
 	)
 	if not _console_mode:
 		for entry in ordered:
-			_mount_panel(entry["panel"], _stage)
+			var surface: Node = entry["surface"]
+			if surface is VenueSurface:
+				surface.mount_panel(entry["panel"])
+			else:
+				_mount_panel(entry["panel"], surface)
 		return
 	var hosts: Array[VBoxContainer] = [_column]
 	if _console_columns > 1:

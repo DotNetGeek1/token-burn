@@ -494,6 +494,47 @@ func _layout_notes(viewport_size: Vector2) -> void:
 			0.0 if down_the_side else NOTES_STRIP_SHARE
 		)
 	_place(_notes, _zoom_rect(area), viewport_size, Rect2())
+	_notes.set_plane(_prop_area_plane(board_dwelling(), "plan_board", board, area))
+
+
+## Rebases a subsection of a photographed prop onto that prop's authored
+## surface plane. This lets the menu occupy only its reserved board area while
+## sharing the same angle as the writing underneath it.
+func _prop_area_plane(
+	dwelling: String,
+	key: String,
+	rect: Rect2,
+	area: Rect2
+) -> PackedVector2Array:
+	var quad: PackedVector2Array = AssetCatalog.board_prop_plane(dwelling, key)
+	if (
+		quad.size() != 4
+		or rect.size.x <= 0.0
+		or rect.size.y <= 0.0
+		or area.size.x <= 0.0
+		or area.size.y <= 0.0
+	):
+		return PackedVector2Array()
+	var corners := PackedVector2Array([
+		area.position,
+		area.position + Vector2(area.size.x, 0.0),
+		area.end,
+		area.position + Vector2(0.0, area.size.y),
+	])
+	var mapped := PackedVector2Array()
+	for corner in corners:
+		var uv: Vector2 = (corner - rect.position) / rect.size
+		# Bilinear interpolation keeps both photographed horizontal edges. An
+		# affine map would discard the bottom-right corner and force the board's
+		# steeper top-edge angle onto notes mounted near its lower rail.
+		var point: Vector2 = (
+			quad[0] * (1.0 - uv.x) * (1.0 - uv.y)
+			+ quad[1] * uv.x * (1.0 - uv.y)
+			+ quad[2] * uv.x * uv.y
+			+ quad[3] * (1.0 - uv.x) * uv.y
+		)
+		mapped.append((point - area.position) / area.size)
+	return mapped
 
 
 ## The board is a surface, and the notes on it are the buttons. Pressing the

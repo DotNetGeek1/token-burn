@@ -37,7 +37,7 @@ func venue_key() -> String:
 
 
 func _hint_entries() -> Array:
-	return [{"index": "ENTER", "headline": "VIEW"}]
+	return []
 
 
 func _build_venue() -> void:

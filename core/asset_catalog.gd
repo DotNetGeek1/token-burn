@@ -212,6 +212,25 @@ static func venue_region(venue: String, key: String) -> Rect2:
 	return Rect2()
 
 
+## The photographed face of a venue panel, as top-left, top-right,
+## bottom-right, bottom-left viewport fractions. A rect still supplies focus and
+## fallback layout; the plane is what lets the live panel follow the furniture.
+static func venue_plane(venue: String, key: String) -> PackedVector2Array:
+	var planes: Variant = _venue_scene(venue).get("planes")
+	if not planes is Dictionary or not Dictionary(planes).has(key):
+		return PackedVector2Array()
+	var corners: Array = Array(Dictionary(planes)[key])
+	if corners.size() != 4:
+		return PackedVector2Array()
+	var quad := PackedVector2Array()
+	for corner in corners:
+		var point: Array = Array(corner)
+		if point.size() != 2:
+			return PackedVector2Array()
+		quad.append(Vector2(float(point[0]), float(point[1])))
+	return quad
+
+
 static func _venue_defaults() -> Dictionary:
 	_ensure_loaded()
 	var defaults: Variant = _data.get("venue_defaults")

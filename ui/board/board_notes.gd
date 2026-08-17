@@ -44,17 +44,23 @@ var columns: int = 1:
 var _notes: Array[Button] = []
 var _keys: Array[String] = []
 var _flagged: Dictionary = {}
+var _plane_node: Node2D = null
+var _plane: PackedVector2Array = PackedVector2Array()
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_plane_node = Node2D.new()
+	_plane_node.name = "Plane"
+	add_child(_plane_node)
 	resized.connect(_relayout)
 
 
 ## The menu, top to bottom. Each entry is `{key, headline, pressed}`.
 func set_entries(entries: Array) -> void:
 	for note in _notes:
-		remove_child(note)
+		if note.get_parent() != null:
+			note.get_parent().remove_child(note)
 		note.queue_free()
 	_notes.clear()
 	_keys.clear()
@@ -65,9 +71,16 @@ func set_entries(entries: Array) -> void:
 		var handler: Variant = entry.get("pressed")
 		if handler is Callable:
 			note.pressed.connect(handler)
-		add_child(note)
+		_plane_node.add_child(note)
 		_notes.append(note)
 		_keys.append(key)
+	_relayout()
+
+
+## Maps the paper and its clickable faces onto the same photographed surface as
+## the whiteboard writing. The plane is expressed in this control's 0..1 space.
+func set_plane(corners: PackedVector2Array) -> void:
+	_plane = corners if corners.size() == 4 else PackedVector2Array()
 	_relayout()
 
 
@@ -124,8 +137,9 @@ func _relayout() -> void:
 	var count: int = _notes.size()
 	if count == 0 or size.y <= 1.0 or size.x <= 1.0:
 		return
+	var face: Vector2 = _place_plane()
 	var rows: int = ceili(float(count) / float(columns))
-	var cell := Vector2(size.x / float(columns), size.y / float(rows))
+	var cell := Vector2(face.x / float(columns), face.y / float(rows))
 	var gap: Vector2 = cell * GAP_SHARE
 	var paper: Vector2 = (cell - gap).max(Vector2(4.0, 4.0))
 	for index in range(count):
@@ -135,10 +149,41 @@ func _relayout() -> void:
 		)
 		note.size = paper
 		note.pivot_offset = paper * 0.5
-		# Alternating, so consecutive notes lean apart rather than stacking the
-		# same lean into a block that looks deliberately skewed.
-		note.rotation = deg_to_rad(TILT_DEGREES * (1.0 if index % 2 == 0 else -1.0))
+		# A measured surface already supplies the photographed angle. Adding the
+		# hand-placed tilt on top makes the paper disagree with that perspective;
+		# keep the small alternating lean only in front-facing rooms.
+		note.rotation = (
+			0.0
+			if _plane.size() == 4
+			else deg_to_rad(TILT_DEGREES * (1.0 if index % 2 == 0 else -1.0))
+		)
 		note.add_theme_font_size_override("font_size", _note_font(note.text, paper))
+
+
+## Gives the notes a natural layout size, then shears that layout into the
+## photographed plane. Godot applies the same transform to Control hit testing,
+## so the tilted notes remain clickable at the pixels where they are drawn.
+func _place_plane() -> Vector2:
+	if _plane_node == null or _plane.size() != 4:
+		if _plane_node != null:
+			_plane_node.transform = Transform2D.IDENTITY
+		return size
+	# Fit the affine Control transform through the centre of the photographed
+	# quadrilateral. Averaging opposite edges uses both the top and bottom rail
+	# instead of silently throwing away the measured bottom-right corner.
+	var centre: Vector2 = (_plane[0] + _plane[1] + _plane[2] + _plane[3]) * size * 0.25
+	var across: Vector2 = (
+		((_plane[1] - _plane[0]) + (_plane[2] - _plane[3])) * size * 0.5
+	)
+	var down: Vector2 = (
+		((_plane[3] - _plane[0]) + (_plane[2] - _plane[1])) * size * 0.5
+	)
+	var origin: Vector2 = centre - across * 0.5 - down * 0.5
+	if across.length() < 1.0 or down.length() < 1.0:
+		_plane_node.transform = Transform2D.IDENTITY
+		return size
+	_plane_node.transform = Transform2D(across.normalized(), down.normalized(), origin)
+	return Vector2(across.length(), down.length())
 
 
 ## Sized to the note rather than the note to the type: the width the word needs
