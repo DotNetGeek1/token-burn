@@ -103,7 +103,8 @@ static func _decorate_burn_outlook(burn: Dictionary, heat_before: float, state: 
 static func _apply_queued_preview_options(sim: Node, state: RunState) -> void:
 	if sim.queued_boost:
 		state.add_rate_modifier(1.35, 1, "boost")
-		sim.heat_system().add_heat(state, 12.0)
+		var capacity: float = maxf(1.0, float(state.compute.get("heat_capacity", 100.0)))
+		sim.heat_system().add_heat(state, HeatSystem.boost_heat_for(capacity))
 	if not sim.queued_cloud or not (sim.CLOUD_ACCOUNT_UPGRADE in state.build.get("upgrades", [])):
 		return
 	var burst: float = float(state.compute.get("local_capacity", 0.0)) * sim._cloud_burst_multiplier_for(state)
@@ -252,20 +253,10 @@ static func cooling_from_effects(effects: Array) -> float:
 ## Whether cooling can keep up with a given power draw, and by how much. Used to
 ## warn the player before they buy hardware their space cannot cool.
 static func heat_outlook(sim: Node, extra_power: float = 0.0, extra_cooling: float = 0.0) -> Dictionary:
-	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.025))
-	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.35))
 	var power: float = float(sim.run_state.compute.get("power_draw", 0.0)) + extra_power
 	var cooling: float = float(sim.run_state.compute.get("cooling", 0.0)) + extra_cooling
-	var gain: float = power * gain_factor
-	var shed: float = cooling * cooling_factor
-	return {
-		"power_draw": power,
-		"cooling": cooling,
-		"heat_per_prompt": gain - shed,
-		"sustainable": shed >= gain,
-		"cooling_needed": gain / maxf(0.0001, cooling_factor),
-	}
+	var capacity: float = maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))
+	return HeatSystem.outlook(power, cooling, capacity)
 
 
 ## Warning text for a hardware purchase that cooling could not keep up with.

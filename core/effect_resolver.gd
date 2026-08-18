@@ -220,6 +220,14 @@ func _apply_effect_dict(
 		value = _as_float(
 			mod_ctx.get_value(str(effect["value_from"]), 0.0)
 		) * _as_float(value, 1.0)
+	# Event and status spikes are authored in bedroom points. Scale the delta
+	# before it is added so the new total the resolver writes stays a real
+	# share of this room's bar. Absolute `set` writes are left alone.
+	if target == "compute.heat" and operation == "add" and mod_ctx.run_state != null:
+		var heat_capacity: float = maxf(
+			1.0, float(mod_ctx.run_state.compute.get("heat_capacity", 100.0))
+		)
+		value = HeatSystem.scale_authored_heat(_as_float(value), heat_capacity)
 	var current: Variant = mod_ctx.get_value(target, 0.0) if target != "" else null
 	var result: Variant = current
 	var metadata: Dictionary = {}

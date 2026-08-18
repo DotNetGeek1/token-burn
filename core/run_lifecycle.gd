@@ -211,11 +211,9 @@ func _install_permanent_rig(sim: Node) -> void:
 			float(curve.get("power_draw", 0.0)), UpgradeSystem.cooling_from(upgrade)
 		)
 		# A permanent unlock is never allowed to turn a cold chapter start into
-		# an unavoidable fire. If one prompt of ambient heat alone exceeds the
-		# room's headroom, the machine stays in storage until a later location.
-		if float(startup.get("heat_per_prompt", 0.0)) >= float(
-			sim.run_state.compute.get("heat_capacity", 100.0)
-		):
+		# an already-cooking rig. Ambient ticks are a fraction of the bar, so
+		# skip on sustainability rather than on one prompt overflowing capacity.
+		if not bool(startup.get("sustainable", true)):
 			continue
 		if sim.upgrade_system().install_carried(
 			sim.run_state, str(upgrade_id), ContentDatabase, sim.effect_resolver

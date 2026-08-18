@@ -636,7 +636,10 @@ func _apply_burn(
 		job["token_requirement"] = requirement + scope_tokens
 		job["tokens_remaining"] = float(job.get("tokens_remaining", 0.0)) + scope_tokens
 
-	heat_system.add_heat(run_state, float(burn.get("heat", 0.0)))
+	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
+	heat_system.add_heat(
+		run_state, HeatSystem.scale_authored_heat(float(burn.get("heat", 0.0)), capacity)
+	)
 	var cost: float = float(burn.get("cost", 0.0))
 	if cost > 0.0:
 		economy_system.debit(run_state, cost, "pipeline_cost", {"job_id": job.get("id", "")})

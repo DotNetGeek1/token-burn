@@ -9,7 +9,7 @@
   "garage": {
     "rent": 1400,
     "hardware_slots": 4,
-    "cooling_capacity": 120,
+    "cooling_capacity": 97,
     "heat_capacity": 140,
     "starting_cash": 4200,
     "starting_hardware": ["upgrade.custom_desktop"]
@@ -17,7 +17,7 @@
   "office_unit": {
     "rent": 3200,
     "hardware_slots": 8,
-    "cooling_capacity": 480,
+    "cooling_capacity": 336,
     "heat_capacity": 200,
     "starting_cash": 9600,
     "starting_hardware": ["upgrade.gpu_rack"]
@@ -25,7 +25,7 @@
   "warehouse": {
     "rent": 8000,
     "hardware_slots": 16,
-    "cooling_capacity": 2000,
+    "cooling_capacity": 1248,
     "heat_capacity": 280,
     "starting_cash": 24000,
     "starting_hardware": ["upgrade.compute_cluster"]
@@ -33,7 +33,7 @@
   "datacentre_campus": {
     "rent": 150000,
     "hardware_slots": 40,
-    "cooling_capacity": 15000,
+    "cooling_capacity": 5280,
     "heat_capacity": 400,
     "starting_cash": 450000,
     "starting_hardware": ["upgrade.garage_datacentre"]
@@ -41,7 +41,7 @@
   "private_power_grid": {
     "rent": 900000,
     "hardware_slots": 80,
-    "cooling_capacity": 120000,
+    "cooling_capacity": 36000,
     "heat_capacity": 560,
     "starting_cash": 2700000,
     "starting_hardware": ["upgrade.compute_warehouse"]
@@ -49,7 +49,7 @@
   "moon_facility": {
     "rent": 6000000,
     "hardware_slots": 160,
-    "cooling_capacity": 700000,
+    "cooling_capacity": 216000,
     "heat_capacity": 800,
     "starting_cash": 18000000,
     "starting_hardware": ["upgrade.industrial_campus"]

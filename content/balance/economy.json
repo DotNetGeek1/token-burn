@@ -21,7 +21,10 @@
     "throttle_ratio": 0.8,
     "throttle_multiplier": 0.75,
     "round_end_retained": 0.5,
-    "vent_ratio": 0.45
+    "vent_ratio": 0.45,
+    "load_pressure": 0.15,
+    "reference_capacity": 100,
+    "boost_heat": 12
   },
   "build": {
     "perk_cap": 6,

@@ -168,6 +168,13 @@ func _test_the_permanent_rig_is_not_refundable() -> void:
 	assert_true(MetaProgress.spend_pick("unlock.starting_rig"), "A permanent rig rung can be kept")
 	var sim: Node = _sim()
 	sim.start_run(9008)
+	# The bedroom cannot cool a desktop, so the rung stays boxed until a room
+	# that can take it. The garage is that room.
+	sim.apply_run_location(sim.run_state, "garage", false)
+	sim._install_permanent_rig()
+	sim.compute_system().recalculate(
+		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
+	)
 	assert_eq(
 		UpgradeSystem.installed_count(sim.run_state, "custom_desktop"),
 		1,

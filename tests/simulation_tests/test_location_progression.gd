@@ -307,19 +307,26 @@ func _test_the_permanent_rig_arrives_on_every_fresh_run() -> void:
 	var sim: Node = _sim()
 	sim.start_run(7112)
 	var hardware: Array = Array(sim.run_state.build.get("hardware", []))
-	assert_true("custom_desktop" in hardware, "The desktop is racked from round one")
+	assert_false(
+		"custom_desktop" in hardware,
+		"The bedroom cannot cool the permanent desktop, so it stays in storage"
+	)
 	assert_false(
 		"gpu_rack" in hardware,
-		"The bedroom's floor is full, so the rack waits for a bigger room"
+		"And the rack waits for a room that can cool it"
 	)
 
-	# Winning the chapter and moving up racks the rung that did not fit.
-	sim.run_state.economy["cash"] = 5000000.0
-	sim.run_state.statistics["lifetime_tokens"] = 1e18
-	sim.run_state.ascension["quality_sum"] = 100.0
-	sim.run_state.ascension["quality_count"] = 1
-	sim._finish_prompt({"ok": true, "messages": []})
+	# The garage can take the desktop. The rack still cooks there.
+	_force_chapter_win(sim)
 	assert_true(sim.advance_to_next_chapter(), "The win moves the company into the garage")
+	hardware = Array(sim.run_state.build.get("hardware", []))
+	assert_true("custom_desktop" in hardware, "The garage racks the earned desktop")
+	assert_false("gpu_rack" in hardware, "The rack still cooks in the garage")
+
+	# The warehouse is the first room that can hold a rack without a separate
+	# cooler. Moving there racks the rung the garage had to leave boxed.
+	sim.apply_run_location(sim.run_state, "warehouse", false)
+	sim._install_permanent_rig()
 	assert_true(
 		"gpu_rack" in Array(sim.run_state.build.get("hardware", [])),
 		"Where the earned GPU rack is finally racked"
@@ -356,3 +363,13 @@ func _test_each_location_stakes_the_run_for_its_own_rent() -> void:
 	sim.free()
 
 	_restore(restore)
+
+
+func _force_chapter_win(sim: Node) -> void:
+	if sim.phase == sim.Phase.ANGEL_ROUND:
+		sim.decline_offers()
+	sim.run_state.economy["cash"] = 5000000.0
+	sim.run_state.statistics["lifetime_tokens"] = 1e18
+	sim.run_state.ascension["quality_sum"] = 100.0
+	sim.run_state.ascension["quality_count"] = 1
+	sim._finish_prompt({"ok": true, "messages": []})

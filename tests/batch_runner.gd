@@ -262,9 +262,7 @@ func _install_profile_rig(sim: Node, profile_id: String) -> void:
 		var startup: Dictionary = sim.heat_outlook(
 			float(curve.get("power_draw", 0.0)), UpgradeSystem.cooling_from(upgrade)
 		)
-		if float(startup.get("heat_per_prompt", 0.0)) >= float(
-			sim.run_state.compute.get("heat_capacity", 100.0)
-		):
+		if not bool(startup.get("sustainable", true)):
 			continue
 		if sim._upgrade_system.install_carried(
 			sim.run_state, upgrade.id, ContentDatabase, sim.effect_resolver

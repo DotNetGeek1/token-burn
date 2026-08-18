@@ -25,8 +25,8 @@ func run() -> void:
 ## combination of purchasable space and cooling that holds heat steady.
 func _test_every_rig_can_be_cooled() -> void:
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.025))
-	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.35))
+	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.06))
+	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.25))
 	var dwellings: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
 	# One run, one location: the best environment on offer, not every one of
 	# them stacked on top of each other.
@@ -76,7 +76,7 @@ func _test_rack_needs_industrial_space() -> void:
 	sim.apply_run_location(sim.run_state, "warehouse")
 	var warehouse_outlook: Dictionary = sim.heat_outlook()
 	assert_true(bool(warehouse_outlook.get("sustainable", false)), "A rack is sustainable in the warehouse")
-	assert_true(float(warehouse_outlook.get("heat_per_prompt", 1.0)) <= 0.0, "Warehouse cooling out-paces the rack")
+	assert_true(float(warehouse_outlook.get("heat_per_prompt", 1.0)) <= 0.0, "Warehouse cooling keeps the rack sustainable")
 	sim.free()
 
 
@@ -181,8 +181,13 @@ func _test_queued_surges_are_included_in_the_first_burn_forecast() -> void:
 		float(surged.get("tokens", 0.0)) > float(baseline.get("tokens", 0.0)),
 		"Queued BOOST and CLOUD increase the pre-session token forecast"
 	)
-	assert_true(
-		float(surged.get("heat_after", 0.0)) >= float(baseline.get("heat_after", 0.0)) + 11.9,
+	var boost_heat: float = HeatSystem.boost_heat_for(
+		maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))
+	)
+	assert_almost_eq(
+		float(surged.get("heat_after", 0.0)) - float(baseline.get("heat_after", 0.0)),
+		boost_heat,
+		0.5,
 		"Queued BOOST heat is visible before the first click"
 	)
 	sim.free()
@@ -195,6 +200,7 @@ func _test_first_burn_forecast_marks_a_projected_fire_without_blocking() -> void
 	var offers: Array = sim.run_state.business.get("job_offers", [])
 	sim.accept_job(str(offers[0].get("id", "")))
 	sim.run_state.compute["heat_capacity"] = 1.0
+	sim.run_state.compute["heat"] = 0.95
 	sim.set_queued_boost(true)
 	var preview: Dictionary = sim.preview_next_burn()
 	assert_true(bool(preview.get("crosses_fire", false)), "The queued forecast flags a cold-start fire")

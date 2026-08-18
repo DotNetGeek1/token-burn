@@ -565,8 +565,10 @@ func _apply_boost(sim: Node) -> void:
 	if boost_engaged(sim):
 		return
 	sim.run_state.add_rate_modifier(1.35, 1, "boost")
-	sim.heat_system().add_heat(sim.run_state, 12.0)
-	sim.round_log.append("BOOST engaged: +35% token rate, +12 heat.")
+	var capacity: float = maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))
+	var boost_heat: float = HeatSystem.boost_heat_for(capacity)
+	sim.heat_system().add_heat(sim.run_state, boost_heat)
+	sim.round_log.append("BOOST engaged: +35%% token rate, +%d heat." % int(round(boost_heat)))
 
 
 ## Rents capacity for one prompt. Cash is deducted immediately so the player
