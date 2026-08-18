@@ -488,7 +488,8 @@ func _on_ascend_pressed() -> void:
 func _on_venue_layout() -> void:
 	var scale: float = console_scale()
 	if _board != null:
-		_board.set_console(console_mode())
+		# Job cards carry a title, a fee, and a spec — four across squashes them.
+		_board.set_console(console_mode(), 3)
 		_board.set_metrics(scale, content_width("board"))
 	_layout_counter_rows()
 	var font_tiny: int = ConsoleMetrics.font_tiny(scale)

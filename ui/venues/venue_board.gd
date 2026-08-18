@@ -141,8 +141,8 @@ func set_metrics(scale: float, available_width: float = 0.0) -> void:
 ## reports its full height and the column grows instead. And it drops to one tile
 ## per row: two fit across a handset arithmetically, but only by wrapping every
 ## status onto a second line, and one column is the whole point of the reflow.
-func set_console(console: bool) -> void:
-	set_inline(console, 1 if console else MAX_COLUMNS)
+func set_console(console: bool, wall_columns: int = MAX_COLUMNS) -> void:
+	set_inline(console, 1 if console else wall_columns)
 
 
 ## Whether the board carries its own scrolling, and how many tiles it will run
