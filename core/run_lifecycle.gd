@@ -753,6 +753,8 @@ func expire_status_effects(sim: Node) -> void:
 		var remaining: int = int(status.get("rounds", 0)) - 1
 		if remaining <= 0:
 			expired.append(str(status.get("name", status.get("id", "A status effect"))))
+			if str(status.get("id", "")).begins_with("status.fault."):
+				EventBus.emit_event(EventBus.EVENT_FAULT_CLEARED, {"id": str(status.get("id", ""))})
 			continue
 		var aged: Dictionary = status.duplicate(true)
 		aged["rounds"] = remaining

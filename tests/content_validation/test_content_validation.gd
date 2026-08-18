@@ -111,8 +111,8 @@ const COOLING_BUDGET_RATIO := 2.0
 ## answer — the rig cooks, and COOL is net-positive with no way to fix it.
 func _validate_every_machine_can_be_cooled() -> void:
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.025))
-	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.35))
+	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.06))
+	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.25))
 	var curves: Dictionary = ContentDatabase.balance.get("hardware_curves", {})
 	var starting_draw: float = float(Dictionary(curves.get("used_laptop", {})).get("power_draw", 0.0))
 

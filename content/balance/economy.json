@@ -21,7 +21,15 @@
     "throttle_ratio": 0.8,
     "throttle_multiplier": 0.75,
     "round_end_retained": 0.5,
-    "vent_ratio": 0.45
+    "vent_ratio": 0.45,
+    "ambient_rate": 0.10,
+    "era_heat_bias": 0.09,
+    "pipeline_heat_ref_capacity": 100,
+    "overclock_band": [0.70, 0.85],
+    "fault_band": [0.85, 1.00],
+    "fire_risk_ratio": 1.4,
+    "catastrophe_ratio": 1.5,
+    "cascade_heat_scale": 0.40
   },
   "build": {
     "perk_cap": 6,

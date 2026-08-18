@@ -41,6 +41,9 @@ extends Resource
 ## — the tooltip could promise "works after X" while the effect checked for Y,
 ## and nothing would catch it.
 @export var combos: Array[Dictionary] = []
+## Optional effects on `board.batch_finalizing`, so a module can change the
+## finished batch (Dead Man's Switch) without pretending those are slot effects.
+@export var finalizing_effects: Array[Dictionary] = []
 
 
 func to_dict() -> Dictionary:
@@ -63,6 +66,7 @@ func to_dict() -> Dictionary:
 		"draft_weight": draft_weight,
 		"difficulty": Array(difficulty),
 		"combos": combos,
+		"finalizing_effects": finalizing_effects,
 	}
 
 
@@ -141,6 +145,24 @@ func _combo_subscriptions(event_name: String) -> Array:
 				"operator": "in",
 				"right": partners.duplicate(),
 			}]))
+	return subscriptions
+
+
+func to_finalizing_subscriptions(event_name: String) -> Array:
+	if finalizing_effects.is_empty():
+		return []
+	var unconditional: Array = []
+	var subscriptions: Array = []
+	for effect in finalizing_effects:
+		if not effect is Dictionary:
+			continue
+		var conditions: Array = Array(effect.get("conditions", []))
+		if conditions.is_empty():
+			unconditional.append(effect.duplicate(true))
+			continue
+		subscriptions.append(_subscription(event_name, [effect.duplicate(true)], conditions))
+	if not unconditional.is_empty():
+		subscriptions.push_front(_subscription(event_name, unconditional, []))
 	return subscriptions
 
 

@@ -38,6 +38,7 @@ static func preview_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 	var burn: Dictionary = result.get("burn", {"ok": false, "reason": "The pipeline is empty."})
 	if burn.get("ok", false):
 		burn = burn.duplicate(true)
+		burn["trace"] = preview_resolver.get_trace()
 		_decorate_burn_outlook(burn, heat_before, clone)
 	return burn
 
@@ -79,6 +80,7 @@ static func preview_next_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 	var burn: Dictionary = result.get("burn", {"ok": false, "reason": "The pipeline is empty."})
 	if burn.get("ok", false):
 		burn = burn.duplicate(true)
+		burn["trace"] = preview_resolver.get_trace()
 		_decorate_burn_outlook(burn, heat_before, clone)
 	return burn
 
@@ -252,19 +254,18 @@ static func cooling_from_effects(effects: Array) -> float:
 ## Whether cooling can keep up with a given power draw, and by how much. Used to
 ## warn the player before they buy hardware their space cannot cool.
 static func heat_outlook(sim: Node, extra_power: float = 0.0, extra_cooling: float = 0.0) -> Dictionary:
-	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.025))
-	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.35))
 	var power: float = float(sim.run_state.compute.get("power_draw", 0.0)) + extra_power
 	var cooling: float = float(sim.run_state.compute.get("cooling", 0.0)) + extra_cooling
-	var gain: float = power * gain_factor
-	var shed: float = cooling * cooling_factor
+	var capacity: float = maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))
+	var tier: int = HeatSystem.work_tier(sim.run_state)
+	var delta: float = HeatSystem.ambient_delta_for(power, cooling, capacity, tier)
+	var needed: float = HeatSystem.cooling_needed_for(power, tier)
 	return {
 		"power_draw": power,
 		"cooling": cooling,
-		"heat_per_prompt": gain - shed,
-		"sustainable": shed >= gain,
-		"cooling_needed": gain / maxf(0.0001, cooling_factor),
+		"heat_per_prompt": delta,
+		"sustainable": delta <= 0.0,
+		"cooling_needed": needed,
 	}
 
 

@@ -95,9 +95,61 @@
   "stretch_reward_bonus": 0.35,
   "mismatch_reward_bonus": 0.2,
   "deadline_slack_by_tier": [3, 2, 2, 2, 2, 2, 2],
-  "revision_risk_cap_by_tier": [0.04, 0.08, 0.12, 0.16, 0.2, 0.22, 0.25],
-  "bug_chance_by_tier": [0.04, 0.07, 0.1, 0.12, 0.12, 0.12, 0.12],
-  "scope_creep_pct_by_tier": [0.02, 0.03, 0.04, 0.05, 0.05, 0.05, 0.05],
+  "revision_risk_cap_by_tier": [0.04, 0.08, 0.12, 0.16, 0.20, 0.26, 0.32],
+  "bug_chance_by_tier": [0.04, 0.07, 0.10, 0.13, 0.16, 0.20, 0.25],
+  "scope_creep_pct_by_tier": [0.02, 0.03, 0.04, 0.06, 0.08, 0.11, 0.15],
+  "depth_growth": [3.0, 5.0, 10.0],
+  "depth_affixes": [
+    {
+      "id": "depth.target_x5",
+      "name": "Target ×5",
+      "description": "This depth's workload is five times larger.",
+      "score_mult": 3.0,
+      "requirement_mult": 5.0
+    },
+    {
+      "id": "depth.thin_cooling",
+      "name": "Thin Cooling",
+      "description": "Cooling efficiency −35% while this depth is live.",
+      "score_mult": 2.0,
+      "requirement_mult": 1.0,
+      "status": {
+        "id": "status.depth.thin_cooling",
+        "name": "Thin Cooling",
+        "subscriptions": [{
+          "event": "compute.recalculate",
+          "priority": 5,
+          "conditions": [],
+          "effects": [{"operation": "multiply", "target": "compute.cooling", "value": 0.65}]
+        }]
+      }
+    },
+    {
+      "id": "depth.hidden_bug",
+      "name": "Recursive Bugs",
+      "description": "Every cascade or repeat writes a hidden bug.",
+      "score_mult": 4.0,
+      "requirement_mult": 1.0,
+      "status": {
+        "id": "status.depth.hidden_bug",
+        "name": "Recursive Bugs",
+        "subscriptions": [
+          {
+            "event": "board.cascade_triggered",
+            "priority": 20,
+            "conditions": [],
+            "effects": [{"operation": "add", "target": "batch.hidden_bugs", "value": 1}]
+          },
+          {
+            "event": "board.stage_resolved",
+            "priority": 20,
+            "conditions": [{"left": "stage.repeat_previous", "operator": ">", "right": 0}],
+            "effects": [{"operation": "add", "target": "stage.hidden_bugs", "value": 1}]
+          }
+        ]
+      }
+    }
+  ],
   "tier_unlock_by_reputation": [0, 12, 22, 32, 42, 52, 62],
   "sales_level_rep_reduction": 2
 }
