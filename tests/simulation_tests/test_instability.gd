@@ -51,12 +51,13 @@ func _test_cluster_can_fault_without_ending_the_run() -> void:
 	var found := false
 	var heat := HeatSystem.new()
 	var progression := ProgressionSystem.new()
-	for seed_value in range(40):
+	for seed_value in range(64):
 		var state := _rig(["compute_cluster"], 90.0)
 		state.compute["power_draw"] = 0.0
 		state.compute["cooling"] = 0.0
-		for _i in range(8):
-			state.compute["heat"] = 90.0
+		for _i in range(16):
+			# Ambient can vent a little; hold the bar in the fault band after that.
+			state.compute["heat"] = 120.0
 			heat.process_prompt(
 				state, [], EffectResolver.new(), DeterministicRng.new(seed_value * 17 + _i),
 				ResolveMode.COMMIT
