@@ -25,6 +25,11 @@ const EVENT_HARDWARE_SOLD := "hardware.sold"
 const EVENT_PERK_ACQUIRED := "perk.acquired"
 const EVENT_MODULE_ACQUIRED := "module.acquired"
 const EVENT_HEAT_THRESHOLD_CROSSED := "heat.threshold_crossed"
+const EVENT_CASCADE_TRIGGERED := "board.cascade_triggered"
+const EVENT_FAULT_STARTED := "compute.fault_started"
+const EVENT_FAULT_CLEARED := "compute.fault_cleared"
+const EVENT_OVERKILL := "job.overkill"
+const EVENT_DEPTH_ADVANCED := "depth.advanced"
 const EVENT_ACHIEVEMENT_UNLOCKED := "achievement.unlocked"
 const EVENT_RUN_ENDED := "run.ended"
 
@@ -53,6 +58,11 @@ signal hardware_sold(hardware_key: String)
 signal perk_acquired(perk_id: String)
 signal module_acquired(module_id: String)
 signal heat_threshold_crossed(level: float)
+signal cascade_triggered(module_id: String)
+signal fault_started(id: String)
+signal fault_cleared(id: String)
+signal overkill(ratio: float)
+signal depth_advanced(level: int)
 signal achievement_unlocked(achievement_id: String)
 signal run_ended(victory: bool)
 
@@ -95,6 +105,16 @@ func emit_event(event_name: String, payload: Dictionary = {}) -> void:
 			module_acquired.emit(payload.get("module_id", ""))
 		EVENT_HEAT_THRESHOLD_CROSSED:
 			heat_threshold_crossed.emit(payload.get("level", 0.0))
+		EVENT_CASCADE_TRIGGERED:
+			cascade_triggered.emit(payload.get("module_id", ""))
+		EVENT_FAULT_STARTED:
+			fault_started.emit(payload.get("id", ""))
+		EVENT_FAULT_CLEARED:
+			fault_cleared.emit(payload.get("id", ""))
+		EVENT_OVERKILL:
+			overkill.emit(payload.get("ratio", 0.0))
+		EVENT_DEPTH_ADVANCED:
+			depth_advanced.emit(payload.get("level", 0))
 		EVENT_ACHIEVEMENT_UNLOCKED:
 			achievement_unlocked.emit(payload.get("achievement_id", ""))
 		EVENT_RUN_ENDED:

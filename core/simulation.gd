@@ -66,6 +66,7 @@ var _event_system := EventSystem.new()
 var _perk_system := PerkSystem.new()
 var _upgrade_system := UpgradeSystem.new()
 var _board_system := BoardSystem.new()
+var _depth_system := DepthSystem.new()
 var _ascension_system := AscensionSystem.new()
 var _achievement_system := AchievementSystem.new()
 var _work := WorkSession.new()
@@ -160,6 +161,32 @@ func job_system() -> JobSystem:
 
 func upgrade_system() -> UpgradeSystem:
 	return _upgrade_system
+
+
+func depth_system() -> DepthSystem:
+	return _depth_system
+
+
+func offer_depth_picks() -> Array:
+	return _depth_system.offer_picks(run_state, rng.derive("depth.picks"), ContentDatabase)
+
+
+func choose_depth_affix(affix_id: String) -> Dictionary:
+	var ok: bool = _depth_system.choose_affix(run_state, affix_id, ContentDatabase)
+	if ok:
+		_invalidate_subscriptions()
+		_compute_system.recalculate(
+			run_state, effect_resolver, _collect_subscriptions(), rng
+		)
+	return {"ok": ok, "depth": run_state.depth.duplicate(true)}
+
+
+func can_begin_depth() -> bool:
+	return _depth_system.can_begin(run_state)
+
+
+func last_effect_trace() -> Array:
+	return effect_resolver.get_trace()
 
 
 func perk_system() -> PerkSystem:

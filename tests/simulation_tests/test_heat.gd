@@ -25,8 +25,8 @@ func run() -> void:
 ## combination of purchasable space and cooling that holds heat steady.
 func _test_every_rig_can_be_cooled() -> void:
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.025))
-	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.35))
+	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.06))
+	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.25))
 	var dwellings: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
 	# One run, one location: the best environment on offer, not every one of
 	# them stacked on top of each other.

@@ -12,6 +12,7 @@ const VALID_EVENTS := [
 	"board.stage_resolved",
 	"board.batch_finalizing",
 	"board.batch_finished",
+	"board.cascade_triggered",
 ]
 
 ## Contributions the Burn Board knows how to fold. A module writing anywhere
@@ -34,6 +35,8 @@ const VALID_STAGE_TARGETS := [
 	"stage.next_multiplier",
 	"stage.next_cost_mult",
 	"stage.fix_hidden_bugs",
+	"stage.cascade_chance",
+	"stage.cascade_strength",
 ]
 
 
@@ -111,8 +114,8 @@ const COOLING_BUDGET_RATIO := 2.0
 ## answer — the rig cooks, and COOL is net-positive with no way to fix it.
 func _validate_every_machine_can_be_cooled() -> void:
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.025))
-	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.35))
+	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.06))
+	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.25))
 	var curves: Dictionary = ContentDatabase.balance.get("hardware_curves", {})
 	var starting_draw: float = float(Dictionary(curves.get("used_laptop", {})).get("power_draw", 0.0))
 
@@ -454,7 +457,10 @@ func run() -> void:
 	var evaluator := ExpressionEvaluator.new()
 	for module in ContentDatabase.modules:
 		assert_true(module.id.begins_with("op."), "Module id is namespaced: %s" % module.id)
-		assert_true(module.slot_effects.size() > 0, "Module %s does something" % module.id)
+		assert_true(
+			module.slot_effects.size() > 0 or module.finalizing_effects.size() > 0,
+			"Module %s does something" % module.id
+		)
 		for effect in module.slot_effects:
 			var target: String = str(effect.get("target", ""))
 			assert_true(target in VALID_STAGE_TARGETS, "Module %s targets a real stage field, not '%s'" % [module.id, target])

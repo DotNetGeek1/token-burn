@@ -28,6 +28,7 @@ The target experience is closer to **Balatro-style build construction** than a r
 - [Game Design Overview](GAME_DESIGN.md)
 - [Technical Architecture](TECHNICAL_ARCHITECTURE.md)
 - [UX and Production Plan](UX_AND_PRODUCTION.md)
+- [Late-game escalation plan](plans/late-game-escalation.md)
 
 ## Core design principle
 

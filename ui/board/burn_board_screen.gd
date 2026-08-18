@@ -578,26 +578,85 @@ func _animate_batch(preview: Dictionary) -> void:
 	var job: Dictionary = Simulation.focused_job()
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 	var intensity: float = float(preview.get("progress_tokens", 0.0)) / requirement
+	var beats: Array = _spectacle_beats(preview, stages)
 	_laptop.set_status(
 		"burning %s BT" % NumberFormat.format(float(preview.get("tokens", 0.0))),
 		"%d stage(s) down the pipeline." % stages.size()
 	)
-	for stage in stages:
+	for beat in beats:
 		if _kill_requested:
 			return
-		# The batch is reported a stage at a time: a line on the console, and a
-		# thump on the machine behind it.
+		var kind: String = str(beat.get("kind", "stage"))
+		var stage: Dictionary = _stage_for_beat(stages, beat)
+		var line: String = str(beat.get("label", "stage"))
+		if kind == "stage" and not stage.is_empty():
+			line = "%s: %s" % [str(stage.get("name", "stage")).to_lower(), _stage_summary(stage)]
 		_laptop.set_status(
 			"burning %s BT" % NumberFormat.format(float(preview.get("tokens", 0.0))),
-			"%s: %s" % [str(stage.get("name", "stage")).to_lower(), _stage_summary(stage)]
+			line
 		)
-		rig.shake(4.0 + intensity * 6.0)
-		_pulse_stage_heat(stage)
-		await get_tree().create_timer(STAGE_SECONDS).timeout
-		# Counted after the wait, so a kill during a stage discards that stage.
+		var slam: float = _beat_slam(kind)
+		rig.shake((4.0 + intensity * 6.0) * slam)
+		if kind == "cascade" or kind == "repeat":
+			UiSound.play("cascade")
+		elif kind == "overkill":
+			UiSound.play("complete")
+		if not stage.is_empty():
+			_pulse_stage_heat(stage)
+		await get_tree().create_timer(_beat_seconds(beat)).timeout
+		# Counted after the wait, so a kill during a beat discards that beat.
 		if _kill_requested:
 			return
-		_stages_completed += 1
+		if kind == "stage" or kind == "fault":
+			_stages_completed += 1
+
+
+func _spectacle_beats(preview: Dictionary, stages: Array) -> Array:
+	if FeatureFlags.is_enabled("burn_spectacle_enabled"):
+		var built: Array = BurnSpectacle.build(
+			preview, Array(preview.get("trace", [])), Simulation.board_slots()
+		)
+		if not built.is_empty():
+			return built
+	var beats: Array = []
+	for stage in stages:
+		if not stage is Dictionary:
+			continue
+		beats.append({
+			"kind": "stage",
+			"label": str(stage.get("name", "stage")),
+			"duration_ms": int(STAGE_SECONDS * 1000.0),
+			"slot_index": int(stage.get("slot_index", 0)),
+			"module_id": str(stage.get("module_id", "")),
+		})
+	return beats
+
+
+func _stage_for_beat(stages: Array, beat: Dictionary) -> Dictionary:
+	var module_id: String = str(beat.get("module_id", ""))
+	var slot_index: int = int(beat.get("slot_index", -1))
+	for stage in stages:
+		if not stage is Dictionary:
+			continue
+		if slot_index >= 0 and int(stage.get("slot_index", -2)) == slot_index:
+			return stage
+		if module_id != "" and str(stage.get("module_id", "")) == module_id:
+			return stage
+	return {}
+
+
+func _beat_slam(kind: String) -> float:
+	match kind:
+		"combo", "perk", "status", "mult":
+			return 1.6
+		"repeat", "cascade", "fault", "overkill":
+			return 2.2
+		_:
+			return 1.0
+
+
+func _beat_seconds(beat: Dictionary) -> float:
+	return maxf(0.05, float(beat.get("duration_ms", int(STAGE_SECONDS * 1000.0))) / 1000.0)
 
 
 ## Heat moves during a burn, so the rig smokes as each stage lands instead of
