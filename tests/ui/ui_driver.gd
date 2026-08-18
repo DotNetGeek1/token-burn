@@ -113,6 +113,50 @@ func press(control) -> void:
 	await _harness.settle()
 
 
+## Performs the pointer stream Godot turns into a one-finger swipe when
+## `emulate_touch_from_mouse` is enabled. This exercises the same path Web uses:
+## the button highlights from the mouse press while the emulated touch drag must
+## reach its ancestor ScrollContainer.
+func swipe(control, delta: Vector2, steps: int = 6) -> void:
+	if control == null or not control is Control:
+		_case.assert_true(false, "swipe() was given no control")
+		return
+	var target: Control = _press_target(control)
+	if not _assert_usable(target):
+		return
+	var viewport: Viewport = target.get_viewport()
+	if viewport == null:
+		_case.assert_true(false, "Control has no viewport: %s" % _describe(target))
+		return
+	var origin: Vector2 = _centre(target)
+	var mouse := InputEventMouseButton.new()
+	mouse.button_index = MOUSE_BUTTON_LEFT
+	mouse.pressed = true
+	mouse.position = origin
+	mouse.global_position = origin
+	viewport.push_input(mouse)
+	await _harness.get_tree().process_frame
+	var previous: Vector2 = origin
+	for step in range(1, maxi(2, steps) + 1):
+		var position: Vector2 = origin + delta * (float(step) / float(maxi(2, steps)))
+		var motion := InputEventMouseMotion.new()
+		motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+		motion.position = position
+		motion.global_position = position
+		motion.relative = position - previous
+		motion.velocity = motion.relative * 60.0
+		viewport.push_input(motion)
+		previous = position
+		await _harness.get_tree().process_frame
+	mouse = InputEventMouseButton.new()
+	mouse.button_index = MOUSE_BUTTON_LEFT
+	mouse.pressed = false
+	mouse.position = previous
+	mouse.global_position = previous
+	viewport.push_input(mouse)
+	await _harness.settle()
+
+
 func press_command(text: String) -> void:
 	var found: Control = command(text)
 	_case.assert_true(found != null, "No command matching '%s'" % text)

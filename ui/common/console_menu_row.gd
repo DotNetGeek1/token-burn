@@ -58,6 +58,9 @@ var _selected: bool = false
 func _ready() -> void:
 	text = ""
 	icon = null
+	# Rows are commonly mounted inside a ScrollContainer. PASS lets the row keep
+	# tap/highlight behaviour while the ancestor receives a finger drag.
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	focus_mode = Control.FOCUS_ALL
 	custom_minimum_size = Vector2(0, ROW_HEIGHT)
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -137,7 +140,7 @@ func set_metrics(font_size: int, height: int, pad_h: int) -> void:
 func _apply_text() -> void:
 	if _index == null:
 		return
-	_index.text = "[%s]" % index_label
+	_index.text = "" if index_label.is_empty() else "[%s]" % index_label
 	_headline.text = headline
 	_value.text = value_text
 	_reserve_index_column()

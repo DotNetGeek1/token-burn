@@ -40,6 +40,7 @@ class Row:
 		_lit = lit
 		_cells = cells
 		text = ""
+		mouse_filter = Control.MOUSE_FILTER_PASS
 		focus_mode = Control.FOCUS_ALL
 		custom_minimum_size = Vector2(0, ConsoleMetrics.row_height(scale))
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND

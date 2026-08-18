@@ -17,6 +17,7 @@ extends PanelContainer
 ## its own contents back up and a grid of them collapses onto one line.
 
 signal pressed
+signal action_pressed(meta: Variant)
 
 const PAD := 8
 const GAP := 4
@@ -37,6 +38,7 @@ var _spec: Label = null
 var _foot: HBoxContainer = null
 var _price: Label = null
 var _status: Label = null
+var _action: Button = null
 var _surface: Button = null
 var _selected: bool = false
 var _compact: bool = false
@@ -49,6 +51,10 @@ func _init() -> void:
 func _build() -> void:
 	if _body != null:
 		return
+	# Both layers pass pointer events so a drag can climb from the button surface
+	# to the VenueBoard ScrollContainer instead of stopping on the highlighted
+	# tile.
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	_margin = MarginContainer.new()
 	_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side in ["left", "right", "top", "bottom"]:
@@ -118,6 +124,7 @@ func _build() -> void:
 	# look of its own; the frame around the card is this control's stylebox.
 	_surface = Button.new()
 	_surface.flat = true
+	_surface.mouse_filter = Control.MOUSE_FILTER_PASS
 	_surface.focus_mode = Control.FOCUS_ALL
 	_surface.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
@@ -126,6 +133,21 @@ func _build() -> void:
 	for signal_name in ["mouse_entered", "mouse_exited", "focus_entered", "focus_exited"]:
 		_surface.connect(signal_name, _apply_palette)
 	add_child(_surface)
+	# Keep the full-card press surface behind the content. Labels ignore input,
+	# while an optional per-card action remains a genuine button above it.
+	move_child(_surface, 0)
+
+	_action = Button.new()
+	_action.visible = false
+	_action.clip_text = true
+	_action.focus_mode = Control.FOCUS_ALL
+	_action.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_action.add_theme_font_override("font", UiThemeBuilder.mono_font())
+	_action.pressed.connect(func() -> void:
+		UiSound.play("tap")
+		action_pressed.emit(meta)
+	)
+	_body.add_child(_action)
 
 	_apply_palette()
 
@@ -161,6 +183,25 @@ func set_entry(entry: Dictionary) -> void:
 	_icon.texture = icon if icon is Texture2D else null
 	_icon.visible = _icon.texture != null
 	_surface.tooltip_text = str(entry.get("tooltip", ""))
+	var action_text: String = str(entry.get("action_text", ""))
+	_action.text = action_text.to_upper()
+	_action.visible = action_text != ""
+	_action.disabled = not bool(entry.get("action_enabled", true))
+	_action.tooltip_text = str(entry.get("action_tooltip", ""))
+	_style_action(bool(entry.get("action_warning", false)))
+
+
+func _style_action(warning: bool) -> void:
+	if _action == null:
+		return
+	var lit: Color = ConsoleStyle.WARNING if warning else ConsoleStyle.PHOSPHOR
+	_action.add_theme_color_override("font_color", lit)
+	_action.add_theme_color_override("font_hover_color", ConsoleStyle.INK)
+	_action.add_theme_color_override("font_pressed_color", ConsoleStyle.INK)
+	_action.add_theme_color_override("font_disabled_color", ConsoleStyle.PHOSPHOR_DIM)
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var box_state: String = "normal" if _action.disabled else state
+		_action.add_theme_stylebox_override(state, ConsoleStyle.row_box(box_state, lit))
 
 
 ## Whether the card puts its figure on a line of its own.
@@ -235,5 +276,7 @@ func set_metrics(scale: float) -> void:
 	_spec.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
 	_price.add_theme_font_size_override("font_size", ConsoleMetrics.font_small(scale))
 	_status.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
+	_action.add_theme_font_size_override("font_size", ConsoleMetrics.font_small(scale))
+	_action.custom_minimum_size.y = ConsoleMetrics.action_height(scale)
 	var glyph: float = float(ConsoleMetrics.px(26, scale))
 	_icon.custom_minimum_size = Vector2(glyph, glyph)

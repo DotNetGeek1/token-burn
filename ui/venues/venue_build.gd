@@ -21,19 +21,14 @@ var _index_lines: VBoxContainer = null
 var _counters: VBoxContainer = null
 var _workflow_rule: Control = null
 var _workflow_row: ConsoleMenuRow = null
+var _workflow_chrome: Button = null
+var _painted_back_rule: Control = null
+var _painted_back_row: ConsoleMenuRow = null
 var _board_panel: VenuePanel = null
 var _board: VenueBoard = null
-var _signage_panel: VenuePanel = null
-var _sign: VBoxContainer = null
-var _detail: ConsoleDetail = null
 var _notice: Label = null
 var _counter_rows: Dictionary = {}
 var _rack: String = ACTIVE
-var _selected: String = ""
-var _selected_active: bool = true
-## The fitted perk the selected bench perk would replace, set when the sheet is
-## drawn so the action and its handler always mean the same swap.
-var _swap_target: String = ""
 
 
 func venue_key() -> String:
@@ -48,11 +43,19 @@ func _painted_hints() -> bool:
 	return false
 
 
+## The index is a tall strip only 7.5% of the room width, so its close-up reaches
+## the camera's maximum zoom. Scale its contents back by that zoom: the panel stays
+## in the photographed Build room, while its lower WORKFLOWS door remains on the
+## visible part of the panel instead of being pushed below the phone.
+func _lean_scale() -> float:
+	return clampf(_scale / maxf(_lean_zoom, 1.0), 1.0, _scale)
+
+
 func _build_venue() -> void:
 	_build_index()
 	_build_board()
-	_build_signage()
 	_build_notice()
+	_build_workflow_chrome()
 	EventBus.perk_acquired.connect(func(_id: String) -> void: refresh())
 	EventBus.run_started.connect(refresh)
 
@@ -88,39 +91,23 @@ func _build_index() -> void:
 	_workflow_row.pressed.connect(_on_workflows_pressed)
 	content.add_child(_workflow_row)
 
+	_painted_back_rule = ConsoleStyle.rule(0.22)
+	content.add_child(_painted_back_rule)
+
+	_painted_back_row = ConsoleMenuRow.new()
+	_painted_back_row.index_label = "<"
+	_painted_back_row.headline = "BACK TO DESK"
+	_painted_back_row.pressed.connect(_on_back)
+	content.add_child(_painted_back_row)
+
 
 func _build_board() -> void:
 	_board_panel = add_panel("board", "Fitted", {
 		"console_order": 20, "console_min": 220.0, "grow": true,
 	})
 	_board = VenueBoard.new()
-	_board.tile_selected.connect(_on_tile_selected)
+	_board.tile_action.connect(_on_perk_action)
 	_board_panel.content().add_child(_board)
-
-
-func _build_signage() -> void:
-	_signage_panel = add_panel("signage", "", {
-		"console_order": 30, "console_min": 0.0,
-	})
-	var content: VBoxContainer = _signage_panel.content()
-
-	_sign = VBoxContainer.new()
-	_sign.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_sign.add_theme_constant_override("separation", 8)
-	content.add_child(_sign)
-	for line in ["FIT WHAT", "THE RUN NEEDS"]:
-		var label: Label = ConsoleStyle.label(
-			line, ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR_DIM
-		)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_sign.add_child(label)
-
-	_detail = ConsoleDetail.new()
-	_detail.visible = false
-	_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_detail.action_pressed.connect(_on_detail_action)
-	_detail.closed.connect(_on_detail_closed)
-	content.add_child(_detail)
 
 
 ## The card on the cabinet, carrying the one thing about a loadout that is not a
@@ -133,6 +120,23 @@ func _build_notice() -> void:
 	_notice = ConsoleStyle.paragraph("", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
 	_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.content().add_child(_notice)
+
+
+## A phone has no W key, and the photographed index is an unusually narrow,
+## projectively mapped surface. Keep the same route available in room chrome so
+## it cannot disappear below the close-up or become unreachable through the
+## surface input mapping. Hidden on desktop and in console mode, where the normal
+## row is already directly usable.
+func _build_workflow_chrome() -> void:
+	_workflow_chrome = Button.new()
+	_workflow_chrome.name = "WorkflowChrome"
+	_workflow_chrome.text = "WORKFLOWS  ►"
+	_workflow_chrome.flat = true
+	_workflow_chrome.focus_mode = Control.FOCUS_NONE
+	_workflow_chrome.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_workflow_chrome.visible = false
+	_workflow_chrome.pressed.connect(_on_workflows_pressed)
+	add_child(_workflow_chrome)
 
 
 # --- Refresh -----------------------------------------------------------------
@@ -148,7 +152,6 @@ func refresh() -> void:
 	_refresh_workflows_door()
 	_refresh_board(racks)
 	_refresh_notice()
-	_refresh_detail()
 
 
 func _racks() -> Dictionary:
@@ -235,7 +238,6 @@ func _on_counter_pressed(key: String) -> void:
 	if _rack == key:
 		return
 	_rack = key
-	_selected = ""
 	_board.clear_selection()
 	refresh()
 	lean_on("board")
@@ -256,6 +258,7 @@ func _refresh_workflows_door() -> void:
 			Simulation.workflow_count(), Simulation.workflow_capacity(),
 		]
 	_layout_workflow_row()
+	_layout_workflow_chrome()
 
 
 func _on_workflows_pressed() -> void:
@@ -272,11 +275,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.keycode == KEY_W:
 		_on_workflows_pressed()
 		get_viewport().set_input_as_handled()
-		return
-	if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
-		if _selected != "":
-			_on_detail_action()
-			get_viewport().set_input_as_handled()
 		return
 	var slot: int = event.keycode - KEY_1
 	var order: Array[String] = _counter_order()
@@ -301,8 +299,6 @@ func _refresh_board(racks: Dictionary) -> void:
 			if fitted else "BENCH EMPTY — EVERYTHING YOU OWN IS IN"
 		)
 	_board.set_entries(entries, note)
-	if _selected != "":
-		_board.select(_selected)
 
 
 ## The synergies the loadout has assembled, which is the only reason to fit two
@@ -329,6 +325,14 @@ func _perk_entry(perk_id: String, fitted: bool) -> Dictionary:
 	var perk: PerkDefinition = ContentDatabase.get_perk(perk_id)
 	if perk == null:
 		return {}
+	var enabled: bool = (
+		Simulation.can_bench_perk(perk_id) if fitted
+		else Simulation.can_equip_perk(perk_id)
+	)
+	var blocked_reason: String = (
+		Simulation.perk_bench_block_reason(perk_id) if fitted
+		else Simulation.perk_equip_block_reason(perk_id)
+	)
 	return {
 		"meta": perk_id,
 		"name": perk.name,
@@ -341,6 +345,10 @@ func _perk_entry(perk_id: String, fitted: bool) -> Dictionary:
 		"status": _perk_status(perk_id, fitted),
 		"status_color": _perk_status_color(perk_id, fitted),
 		"tooltip": Simulation.get_perk_description(perk_id),
+		"action_text": "UNEQUIP" if fitted else "EQUIP",
+		"action_enabled": enabled,
+		"action_warning": fitted,
+		"action_tooltip": "" if enabled else blocked_reason,
 	}
 
 
@@ -353,96 +361,33 @@ func _perk_status(perk_id: String, fitted: bool) -> String:
 		return blocked if blocked != "" else "FITTED"
 	if Simulation.can_equip_perk(perk_id):
 		return "READY TO FIT"
-	if _swap_target_for(perk_id) != "":
-		return "SWAP AVAILABLE"
 	return Simulation.perk_equip_block_reason(perk_id)
 
 
 func _perk_status_color(perk_id: String, fitted: bool) -> Color:
 	if fitted:
 		return ConsoleStyle.PHOSPHOR_DIM
-	if Simulation.can_equip_perk(perk_id) or _swap_target_for(perk_id) != "":
+	if Simulation.can_equip_perk(perk_id):
 		return ConsoleStyle.PHOSPHOR
 	return ConsoleStyle.PHOSPHOR_DIM
 
 
-# --- The sheet ---------------------------------------------------------------
+# --- Actions -----------------------------------------------------------------
 
-func _on_tile_selected(meta: Variant) -> void:
-	_selected = str(meta) if meta != null else ""
-	_selected_active = _selected in Array(Simulation.run_state.build.get("perks", []))
-	_refresh_detail()
-
-
-func _on_detail_closed() -> void:
-	_selected = ""
-	_board.clear_selection()
-	_refresh_detail()
-
-
-func _refresh_detail() -> void:
-	var perk: PerkDefinition = ContentDatabase.get_perk(_selected)
-	var reading: bool = perk != null
-	_sign.visible = not reading
-	_detail.visible = reading
-	_signage_panel.set_heading("" if not reading else "The perk")
-	if not reading:
+func _on_perk_action(meta: Variant) -> void:
+	var perk_id: String = str(meta)
+	if perk_id == "":
 		return
-	var lines: Array = [
-		{"text": Simulation.get_perk_description(_selected)},
-		{"stat": "Rarity", "value": perk.rarity.capitalize()},
-	]
-	if perk.tags.size() > 0:
-		lines.append({"stat": "Tags", "value": ", ".join(perk.tags)})
-	var action: String = ""
-	var enabled: bool = false
-	_swap_target = ""
-	if _selected_active:
-		var bench_reason: String = Simulation.perk_bench_block_reason(_selected)
-		lines.append({
-			"stat": "Status",
-			"value": "Fitted" if bench_reason == "" else "Fitted · %s" % bench_reason,
-		})
-		action = "[ ENTER ] BENCH IT"
-		enabled = bench_reason == ""
-	else:
-		var equip_reason: String = Simulation.perk_equip_block_reason(_selected)
-		lines.append({
-			"stat": "Fit",
-			"value": "Ready" if Simulation.can_equip_perk(_selected) else equip_reason,
-		})
-		if Simulation.can_equip_perk(_selected):
-			action = "[ ENTER ] FIT IT"
-			enabled = true
-		else:
-			# Nothing else can free a slot for this perk, so the sheet offers the
-			# swap it would have to make rather than a dead FIT line.
-			_swap_target = _swap_target_for(_selected)
-			if _swap_target != "":
-				var outgoing: PerkDefinition = ContentDatabase.get_perk(_swap_target)
-				var outgoing_name: String = (
-					outgoing.name if outgoing != null else _swap_target
-				)
-				lines.append({"stat": "Swap out", "value": outgoing_name})
-				action = "[ ENTER ] SWAP FOR %s" % outgoing_name.to_upper()
-				enabled = true
-			else:
-				action = "[ -- ] NO ROOM"
-				enabled = false
-	_detail.show_detail(perk.name.to_upper(), lines, action, enabled)
-
-
-## The fitted perk this one could replace. Only offered when exactly one clears
-## the way, so a swap is never a guess about which one the player meant to give
-## up.
-func _swap_target_for(perk_id: String) -> String:
-	var candidates: Array = []
-	for active_id in Array(Simulation.run_state.build.get("perks", [])):
-		if Simulation.can_swap_perk(str(active_id), perk_id):
-			candidates.append(str(active_id))
-		if candidates.size() > 1:
-			return ""
-	return str(candidates[0]) if candidates.size() == 1 else ""
+	var active: bool = perk_id in Array(Simulation.run_state.build.get("perks", []))
+	var changed: bool = (
+		Simulation.bench_perk(perk_id) if active
+		else Simulation.equip_perk(perk_id)
+	)
+	if not changed:
+		return
+	_board.clear_selection()
+	refresh()
+	get_tree().call_group("ui_refresh", "refresh")
 
 
 func _active_synergy_entries() -> Array[Dictionary]:
@@ -492,25 +437,6 @@ func _hardware_token_rate() -> float:
 	return total
 
 
-# --- Actions -----------------------------------------------------------------
-
-func _on_detail_action() -> void:
-	if _selected == "":
-		return
-	if _selected_active:
-		if Simulation.bench_perk(_selected):
-			_selected = ""
-	elif _swap_target != "":
-		if Simulation.swap_perk(_swap_target, _selected):
-			_selected_active = true
-		_swap_target = ""
-	elif Simulation.equip_perk(_selected):
-		_selected_active = true
-	_board.clear_selection()
-	refresh()
-	get_tree().call_group("ui_refresh", "refresh")
-
-
 # --- Layout ------------------------------------------------------------------
 
 func _on_venue_layout() -> void:
@@ -518,19 +444,15 @@ func _on_venue_layout() -> void:
 	if _board != null:
 		_board.set_console(console_mode())
 		_board.set_metrics(scale, content_width("board"))
-	if _detail != null:
-		_detail.set_metrics(scale)
 	_layout_counter_rows()
 	_layout_workflow_row()
+	_layout_workflow_chrome()
+	_layout_painted_back_row()
 	var font_tiny: int = ConsoleMetrics.font_tiny(scale)
 	if _kicker != null:
 		_kicker.add_theme_font_size_override("font_size", font_tiny)
 	if _notice != null:
 		_notice.add_theme_font_size_override("font_size", font_tiny)
-	var font_body: int = ConsoleMetrics.font_body(scale)
-	for label in _sign.get_children():
-		if label is Label:
-			label.add_theme_font_size_override("font_size", font_body)
 	for line in _index_lines.get_children():
 		_apply_line_font(line, ConsoleMetrics.font_small(scale))
 
@@ -557,6 +479,58 @@ func _layout_workflow_row() -> void:
 		return
 	var scale: float = console_scale()
 	_workflow_row.set_metrics(
+		ConsoleMetrics.font_small(scale),
+		ConsoleMetrics.row_height(scale),
+		ConsoleMetrics.pad_h(scale)
+	)
+
+
+func _layout_workflow_chrome() -> void:
+	if _workflow_chrome == null:
+		return
+	var in_run: bool = Simulation.phase != Simulation.Phase.IDLE
+	_workflow_chrome.visible = _room_mode and in_run
+	if not _workflow_chrome.visible:
+		return
+	_workflow_chrome.add_theme_font_override("font", UiThemeBuilder.mono_font())
+	_workflow_chrome.add_theme_font_size_override(
+		"font_size", ConsoleMetrics.font_body(_scale)
+	)
+	var pad: float = float(ConsoleMetrics.pad_h(_scale))
+	for state in ["normal", "hover", "pressed"]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(0.02, 0.05, 0.04, 0.96 if state == "hover" else 0.86)
+		box.border_color = Color(
+			ConsoleStyle.PHOSPHOR.r,
+			ConsoleStyle.PHOSPHOR.g,
+			ConsoleStyle.PHOSPHOR.b,
+			0.45
+		)
+		box.set_border_width_all(1)
+		box.content_margin_left = pad
+		box.content_margin_right = pad
+		box.content_margin_top = pad * 0.6
+		box.content_margin_bottom = pad * 0.6
+		_workflow_chrome.add_theme_stylebox_override(state, box)
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_workflow_chrome.add_theme_color_override(state, ConsoleStyle.PHOSPHOR)
+	_workflow_chrome.reset_size()
+	_workflow_chrome.set_anchors_preset(Control.PRESET_BOTTOM_LEFT, true)
+	_workflow_chrome.offset_left = EDGE_PAD
+	_workflow_chrome.offset_right = _workflow_chrome.size.x + EDGE_PAD
+	_workflow_chrome.offset_bottom = -EDGE_PAD
+	_workflow_chrome.offset_top = -_workflow_chrome.size.y - EDGE_PAD
+
+
+func _layout_painted_back_row() -> void:
+	if _painted_back_row == null:
+		return
+	var painted: bool = not console_mode()
+	_painted_back_row.visible = painted
+	if _painted_back_rule != null:
+		_painted_back_rule.visible = painted
+	var scale: float = console_scale()
+	_painted_back_row.set_metrics(
 		ConsoleMetrics.font_small(scale),
 		ConsoleMetrics.row_height(scale),
 		ConsoleMetrics.pad_h(scale)

@@ -5,8 +5,9 @@ extends VenueScene
 ## This is the same shop it has always been — the same shelves, the same
 ## blockers, the same purchase and sale calls — laid out as a place rather than
 ## as a price list in a 442-pixel column. The counters go down the left where the
-## shop writes them up, the shelf itself is the big board on the wall, and what
-## is wrong with the thing you just pointed at is printed on the sign beside it.
+## shop writes them up and the shelf itself is the big board on the wall. Stock
+## is bought directly from that board, including on a handset where there is no
+## useful room for a separate detail sign.
 ##
 ## The shelves are grouped one counter at a time rather than all printed under
 ## section rules. A wall board has the width for tiles and the tiles have room
@@ -22,14 +23,9 @@ var _index_lines: VBoxContainer = null
 var _counters: VBoxContainer = null
 var _board_panel: VenuePanel = null
 var _board: VenueBoard = null
-var _signage_panel: VenuePanel = null
-var _sign: VBoxContainer = null
-var _detail: ConsoleDetail = null
 var _notice: Label = null
 var _counter_rows: Dictionary = {}
 var _active: String = "hardware"
-var _selected: String = ""
-var _rows: Dictionary = {}
 
 
 func venue_key() -> String:
@@ -43,7 +39,6 @@ func _hint_entries() -> Array:
 func _build_venue() -> void:
 	_build_index()
 	_build_board()
-	_build_signage()
 	_build_notice()
 	EventBus.upgrade_purchased.connect(func(_id: String) -> void: refresh())
 	EventBus.run_started.connect(refresh)
@@ -79,41 +74,13 @@ func _build_board() -> void:
 		"console_order": 20, "console_min": 300.0, "grow": true,
 	})
 	_board = VenueBoard.new()
-	_board.tile_selected.connect(_on_tile_selected)
+	_board.tile_action.connect(_on_market_action)
 	_board_panel.content().add_child(_board)
 
 
 ## The right-hand sign. It is the shop's own notice until the player points at
 ## something, and then it is what that thing is and what is stopping them having
 ## it — which is where a buyer would look anyway.
-func _build_signage() -> void:
-	# No floor height in the column: the sign is two lines of flavour until
-	# something is selected, and reserving a screen inch for it on a handset is
-	# reserving it against the shelf the player came to read.
-	_signage_panel = add_panel("signage", "", {
-		"console_order": 30, "console_min": 0.0,
-	})
-	var content: VBoxContainer = _signage_panel.content()
-
-	_sign = VBoxContainer.new()
-	_sign.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_sign.add_theme_constant_override("separation", 8)
-	content.add_child(_sign)
-	for line in ["NO REFUNDS", "ONLY UPGRADES"]:
-		var label: Label = ConsoleStyle.label(
-			line, ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR_DIM
-		)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_sign.add_child(label)
-
-	_detail = ConsoleDetail.new()
-	_detail.visible = false
-	_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_detail.action_pressed.connect(_on_detail_action)
-	_detail.closed.connect(_on_detail_closed)
-	content.add_child(_detail)
-
-
 ## The crate by the door, which is where the shop keeps the one number that stops
 ## a purchase being a mistake: what the room this stock has to stand in has left.
 func _build_notice() -> void:
@@ -137,7 +104,6 @@ func refresh() -> void:
 	_refresh_counters(shelves)
 	_refresh_board(shelves)
 	_refresh_notice()
-	_refresh_detail()
 
 
 func _refresh_index(_shelves_data: Dictionary) -> void:
@@ -241,7 +207,6 @@ func _on_counter_pressed(key: String) -> void:
 	if _active == key:
 		return
 	_active = key
-	_selected = ""
 	_board.clear_selection()
 	refresh()
 	lean_on("board")
@@ -273,8 +238,6 @@ func _refresh_board(shelves: Dictionary) -> void:
 	if entries.is_empty():
 		note = "SHELF CLEARED — NEW STOCK ARRIVES AS YOU PROGRESS"
 	_board.set_entries(entries, note)
-	if _selected != "":
-		_board.select(_selected)
 
 
 func _refresh_notice() -> void:
@@ -295,7 +258,6 @@ func _upgrade_entry(upgrade: UpgradeDefinition) -> Dictionary:
 	var affordable: bool = float(Simulation.run_state.economy.get("cash", 0.0)) >= cost
 	var headline: Dictionary = _headline_figure(upgrade)
 	var meta: String = "buy:%s" % upgrade.id
-	_rows[meta] = upgrade
 	return {
 		"meta": meta,
 		"name": _row_title(upgrade, level),
@@ -308,6 +270,9 @@ func _upgrade_entry(upgrade: UpgradeDefinition) -> Dictionary:
 		"status_color": ConsoleStyle.PHOSPHOR if can_buy else ConsoleStyle.PHOSPHOR_DIM,
 		"icon": AssetCatalog.category_icon(upgrade.category),
 		"tooltip": upgrade.description,
+		"action_text": "BUY",
+		"action_enabled": can_buy,
+		"action_tooltip": _buy_action_tooltip(upgrade, cost, can_buy),
 	}
 
 
@@ -316,7 +281,6 @@ func _installed_entries() -> Array:
 	for row in UpgradePresentation.installed_inventory():
 		var key: String = str(row.get("key", ""))
 		var meta: String = "sell:%s" % key
-		_rows[meta] = row
 		var can_sell: bool = Simulation.can_sell_hardware(key)
 		var rate: float = float(row.get("token_rate", 0.0))
 		entries.append({
@@ -332,6 +296,10 @@ func _installed_entries() -> Array:
 			"icon": AssetCatalog.category_icon(
 				"component" if bool(row.get("component", false)) else "hardware"
 			),
+			"action_text": "SELL",
+			"action_enabled": can_sell,
+			"action_warning": true,
+			"action_tooltip": "" if can_sell else Simulation.hardware_sale_reason(key),
 		})
 	return entries
 
@@ -472,154 +440,55 @@ func _card_cost(upgrade: UpgradeDefinition) -> float:
 	)
 
 
-# --- The sign ----------------------------------------------------------------
-
-func _on_tile_selected(meta: Variant) -> void:
-	_selected = str(meta) if meta != null else ""
-	_refresh_detail()
-
-
-func _on_detail_closed() -> void:
-	_selected = ""
-	_board.clear_selection()
-	_refresh_detail()
-
-
-## The sign carries one of two things, never both: what the shop wants you to
-## know, or what you just asked about.
-func _refresh_detail() -> void:
-	var reading: bool = _selected != ""
-	_sign.visible = not reading
-	_detail.visible = reading
-	_signage_panel.set_heading("" if not reading else "Details")
-	if not reading:
-		return
-	if _selected.begins_with("sell:"):
-		_show_installed_detail(Dictionary(_rows.get(_selected, {})))
-	else:
-		_show_upgrade_detail(_rows.get(_selected, null))
-
-
-func _show_installed_detail(row: Dictionary) -> void:
-	if row.is_empty():
-		_on_detail_closed()
-		return
-	var key: String = str(row.get("key", ""))
-	var can_sell: bool = Simulation.can_sell_hardware(key)
-	var refund: float = float(row.get("refund", 0.0))
-	var lines: Array = [
-		{"stat": "Owned", "value": "×%d" % int(row.get("count", 1))},
-		{"stat": "Sells for", "value": NumberFormat.format_cash(refund)},
-		{"text": _installed_spec(row)},
-	]
-	if not can_sell:
-		var reason: String = Simulation.hardware_sale_reason(key)
-		if reason != "":
-			lines.append({"warn": reason})
-	_detail.show_detail(
-		str(row.get("name", key)).to_upper(),
-		lines,
-		"[ ENTER ] SELL FOR %s" % NumberFormat.format_cash(refund)
-			if can_sell else "[ -- ] KEEPING IT",
-		can_sell
-	)
-
-
-func _show_upgrade_detail(upgrade: UpgradeDefinition) -> void:
-	if upgrade == null:
-		_on_detail_closed()
-		return
-	var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-	var cost: float = UpgradeSystem.purchase_cost(upgrade, level)
-	var can_buy: bool = Simulation.can_buy_upgrade(upgrade.id)
-	var lines: Array = [{"stat": "Cost", "value": NumberFormat.format_cash(cost)}]
-	if level > 0:
-		var counted: bool = upgrade.category == "hardware" or upgrade.category == "component"
-		lines.insert(0, {"stat": "Owned" if counted else "Level", "value": str(level)})
-	if upgrade.recurring_cost_delta > 0.0:
-		lines.append({
-			"stat": "Adds to bills",
-			"value": "%s / round" % NumberFormat.format_cash(upgrade.recurring_cost_delta),
-			"color": ConsoleStyle.WARNING,
-		})
-	lines.append({"text": upgrade.description})
-	lines.append({"text": UpgradePresentation.effect_line(upgrade)})
-	lines.append_array(_blocker_lines(upgrade, cost, can_buy))
-	if upgrade.repeatable and level > 0:
-		lines.append({
-			"text": "Each one after the first costs %d%% more than the last." % int(
-				round((upgrade.cost_growth - 1.0) * 100.0)
-			),
-		})
-	_detail.show_detail(
-		upgrade.name.to_upper(),
-		lines,
-		"[ ENTER ] BUY FOR %s" % NumberFormat.format_cash(cost)
-			if can_buy else "[ -- ] UNAVAILABLE",
-		can_buy
-	)
-
-
-func _blocker_lines(upgrade: UpgradeDefinition, cost: float, can_buy: bool) -> Array:
-	var lines: Array = []
-	var cooling: Dictionary = UpgradePresentation.cooling_shortfall(upgrade)
-	if not cooling.is_empty():
-		lines.append({
-			"warn": "Cooling %d / %d — running this adds %.0f heat per prompt. Buy cooling or a bigger space first." % [
-				int(cooling["have"]), int(cooling["need"]), float(cooling["heat_per_prompt"]),
-			],
-		})
+## Card actions replace the old detail sign, so a disabled BUY still explains
+## the exact gate without asking the player to open another surface.
+func _buy_action_tooltip(
+	upgrade: UpgradeDefinition, cost: float, can_buy: bool
+) -> String:
+	if can_buy:
+		var outlook: Dictionary = Simulation.bills_outlook()
+		var left: float = float(outlook.get("cash", 0.0)) - cost
+		var rent_shortfall: float = maxf(0.0, float(outlook.get("due", 0.0)) - left)
+		if rent_shortfall > 0.0:
+			return "%s short of rent after this purchase." % NumberFormat.format_cash(
+				rent_shortfall
+			)
+		return "Buy for %s" % NumberFormat.format_cash(cost)
+	if not MarketService.market_open(Simulation):
+		return "The Market is closed once a round is under way. Shop between rounds."
+	if UpgradeSystem.is_maxed(Simulation.run_state, upgrade):
+		return "Maximum level reached."
 	var prerequisite: String = UpgradePresentation.prerequisite_text(upgrade)
 	if prerequisite != "":
-		var reason: String = "Take the step before it first."
-		if upgrade.requires_dwelling != "":
-			reason = "This belongs to a later chapter than the one this run is in."
-		lines.append({"warn": "%s — %s" % [prerequisite, reason]})
+		return prerequisite
 	if UpgradePresentation.hardware_space_full(upgrade):
-		var space: Dictionary = UpgradePresentation.hardware_space()
-		lines.append({
-			"warn": "The %s holds %d machines and all %d are running. Sell something first." % [
-				space.get("dwelling", ""), int(space.get("total", 0)), int(space.get("used", 0)),
-			],
-		})
+		return "No floor space. Sell hardware first."
 	if UpgradePresentation.component_capacity_reached(upgrade):
-		lines.append({
-			"warn": "One fits per %s you own. Buy another machine and there will be somewhere to put this." % UpgradePresentation.hardware_name(upgrade.requires_hardware),
-		})
-	if not can_buy:
-		var shortfall: float = cost - float(Simulation.run_state.economy.get("cash", 0.0))
-		if shortfall > 0.0:
-			lines.append({
-				"warn": "Need %s more. Finish a contract or take a better paying one." % NumberFormat.format_cash(shortfall),
-			})
-	elif _rent_shortfall(cost) > 0.0:
-		lines.append({
-			"warn": "%s short of rent if you buy this." % NumberFormat.format_cash(_rent_shortfall(cost)),
-		})
-	return lines
-
-
-func _rent_shortfall(cost: float) -> float:
-	var outlook: Dictionary = Simulation.bills_outlook()
-	var left: float = float(outlook.get("cash", 0.0)) - cost
-	return maxf(0.0, float(outlook.get("due", 0.0)) - left)
+		return "No compatible machine has a free component slot."
+	var cooling: Dictionary = UpgradePresentation.cooling_shortfall(upgrade)
+	if not cooling.is_empty():
+		return "Needs %d cooling; only %d available." % [
+			int(cooling.get("need", 0)), int(cooling.get("have", 0)),
+		]
+	var shortfall: float = cost - float(Simulation.run_state.economy.get("cash", 0.0))
+	if shortfall > 0.0:
+		return "Need %s more." % NumberFormat.format_cash(shortfall)
+	return "Unavailable"
 
 
 # --- Actions -----------------------------------------------------------------
 
-func _on_detail_action() -> void:
-	if _selected.begins_with("buy:"):
-		_buy_upgrade(_selected.trim_prefix("buy:"))
-	elif _selected.begins_with("sell:"):
-		_sell_hardware(_selected.trim_prefix("sell:"))
+func _on_market_action(meta: Variant) -> void:
+	var action: String = str(meta)
+	if action.begins_with("buy:"):
+		_buy_upgrade(action.trim_prefix("buy:"))
+	elif action.begins_with("sell:"):
+		_sell_hardware(action.trim_prefix("sell:"))
 
 
 func _buy_upgrade(upgrade_id: String) -> void:
 	UiSound.play("buy")
 	if Simulation.buy_upgrade(upgrade_id):
-		# The thing bought is off the shelf now, so nothing is selected: the sign
-		# would otherwise be describing stock that is no longer for sale.
-		_selected = ""
 		_board.clear_selection()
 		refresh()
 		get_tree().call_group("ui_refresh", "refresh")
@@ -628,7 +497,6 @@ func _buy_upgrade(upgrade_id: String) -> void:
 func _sell_hardware(hardware_key: String) -> void:
 	UiSound.play("buy")
 	if Simulation.sell_hardware(hardware_key):
-		_selected = ""
 		_board.clear_selection()
 		refresh()
 		get_tree().call_group("ui_refresh", "refresh")
@@ -643,14 +511,8 @@ func _on_venue_layout() -> void:
 		_board.set_metrics(scale, content_width("board"))
 	if _kicker != null:
 		_kicker.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
-	if _detail != null:
-		_detail.set_metrics(scale)
 	_layout_counter_rows()
-	var font_body: int = ConsoleMetrics.font_body(scale)
 	var font_tiny: int = ConsoleMetrics.font_tiny(scale)
-	for label in _sign.get_children():
-		if label is Label:
-			label.add_theme_font_size_override("font_size", font_body)
 	if _notice != null:
 		_notice.add_theme_font_size_override("font_size", font_tiny)
 	for line in _index_lines.get_children():

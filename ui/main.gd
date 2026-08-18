@@ -262,16 +262,41 @@ func _focus_rect(key: String) -> Rect2:
 ## Whether leaning in is offered at all is the furniture's decision, not this
 ## one: on a monitor the room is already at reading size, so nothing asks for
 ## it and every piece of furniture stays live where it is painted.
-func focus_room(key: String) -> void:
+func focus_room(key: String, target_rect: Rect2 = Rect2()) -> void:
 	if _focus_key == key:
 		return
-	var rect: Rect2 = _focus_rect(key)
+	var rect: Rect2 = target_rect
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		rect = _focus_rect(key)
 	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 		return
 	_focus_key = key
 	_focus_point = rect.get_center()
 	_focus_full_zoom = ConsoleMetrics.focus_zoom(rect)
 	_tween_room_zoom(_focus_full_zoom)
+
+
+## Brings one live piece of furniture to reading size using its actual glass,
+## rather than the larger bay reserved around it. Workstation stages put their
+## primary screens in different places, so the mounted control is the only
+## reliable focus target.
+func focus_control(key: String, control: Control) -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	var viewport_size: Vector2 = get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	var shown: Rect2 = control.get_global_rect()
+	var rect := Rect2(shown.position / viewport_size, shown.size / viewport_size)
+	# The control may ask while the room is already moving. Rebase the shown
+	# rectangle onto the unzoomed room so focus never compounds its own camera.
+	var zoom: float = maxf(_room_zoom, 0.001)
+	rect = Rect2((rect.position - _room_offset) / zoom, rect.size / zoom)
+	focus_room(key, rect)
+
+
+func room_focused_on(key: String) -> bool:
+	return _focus_key == key
 
 
 ## Back to the whole room. Called by anything that takes over the window, so the
@@ -680,6 +705,9 @@ func _ensure_title_screen() -> void:
 
 func _on_title_start() -> void:
 	_title_active = false
+	# A continued session belongs on the deck it was saved on. Fresh runs still
+	# resolve to the idle office, while queued or active work resolves to BOARD.
+	_show_desk_tab(_desk_tab_now())
 	refresh_all()
 	# The investor's opening call is the first thing a fresh run does, before the
 	# player has touched anything.

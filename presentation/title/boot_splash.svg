@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="leftScrim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#020605" stop-opacity="0.93"/>
+      <stop offset="0.42" stop-color="#020605" stop-opacity="0.72"/>
+      <stop offset="0.70" stop-color="#020605" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#020605" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="50%" cy="46%" r="76%">
+      <stop offset="0.58" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.70"/>
+    </radialGradient>
+    <linearGradient id="barBurn" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6beb99"/>
+      <stop offset="0.72" stop-color="#6beb99"/>
+      <stop offset="1" stop-color="#e9bc5c"/>
+    </linearGradient>
+    <pattern id="barBlocks" width="20" height="22" patternUnits="userSpaceOnUse">
+      <rect x="1" y="1" width="15" height="20" fill="url(#barBurn)"/>
+      <rect x="16" y="1" width="2" height="20" fill="#06100d" opacity="0.70"/>
+    </pattern>
+    <pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="1280" height="1" fill="#baffcb" opacity="0.036"/>
+    </pattern>
+    <filter id="phosphorGlow" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- The generated venue remains readable on the right while the title owns the shadows. -->
+  <rect width="1280" height="720" fill="url(#leftScrim)"/>
+  <rect width="1280" height="720" fill="#082016" opacity="0.10"/>
+
+  <!-- Upper boot telemetry -->
+  <g font-family="Consolas, 'Courier New', monospace" fill="#6beb99">
+    <rect x="78" y="55" width="425" height="48" fill="#03110c" fill-opacity="0.72" stroke="#6beb99" stroke-opacity="0.45"/>
+    <path d="M78 103h425M91 93h102" stroke="#6beb99" stroke-opacity="0.18"/>
+    <text x="96" y="85" font-size="17" letter-spacing="1.2">TOKEN_BURN v0.7.1  -  [ SYS-178 ]</text>
+    <rect x="78" y="112" width="305" height="34" fill="#03110c" fill-opacity="0.58" stroke="#6beb99" stroke-opacity="0.18"/>
+    <text x="96" y="135" font-size="14" letter-spacing="1.7" opacity="0.84">INITIALIZING SYSTEM...</text>
+  </g>
+
+  <!-- Small workshop maxim, intentionally secondary to the venue fire. -->
+  <g font-family="Consolas, 'Courier New', monospace" fill="#6beb99" opacity="0.74">
+    <rect x="1106" y="56" width="124" height="59" fill="#03110c" fill-opacity="0.55" stroke="#6beb99" stroke-opacity="0.38"/>
+    <text x="1121" y="79" font-size="11" letter-spacing="1.4">GOOD TOOLS</text>
+    <text x="1121" y="99" font-size="11" letter-spacing="1.4">GOOD WORK</text>
+    <path d="M1106 121h124" stroke="#e9bc5c" stroke-width="5" stroke-dasharray="11 6" opacity="0.70"/>
+  </g>
+
+  <!-- Main wordmark. The ghost layer and broken bars give it a CRT boot pulse. -->
+  <g font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="2">
+    <text x="104" y="312" font-size="83" fill="#6beb99" opacity="0.17" filter="url(#phosphorGlow)">TOKEN_BURN</text>
+    <text x="101" y="309" font-size="83" fill="#07130e" stroke="#6beb99" stroke-opacity="0.48" stroke-width="6">TOKEN_BURN</text>
+    <text x="101" y="309" font-size="83" fill="#88f5a4">TOKEN_BURN</text>
+  </g>
+  <g fill="#88f5a4" opacity="0.78">
+    <rect x="72" y="251" width="83" height="3"/>
+    <rect x="86" y="263" width="55" height="2" opacity="0.55"/>
+    <rect x="76" y="282" width="102" height="3" opacity="0.34"/>
+    <rect x="88" y="319" width="73" height="2" opacity="0.42"/>
+    <rect x="684" y="275" width="91" height="3" opacity="0.38"/>
+  </g>
+  <path d="M96 332h704" stroke="#6beb99" stroke-width="2" stroke-opacity="0.68"/>
+  <text x="142" y="374" fill="#6beb99" font-family="Consolas, 'Courier New', monospace" font-size="20" letter-spacing="6">BUILD.  OPTIMIZE.  BURN.</text>
+
+  <!-- Loading readout -->
+  <g font-family="Consolas, 'Courier New', monospace">
+    <text x="95" y="448" fill="#79ee99" font-size="18" letter-spacing="1.8">&gt; LOADING SYSTEMS...</text>
+    <rect x="94" y="464" width="600" height="31" fill="#02100a" fill-opacity="0.78" stroke="#6beb99" stroke-width="2" stroke-opacity="0.72"/>
+    <rect x="100" y="470" width="438" height="19" fill="url(#barBlocks)"/>
+    <rect x="538" y="470" width="2" height="19" fill="#dfffe6"/>
+    <text x="715" y="489" fill="#7dff9f" font-size="23" letter-spacing="1">73%</text>
+  </g>
+
+  <!-- Lower console rail -->
+  <g font-family="Consolas, 'Courier New', monospace" fill="#6beb99">
+    <path d="M94 564h668" stroke="#6beb99" stroke-opacity="0.34"/>
+    <text x="96" y="591" font-size="13" letter-spacing="1.2" opacity="0.72">// CONTRACTS</text>
+    <text x="251" y="591" font-size="13" letter-spacing="1.2" opacity="0.72">// UPGRADES</text>
+    <text x="403" y="591" font-size="13" letter-spacing="1.2" opacity="0.72">// MARKET</text>
+    <text x="527" y="591" font-size="13" letter-spacing="1.2" opacity="0.72">// AUTOMATE</text>
+  </g>
+
+  <!-- Live status tucked into the machinery side. -->
+  <g font-family="Consolas, 'Courier New', monospace" font-size="11" letter-spacing="1" fill="#6beb99">
+    <rect x="895" y="572" width="282" height="88" fill="#020a07" fill-opacity="0.73" stroke="#6beb99" stroke-opacity="0.46"/>
+    <text x="914" y="598" opacity="0.62">SYSTEM STATUS:</text><text x="1037" y="598" fill="#a6ff9a">ONLINE</text>
+    <text x="914" y="622" opacity="0.62">MARKET LINK:</text><text x="1037" y="622" fill="#a6ff9a">SECURE</text>
+    <text x="914" y="646" opacity="0.62">TOKEN LEDGER:</text><text x="1037" y="646" fill="#a6ff9a">SYNCED</text>
+  </g>
+
+  <rect width="1280" height="720" fill="url(#scanlines)"/>
+  <rect width="1280" height="720" fill="url(#vignette)"/>
+  <rect x="1" y="1" width="1278" height="718" fill="none" stroke="#6beb99" stroke-opacity="0.11" stroke-width="2"/>
+</svg>

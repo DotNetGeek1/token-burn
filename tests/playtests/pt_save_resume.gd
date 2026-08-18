@@ -9,6 +9,7 @@ extends PlaytestCase
 
 
 const SEED := 17
+const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 
 func play(harness: UiHarness) -> void:
@@ -17,6 +18,8 @@ func play(harness: UiHarness) -> void:
 
 	Simulation.autosave_enabled = true
 	await accept_first_job(harness)
+	Simulation.start_work()
+	assert_true(Simulation.is_work_running(), "The saved run has an active burn session")
 
 	var saved_round: int = int(Simulation.run_state.calendar.get("round", 1))
 	var saved_cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
@@ -25,7 +28,7 @@ func play(harness: UiHarness) -> void:
 	# if that path did not fire.
 	SaveManager.save_run(
 		Simulation.run_state,
-		"ROUND_PREP",
+		"IN_ROUND",
 		Simulation.run_seed,
 		Simulation.pending_choices
 	)
@@ -55,6 +58,42 @@ func play(harness: UiHarness) -> void:
 		0.01,
 		"CONTINUE restored the same cash"
 	)
+	assert_true(
+		driver.command("BURN") != null,
+		"CONTINUE returns a run with pending work directly to the burn board"
+	)
+	var shell: Node = harness.current_scene()
+	if shell != null:
+		shell.switch_tab("office")
+		await harness.settle()
+		var open_board: Control = driver.command("OPEN BOARD")
+		var console: WorkstationConsole = shell.find_child("PrimaryConsole", true, false)
+		assert_true(open_board != null, "The resumed operation still offers OPEN BOARD")
+		assert_true(console != null, "The resumed operation has a primary console")
+		if open_board != null and console != null:
+			assert_true(
+				console._should_lean_in(true, true),
+				"A compact mobile console captures the first tap while across the room"
+			)
+			var bay_zoom: float = ConsoleMetrics.focus_zoom(shell._focus_rect("workstation"))
+			console._on_lean_in_pressed()
+			await harness.settle()
+			assert_true(
+				shell.room_focused_on("workstation"),
+				"The first mobile tap focuses the workstation"
+			)
+			assert_true(
+				shell._focus_full_zoom > bay_zoom,
+				"Mobile focus targets the smaller live glass instead of the whole bay"
+			)
+			assert_false(
+				console._should_lean_in(true, true),
+				"The lean-in catcher releases commands after the workstation is focused"
+			)
+			await driver.press(open_board)
+			assert_true(driver.command("BURN") != null, "OPEN BOARD reaches the burn screen")
+			shell.clear_room_focus()
+			await harness.settle()
 	driver.audit_screen("desk", "desk")
 
 

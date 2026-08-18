@@ -162,6 +162,13 @@ func _painted_hints() -> bool:
 	return true
 
 
+## Whether a handset may keep this venue as a painted room and lean into its
+## panels. Dense venues can opt out when a narrow painted panel would need more
+## zoom than the window can show; they then use the scrolling console layout.
+func _room_layout_supported() -> bool:
+	return true
+
+
 # --- Chassis ----------------------------------------------------------------
 
 func _ready() -> void:
@@ -235,6 +242,7 @@ func _build_chassis() -> void:
 	# the window turns out to be that shape.
 	_console_row = HBoxContainer.new()
 	_console_row.name = "Columns"
+	_console_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_console_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_console.add_child(_console_row)
 
@@ -274,6 +282,7 @@ func _build_step_back() -> void:
 func _build_console_column(node_name: String) -> VBoxContainer:
 	var column := VBoxContainer.new()
 	column.name = node_name
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.size_flags_vertical = Control.SIZE_FILL
 	column.add_theme_constant_override("separation", CONSOLE_GAP)
@@ -485,7 +494,7 @@ func _layout_pass() -> void:
 	# them — neither of which leaning in would rescue.
 	var handset: bool = ConsoleMetrics.needs_focus()
 	var shape_fits: bool = _shape_fits(view)
-	_room_mode = handset and _painted_ready() and shape_fits
+	_room_mode = _use_room_mode(handset, shape_fits)
 	_console_mode = (
 		not _painted_ready()
 		or (not _room_mode and (handset or not shape_fits))
@@ -508,6 +517,10 @@ func _layout_pass() -> void:
 	_layout_step_back()
 	_sync_lean_chrome()
 	_on_venue_layout()
+
+
+func _use_room_mode(handset: bool, shape_fits: bool) -> bool:
+	return handset and _room_layout_supported() and _painted_ready() and shape_fits
 
 
 ## Sized for the screen it is on rather than for the canvas: this is the one

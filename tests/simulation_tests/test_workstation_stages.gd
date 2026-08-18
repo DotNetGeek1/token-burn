@@ -26,10 +26,10 @@ func _test_each_stage_trigger() -> void:
 	assert_eq(_stage([], ["upgrade.second_monitor"]), 2, "The second-monitor upgrade unlocks the ultrawide")
 	assert_eq(_stage([], ["upgrade.second_desk"]), 3, "A second desk unlocks dual displays")
 	assert_eq(_stage([], ["upgrade.standing_desk"]), 3, "A standing desk unlocks dual displays")
-	assert_eq(_stage(["gpu_rack"]), 4, "A GPU rack unlocks the rack console")
-	assert_eq(_stage(["compute_cluster"]), 4, "A compute cluster unlocks the rack console")
+	assert_eq(_stage(["gpu_rack"]), 4, "A GPU rack unlocks the dual-monitor GPU desk")
+	assert_eq(_stage(["compute_cluster"]), 4, "A compute cluster unlocks the dual-monitor GPU desk")
 	for hardware_key in ["garage_datacentre", "compute_warehouse", "industrial_campus"]:
-		assert_eq(_stage([hardware_key]), 5, "%s unlocks the operations wall" % hardware_key)
+		assert_eq(_stage([hardware_key]), 5, "%s unlocks the three-monitor command desk" % hardware_key)
 
 
 func _test_highest_stage_wins() -> void:

@@ -25,6 +25,7 @@ var _heading: Label = null
 var _rule: ColorRect = null
 var _scroll: ScrollContainer = null
 var _content: VBoxContainer = null
+var _crt: Control = null
 ## Takes the press while the panel is across the room. See `set_far_off`.
 var _surface: Button = null
 
@@ -36,15 +37,21 @@ func _init() -> void:
 func _build() -> void:
 	if _body != null:
 		return
+	# A panel may itself be inside the venue's reflowed ScrollContainer. Keep the
+	# whole structural chain transparent to drags once the far-off tap surface is
+	# hidden.
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	add_theme_stylebox_override("panel", ConsoleStyle.glass_box())
 	clip_contents = true
 
 	_margin = MarginContainer.new()
+	_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side in ["left", "right", "top", "bottom"]:
 		_margin.add_theme_constant_override("margin_%s" % side, PAD)
 	add_child(_margin)
 
 	_body = VBoxContainer.new()
+	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_body.add_theme_constant_override("separation", HEADING_GAP)
 	_margin.add_child(_body)
 
@@ -63,12 +70,14 @@ func _build() -> void:
 	# panel being read at close range, where the alternative to scrolling is
 	# clipping. See `set_scrollable`.
 	_scroll = ScrollContainer.new()
+	_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_body.add_child(_scroll)
 
 	_content = VBoxContainer.new()
+	_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_content.add_theme_constant_override("separation", HEADING_GAP)
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -76,7 +85,8 @@ func _build() -> void:
 
 	# Every piece of glass in the game is the same tube, so a wall board gets the
 	# same scanlines as the laptop it is being read from.
-	add_child(ConsoleStyle.crt_overlay())
+	_crt = ConsoleStyle.crt_overlay()
+	add_child(_crt)
 
 	# Added last so it lies over the lines. Carries no look of its own and is only
 	# live while the panel is a sign rather than a screen.
@@ -105,6 +115,18 @@ func set_heading(text: String) -> void:
 func content() -> VBoxContainer:
 	_build()
 	return _content
+
+
+## Whiteboards use the room artwork as their surface instead of laying another
+## sheet of CRT glass over it. Their live cards still carry the console palette,
+## but the blank board and its physical divider remain visible between them.
+func set_whiteboard(enabled: bool) -> void:
+	_build()
+	add_theme_stylebox_override(
+		"panel", StyleBoxEmpty.new() if enabled else ConsoleStyle.glass_box()
+	)
+	if _crt != null:
+		_crt.visible = not enabled
 
 
 ## Puts a tap-catcher over the whole panel while it is being seen from across the

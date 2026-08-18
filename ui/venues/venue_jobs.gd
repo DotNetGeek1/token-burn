@@ -5,8 +5,8 @@ extends VenueScene
 ## Same wire, same offers, same accept call as the printed table, read as a board
 ## in a room instead. The office writes the state of the business up the left —
 ## what demand is, what reputation is worth, how loaded the slate already is —
-## the contracts themselves are cards on the big board, and what a contract
-## actually asks of you is on the sheet beside it.
+## the contracts themselves are cards on the big board, including the action
+## that accepts them without opening a separate detail surface.
 ##
 ## What the table could never do is set the fee large. A contract is taken or left
 ## on its fee against what it will cost to deliver, and on a board there is room
@@ -26,14 +26,9 @@ var _warning: Label = null
 var _counters: VBoxContainer = null
 var _board_panel: VenuePanel = null
 var _board: VenueBoard = null
-var _signage_panel: VenuePanel = null
-var _sign: VBoxContainer = null
-var _detail: ConsoleDetail = null
 var _notice: Label = null
 var _counter_rows: Dictionary = {}
 var _active: String = WIRE
-var _selected_id: String = ""
-var _offers: Dictionary = {}
 var _round_cost_cache: float = 1.0
 
 
@@ -48,7 +43,6 @@ func _hint_entries() -> Array:
 func _build_venue() -> void:
 	_build_index()
 	_build_board()
-	_build_signage()
 	_build_notice()
 	EventBus.run_started.connect(refresh)
 	EventBus.round_started.connect(refresh)
@@ -93,36 +87,8 @@ func _build_board() -> void:
 		"console_order": 20, "console_min": 200.0, "grow": true,
 	})
 	_board = VenueBoard.new()
-	_board.tile_selected.connect(_on_tile_selected)
+	_board.tile_action.connect(_on_job_action)
 	_board_panel.content().add_child(_board)
-
-
-## The sheet beside the board: the office's standing advice until a contract is
-## picked, and then everything that contract wants and every reason it might sink
-## the round.
-func _build_signage() -> void:
-	_signage_panel = add_panel("signage", "", {
-		"console_order": 30, "console_min": 0.0,
-	})
-	var content: VBoxContainer = _signage_panel.content()
-
-	_sign = VBoxContainer.new()
-	_sign.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_sign.add_theme_constant_override("separation", 8)
-	content.add_child(_sign)
-	for line in ["TAKE WHAT", "YOU CAN FINISH"]:
-		var label: Label = ConsoleStyle.label(
-			line, ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR_DIM
-		)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_sign.add_child(label)
-
-	_detail = ConsoleDetail.new()
-	_detail.visible = false
-	_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_detail.action_pressed.connect(_on_detail_action)
-	_detail.closed.connect(_on_detail_closed)
-	content.add_child(_detail)
 
 
 ## The card by the door, carrying the one contract that is not on the wire: the
@@ -164,7 +130,6 @@ func refresh() -> void:
 	_refresh_counters(shelves)
 	_refresh_board(shelves)
 	_refresh_notice()
-	_refresh_detail()
 
 
 func _shelves() -> Dictionary:
@@ -300,7 +265,6 @@ func _on_counter_pressed(key: String) -> void:
 	if _active == key:
 		return
 	_active = key
-	_selected_id = ""
 	_board.clear_selection()
 	refresh()
 	lean_on("board")
@@ -310,11 +274,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	if SceneRouter.investor_busy():
-		return
-	if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
-		if _can_accept(_selected_id):
-			_accept_job(_selected_id)
-			get_viewport().set_input_as_handled()
 		return
 	var slot: int = event.keycode - KEY_1
 	var order: Array[String] = _counter_order()
@@ -326,15 +285,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _refresh_board(shelves: Dictionary) -> void:
 	_board_panel.set_heading(_counter_label(_active).capitalize())
-	_offers.clear()
 	var entries: Array = []
 	var taken: bool = _active == SLATE
 	for job in Array(shelves.get(_active, [])):
 		entries.append(_job_entry(job, taken))
 	var note: String = "" if not entries.is_empty() else _empty_line()
 	_board.set_entries(entries, note)
-	if _selected_id != "":
-		_board.select(_selected_id)
 
 
 func _refresh_notice() -> void:
@@ -374,8 +330,6 @@ func _job_entry(job: Dictionary, taken: bool) -> Dictionary:
 	var identity: Dictionary = JobPresentation.sector(job)
 	var reward: float = float(job.get("reward", 0.0))
 	var status: String = "TAKEN" if taken else _offer_status(id)
-	if not taken:
-		_offers[id] = job
 	return {
 		"meta": id if not taken else null,
 		"name": "%s — %s" % [str(identity["client"]), str(job.get("name", "Job"))],
@@ -391,6 +345,9 @@ func _job_entry(job: Dictionary, taken: bool) -> Dictionary:
 		"figure_color": ConsoleStyle.PHOSPHOR if not taken else ConsoleStyle.PHOSPHOR_DIM,
 		"icon": identity["icon"],
 		"tooltip": str(job.get("description", "")),
+		"action_text": "" if taken else "ACCEPT",
+		"action_enabled": not taken and _can_accept(id),
+		"action_tooltip": "" if taken else _accept_action_tooltip(id),
 	}
 
 
@@ -427,46 +384,16 @@ func _can_accept(offer_id: String) -> bool:
 	return Simulation.can_accept_offer(offer_id)
 
 
-# --- The sheet ---------------------------------------------------------------
+# --- Card actions ------------------------------------------------------------
 
-func _on_tile_selected(meta: Variant) -> void:
-	_selected_id = str(meta) if meta != null else ""
-	_refresh_detail()
-
-
-func _on_detail_closed() -> void:
-	_selected_id = ""
-	_board.clear_selection()
-	_refresh_detail()
-
-
-func _refresh_detail() -> void:
-	var offer: Dictionary = Dictionary(_offers.get(_selected_id, {}))
-	var reading: bool = not offer.is_empty()
-	_sign.visible = not reading
-	_detail.visible = reading
-	_signage_panel.set_heading("" if not reading else "The contract")
-	if not reading:
-		return
-	var can_accept: bool = _can_accept(_selected_id)
-	var identity: Dictionary = JobPresentation.sector(offer)
-	_detail.show_detail(
-		"%s — %s" % [
-			str(identity["client"]).to_upper(),
-			str(offer.get("name", "Job")).to_upper(),
-		],
-		_detail_lines(offer),
-		"[ ENTER ] ACCEPT CONTRACT" if can_accept else _blocked_action(),
-		can_accept
-	)
-
-
-func _blocked_action() -> String:
+func _accept_action_tooltip(offer_id: String) -> String:
+	if _can_accept(offer_id):
+		return "Accept contract"
 	if Simulation.phase == Simulation.Phase.ANGEL_ROUND:
-		return "[ -- ] CHOOSE YOUR UPGRADE FIRST"
+		return "Choose your upgrade first."
 	if Simulation.is_work_running():
-		return "[ -- ] ROUND IN PROGRESS"
-	return "[ -- ] AT CAPACITY"
+		return "The current round is already in progress."
+	return "The slate is at capacity."
 
 
 func _detail_lines(offer: Dictionary) -> Array:
@@ -537,17 +464,15 @@ func _round_costs() -> float:
 
 # --- Actions -----------------------------------------------------------------
 
-func _on_detail_action() -> void:
-	if _can_accept(_selected_id):
-		_accept_job(_selected_id)
+func _on_job_action(meta: Variant) -> void:
+	var job_id: String = str(meta)
+	if _can_accept(job_id):
+		_accept_job(job_id)
 
 
 func _accept_job(job_id: String) -> void:
 	UiSound.play("accept")
 	if Simulation.accept_job(job_id):
-		# The contract has moved to the slate, so the sheet would be describing
-		# something that is no longer an offer.
-		_selected_id = ""
 		_board.clear_selection()
 		refresh()
 		get_tree().call_group("ui_refresh", "refresh")
@@ -565,8 +490,6 @@ func _on_venue_layout() -> void:
 	if _board != null:
 		_board.set_console(console_mode())
 		_board.set_metrics(scale, content_width("board"))
-	if _detail != null:
-		_detail.set_metrics(scale)
 	_layout_counter_rows()
 	var font_tiny: int = ConsoleMetrics.font_tiny(scale)
 	if _kicker != null:
@@ -575,10 +498,6 @@ func _on_venue_layout() -> void:
 		_warning.add_theme_font_size_override("font_size", font_tiny)
 	if _notice != null:
 		_notice.add_theme_font_size_override("font_size", font_tiny)
-	var font_body: int = ConsoleMetrics.font_body(scale)
-	for label in _sign.get_children():
-		if label is Label:
-			label.add_theme_font_size_override("font_size", font_body)
 	for line in _index_lines.get_children():
 		_apply_line_font(line, ConsoleMetrics.font_small(scale))
 

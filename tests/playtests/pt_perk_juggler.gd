@@ -74,7 +74,7 @@ func _bench_one(harness: UiHarness) -> void:
 		return
 	await harness.driver.lean_if_needed(tile)
 	await harness.driver.press(tile)
-	await _press_enabled_action(harness, ["BENCH"])
+	await _press_enabled_action(harness, ["UNEQUIP", "BENCH"])
 
 
 func _equip_from_bench(harness: UiHarness) -> void:

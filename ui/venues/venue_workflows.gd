@@ -1,271 +1,319 @@
 extends VenueScene
 
-## Workflows: the room where the run's ways of working are wired up.
-##
-## This is the screen the whole exercise was for. It was a `ConsoleOverlay` inside
-## a centred frame inside the side panel, which on a handset meant editing a
-## pipeline through a letterbox 442 pixels wide: two tables of four columns each,
-## every effect wrapped to three lines, and a tap target the width of a fingernail.
-##
-## Here it is a wall. The pipelines the run owns are listed on the left, the
-## pipeline being edited is the board — burn order top to bottom, one stage per
-## card, because the order *is* the screen — and the modules not yet placed are
-## on the bench under it. Placing is still the same two taps it always was: pick a
-## module, pick a slot.
+## The visual workflow editor. The room is one large magnetic whiteboard: unused
+## modules live in the narrow tray on the left and the active pipeline is a
+## connected diagram on the right. Pointer users can drag cards directly; the
+## tap-then-tap interaction remains as an equivalent touch and keyboard path.
 
 enum Selection { NONE, MODULE, SLOT }
 
-## Printed on a card for a slot with nothing in it yet.
-const EMPTY_STAGE := "— EMPTY —"
+const LEFT_SHARE := 0.238
+const RIGHT_SHARE := 0.762
+const SECTION_GAP := 48
+const LEFT_INSET := 10
+## More of the divider gutter belongs to the diagram side: its heading and first
+## stage should begin clearly beyond the metal rail, not straddle it.
+const DIVIDER_RIGHT_WEIGHT := 0.65
+const TOP_INSET := 24
+const BOARD_INK := Color(0.025, 0.12, 0.072)
+const BOARD_INK_DIM := Color(0.055, 0.22, 0.13)
+const BOARD_WARNING := Color(0.38, 0.23, 0.035)
 
-## Where the two halves of the board are separated, since they are two boards in
-## one panel rather than one list of mixed things.
-const SECTION_GAP := 10
-
-var _kicker: Label = null
-var _workflows: VBoxContainer = null
-var _name_edit: LineEdit = null
-var _commands: VBoxContainer = null
-var _new_row: ConsoleMenuRow = null
-var _delete_row: ConsoleMenuRow = null
 var _board_panel: VenuePanel = null
-var _board_scroll: ScrollContainer = null
-var _board_column: VBoxContainer = null
+var _top_spacer: Control = null
+var _body: Control = null
+var _left: VBoxContainer = null
+var _right: VBoxContainer = null
+
+var _workflow_caption: Label = null
+var _workflow_picker: OptionButton = null
+var _name_edit: LineEdit = null
+var _new_button: Button = null
+var _delete_button: Button = null
+var _tray_caption: Label = null
+var _tray: WorkflowModuleTray = null
+var _back_button: Button = null
+
+var _pipeline_title: Label = null
 var _prompt: Label = null
-var _pipeline_caption: Label = null
-var _pipeline: VenueBoard = null
-var _bench_caption: Label = null
-var _bench: VenueBoard = null
-var _signage_panel: VenuePanel = null
-var _sign: VBoxContainer = null
-var _detail: ConsoleDetail = null
-var _notice: Label = null
-var _workflow_rows: Array[ConsoleMenuRow] = []
+var _diagram: WorkflowDiagram = null
+var _status: Label = null
+var _remove_button: Button = null
 
 var _selection: Selection = Selection.NONE
 var _selected_module_id: String = ""
 var _selected_slot_index: int = -1
+var _syncing_picker: bool = false
 
 
 func venue_key() -> String:
 	return "workflows"
 
 
-func _hint_entries() -> Array:
-	return []
+func _painted_hints() -> bool:
+	return false
+
+
+## The whiteboard is already enlarged by the room camera. Applying the complete
+## handset readability multiplier inside that enlarged surface makes the picker
+## outgrow the left side and the magnetic notes crowd the workflow. Compensate
+## only this full-board editor for the camera zoom; narrow venue panels still use
+## VenueScene's ordinary close-up scale.
+func _lean_scale() -> float:
+	return clampf(_scale / maxf(_lean_zoom, 1.0), 1.0, _scale)
 
 
 func _build_venue() -> void:
-	_build_index()
-	_build_board()
-	_build_signage()
-	_build_notice()
+	_board_panel = add_panel("board", "", {
+		"console_order": 10,
+		"console_min": 760.0,
+		"grow": true,
+	})
+	_board_panel.set_whiteboard(true)
+	var root: VBoxContainer = _board_panel.content()
+	_top_spacer = Control.new()
+	_top_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_top_spacer)
+
+	_body = Control.new()
+	_body.clip_contents = true
+	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body.resized.connect(_layout_whiteboard_columns)
+	root.add_child(_body)
+
+	_build_module_side()
+	_build_diagram_side()
+
 	Simulation.work_tick_completed.connect(refresh)
 	EventBus.module_acquired.connect(func(_id: String) -> void: refresh())
 	EventBus.run_started.connect(refresh)
 
 
-## The left-hand panel: which pipelines exist, what this one is called, and the
-## two commands that change the set of them.
-func _build_index() -> void:
-	var panel: VenuePanel = add_panel("index", "Workflows", {
-		"console_order": 10, "console_min": 200.0,
-	})
-	var content: VBoxContainer = panel.content()
+func _build_module_side() -> void:
+	_left = VBoxContainer.new()
+	_left.name = "ModuleTray"
+	_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_left.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_left.size_flags_stretch_ratio = LEFT_SHARE
+	_left.add_theme_constant_override("separation", 6)
+	_body.add_child(_left)
 
-	_kicker = ConsoleStyle.label(
-		"PIPELINES", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+	_workflow_caption = ConsoleStyle.label(
+		"WORKFLOWS", ConsoleStyle.FONT_BODY, BOARD_INK
 	)
-	content.add_child(_kicker)
+	_left.add_child(_workflow_caption)
 
-	_workflows = VBoxContainer.new()
-	_workflows.add_theme_constant_override("separation", 0)
-	content.add_child(_workflows)
-
-	content.add_child(ConsoleStyle.rule(0.22))
+	_workflow_picker = OptionButton.new()
+	_workflow_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_workflow_picker.fit_to_longest_item = false
+	_style_board_control(_workflow_picker)
+	_workflow_picker.item_selected.connect(_on_workflow_selected)
+	_left.add_child(_workflow_picker)
 
 	_name_edit = ConsoleStyle.line_edit("workflow name", ConsoleStyle.FONT_SMALL)
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_style_board_control(_name_edit)
 	_name_edit.text_submitted.connect(_on_name_submitted)
 	_name_edit.focus_exited.connect(func() -> void: _on_name_submitted(_name_edit.text))
-	content.add_child(_name_edit)
+	_left.add_child(_name_edit)
 
-	_commands = VBoxContainer.new()
-	_commands.add_theme_constant_override("separation", 0)
-	_commands.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_commands)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 6)
+	_left.add_child(actions)
 
-	_new_row = ConsoleMenuRow.new()
-	_new_row.index_label = "N"
-	_new_row.headline = "NEW WORKFLOW"
-	_new_row.pressed.connect(_on_new_workflow)
-	_commands.add_child(_new_row)
+	_new_button = _board_button("+ NEW")
+	_new_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_new_button.pressed.connect(_on_new_workflow)
+	actions.add_child(_new_button)
 
-	_delete_row = ConsoleMenuRow.new()
-	_delete_row.index_label = "D"
-	_delete_row.headline = "DELETE THIS ONE"
-	_delete_row.destructive = true
-	_delete_row.pressed.connect(_on_delete_workflow)
-	_commands.add_child(_delete_row)
+	_delete_button = _board_button("DELETE", true)
+	_delete_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_delete_button.pressed.connect(_on_delete_workflow)
+	actions.add_child(_delete_button)
 
+	_left.add_child(ConsoleStyle.rule(0.35))
 
-## The board: the pipeline, then the bench under it.
-##
-## Both are `VenueBoard`s inline in one scroll rather than scrolling themselves,
-## because a scroll view inside a scroll view swallows the drag and traps the
-## player — which is exactly what the old overlay did on a handset.
-func _build_board() -> void:
-	_board_panel = add_panel("board", "Pipeline", {
-		"console_order": 20, "console_min": 320.0, "grow": true,
-	})
-	var content: VBoxContainer = _board_panel.content()
-
-	# What the editor is waiting for, at the top of the thing being edited rather
-	# than in a banner somewhere else on the wall.
-	_prompt = ConsoleStyle.label("", ConsoleStyle.FONT_SMALL, ConsoleStyle.WARNING)
-	_prompt.visible = false
-	content.add_child(_prompt)
-
-	_board_scroll = ScrollContainer.new()
-	_board_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_board_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_board_scroll)
-
-	var column := VBoxContainer.new()
-	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", SECTION_GAP)
-	_board_scroll.add_child(column)
-	_board_column = column
-
-	_pipeline_caption = ConsoleStyle.label(
-		"PIPELINE · TOP TO BOTTOM", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+	_tray_caption = ConsoleStyle.label(
+		"UNUSED MODULES", ConsoleStyle.FONT_SMALL, BOARD_INK
 	)
-	column.add_child(_pipeline_caption)
+	_left.add_child(_tray_caption)
 
-	_pipeline = VenueBoard.new()
-	_pipeline.tile_selected.connect(_on_slot_pressed)
-	# One stage per row whatever the width: burn order is the point of the
-	# listing, and a grid would have the player reading it in a snake.
-	_pipeline.set_inline(true, 1)
-	column.add_child(_pipeline)
+	_tray = WorkflowModuleTray.new()
+	_tray.module_tapped.connect(_on_module_tapped)
+	_left.add_child(_tray)
 
-	_bench_caption = ConsoleStyle.label(
-		"MODULES", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+	_back_button = _board_button("< BACK TO DESK")
+	_back_button.pressed.connect(_on_back)
+	_left.add_child(_back_button)
+
+
+func _build_diagram_side() -> void:
+	_right = VBoxContainer.new()
+	_right.name = "WorkflowDiagram"
+	_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_right.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_right.size_flags_stretch_ratio = RIGHT_SHARE
+	_right.add_theme_constant_override("separation", 6)
+	_body.add_child(_right)
+
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 10)
+	_right.add_child(title_row)
+
+	_pipeline_title = ConsoleStyle.label(
+		"WORKFLOW", ConsoleStyle.FONT_HEAD, BOARD_INK
 	)
-	column.add_child(_bench_caption)
+	_pipeline_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(_pipeline_title)
 
-	_bench = VenueBoard.new()
-	_bench.tile_selected.connect(_on_module_pressed)
-	_bench.set_inline(true)
-	column.add_child(_bench)
+	_remove_button = _board_button("REMOVE STAGE", true)
+	_remove_button.visible = false
+	_remove_button.pressed.connect(_remove_selected_slot)
+	title_row.add_child(_remove_button)
 
+	_prompt = ConsoleStyle.label(
+		"DRAG A MODULE INTO THE WORKFLOW", ConsoleStyle.FONT_SMALL, BOARD_WARNING
+	)
+	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_right.add_child(_prompt)
 
-func _build_signage() -> void:
-	_signage_panel = add_panel("signage", "", {
-		"console_order": 30, "console_min": 0.0,
-	})
-	var content: VBoxContainer = _signage_panel.content()
+	_diagram = WorkflowDiagram.new()
+	_diagram.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_diagram.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_diagram.slot_tapped.connect(_on_slot_tapped)
+	_diagram.module_dropped.connect(_on_module_dropped)
+	_diagram.slot_dropped.connect(_on_slot_dropped)
+	_right.add_child(_diagram)
 
-	_sign = VBoxContainer.new()
-	_sign.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_sign.add_theme_constant_override("separation", 8)
-	content.add_child(_sign)
-	for line in ["PICK A MODULE", "THEN A SLOT"]:
-		var label: Label = ConsoleStyle.label(
-			line, ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR_DIM
-		)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_sign.add_child(label)
-
-	_detail = ConsoleDetail.new()
-	_detail.visible = false
-	_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_detail.action_pressed.connect(_on_detail_action)
-	_detail.closed.connect(_clear_selection)
-	content.add_child(_detail)
+	_status = ConsoleStyle.paragraph(
+		"", ConsoleStyle.FONT_TINY, BOARD_INK_DIM
+	)
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_right.add_child(_status)
 
 
-## The card by the cabinet: which contracts this pipeline is currently
-## responsible for, so a change made here is never a surprise to work already
-## under way.
-func _build_notice() -> void:
-	var panel: VenuePanel = add_panel("notice", "", {
-		"console_order": 40, "console_min": 70.0,
-	})
-	_notice = ConsoleStyle.paragraph("", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
-	_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.content().add_child(_notice)
+func _board_button(text: String, destructive: bool = false) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.flat = true
+	button.clip_text = true
+	button.focus_mode = Control.FOCUS_ALL
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var color: Color = Color("7b3035") if destructive else BOARD_INK
+	button.add_theme_color_override("font_color", color)
+	button.add_theme_color_override("font_hover_color", BOARD_INK)
+	button.add_theme_color_override("font_pressed_color", BOARD_INK)
+	button.add_theme_color_override("font_disabled_color", Color(BOARD_INK.r, BOARD_INK.g, BOARD_INK.b, 0.32))
+	button.add_theme_stylebox_override("normal", _whiteboard_box(color, 0.38, 0.92))
+	button.add_theme_stylebox_override("hover", _whiteboard_box(color, 0.72, 1.0, Color("eee4b0")))
+	button.add_theme_stylebox_override("pressed", _whiteboard_box(color, 0.90, 1.0, Color("d8cf9f")))
+	button.add_theme_stylebox_override("focus", _whiteboard_box(color, 0.85, 0.96))
+	button.add_theme_stylebox_override("disabled", _whiteboard_box(color, 0.16, 0.42))
+	return button
+
+
+func _style_board_control(control: Control) -> void:
+	for state in ["normal", "read_only"]:
+		control.add_theme_stylebox_override(state, _whiteboard_box(BOARD_INK, 0.36, 0.92))
+	control.add_theme_stylebox_override("focus", _whiteboard_box(BOARD_INK, 0.82, 0.96))
+	control.add_theme_stylebox_override("hover", _whiteboard_box(BOARD_INK, 0.72, 0.96))
+	control.add_theme_stylebox_override("pressed", _whiteboard_box(BOARD_INK, 0.90, 0.98))
+	control.add_theme_color_override("font_color", BOARD_INK)
+	control.add_theme_color_override("font_hover_color", BOARD_INK)
+	control.add_theme_color_override("font_pressed_color", BOARD_INK)
+	control.add_theme_color_override("font_placeholder_color", Color(BOARD_INK.r, BOARD_INK.g, BOARD_INK.b, 0.52))
+
+
+func _whiteboard_box(
+	ink: Color,
+	border_alpha: float,
+	fill_alpha: float,
+	fill: Color = Color("f1eee1")
+) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(fill.r, fill.g, fill.b, fill_alpha)
+	box.border_color = Color(ink.r, ink.g, ink.b, border_alpha)
+	box.set_border_width_all(1)
+	box.set_corner_radius_all(2)
+	return box
 
 
 # --- Refresh -----------------------------------------------------------------
 
 func refresh() -> void:
-	if _pipeline == null:
+	if _diagram == null:
 		return
-	_refresh_workflows()
-	_refresh_name()
+	_refresh_workflow_picker()
 	_refresh_commands()
-	_refresh_pipeline()
-	_refresh_bench()
+	_refresh_tray()
+	_refresh_diagram()
 	_refresh_prompt()
-	_refresh_notice()
-	_refresh_detail()
-	# The board just changed height, and the containers inside it only report the
-	# new one after this frame has settled.
-	call_deferred("_layout_board_scroll")
+	_refresh_status()
 
 
-## One row per pipeline the run owns. The capacity it has not spent is reported on
-## the NEW command rather than shown as a phantom row.
-func _refresh_workflows() -> void:
-	var list: Array = Simulation.workflows()
-	if list.size() != _workflow_rows.size():
-		for row in _workflow_rows:
-			_workflows.remove_child(row)
-			row.queue_free()
-		_workflow_rows.clear()
-		for index in range(list.size()):
-			var row := ConsoleMenuRow.new()
-			row.index_label = str(index + 1)
-			row.pressed.connect(_on_workflow_pressed.bind(index))
-			_workflows.add_child(row)
-			_workflow_rows.append(row)
-	var active: int = Simulation.active_workflow_index()
-	for index in range(_workflow_rows.size()):
-		var workflow: Dictionary = Dictionary(list[index])
-		var row: ConsoleMenuRow = _workflow_rows[index]
-		row.headline = str(workflow.get("name", "Workflow")).to_upper()
-		row.value_text = "%d MOD" % _filled_count(Array(workflow.get("slots", [])))
-		row.set_selected(index == active)
-	_layout_rows()
-
-
-func _filled_count(slots: Array) -> int:
-	var count: int = 0
-	for entry in slots:
-		if str(entry) != "":
-			count += 1
-	return count
-
-
-func _refresh_name() -> void:
-	if _name_edit.has_focus():
-		return
-	_name_edit.text = str(Simulation.active_workflow().get("name", ""))
+func _refresh_workflow_picker() -> void:
+	var workflows: Array = Simulation.workflows()
+	_syncing_picker = true
+	_workflow_picker.clear()
+	for index in range(workflows.size()):
+		var workflow: Dictionary = Dictionary(workflows[index])
+		var filled: int = _filled_count(Array(workflow.get("slots", [])))
+		_workflow_picker.add_item(
+			"%d  %s  Â·  %d MOD" % [index + 1, str(workflow.get("name", "Workflow")).to_upper(), filled],
+			index
+		)
+	_workflow_picker.select(Simulation.active_workflow_index())
+	_syncing_picker = false
+	if not _name_edit.has_focus():
+		_name_edit.text = str(Simulation.active_workflow().get("name", ""))
 
 
 func _refresh_commands() -> void:
 	var spare: int = Simulation.workflow_capacity() - Simulation.workflow_count()
-	_new_row.value_text = "%d SPARE" % spare if spare > 0 else "NO ROOM"
-	_new_row.disabled = spare <= 0
-	_delete_row.disabled = Simulation.workflow_count() <= 1
-	_layout_rows()
+	_new_button.text = "+ NEW  (%d)" % spare if spare > 0 else "+ NEW"
+	_new_button.disabled = spare <= 0
+	_delete_button.disabled = Simulation.workflow_count() <= 1
 
 
-func _refresh_pipeline() -> void:
-	_board_panel.set_heading(
-		str(Simulation.active_workflow().get("name", "Pipeline"))
-	)
+func _refresh_tray() -> void:
+	var slots: Array = Simulation.board_slots()
+	var entries: Array = []
+	var evaluator := ExpressionEvaluator.new()
+	for module_value in Simulation.owned_modules():
+		var module_id := str(module_value)
+		if module_id in slots:
+			continue
+		var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+		if module == null:
+			continue
+		entries.append({
+			"meta": _module_meta(module_id),
+			"role": WorkflowCard.ROLE_MODULE,
+			"module_id": module_id,
+			"name": module.name,
+			"badge": evaluator.render_template(module.badge, module.parameters),
+			"description": evaluator.render_template(
+				module.description_template, module.parameters
+			),
+			"status": module.category,
+		})
+	_tray_caption.text = "UNUSED MODULES  Â·  %d" % entries.size()
+	var note: String = ""
+	if entries.is_empty():
+		note = (
+			"ALL OWNED MODULES ARE IN THIS WORKFLOW"
+			if not Simulation.owned_modules().is_empty()
+			else "FINISH CONTRACTS TO EARN MODULES"
+		)
+	_tray.set_modules(entries, note)
+	if _selection == Selection.MODULE:
+		_tray.select(_module_meta(_selected_module_id))
+	else:
+		_tray.clear_selection()
+
+
+func _refresh_diagram() -> void:
 	var slots: Array = Simulation.board_slots()
 	var job: Dictionary = Simulation.editing_job()
 	var blocked: int = int(job.get("blocked_slots", 0))
@@ -273,154 +321,90 @@ func _refresh_pipeline() -> void:
 	var evaluator := ExpressionEvaluator.new()
 	var entries: Array = []
 	for index in range(slots.size()):
-		entries.append(
-			_slot_entry(slots, index, blocked, blocked_label, evaluator)
-		)
-	var note: String = ""
-	if slots.is_empty():
-		note = "NO SLOTS — THIS WORKFLOW HAS NO PIPELINE YET"
-	_pipeline.set_entries(entries, note)
+		entries.append(_slot_entry(slots, index, blocked, blocked_label, evaluator))
+	_diagram.set_slots(entries)
 	if _selection == Selection.SLOT:
-		_pipeline.select(_slot_meta(_selected_slot_index))
+		_diagram.select(_slot_meta(_selected_slot_index))
 	else:
-		_pipeline.clear_selection()
-
-
-## The bench first, then everything already placed: what the player can still
-## spend is the part of the list they came here for.
-func _refresh_bench() -> void:
-	var slots: Array = Simulation.board_slots()
-	var owned: Array = Simulation.owned_modules()
-	var ordered: Array = []
-	for module_id in owned:
-		if not (str(module_id) in slots):
-			ordered.append(str(module_id))
-	var benched: int = ordered.size()
-	for module_id in owned:
-		if str(module_id) in slots:
-			ordered.append(str(module_id))
-	_bench_caption.text = (
-		"MODULES · %d OWNED, %d ON THE BENCH" % [owned.size(), benched]
-		if benched > 0
-		else "MODULES · %d OWNED, ALL IN THE PIPELINE" % owned.size()
-	)
-	var evaluator := ExpressionEvaluator.new()
-	var entries: Array = []
-	for module_id in ordered:
-		var entry: Dictionary = _module_entry(str(module_id), slots, evaluator)
-		if not entry.is_empty():
-			entries.append(entry)
-	var note: String = ""
-	if entries.is_empty():
-		note = "NO MODULES OWNED YET — FINISH CONTRACTS TO EARN THEM"
-	_bench.set_entries(entries, note)
-	if _selection == Selection.MODULE:
-		_bench.select(_module_meta(_selected_module_id))
-	else:
-		_bench.clear_selection()
+		_diagram.clear_selection()
+	_pipeline_title.text = str(
+		Simulation.active_workflow().get("name", "Workflow")
+	).to_upper()
 
 
 func _refresh_prompt() -> void:
 	match _selection:
 		Selection.MODULE:
-			_prompt.text = "PLACING %s — PICK A SLOT" % _module_name(
+			_prompt.text = "DROP %s ON A STAGE  Â·  OR TAP A STAGE" % _module_name(
 				_selected_module_id
 			).to_upper()
 		Selection.SLOT:
-			_prompt.text = "MOVING %s — PICK ANOTHER SLOT" % _slot_name(
+			_prompt.text = "DRAG %s TO REORDER  Â·  OR TAP ANOTHER STAGE" % _slot_name(
 				_selected_slot_index
 			).to_upper()
 		_:
-			_prompt.text = ""
-	_prompt.visible = _prompt.text != ""
+			_prompt.text = "DRAG AN UNUSED MODULE FROM THE LEFT INTO THE WORKFLOW"
+	_remove_button.visible = _selection == Selection.SLOT
 
 
-func _refresh_notice() -> void:
+func _refresh_status() -> void:
 	var workflow_id: String = str(Simulation.active_workflow().get("id", ""))
 	var names: PackedStringArray = []
-	for job in Array(Simulation.run_state.business.get("active_jobs", [])):
-		if job is Dictionary and str(Dictionary(job).get("workflow_id", "")) == workflow_id:
-			names.append(str(Dictionary(job).get("name", "a contract")).to_upper())
-	if names.is_empty():
-		_notice.text = "NO CONTRACT ASSIGNED"
-		_notice.add_theme_color_override("font_color", ConsoleStyle.PHOSPHOR_DIM)
-		return
-	_notice.text = "WORKING\n%s" % " · ".join(names)
-	_notice.add_theme_color_override("font_color", ConsoleStyle.PHOSPHOR)
+	for job_value in Array(Simulation.run_state.business.get("active_jobs", [])):
+		if not job_value is Dictionary:
+			continue
+		var job: Dictionary = Dictionary(job_value)
+		if str(job.get("workflow_id", "")) == workflow_id:
+			names.append(str(job.get("name", "a contract")).to_upper())
+	_status.text = (
+		"ACTIVE: %s" % " Â· ".join(names)
+		if not names.is_empty()
+		else "NO CONTRACT ASSIGNED"
+	)
 
 
-# --- Tiles -------------------------------------------------------------------
-
-func _slot_meta(index: int) -> String:
-	return "slot:%d" % index
-
-
-func _module_meta(module_id: String) -> String:
-	return "mod:%s" % module_id
-
-
-## One stage of the pipeline. The badge is the figure because a stage is judged on
-## what it does to the batch, and the effect line carries any combo it has live
-## with its neighbours — which exists only because of what sits either side, so it
-## belongs on the stage rather than on the module.
 func _slot_entry(
 	slots: Array,
 	index: int,
-	blocked: int,
+	blocked_count: int,
 	blocked_label: String,
 	evaluator: ExpressionEvaluator
 ) -> Dictionary:
-	var number: String = "%02d" % (index + 1)
-	if index < blocked:
+	var module_id: String = str(slots[index])
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	if index < blocked_count:
 		return {
-			"meta": null,
-			"name": "%s · OCCUPIED" % number,
-			"figure": "×",
-			"figure_color": ConsoleStyle.DANGER,
-			"spec": blocked_label,
-			"status": "TAKEN BY THE CONTRACT",
-			"status_color": ConsoleStyle.DANGER,
+			"meta": _slot_meta(index),
+			"role": WorkflowCard.ROLE_SLOT,
+			"slot_index": index,
+			"module_id": module_id,
+			"blocked": true,
+			"step": "STAGE %02d" % (index + 1),
+			"name": module.name if module != null else "OCCUPIED",
+			"badge": "Ã—",
+			"description": blocked_label,
+			"status": "CONTRACT LOCKED",
 		}
-	var module: ModuleDefinition = ContentDatabase.get_module(str(slots[index]))
 	if module == null:
 		return {
 			"meta": _slot_meta(index),
-			"name": "%s · %s" % [number, EMPTY_STAGE],
-			"figure": "",
-			"spec": "Pick a module from the bench, then this slot.",
-			"status": "EMPTY",
+			"role": WorkflowCard.ROLE_SLOT,
+			"slot_index": index,
+			"step": "STAGE %02d" % (index + 1),
+			"name": "EMPTY",
+			"description": "Drop a module here",
+			"status": "AVAILABLE",
 		}
 	return {
 		"meta": _slot_meta(index),
-		"name": "%s · %s" % [number, module.name],
-		"figure": evaluator.render_template(module.badge, module.parameters),
-		"figure_color": AssetCatalog.rarity_color(module.rarity),
-		"spec": _stage_effect(module, slots, index, blocked, evaluator),
-		"price": module.category.to_upper(),
-		"price_color": ConsoleStyle.PHOSPHOR_DIM,
-		"status": "TAP TO MOVE",
-	}
-
-
-func _module_entry(
-	module_id: String, slots: Array, evaluator: ExpressionEvaluator
-) -> Dictionary:
-	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
-	if module == null:
-		return {}
-	var placed: bool = module_id in slots
-	return {
-		"meta": _module_meta(module_id),
+		"role": WorkflowCard.ROLE_SLOT,
+		"slot_index": index,
+		"module_id": module_id,
+		"step": "STAGE %02d" % (index + 1),
 		"name": module.name,
-		"figure": evaluator.render_template(module.badge, module.parameters),
-		"figure_color": AssetCatalog.rarity_color(module.rarity),
-		"spec": evaluator.render_template(
-			module.description_template, module.parameters
-		),
-		"price": module.category.to_upper(),
-		"price_color": ConsoleStyle.PHOSPHOR_DIM,
-		"status": "IN PIPELINE" if placed else "ON THE BENCH",
-		"status_color": ConsoleStyle.PHOSPHOR_DIM if placed else ConsoleStyle.PHOSPHOR,
+		"badge": evaluator.render_template(module.badge, module.parameters),
+		"description": _stage_effect(module, slots, index, blocked_count, evaluator),
+		"status": module.category,
 	}
 
 
@@ -428,117 +412,75 @@ func _stage_effect(
 	module: ModuleDefinition,
 	slots: Array,
 	index: int,
-	blocked: int,
+	blocked_count: int,
 	evaluator: ExpressionEvaluator
 ) -> String:
-	var text: String = evaluator.render_template(
-		module.description_template, module.parameters
-	)
+	var text: String = evaluator.render_template(module.description_template, module.parameters)
 	var combos: Array = module.active_combos(
-		_neighbour(slots, index, -1, blocked), _neighbour(slots, index, 1, blocked)
+		_neighbour(slots, index, -1, blocked_count),
+		_neighbour(slots, index, 1, blocked_count)
 	)
-	for combo in combos:
-		if not combo is Dictionary:
-			continue
-		text += "  ◆ %s — %s" % [
-			str(Dictionary(combo).get("name", "Combo")),
-			evaluator.render_template(
-				str(Dictionary(combo).get("description", "")), module.parameters
-			),
-		]
+	if not combos.is_empty():
+		text += "  â—† %s" % str(Dictionary(combos[0]).get("name", "COMBO")).to_upper()
 	return text
 
 
-## The nearest filled stage in `step` direction. Empty slots between two modules
-## do not break a combo the player can plainly see lining up.
-func _neighbour(slots: Array, index: int, step: int, blocked: int) -> String:
-	var i: int = index + step
-	while i >= blocked and i < slots.size():
-		if str(slots[i]) != "":
-			return str(slots[i])
-		i += step
+func _neighbour(slots: Array, index: int, step: int, blocked_count: int) -> String:
+	var cursor: int = index + step
+	while cursor >= blocked_count and cursor < slots.size():
+		if str(slots[cursor]) != "":
+			return str(slots[cursor])
+		cursor += step
 	return ""
 
 
 func _blocked_label(job: Dictionary) -> String:
-	for rule in Array(job.get("board_rules", [])):
-		if rule is Dictionary and str(Dictionary(rule).get("type", "")) == BoardSystem.RULE_BLOCKED_SLOTS:
-			return str(Dictionary(rule).get("label", "This contract already owns the slot."))
-	return "This contract already owns the slot."
-
-
-func _module_name(module_id: String) -> String:
-	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
-	return module.name if module != null else module_id
-
-
-func _slot_name(index: int) -> String:
-	var slots: Array = Simulation.board_slots()
-	if index < 0 or index >= slots.size():
-		return "module"
-	return _module_name(str(slots[index]))
-
-
-# --- The sheet ---------------------------------------------------------------
-
-## What is selected, said in full beside the board: the module and what it does,
-## and the one command that applies to it.
-func _refresh_detail() -> void:
-	var reading: bool = _selection != Selection.NONE
-	_sign.visible = not reading
-	_detail.visible = reading
-	_signage_panel.set_heading("" if not reading else "Selected")
-	if not reading:
-		return
-	var evaluator := ExpressionEvaluator.new()
-	var module_id: String = (
-		_selected_module_id if _selection == Selection.MODULE
-		else str(Simulation.board_slots()[_selected_slot_index])
-	)
-	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
-	if module == null:
-		_clear_selection()
-		return
-	var lines: Array = [
-		{
-			"text": evaluator.render_template(
-				module.description_template, module.parameters
-			),
-		},
-		{"stat": "Type", "value": module.category.capitalize()},
-		{"stat": "Rarity", "value": module.rarity.capitalize()},
-	]
-	if _selection == Selection.MODULE:
-		lines.append({"text": "Pick a slot in the pipeline to place it."})
-		_detail.show_detail(module.name.to_upper(), lines, "[ C ] CANCEL", false)
-		return
-	lines.append({
-		"stat": "Slot", "value": "%02d" % (_selected_slot_index + 1),
-	})
-	lines.append({"text": "Pick another slot to move it, or clear this one."})
-	_detail.show_detail(
-		module.name.to_upper(), lines, "[ R ] REMOVE FROM PIPELINE", true
-	)
+	for rule_value in Array(job.get("board_rules", [])):
+		if not rule_value is Dictionary:
+			continue
+		var rule: Dictionary = Dictionary(rule_value)
+		if str(rule.get("type", "")) == BoardSystem.RULE_BLOCKED_SLOTS:
+			return str(rule.get("label", "This contract owns this stage."))
+	return "This contract owns this stage."
 
 
 # --- Actions -----------------------------------------------------------------
 
-## Placing is two taps: a module, then a slot. The second tap is on the board
-## rather than on a confirm button, so the gesture is the same on a desk and under
-## a thumb.
-func _on_slot_pressed(meta: Variant) -> void:
+func _on_module_dropped(module_id: String, slot_index: int) -> void:
+	if Simulation.place_module(module_id, slot_index):
+		_clear_selection()
+
+
+func _on_slot_dropped(from_index: int, to_index: int) -> void:
+	if from_index >= 0 and Simulation.swap_slots(from_index, to_index):
+		_clear_selection()
+
+
+func _on_module_tapped(meta: Variant) -> void:
+	if meta == null:
+		return
+	var module_id: String = str(meta).trim_prefix("mod:")
+	if _selection == Selection.MODULE and _selected_module_id == module_id:
+		_clear_selection(false)
+		return
+	_selection = Selection.MODULE
+	_selected_module_id = module_id
+	_selected_slot_index = -1
+	_sync_selection_view()
+
+
+func _on_slot_tapped(meta: Variant) -> void:
 	if meta == null:
 		return
 	var index: int = int(str(meta).trim_prefix("slot:"))
 	match _selection:
 		Selection.MODULE:
-			Simulation.place_module(_selected_module_id, index)
-			_clear_selection()
+			if Simulation.place_module(_selected_module_id, index):
+				_clear_selection()
 		Selection.SLOT:
 			if index == _selected_slot_index:
-				_clear_selection()
-			else:
-				Simulation.swap_slots(_selected_slot_index, index)
+				_clear_selection(false)
+			elif Simulation.swap_slots(_selected_slot_index, index):
 				_clear_selection()
 		_:
 			if str(Simulation.board_slots()[index]) == "":
@@ -546,37 +488,42 @@ func _on_slot_pressed(meta: Variant) -> void:
 			_selection = Selection.SLOT
 			_selected_slot_index = index
 			_selected_module_id = ""
-			refresh()
+			_sync_selection_view()
 
 
-func _on_module_pressed(meta: Variant) -> void:
-	if meta == null:
-		return
-	var module_id: String = str(meta).trim_prefix("mod:")
-	if _selection == Selection.MODULE and _selected_module_id == module_id:
+func _remove_selected_slot() -> void:
+	if _selection == Selection.SLOT and Simulation.clear_slot(_selected_slot_index):
 		_clear_selection()
-		return
-	_selection = Selection.MODULE
-	_selected_module_id = module_id
-	_selected_slot_index = -1
-	refresh()
 
 
-func _on_detail_action() -> void:
-	if _selection != Selection.SLOT:
-		return
-	Simulation.clear_slot(_selected_slot_index)
-	_clear_selection()
-
-
-func _clear_selection() -> void:
+func _clear_selection(rebuild: bool = true) -> void:
 	_selection = Selection.NONE
 	_selected_module_id = ""
 	_selected_slot_index = -1
-	refresh()
+	if rebuild:
+		refresh()
+	else:
+		_sync_selection_view()
 
 
-func _on_workflow_pressed(index: int) -> void:
+## Selecting a note changes only highlights and instruction copy. Rebuilding the
+## picker, tray and full diagram from inside a desktop mouse-release callback can
+## churn focus and layout while Godot is still dispatching that same event.
+func _sync_selection_view() -> void:
+	if _selection == Selection.MODULE:
+		_tray.select(_module_meta(_selected_module_id))
+	else:
+		_tray.clear_selection()
+	if _selection == Selection.SLOT:
+		_diagram.select(_slot_meta(_selected_slot_index))
+	else:
+		_diagram.clear_selection()
+	_refresh_prompt()
+
+
+func _on_workflow_selected(index: int) -> void:
+	if _syncing_picker:
+		return
 	if Simulation.set_active_workflow(index):
 		_clear_selection()
 
@@ -593,16 +540,12 @@ func _on_delete_workflow() -> void:
 
 func _on_name_submitted(new_name: String) -> void:
 	var wanted: String = new_name.strip_edges()
-	if wanted == "":
-		return
-	if str(Simulation.active_workflow().get("name", "")) == wanted:
+	if wanted == "" or str(Simulation.active_workflow().get("name", "")) == wanted:
 		return
 	if Simulation.rename_workflow(Simulation.active_workflow_index(), wanted):
 		refresh()
 
 
-## The pipeline answers to the keyboard as well as the pointer: the workflows are
-## numbered, and the two commands that are not a tap on the board have letters.
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
@@ -614,75 +557,115 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				_clear_selection()
 				get_viewport().set_input_as_handled()
 			return
-		KEY_R:
+		KEY_R, KEY_DELETE:
 			if _selection == Selection.SLOT:
-				_on_detail_action()
+				_remove_selected_slot()
 				get_viewport().set_input_as_handled()
 			return
 		KEY_N:
-			if not _new_row.disabled:
+			if not _new_button.disabled:
 				_on_new_workflow()
 				get_viewport().set_input_as_handled()
 			return
-	var slot: int = event.keycode - KEY_1
-	if slot < 0 or slot >= _workflow_rows.size():
-		return
-	_on_workflow_pressed(slot)
-	get_viewport().set_input_as_handled()
+	var workflow_index: int = event.keycode - KEY_1
+	if workflow_index >= 0 and workflow_index < Simulation.workflow_count():
+		_on_workflow_selected(workflow_index)
+		get_viewport().set_input_as_handled()
 
 
 # --- Layout ------------------------------------------------------------------
 
 func _on_venue_layout() -> void:
 	var scale: float = console_scale()
-	var width: float = content_width("board")
-	if _pipeline != null:
-		_pipeline.set_metrics(scale, width)
-	if _bench != null:
-		_bench.set_metrics(scale, width)
-	if _detail != null:
-		_detail.set_metrics(scale)
-	_layout_board_scroll()
-	_layout_rows()
-	var font_tiny: int = ConsoleMetrics.font_tiny(scale)
-	for label in [_kicker, _pipeline_caption, _bench_caption, _notice]:
-		if label != null:
-			label.add_theme_font_size_override("font_size", font_tiny)
-	if _prompt != null:
-		_prompt.add_theme_font_size_override("font_size", ConsoleMetrics.font_small(scale))
-	if _name_edit != null:
-		_name_edit.add_theme_font_size_override("font_size", ConsoleMetrics.font_small(scale))
-		_name_edit.custom_minimum_size = Vector2(0.0, ConsoleMetrics.row_height(scale))
-	var font_body: int = ConsoleMetrics.font_body(scale)
-	for label in _sign.get_children():
-		if label is Label:
-			label.add_theme_font_size_override("font_size", font_body)
+	_top_spacer.custom_minimum_size.y = (
+		0.0 if console_mode() else float(ConsoleMetrics.px(TOP_INSET, scale))
+	)
+	_left.add_theme_constant_override("separation", ConsoleMetrics.px(6, scale))
+	_right.add_theme_constant_override("separation", ConsoleMetrics.px(6, scale))
+
+	var tiny: int = ConsoleMetrics.font_tiny(scale)
+	var small: int = ConsoleMetrics.font_small(scale)
+	var body_font: int = ConsoleMetrics.font_body(scale)
+	var head: int = ConsoleMetrics.font_head(scale)
+	_workflow_caption.add_theme_font_size_override("font_size", body_font)
+	_tray_caption.add_theme_font_size_override("font_size", small)
+	_pipeline_title.add_theme_font_size_override("font_size", head)
+	_prompt.add_theme_font_size_override("font_size", small)
+	_status.add_theme_font_size_override("font_size", tiny)
+	_name_edit.add_theme_font_size_override("font_size", small)
+	_workflow_picker.add_theme_font_size_override("font_size", small)
+	for button in [_new_button, _delete_button, _remove_button, _back_button]:
+		button.add_theme_font_size_override("font_size", small)
+	# Console mode already has VenueScene's full-width ESC/BACK row. Keeping one
+	# exit in each layout avoids the duplicate controls the venue pass removed.
+	_back_button.visible = not console_mode()
+
+	_tray.custom_minimum_size.y = ConsoleMetrics.px(260 if console_mode() else 0, scale)
+	_tray.set_metrics(scale)
+	_diagram.set_metrics(scale)
+	_layout_whiteboard_columns()
 
 
-## On the wall the board is a fixed rectangle and the pipeline scrolls inside it.
-## In the console column it must not: the column is already a scroll view, and a
-## scroll view inside one swallows the drag — the player reaches the bottom of the
-## pipeline and cannot get past it to the bench. So the board reports its full
-## height instead and the column grows.
-func _layout_board_scroll() -> void:
-	if _board_scroll == null:
+## The photographed divider is authoritative. A container would first honour the
+## controls' minimum widths and only then apply the stretch ratio, which is what
+## pushed the tray over the metal rail. Manual placement fixes the split to the
+## board, and the narrow controls wrap or clip inside their side of it.
+func _layout_whiteboard_columns() -> void:
+	if _body == null or _left == null or _right == null or _body.size.x <= 1.0:
 		return
-	var nested: bool = console_mode()
-	_board_scroll.vertical_scroll_mode = (
-		ScrollContainer.SCROLL_MODE_DISABLED if nested else ScrollContainer.SCROLL_MODE_AUTO
+	var gap: float = float(ConsoleMetrics.px(SECTION_GAP, console_scale()))
+	if console_mode():
+		var left_height: float = maxf(
+			_left.get_combined_minimum_size().y,
+			float(ConsoleMetrics.px(390, console_scale()))
+		)
+		var right_height: float = maxf(
+			_right.get_combined_minimum_size().y,
+			float(ConsoleMetrics.px(420, console_scale()))
+		)
+		_left.position = Vector2.ZERO
+		_left.size = Vector2(_body.size.x, left_height)
+		_right.position = Vector2(0.0, left_height + gap)
+		_right.size = Vector2(_body.size.x, right_height)
+		_body.custom_minimum_size.y = left_height + gap + right_height
+		return
+	var divider_x: float = _body.size.x * LEFT_SHARE
+	var left_gutter: float = gap * (1.0 - DIVIDER_RIGHT_WEIGHT)
+	var right_gutter: float = gap * DIVIDER_RIGHT_WEIGHT
+	var left_inset: float = float(ConsoleMetrics.px(LEFT_INSET, console_scale()))
+	_left.position = Vector2(left_inset, 0.0)
+	_left.size = Vector2(
+		maxf(1.0, divider_x - left_gutter),
+		_body.size.y
 	)
-	_board_scroll.custom_minimum_size.y = (
-		_board_column.get_combined_minimum_size().y if nested else 0.0
-	)
+	_right.position = Vector2(divider_x + right_gutter, 0.0)
+	_right.size = Vector2(maxf(1.0, _body.size.x - divider_x - right_gutter), _body.size.y)
+	_body.custom_minimum_size.y = 0.0
 
 
-func _layout_rows() -> void:
-	var scale: float = console_scale()
-	var font: int = ConsoleMetrics.font_small(scale)
-	var height: int = ConsoleMetrics.row_height(scale)
-	var pad: int = ConsoleMetrics.pad_h(scale)
-	for row in _workflow_rows:
-		row.set_metrics(font, height, pad)
-	for row in [_new_row, _delete_row]:
-		if row != null:
-			row.set_metrics(font, height, pad)
+func _filled_count(slots: Array) -> int:
+	var count: int = 0
+	for module_id in slots:
+		if str(module_id) != "":
+			count += 1
+	return count
+
+
+func _slot_meta(index: int) -> String:
+	return "slot:%d" % index
+
+
+func _module_meta(module_id: String) -> String:
+	return "mod:%s" % module_id
+
+
+func _module_name(module_id: String) -> String:
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	return module.name if module != null else module_id
+
+
+func _slot_name(index: int) -> String:
+	var slots: Array = Simulation.board_slots()
+	if index < 0 or index >= slots.size():
+		return "module"
+	return _module_name(str(slots[index]))

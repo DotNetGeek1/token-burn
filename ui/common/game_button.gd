@@ -87,6 +87,9 @@ func _ready() -> void:
 	# The built-in label and icon would draw underneath the child controls.
 	text = ""
 	icon = null
+	# Action buttons appear inside cards and sheets that scroll on touch. They
+	# still receive taps, but must pass drags to the scroll view behind them.
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	# A scene that named its own height meant it; only unspecified buttons get
 	# pushed up to the full action target, so card CTAs stay list-sized.
 	var default_height: int = (

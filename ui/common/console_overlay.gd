@@ -28,6 +28,7 @@ var _frame: ConsoleFrame = null
 var _body: VBoxContainer = null
 var _footer: VBoxContainer = null
 var _footer_rule: ColorRect = null
+var _inline_actions: HBoxContainer = null
 var _close_row: ConsoleMenuRow = null
 var _action_rows: Array[ConsoleMenuRow] = []
 var _scale: float = 1.0
@@ -88,6 +89,12 @@ func _ensure_built() -> void:
 	_footer.add_theme_constant_override("separation", 0)
 	frame_content.add_child(_footer)
 
+	_inline_actions = HBoxContainer.new()
+	_inline_actions.visible = false
+	_inline_actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_inline_actions.add_theme_constant_override("separation", 12)
+	_footer.add_child(_inline_actions)
+
 	_close_row = ConsoleMenuRow.new()
 	_close_row.index_label = "ESC"
 	_close_row.headline = "CLOSE"
@@ -115,18 +122,25 @@ func set_context(text: String, color: Color = ConsoleStyle.PHOSPHOR_DIM) -> void
 ## Footer commands, printed above the close line. Each entry is
 ## `{"index": "1", "headline": "DELIVER", "value": "", "destructive": false,
 ## "enabled": true, "pressed": Callable}`.
-func set_actions(entries: Array) -> void:
+func set_actions(entries: Array, inline: bool = false) -> void:
 	_ensure_built()
 	for row in _action_rows:
-		_footer.remove_child(row)
+		var parent: Node = row.get_parent()
+		if parent != null:
+			parent.remove_child(row)
 		row.queue_free()
 	_action_rows.clear()
+	_inline_actions.visible = inline and not entries.is_empty()
 	for entry in entries:
 		if not entry is Dictionary:
 			continue
 		var row := ConsoleMenuRow.new()
-		_footer.add_child(row)
-		_footer.move_child(row, _footer.get_child_count() - 2)
+		if inline:
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_inline_actions.add_child(row)
+		else:
+			_footer.add_child(row)
+			_footer.move_child(row, _close_row.get_index())
 		row.index_label = str(entry.get("index", str(_action_rows.size() + 1)))
 		row.headline = str(entry.get("headline", ""))
 		row.value_text = str(entry.get("value", ""))
@@ -241,6 +255,7 @@ func _apply_metrics() -> void:
 		return
 	_frame.set_metrics(_scale)
 	_body.add_theme_constant_override("separation", ConsoleMetrics.px(8, _scale))
+	_inline_actions.add_theme_constant_override("separation", ConsoleMetrics.px(8, _scale))
 	var font_small: int = ConsoleMetrics.font_small(_scale)
 	var height: int = ConsoleMetrics.row_height(_scale)
 	var pad_h: int = ConsoleMetrics.pad_h(_scale)

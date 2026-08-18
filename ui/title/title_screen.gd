@@ -1,54 +1,33 @@
 extends Control
 
-## The game's front door: the menu running on the laptop that starts the run.
+## The game's front door: a live console printed over the burning compute works.
 ##
 ## The menu used to live in the "More" tab, which meant the first thing a new
 ## player saw was the middle of a run. This screen sits over the shell at boot
 ## and steps aside once a run is loaded or started, so the run always begins
 ## with a deliberate press rather than by default.
 ##
-## Nothing here is an app control. The bedroom is the backdrop, the used laptop
-## from the rig art is the machine, and the menu is what is printed on its glass:
-## fixed-pitch phosphor text that types itself on at boot, one touchable line per
-## action, with the number keys as a shortcut for anyone who would rather type at
-## it. Everything is measured off the screen rect the artwork was authored with,
-## so the menu stays pinned to the glass at any window size.
+## Nothing here is an app control. The menu is a diegetic system console laid into
+## the same overheated venue as the boot splash: fixed-pitch phosphor text that
+## types itself on, one touchable line per action, with number-key shortcuts.
 
 signal start_requested
 
 ## The rig's own monitor overlay, so the title's glass and the one the player
 ## works on during a run are the same piece of hardware.
 const CRT_SHADER := preload("res://ui/board/crt_screen.gdshader")
-const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
+const TITLE_BACKGROUND := preload("res://presentation/title/boot_splash_background.png")
 
 const PHOSPHOR := ConsoleStyle.PHOSPHOR
 const PHOSPHOR_DIM := ConsoleStyle.PHOSPHOR_DIM
 
-## The laptop the run starts on. Same artwork the board puts on the desk, so the
-## machine on the title is the machine the player is about to use.
-const LAPTOP_STAGE := 1
-## Where the machine itself sits inside its picture, measured off the artwork.
-## The picture is mostly black field, so the composition is framed on this rather
-## than on the file: the laptop is centred and scaled by where the plastic is.
-const MACHINE_UV := Rect2(0.18, 0.06, 0.66, 0.93)
-## How much of the window's width the machine is asked to fill. The glass is only
-## 46% of the picture across, so this is the dial that decides whether the menu
-## is legible; what it costs is the front of the keyboard, which runs off the
-## bottom of the frame as though the player were leaning over it.
-const MACHINE_WIDTH := 0.74
-## Where the top of the lid sits, as a fraction of the window height.
-const MACHINE_TOP := 0.045
-## Ceiling on how far the artwork may overhang vertically, so a short window
-## crops the keyboard rather than swallowing the whole machine.
-const MAX_ART_OVERFLOW := 1.5
-## The key art is a portrait room and the window is landscape, so most of it is
-## cropped away. Centring the crop lands on the floor; this pulls it up to the
-## band with the desk, the window and the neon in it.
-const BACKDROP_FOCUS := 0.3
 ## Glass height every type size below was chosen against. Rendered text is scaled
 ## from this, so the menu keeps its proportions on a phone and on a 4K monitor.
-const REFERENCE_GLASS := 350.0
-const MIN_SCALE := 0.55
+const REFERENCE_GLASS := Vector2(720.0, 560.0)
+const PANEL_WIDTH_RATIO := 0.62
+const PANEL_MAX_WIDTH := 800.0
+const DESKTOP_BREAKPOINT := 720.0
+const MIN_SCALE := 0.82
 const MAX_SCALE := 3.0
 
 const BOOT_LINES := [
@@ -64,6 +43,7 @@ const METRIC_INTERVAL := 0.5
 const EMBER_COUNT := 22
 
 @onready var backdrop: TextureRect = $Backdrop
+@onready var scrim: TextureRect = $Scrim
 @onready var vignette: TextureRect = $Vignette
 @onready var embers: GPUParticles2D = $Embers
 @onready var stage: Control = $Stage
@@ -107,7 +87,6 @@ const EMBER_COUNT := 22
 var _detail_sheet: ConsoleSheet = null
 var _rows: Array[ConsoleMenuRow] = []
 var _panels: Dictionary = {}
-var _glass_uv: Rect2 = Rect2()
 var _scale: float = 1.0
 var _boot_tween: Tween = null
 var _cursor_tween: Tween = null
@@ -130,27 +109,32 @@ func _ready() -> void:
 # --- The room and the machine ------------------------------------------------
 
 func _build_scene() -> void:
-	backdrop.texture = AssetCatalog.title_art()
-	vignette.texture = UiFx.vignette(Color(0, 0, 0, 0.82), 0.22)
+	backdrop.texture = TITLE_BACKGROUND
+	# A horizontal scrim leaves the burning turbine intact while making the live
+	# menu feel printed into the darker half of the venue.
+	var scrim_texture := GradientTexture2D.new()
+	scrim_texture.gradient = UiFx.ramp(
+		[0.0, 0.46, 0.76, 1.0],
+		[
+			Color(0.005, 0.016, 0.012, 0.92),
+			Color(0.005, 0.016, 0.012, 0.72),
+			Color(0.005, 0.016, 0.012, 0.16),
+			Color(0.005, 0.016, 0.012, 0.03),
+		]
+	)
+	scrim_texture.fill_from = Vector2(0.0, 0.5)
+	scrim_texture.fill_to = Vector2(1.0, 0.5)
+	scrim_texture.width = 256
+	scrim_texture.height = 8
+	scrim.texture = scrim_texture
+	vignette.texture = UiFx.vignette(Color(0, 0, 0, 0.78), 0.28)
 
-	var art: Dictionary = AssetCatalog.rig_stage(LAPTOP_STAGE)
-	laptop.texture = _cropped_art(art)
-	var screens: Array = Array(art.get("screens", []))
-	_glass_uv = screens[0] if not screens.is_empty() else Rect2(0.27, 0.1, 0.46, 0.42)
-	# The photograph is a machine on a black field. Added rather than pasted, so
-	# the field contributes nothing and the laptop's edges melt into the room
-	# instead of covering it with a rectangle.
-	var additive := CanvasItemMaterial.new()
-	additive.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	laptop.material = additive
-	laptop.modulate = Color(1.0, 1.0, 1.0)
-
-	# Added art is see-through, so the room is pushed down under the machine
-	# first, or the monitors behind it show through the lid.
-	desk_shadow.texture = UiFx.radial_dot(64, 0.42)
-	desk_shadow.modulate = Color(0, 0, 0, 0.55)
+	# The old laptop nodes remain in the scene for save-compatible node paths,
+	# but the new title is full-bleed venue art rather than another machine shot.
+	laptop.visible = false
+	desk_shadow.visible = false
 	screen_glow.texture = UiFx.radial_dot(96, 0.15)
-	screen_glow.modulate = Color(PHOSPHOR.r, PHOSPHOR.g, PHOSPHOR.b, 0.13)
+	screen_glow.modulate = Color(PHOSPHOR.r, PHOSPHOR.g, PHOSPHOR.b, 0.07)
 	var glow_material := CanvasItemMaterial.new()
 	glow_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	screen_glow.material = glow_material
@@ -161,38 +145,29 @@ func _build_scene() -> void:
 	crt_overlay.material = crt_material
 	crt_overlay.color = Color.WHITE
 
-	glass.color = Color(0.027, 0.063, 0.055, 0.97)
+	glass.color = Color(0.009, 0.032, 0.023, 0.48)
 
 	var menu_style := StyleBoxFlat.new()
-	menu_style.bg_color = Color(PHOSPHOR.r, PHOSPHOR.g, PHOSPHOR.b, 0.03)
-	menu_style.border_color = Color(PHOSPHOR.r, PHOSPHOR.g, PHOSPHOR.b, 0.26)
+	menu_style.bg_color = Color(0.006, 0.025, 0.017, 0.62)
+	menu_style.border_color = Color(PHOSPHOR.r, PHOSPHOR.g, PHOSPHOR.b, 0.34)
 	menu_style.set_border_width_all(1)
 	menu_style.set_corner_radius_all(0)
 	menu_frame.add_theme_stylebox_override("panel", menu_style)
 	header_rule.color = Color(PHOSPHOR.r, PHOSPHOR.g, PHOSPHOR.b, 0.26)
 
 	header_label.text = "TOKEN_BURN %s" % _version()
-	menu_title.text = "\u2500\u2500  MAIN MENU  \u2500\u2500"
+	wordmark.text = "TOKEN_BURN"
+	wordmark.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	tagline.text = "BUILD.  OPTIMIZE.  BURN."
+	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	menu_title.text = "\u2500\u2500  MAIN MENU"
+	menu_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	# The venue and its fire are the secondary readout now. Keeping the old live
+	# metric widgets built but hidden preserves their data path without crowding
+	# the action list the player came here to use.
+	side_panels.visible = false
 	_refresh_clock()
 	_build_embers()
-
-
-## `AssetCatalog` reports the screen rects against the cropped picture, so the
-## same crop has to be taken out of the texture or the glass lands low.
-static func _cropped_art(data: Dictionary) -> Texture2D:
-	var source: Variant = data.get("texture")
-	if not source is Texture2D:
-		return null
-	var texture: Texture2D = source
-	var top: float = float(data.get("crop_top", 0.0))
-	var bottom: float = float(data.get("crop_height", 1.0))
-	if top <= 0.001 and bottom >= 0.999:
-		return texture
-	var atlas := AtlasTexture.new()
-	atlas.atlas = texture
-	var full: Vector2 = texture.get_size()
-	atlas.region = Rect2(0.0, full.y * top, full.x, full.y * (bottom - top))
-	return atlas
 
 
 func _build_embers() -> void:
@@ -226,89 +201,55 @@ func _version() -> String:
 	return "v%s" % (version if version != "" else "0.1.0")
 
 
-# --- Placing the machine and its glass ---------------------------------------
+# --- Placing the venue console -----------------------------------------------
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and is_node_ready():
 		_layout_stage()
 
 
-## Places the laptop by hand rather than leaving it to the TextureRect's own
-## aspect fitting, because the menu, the glow and the shadow are all positioned
-## against wherever the picture actually landed.
+## Wide displays leave the turbine unobstructed. Narrow displays promote the
+## console to a near-full-screen sheet so every action remains touchable.
 func _layout_stage() -> void:
-	var texture: Texture2D = laptop.texture
-	if texture == null or size.x <= 0.0 or size.y <= 0.0:
-		return
-	var art_size: Vector2 = texture.get_size()
-	if art_size.x <= 0.0 or art_size.y <= 0.0:
+	if size.x <= 0.0 or size.y <= 0.0:
 		return
 	_layout_backdrop()
-	var contain: float = minf(size.x / art_size.x, size.y / art_size.y)
-	var fit: float = (MACHINE_WIDTH * size.x) / (MACHINE_UV.size.x * art_size.x)
-	fit = minf(fit, (size.y * MAX_ART_OVERFLOW) / art_size.y)
-	fit = maxf(fit, contain)
-	var drawn: Vector2 = art_size * fit
-	# Positioned by the machine rather than by the file: the lid is centred across
-	# the window and hung just below the top edge, and whatever black field that
-	# leaves over is spent off the bottom.
-	var origin := Vector2(
-		size.x * 0.5 - (MACHINE_UV.position.x + MACHINE_UV.size.x * 0.5) * drawn.x,
-		size.y * MACHINE_TOP - MACHINE_UV.position.y * drawn.y
-	)
-	var glass_rect := Rect2(origin + _glass_uv.position * drawn, _glass_uv.size * drawn)
-	# On a handset the painted glass is a couple of centimetres tall, so the
-	# whole machine is blown up around its screen until the menu can print at a
-	# readable size — the keyboard runs off the frame as though the player were
-	# leaning right over it. Desktop keeps the machine the artwork drew.
-	var grow: float = _glass_grow(glass_rect)
-	if grow > 1.001:
-		var focus: Vector2 = glass_rect.get_center()
-		drawn *= grow
-		origin = focus + (origin - focus) * grow
-		glass_rect = Rect2(origin + _glass_uv.position * drawn, _glass_uv.size * drawn)
-		# Keep the grown glass on the window; the machine follows it.
-		var shift := Vector2(
-			clampf(
-				glass_rect.position.x, 8.0, maxf(8.0, size.x - glass_rect.size.x - 8.0)
-			) - glass_rect.position.x,
-			clampf(
-				glass_rect.position.y,
-				size.y * 0.04,
-				maxf(size.y * 0.04, size.y - glass_rect.size.y - 8.0)
-			) - glass_rect.position.y
+	var desktop: bool = size.x >= DESKTOP_BREAKPOINT and size.x / size.y >= 1.15
+	var glass_rect: Rect2
+	if desktop:
+		var margin_x: float = maxf(42.0, size.x * 0.055)
+		var margin_y: float = maxf(26.0, size.y * 0.052)
+		glass_rect = Rect2(
+			Vector2(margin_x, margin_y),
+			Vector2(minf(size.x * PANEL_WIDTH_RATIO, PANEL_MAX_WIDTH), size.y - margin_y * 2.0)
 		)
-		origin += shift
-		glass_rect.position += shift
-	laptop.position = origin
-	laptop.size = drawn
+	else:
+		var margin: float = maxf(12.0, size.x * 0.032)
+		glass_rect = Rect2(
+			Vector2(margin, margin), Vector2(size.x - margin * 2.0, size.y - margin * 2.0)
+		)
 	terminal.position = glass_rect.position
 	terminal.size = glass_rect.size
+	screen_glow.position = glass_rect.position - glass_rect.size * Vector2(0.12, 0.08)
+	screen_glow.size = glass_rect.size * Vector2(1.24, 1.16)
 
-	# The shadow is a soft blob over the machine's own footprint rather than the
-	# whole picture, so the room keeps its corners. The glow is a tighter one over
-	# the glass, so light appears to spill onto the bezel.
-	var machine := Rect2(
-		origin + MACHINE_UV.position * drawn, MACHINE_UV.size * drawn
-	)
-	desk_shadow.position = machine.position - machine.size * 0.05
-	desk_shadow.size = machine.size * 1.1
-	screen_glow.position = glass_rect.position - glass_rect.size * 0.2
-	screen_glow.size = glass_rect.size * 1.4
-
-	embers.position = Vector2(size.x * 0.5, size.y + 20.0)
+	embers.position = Vector2(size.x * 0.82, size.y + 20.0)
 	var ember_material: ParticleProcessMaterial = embers.process_material
 	if ember_material != null:
-		ember_material.emission_box_extents = Vector3(maxf(80.0, size.x * 0.5), 20, 1)
+		ember_material.emission_box_extents = Vector3(maxf(80.0, size.x * 0.22), 20, 1)
 
 	var crt_material: ShaderMaterial = crt_overlay.material
 	if crt_material != null:
-		# Two device pixels per scanline, whatever the glass ended up being.
 		crt_material.set_shader_parameter(
 			"scanline_count", maxf(60.0, glass_rect.size.y * 0.5)
 		)
 
-	_apply_metrics(clampf(glass_rect.size.y / REFERENCE_GLASS, MIN_SCALE, MAX_SCALE))
+	var fit_scale: float = minf(
+		glass_rect.size.x / REFERENCE_GLASS.x, glass_rect.size.y / REFERENCE_GLASS.y
+	)
+	if not desktop:
+		fit_scale = maxf(fit_scale, glass_rect.size.x / 460.0)
+	_apply_metrics(clampf(fit_scale * 1.18, MIN_SCALE, MAX_SCALE))
 
 
 ## Everything printed on the glass is sized from the glass, so the menu reads the
@@ -338,34 +279,21 @@ func _apply_metrics(new_scale: float) -> void:
 
 	_mono(header_label, _px(11), PHOSPHOR_DIM)
 	_mono(clock_label, _px(11), PHOSPHOR_DIM)
-	_mono(wordmark, _px(28), PHOSPHOR)
-	_mono(tagline, _px(10), PHOSPHOR_DIM)
+	_mono(wordmark, _px(38), PHOSPHOR)
+	_mono(tagline, _px(11), PHOSPHOR_DIM)
 	_mono(menu_title, _px(10), PHOSPHOR_DIM)
-	_mono(prompt_label, _px(12), PHOSPHOR)
+	_mono(prompt_label, _px(13), PHOSPHOR)
 	for child in boot_log.get_children():
 		if child is Label:
 			_mono(child as Label, _px(10), PHOSPHOR_DIM)
 	for row in _rows:
-		row.set_metrics(_px(13), _px(24), _px(8))
+		row.set_metrics(_px(14), _px(27), _px(8))
 	for key in _panels:
 		(_panels[key] as ConsolePanel).set_metrics(_scale)
 
 
-## How far the machine has to be blown up for the menu on its glass to reach a
-## readable physical size on this screen. 1.0 wherever the artwork already
-## delivers that.
-func _glass_grow(glass_rect: Rect2) -> float:
-	var boost: float = ConsoleMetrics.stretch_compensation()
-	if boost <= 1.2 or glass_rect.size.y <= 1.0:
-		return 1.0
-	var wanted_height: float = minf(
-		REFERENCE_GLASS * clampf(boost, 1.0, MAX_SCALE), size.y * 0.88
-	)
-	return maxf(1.0, wanted_height / glass_rect.size.y)
-
-
-## Covers the window with the room, biased up the picture so the crop keeps the
-## desk rather than the empty floor beneath it.
+## Covers the window with the venue. Portrait crops toward the burning machinery
+## so the few exposed edges still carry the scene's orange/green contrast.
 func _layout_backdrop() -> void:
 	var texture: Texture2D = backdrop.texture
 	if texture == null:
@@ -374,9 +302,8 @@ func _layout_backdrop() -> void:
 	if room.x <= 0.0 or room.y <= 0.0:
 		return
 	var drawn: Vector2 = room * maxf(size.x / room.x, size.y / room.y)
-	backdrop.position = Vector2(
-		(size.x - drawn.x) * 0.5, (size.y - drawn.y) * BACKDROP_FOCUS
-	)
+	var focus_x: float = 0.64 if size.x < size.y else 0.5
+	backdrop.position = Vector2((size.x - drawn.x) * focus_x, (size.y - drawn.y) * 0.5)
 	backdrop.size = drawn
 	vignette.position = Vector2.ZERO
 	vignette.size = size
@@ -466,7 +393,7 @@ func _build_rows() -> void:
 		row.set_meta("entry_id", str(entry.get("id", "")))
 		row.pressed.connect(_activate.bind(str(entry.get("id", ""))))
 		rows_box.add_child(row)
-		row.set_metrics(_px(13), _px(24), _px(8))
+		row.set_metrics(_px(14), _px(27), _px(8))
 		_rows.append(row)
 		if not _booted:
 			row.set_reveal(0)

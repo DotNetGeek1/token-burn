@@ -96,31 +96,26 @@ func show_choices() -> void:
 func refresh() -> void:
 	if _cards_list == null:
 		return
-	_refresh_heading()
-	_refresh_board_line()
-	_refresh_bills_line()
+	_refresh_header_line()
 	_deal_cards()
 	var actions: Array = [{
-		"index": "1",
+		"index": "",
 		"headline": "TAKE NOTHING",
-		"value": "Tell him you are fine",
 		"pressed": _on_decline,
 	}]
 	if Simulation.can_reroll_angel():
 		actions.append({
-			"index": "2",
+			"index": "",
 			"headline": "REROLL — %s" % NumberFormat.format_cash(Simulation.angel_reroll_cost()),
-			"value": "Pay for a fresh table",
 			"pressed": _on_reroll,
 		})
 	elif Simulation.phase == Simulation.Phase.ANGEL_ROUND:
 		actions.append({
-			"index": "2",
+			"index": "",
 			"headline": "REROLL — %s" % NumberFormat.format_cash(Simulation.angel_reroll_cost()),
-			"value": "Not enough cash",
 			"enabled": false,
 		})
-	set_actions(actions)
+	set_actions(actions, true)
 	_apply_body_metrics()
 
 
@@ -133,10 +128,7 @@ func _apply_body_metrics() -> void:
 	if _pitch == null:
 		return
 	var scale: float = console_scale()
-	var small: int = ConsoleMetrics.font_small(scale)
-	_pitch.add_theme_font_size_override("font_size", small)
-	_board_label.add_theme_font_size_override("font_size", small)
-	_bills_label.add_theme_font_size_override("font_size", small)
+	_pitch.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
 	_fit_columns()
 
 
@@ -149,10 +141,27 @@ func _fit_columns() -> void:
 	var available: float = _scroll.size.x
 	if available <= 1.0:
 		return
-	var fits: int = maxi(1, int(available / (CARD_MIN_WIDTH * console_scale())))
-	_cards_list.columns = clampi(
-		mini(maxi(1, Simulation.pending_choices.size()), fits), 1, 3
+	_cards_list.columns = _column_count(
+		available,
+		Simulation.pending_choices.size(),
+		console_scale()
 	)
+	var stretch_row: bool = _cards_list.columns > 1
+	_cards_list.size_flags_vertical = (
+		Control.SIZE_EXPAND_FILL if stretch_row else Control.SIZE_FILL
+	)
+	for card in _cards_list.get_children():
+		if card is Control:
+			card.size_flags_vertical = (
+				Control.SIZE_EXPAND_FILL if stretch_row else Control.SIZE_FILL
+			)
+
+
+func _column_count(
+	available: float, choice_count: int, scale: float
+) -> int:
+	var fits: int = maxi(1, int(available / (CARD_MIN_WIDTH * scale)))
+	return clampi(mini(maxi(1, choice_count), fits), 1, 2)
 
 
 func _deal_cards() -> void:
@@ -169,7 +178,7 @@ func _deal_cards() -> void:
 		var offer_id: String = str(offer.get("id", ""))
 		card.setup(
 			str(offer.get("label", "Offer")),
-			_body_text(offer, patter),
+			str(offer.get("description", "")),
 			"",
 			"TAKE IT",
 			_offer_icon(offer_type, offer_id)
@@ -185,7 +194,12 @@ func _deal_cards() -> void:
 		elif offer_type == "perk":
 			card.set_warnings(_perk_bench_warning())
 		card.set_action_style("perks", "perk", "BoostButton")
+		card.set_body_max_lines(2)
+		card.set_action_pinned()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_vertical = (
+			Control.SIZE_EXPAND_FILL if _cards_list.columns > 1 else Control.SIZE_FILL
+		)
 		card.pressed.connect(_accept.bind(offer_type, offer_id))
 		# Taking a module or perk is a decision, so only TAKE IT commits to it.
 		# A tap on the card face reads the pitch in full instead.
@@ -194,13 +208,8 @@ func _deal_cards() -> void:
 	UiTransition.stagger(_cards_list)
 
 
-func _refresh_heading() -> void:
-	_pitch.text = "%s is feeling generous. Take one." % InvestorVoice.investor_name()
-	set_context("NOTHING HERE HAS A PRICE")
-
-
 func _kind_chip_text(offer_type: String) -> String:
-	return "Free %s" % ("module" if offer_type == "module" else "perk")
+	return "Module" if offer_type == "module" else "Perk"
 
 
 func _show_offer_detail(offer: Dictionary, patter: String) -> void:
@@ -231,13 +240,6 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 	_sheet.action_confirmed.connect(_accept.bind(offer_type, offer_id))
 
 
-func _body_text(offer: Dictionary, patter: String) -> String:
-	var description: String = str(offer.get("description", ""))
-	if patter == "":
-		return description
-	return "%s\n\n\"%s\"" % [description, patter]
-
-
 ## A module arriving on a full board is a decision, not a gift, and the screen
 ## says so before the player takes it.
 func _bench_warning() -> Array:
@@ -248,24 +250,26 @@ func _bench_warning() -> Array:
 	return [{"text": "Pipeline full · waits on the bench", "role": "warning"}]
 
 
-func _refresh_board_line() -> void:
-	var owned: int = Simulation.owned_modules().size()
-	# The perk count belongs next to the offers: a build is capped, so the last
-	# free perk of a run should not be taken by accident.
+func _refresh_header_line() -> void:
 	var perks: Dictionary = Simulation.perk_capacity()
-	_board_label.text = "%d of %d modules in the pipeline · %d slot(s) · %d of %d perks" % [
-		Simulation.filled_slot_count(), owned, Simulation.board_slots().size(),
-		int(perks.get("owned", 0)), int(perks.get("cap", 0))
-	]
-
-
-## Knowing rent is due while an investor talks about conviction is the whole joke.
-func _refresh_bills_line() -> void:
 	var outlook: Dictionary = Simulation.bills_outlook()
-	_bills_label.text = "%s in the bank · %s rent and bills due when the next round ends" % [
+	_pitch.text = "%s: PICK ONE FREE  ·  PIPELINE %d/%d  ·  PERKS %d/%d  ·  BANK %s  ·  BILLS %s" % [
+		InvestorVoice.investor_name().to_upper(),
+		Simulation.filled_slot_count(),
+		Simulation.board_slots().size(),
+		int(perks.get("owned", 0)),
+		int(perks.get("cap", 0)),
 		NumberFormat.format_cash(float(outlook.get("cash", 0.0))),
 		NumberFormat.format_cash(float(outlook.get("due", 0.0))),
 	]
+	_pitch.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_pitch.clip_text = true
+	_pitch.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_board_label.text = ""
+	_board_label.visible = false
+	_bills_label.text = ""
+	_bills_label.visible = false
+	set_context("NOTHING HERE HAS A PRICE")
 
 
 func _accept(offer_type: String, offer_id: String) -> void:

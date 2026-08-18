@@ -9,6 +9,7 @@ extends ScrollContainer
 ## not be dropping and reallocating thirty controls to change one price.
 
 signal tile_selected(meta: Variant)
+signal tile_action(meta: Variant)
 
 ## Narrowest a tile can be and still fit a machine's name on two lines with its
 ## rate beside it. Below this the board drops a column.
@@ -43,6 +44,7 @@ func _build() -> void:
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	_body = VBoxContainer.new()
+	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_theme_constant_override("separation", GAP)
 	add_child(_body)
@@ -52,6 +54,7 @@ func _build() -> void:
 	_body.add_child(_note)
 
 	_grid = GridContainer.new()
+	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_grid.columns = 3
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.add_theme_constant_override("h_separation", GAP)
@@ -68,6 +71,7 @@ func set_entries(entries: Array, note: String = "") -> void:
 		var tile := VenueTile.new()
 		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tile.pressed.connect(_on_tile_pressed.bind(tile))
+		tile.action_pressed.connect(func(meta: Variant) -> void: tile_action.emit(meta))
 		_grid.add_child(tile)
 		_tiles.append(tile)
 	for index in range(_tiles.size()):

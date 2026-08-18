@@ -177,12 +177,37 @@ func _compact() -> bool:
 func _refresh_lean_in() -> void:
 	if _lean_in == null:
 		return
-	_lean_in.visible = ConsoleMetrics.needs_focus() and _compact()
+	_lean_in.visible = _should_lean_in(ConsoleMetrics.needs_focus(), _compact())
+
+
+func _should_lean_in(needs_focus: bool, compact: bool) -> bool:
+	return needs_focus and compact and not _room_focused()
 
 
 func _on_lean_in_pressed() -> void:
 	UiSound.play("tap")
-	get_tree().call_group("main_ui", "focus_room", "workstation")
+	# Aim the camera at the primary glass, not the workstation bay around it.
+	# The bay became the target when multi-stage rig art was introduced, but it
+	# is far larger than a phone screen and left this catcher permanently over
+	# commands such as OPEN BOARD after the shallow zoom completed.
+	var handled: bool = false
+	for node in get_tree().get_nodes_in_group("main_ui"):
+		if node.has_method("focus_control"):
+			node.call("focus_control", "workstation", self)
+			handled = true
+	if not handled:
+		get_tree().call_group("main_ui", "focus_room", "workstation")
+	_refresh_lean_in()
+
+
+func _room_focused() -> bool:
+	for node in get_tree().get_nodes_in_group("main_ui"):
+		if (
+			node.has_method("room_focused_on")
+			and bool(node.call("room_focused_on", "workstation"))
+		):
+			return true
+	return false
 
 
 ## One printed reading. Rows are addressed by key so the caller can rewrite a

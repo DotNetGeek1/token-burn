@@ -75,6 +75,32 @@ func set_action_style(
 		action_button.theme_type_variation = StringName(variation)
 
 
+## Keeps calls to action on a shared baseline when cards in the same row have
+## different amounts of copy. This is opt-in because most cards should remain
+## only as tall as their content.
+func set_action_pinned(pinned: bool = true) -> void:
+	var box: VBoxContainer = $Margin/VBox
+	var action_button: GameButton = $Margin/VBox/ActionButton
+	var spacer: Control = box.get_node_or_null("ActionSpacer") as Control
+	if pinned and spacer == null:
+		spacer = Control.new()
+		spacer.name = "ActionSpacer"
+		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		box.add_child(spacer)
+		box.move_child(spacer, action_button.get_index())
+	elif not pinned and spacer != null:
+		spacer.queue_free()
+
+
+## Card faces are summaries; the screen can cap prose when a detail sheet is
+## available behind a tap.
+func set_body_max_lines(max_lines: int) -> void:
+	var body_label: Label = $Margin/VBox/BodyLabel
+	body_label.max_lines_visible = maxi(0, max_lines)
+	body_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+
+
 ## Colour identity for a data-driven category (job sector, upgrade group).
 func set_accent(accent: Color) -> void:
 	add_theme_stylebox_override("panel", UiThemeBuilder.card_style_accent(accent))

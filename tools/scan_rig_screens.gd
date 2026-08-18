@@ -15,8 +15,8 @@ const SCREENS := [
 	"res://presentation/rig/rig_stage_01.png",
 	"res://presentation/rig/rig_stage_02.png",
 	"res://presentation/rig/rig_stage_03.png",
-	"res://presentation/rig/rig_stage_04.png",
-	"res://presentation/rig/rig_stage_05.png",
+	"res://presentation/rig/rig_stage_04_desk.png",
+	"res://presentation/rig/rig_stage_05_desk.png",
 ]
 const EXPECTED_SCREEN_COUNTS := [1, 1, 2, 2, 3]
 
