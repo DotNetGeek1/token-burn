@@ -86,6 +86,7 @@ func set_entries(entries: Array, note: String = "") -> void:
 		tile.set_selected(_selected != null and tile.meta == _selected)
 	_note.text = note
 	_note.visible = note != ""
+	_fit_columns()
 	_sync_height()
 
 
@@ -204,6 +205,10 @@ func _fit_columns() -> void:
 	if _grid.columns != columns:
 		_grid.columns = columns
 	_apply_compact(columns == 1)
+	var gap: float = float(ConsoleMetrics.px(GAP, _scale))
+	var cell: float = (available - gap * float(columns - 1)) / float(columns)
+	for tile in _tiles:
+		tile.set_cell_width(cell if tile.visible else 0.0)
 
 
 func _notification(what: int) -> void:

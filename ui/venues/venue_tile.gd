@@ -42,6 +42,7 @@ var _action: Button = null
 var _surface: Button = null
 var _selected: bool = false
 var _compact: bool = false
+var _cell_width: float = 0.0
 
 
 func _init() -> void:
@@ -113,11 +114,13 @@ func _build() -> void:
 	_body.add_child(_foot)
 
 	_price = ConsoleStyle.label("", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR)
+	_price.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_foot.add_child(_price)
 
 	_status = ConsoleStyle.label("", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_status.clip_text = true
 	_foot.add_child(_status)
 
 	# Added last so it sits over the lines and takes the press. It carries no
@@ -259,6 +262,28 @@ func _apply_palette() -> void:
 		border = 0.75
 		fill = 0.11
 	add_theme_stylebox_override("panel", ConsoleStyle.frame_box(border, fill))
+
+
+## The board assigns every visible tile the same cell so a long spec cannot
+## stretch one GridContainer column past its neighbours.
+func set_cell_width(width: float) -> void:
+	if is_equal_approx(_cell_width, width):
+		return
+	_cell_width = width
+	custom_minimum_size.x = width
+	update_minimum_size()
+
+
+func _get_minimum_size() -> Vector2:
+	var min_size := Vector2.ZERO
+	if _margin != null:
+		min_size = _margin.get_combined_minimum_size()
+	var box: StyleBox = get_theme_stylebox("panel")
+	if box != null:
+		min_size += box.get_minimum_size()
+	if _cell_width > 0.0:
+		min_size.x = _cell_width
+	return min_size
 
 
 func set_metrics(scale: float) -> void:
