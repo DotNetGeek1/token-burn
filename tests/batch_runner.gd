@@ -548,6 +548,9 @@ func _work_round(sim: Node, policy: String) -> void:
 			consecutive_cools += 1
 			continue
 		consecutive_cools = 0
+		if JobSystem.is_ready(sim.focused_job()):
+			if sim.ship_focused_job():
+				continue
 		var job_meta: Dictionary = {}
 		var current_matched_tier: int = maxi(
 			JobSystem.location_tier(sim.run_state, ContentDatabase),

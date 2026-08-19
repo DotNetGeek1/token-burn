@@ -381,8 +381,9 @@ func _test_multi_job_session_resolves() -> void:
 	sim.run_state.business["job_queue"] = []
 
 	active_jobs[0]["tokens_remaining"] = 0.0
+	active_jobs[0]["shipped"] = true
 	for i in range(1, job_count):
-		active_jobs[i]["prompts_remaining"] = -1
+		active_jobs[i]["abandoned"] = true
 
 	var result: Dictionary = job_system.run_production_tick(
 		sim.run_state,

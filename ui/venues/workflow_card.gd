@@ -22,6 +22,7 @@ const PAPER_MODULE := Color("e7d98f")
 const PAPER_STAGE := Color("dfe2d2")
 const PAPER_EMPTY := Color("eef0e8")
 const PAPER_BLOCKED := Color("dfb2aa")
+const PAPER_OVERFLOW := Color("e4c48a")
 const PAPER_SELECTED := Color("b9dcd2")
 const PAPER_HOVER := Color("f1e7b8")
 const INK := Color("17251f")
@@ -35,6 +36,7 @@ var role: String = ROLE_MODULE
 var module_id: String = ""
 var slot_index: int = -1
 var blocked: bool = false
+var overflow: bool = false
 
 var _margin: MarginContainer = null
 var _body: VBoxContainer = null
@@ -133,6 +135,7 @@ func set_card(entry: Dictionary) -> void:
 	module_id = str(entry.get("module_id", ""))
 	slot_index = int(entry.get("slot_index", -1))
 	blocked = bool(entry.get("blocked", false))
+	overflow = bool(entry.get("overflow", false))
 	_step.text = str(entry.get("step", "")).to_upper()
 	_step.visible = _step.text != ""
 	_name.text = str(entry.get("name", "")).to_upper()
@@ -268,6 +271,10 @@ func _apply_palette() -> void:
 	if role == ROLE_SLOT and module_id == "":
 		paper = PAPER_EMPTY
 		border = 0.30
+	if overflow and not blocked:
+		paper = PAPER_OVERFLOW
+		ink = INK_DANGER
+		border = 0.55
 	if blocked:
 		paper = PAPER_BLOCKED
 		ink = INK_DANGER

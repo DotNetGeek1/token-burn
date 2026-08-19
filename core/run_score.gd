@@ -10,6 +10,8 @@ static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 	var lifetime_tokens: float = float(stats.get("lifetime_tokens", 0.0))
 	var lifetime_overkill: float = float(stats.get("lifetime_overkill", 0.0))
 	var depth_mult: float = maxf(1.0, float(run_state.depth.get("score_mult", 1.0)))
+	if str(run_state.flags.get("work_policy", "")) == "yolo":
+		depth_mult *= 1.25
 	var ascension_system := AscensionSystem.new()
 	return {
 		"total_tokens_burned": lifetime_tokens,

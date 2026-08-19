@@ -25,6 +25,8 @@ const KIND_REPEAT := "repeat"
 const KIND_CASCADE := "cascade"
 const KIND_FAULT := "fault"
 const KIND_CONVERT := "convert"
+const KIND_QUALITY_GATE := "quality_gate"
+const KIND_BUG_RISK := "bug_risk"
 const KIND_FINAL := "final"
 
 const FORK_LABEL := "RECURSIVE FORK"
@@ -146,6 +148,7 @@ static func _closing_beats(burn: Dictionary, traces: Array) -> Array:
 				tokens,
 				{}
 			))
+	beats.append_array(_consequence_beats(burn, progress_mult, tokens))
 	beats.append(_beat(KIND_FINAL, FINAL_LABEL, true, progress_mult, tokens, {}))
 	if not beats.is_empty():
 		beats[beats.size() - 1]["hold"] = FINALE_HOLD
@@ -249,6 +252,46 @@ static func _label_for(source_id: String, metadata: Dictionary) -> String:
 	if module != null and module.name != "":
 		return module.name.to_upper()
 	return ""
+
+
+static func _consequence_beats(burn: Dictionary, progress_mult: float, tokens: float) -> Array:
+	if not FeatureFlags.is_enabled("quality_consequences_enabled"):
+		return []
+	var beats: Array = []
+	var before_job := {
+		"quality": float(burn.get("job_quality", 0.0)),
+		"quality_threshold": float(burn.get("job_quality_threshold", 0.0)),
+		"known_bugs": int(burn.get("job_known_bugs", 0)),
+		"hidden_bugs": int(burn.get("job_hidden_bugs", 0)),
+	}
+	var after_job: Dictionary = JobSystem.preview_job_after_burn(before_job, burn)
+	var threshold: float = float(before_job.get("quality_threshold", 0.0))
+	var before_q: float = JobSystem.delivered_quality(before_job)
+	var after_q: float = JobSystem.delivered_quality(after_job)
+	if threshold > 0.0 and before_q < threshold and after_q >= threshold:
+		beats.append(_beat(
+			KIND_QUALITY_GATE,
+			"CLIENT BAR CLEARED  PAY ×%.2f → ×%.2f" % [
+				JobSystem.projected_payout_multiplier(before_job),
+				JobSystem.projected_payout_multiplier(after_job),
+			],
+			true,
+			progress_mult,
+			tokens,
+			{}
+		))
+	var before_risk: String = JobSystem.production_risk_class(before_job)
+	var after_risk: String = JobSystem.production_risk_class(after_job)
+	if after_risk != before_risk and after_risk in ["HIGH", "INSANE"]:
+		beats.append(_beat(
+			KIND_BUG_RISK,
+			"SHIP RISK: %s" % after_risk,
+			true,
+			progress_mult,
+			tokens,
+			{}
+		))
+	return beats
 
 
 static func _convert_label(burn: Dictionary) -> String:

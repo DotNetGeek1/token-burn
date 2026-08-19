@@ -11,5 +11,9 @@
   "burn_spectacle_enabled": true,
   "instability_enabled": true,
   "cascade_enabled": true,
-  "depth_ladder_enabled": true
+  "depth_ladder_enabled": true,
+  "workflow_overflow_enabled": true,
+  "quality_consequences_enabled": true,
+  "ready_to_ship_enabled": true,
+  "yolo_mode_enabled": true
 }

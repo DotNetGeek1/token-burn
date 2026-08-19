@@ -45,6 +45,8 @@ static func record_tokens(run_state: RunState, tokens: float) -> void:
 	if not is_active(run_state):
 		return
 	var bonus: float = maxf(0.0, tokens) * maxf(0.0, float(run_state.depth.get("score_mult", 1.0)) - 1.0)
+	if str(run_state.flags.get("work_policy", "")) == "yolo":
+		bonus *= 1.25
 	if bonus <= 0.0:
 		return
 	run_state.statistics["depth_score"] = float(run_state.statistics.get("depth_score", 0.0)) + bonus

@@ -312,10 +312,30 @@ func _refresh_focus(run_state: RunState) -> void:
 ## A deadline of N prompts means N actions remain. Once `prompts_remaining`
 ## reaches zero the job has had its last action and, if it is not done, it has
 ## missed its deadline — so zero is terminal, not one more free prompt.
+## When ready-to-ship is on, hitting 100% leaves the job live so leftover
+## prompts can polish, farm overkill, or explode.
 func _is_in_progress(job: Dictionary) -> bool:
-	if float(job.get("tokens_remaining", 0.0)) <= 0.0:
+	if is_shipped(job) or bool(job.get("abandoned", false)):
 		return false
-	return int(job.get("prompts_remaining", 0)) > 0
+	if int(job.get("prompts_remaining", 0)) <= 0:
+		return false
+	if FeatureFlags.is_enabled("ready_to_ship_enabled"):
+		return true
+	return float(job.get("tokens_remaining", 0.0)) > 0.0
+
+
+static func is_shipped(job: Dictionary) -> bool:
+	return bool(job.get("shipped", false))
+
+
+static func is_ready(job: Dictionary) -> bool:
+	if not FeatureFlags.is_enabled("ready_to_ship_enabled"):
+		return false
+	if is_shipped(job) or bool(job.get("abandoned", false)):
+		return false
+	if int(job.get("prompts_remaining", 0)) <= 0:
+		return false
+	return float(job.get("tokens_remaining", 0.0)) <= 0.0
 
 
 ## The contracts one prompt advances. One machine works one contract, so the
@@ -483,7 +503,7 @@ func run_burn(
 	# be told apart from a job that had already finished a prompt earlier.
 	for job in lanes:
 		var job_id: String = str(job.get("id", ""))
-		if was_complete_before.get(job_id, false):
+		if was_complete_before.get(job_id, false) and is_shipped(job):
 			continue
 		# The contract was live when this prompt started, so this prompt comes
 		# off its deadline whether or not it was the one that finished it.
@@ -492,7 +512,8 @@ func run_burn(
 		# prompt and collected an early-delivery bonus it had not earned.
 		job["_deadline_pending"] = true
 		if mode == ResolveMode.COMMIT and float(job.get("tokens_remaining", 0.0)) <= 0.0:
-			EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job_id})
+			if not FeatureFlags.is_enabled("ready_to_ship_enabled"):
+				EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job_id})
 	primary = primary.duplicate(true)
 	primary["lanes"] = lane_reports
 	primary["lane_count"] = lane_reports.size()
@@ -548,7 +569,8 @@ func run_production_tick(
 	compute_system: ComputeSystem,
 	heat_system: HeatSystem,
 	economy_system: EconomySystem,
-	board_system: BoardSystem = null
+	board_system: BoardSystem = null,
+	allow_cool: bool = true
 ) -> Dictionary:
 	if board_system == null:
 		board_system = BoardSystem.new()
@@ -557,7 +579,7 @@ func run_production_tick(
 	board_system.compact_for_job(run_state, focused_job(run_state))
 	# The auto-drive stands in for a player, and a player watching the rig climb
 	# into the danger band would reach for COOL rather than burn another batch.
-	if _should_cool(run_state):
+	if allow_cool and _should_cool(run_state):
 		return run_cooling_prompt(
 			run_state, rng, effect_resolver, subscriptions, tuning,
 			compute_system, heat_system, economy_system
@@ -602,7 +624,9 @@ func _apply_burn(
 	var remaining_before: float = float(job.get("tokens_remaining", 0.0))
 	var progress: float = minf(remaining_before, float(burn.get("progress_tokens", 0.0)))
 	job["tokens_remaining"] = maxf(0.0, remaining_before - progress)
-	if remaining_before > 0.0 and float(job["tokens_remaining"]) <= 0.0:
+	if remaining_before <= 0.0 and FeatureFlags.is_enabled("ready_to_ship_enabled"):
+		_record_overkill(run_state, job, burn, requirement, mode)
+	elif remaining_before > 0.0 and float(job["tokens_remaining"]) <= 0.0:
 		_record_overkill(run_state, job, burn, requirement, mode)
 
 	var tokens_burned: float = float(burn.get("tokens", 0.0))
@@ -762,19 +786,30 @@ func end_prompt(
 		# started, so work finished by this prompt still pays for it.
 		var worked_this_prompt: bool = bool(job.get("_deadline_pending", false))
 		job.erase("_deadline_pending")
-		var complete: bool = float(job.get("tokens_remaining", 0.0)) <= 0.0
-		if complete and not worked_this_prompt:
+		if is_shipped(job) or bool(job.get("abandoned", false)):
 			continue
-		# A deadline already at zero has had its last action: it failed the
-		# prompt that took it there and does not get another free one.
+		var complete: bool = float(job.get("tokens_remaining", 0.0)) <= 0.0
+		var ready_mode: bool = FeatureFlags.is_enabled("ready_to_ship_enabled")
+		# Finished-and-shipped work used to drop out of the deadline clock.
+		# READY work is still on the desk, so polish burns and idle contracts
+		# both still spend a prompt.
+		if complete and not worked_this_prompt and not ready_mode:
+			continue
 		if int(job.get("prompts_remaining", 0)) <= 0:
+			if ready_mode:
+				_ship_job(job, true)
+				messages.append("%s: deadline — shipped as it stood." % job.get("name", "Job"))
 			continue
 		job["prompts_remaining"] = int(job.get("prompts_remaining", 1)) - 1
 		job["time_remaining_ratio"] = maxf(
 			0.0, float(job.get("prompts_remaining", 0)) / maxf(1.0, float(job.get("deadline_prompts", 4)))
 		)
-		if not complete and int(job.get("prompts_remaining", 0)) <= 0:
-			messages.append("%s: deadline missed." % job.get("name", "Job"))
+		if int(job.get("prompts_remaining", 0)) <= 0:
+			if ready_mode:
+				_ship_job(job, true)
+				messages.append("%s: deadline — shipped as it stood." % job.get("name", "Job"))
+			elif not complete:
+				messages.append("%s: deadline missed." % job.get("name", "Job"))
 
 	run_state.business["active_jobs"] = active_jobs
 	run_state.business["active_job"] = active_jobs[0] if active_jobs.size() == 1 else {}
@@ -798,9 +833,12 @@ func end_prompt(
 	var completed_count: int = 0
 	var failed_count: int = 0
 	for job in active_jobs:
-		if float(job.get("tokens_remaining", 0.0)) <= 0.0:
+		if is_shipped(job) or (
+			not FeatureFlags.is_enabled("ready_to_ship_enabled")
+			and float(job.get("tokens_remaining", 0.0)) <= 0.0
+		):
 			completed_count += 1
-		elif int(job.get("prompts_remaining", 0)) <= 0:
+		elif int(job.get("prompts_remaining", 0)) <= 0 or bool(job.get("abandoned", false)):
 			failed_count += 1
 
 	return {
@@ -821,14 +859,22 @@ func ship_focused_job(run_state: RunState) -> Dictionary:
 	var job: Dictionary = focused_job(run_state)
 	if job.is_empty():
 		return {"ok": false, "reason": "No contract in progress."}
+	if is_shipped(job):
+		return {"ok": false, "reason": "Already shipped."}
+	_ship_job(job, true)
+	_refresh_focus(run_state)
+	return {"ok": true, "progress": float(job.get("shipped_progress", 1.0)), "job": job}
+
+
+func _ship_job(job: Dictionary, emit_completed: bool) -> void:
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 	var remaining: float = maxf(0.0, float(job.get("tokens_remaining", 0.0)))
 	job["shipped_progress"] = clampf(1.0 - remaining / requirement, 0.0, 1.0)
 	job["shipped_unfinished"] = remaining > 0.0
 	job["tokens_remaining"] = 0.0
-	EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job.get("id", "")})
-	_refresh_focus(run_state)
-	return {"ok": true, "progress": float(job["shipped_progress"]), "job": job}
+	job["shipped"] = true
+	if emit_completed:
+		EventBus.emit_event(EventBus.EVENT_JOB_COMPLETED, {"job_id": job.get("id", "")})
 
 
 ## Walks away. The contract is written off, but the prompts it would have eaten
@@ -855,6 +901,8 @@ func finalize_completed_jobs(
 ) -> Dictionary:
 	var total_reward: float = 0.0
 	for job in jobs:
+		if FeatureFlags.is_enabled("ready_to_ship_enabled") and not is_shipped(job):
+			continue
 		if float(job.get("tokens_remaining", 0.0)) > 0.0:
 			continue
 		total_reward += _calculate_reward(run_state, job, effect_resolver, subscriptions, tuning, economy_system, messages, true, rng)
@@ -1002,8 +1050,74 @@ static func delivered_quality(job: Dictionary) -> float:
 	var quality: float = float(job.get("quality", 0.0))
 	if bool(job.get("shipped_unfinished", false)):
 		quality *= clampf(float(job.get("shipped_progress", 1.0)), 0.0, 1.0)
-	quality -= 3.0 * float(maxi(0, int(job.get("known_bugs", 0))))
+	quality -= known_bug_quality_penalty(job)
 	return maxf(0.0, quality)
+
+
+static func known_bug_quality_penalty(job: Dictionary) -> float:
+	return 3.0 * float(maxi(0, int(job.get("known_bugs", 0))))
+
+
+static func known_bug_fee_multiplier(job: Dictionary) -> float:
+	var known: int = maxi(0, int(job.get("known_bugs", 0)))
+	if known <= 0:
+		return 1.0
+	return maxf(0.3, 1.0 - 0.08 * float(known))
+
+
+## What shipping now would pay, before hidden bugs are rolled. Uses delivered
+## quality and the known-bug fee so the HUD cannot invent a friendlier number.
+static func projected_payout_multiplier(job: Dictionary) -> float:
+	var threshold: float = float(job.get("quality_threshold", 0.0))
+	return quality_payout_multiplier(delivered_quality(job), threshold) * known_bug_fee_multiplier(job)
+
+
+static func production_risk_class(job: Dictionary) -> String:
+	var hidden: int = maxi(0, int(job.get("hidden_bugs", 0)))
+	var cfg: Dictionary = ContentDatabase.balance.get("job_scaling", {}).get("board", {}).get("production_risk", {})
+	if hidden >= int(cfg.get("insane", 4)):
+		return "INSANE"
+	if hidden >= int(cfg.get("high", 2)):
+		return "HIGH"
+	if hidden >= int(cfg.get("elevated", 1)):
+		return "ELEVATED"
+	return "LOW"
+
+
+static func expected_reputation_hit(job: Dictionary) -> float:
+	var hidden: int = maxi(0, int(job.get("hidden_bugs", 0)))
+	var chance: float = float(
+		ContentDatabase.balance.get("job_scaling", {}).get("board", {}).get("hidden_bug_discovery_chance", 0.6)
+	)
+	return float(hidden) * chance
+
+
+## What the contract would look like after this previewed burn lands. Used by
+## the Burn Board so PAY × and risk class can move before the player commits.
+static func preview_job_after_burn(
+	job: Dictionary, preview: Dictionary, run_state: RunState = null
+) -> Dictionary:
+	var next: Dictionary = job.duplicate(true)
+	if not preview.get("ok", false):
+		return next
+	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
+	var remaining: float = maxf(0.0, float(job.get("tokens_remaining", 0.0)))
+	var progress: float = minf(remaining, float(preview.get("progress_tokens", 0.0)))
+	var scaling: Dictionary = ContentDatabase.balance.get("job_scaling", {})
+	var base_ratio: float = float(scaling.get("board", {}).get("base_quality_ratio", 0.2))
+	var efficiency: float = 1.0
+	if run_state != null:
+		efficiency = float(run_state.compute.get("efficiency", 1.0))
+	var quality_gain: float = float(preview.get("quality", 0.0))
+	quality_gain += (progress / requirement) * 100.0 * base_ratio * efficiency
+	next["quality"] = clampf(float(job.get("quality", 0.0)) + quality_gain, 0.0, 150.0)
+	next["known_bugs"] = maxi(0, int(preview.get("known_bugs", job.get("known_bugs", 0))))
+	next["hidden_bugs"] = maxi(0, int(preview.get("hidden_bugs", job.get("hidden_bugs", 0))))
+	if remaining <= 0.0:
+		next["tokens_remaining"] = 0.0
+	else:
+		next["tokens_remaining"] = maxf(0.0, remaining - progress)
+	return next
 
 
 ## Rolls which buried defects the client finds. Settled before the fee is
@@ -1095,6 +1209,7 @@ func _prepare_job(offer: Dictionary, run_state: RunState, content_db: Node) -> D
 	_enforce_minimum_workload(job, run_state, content_db)
 	job["tokens_remaining"] = float(job.get("token_requirement", 0.0))
 	job["quality"] = 0.0
+	job["shipped"] = false
 	job["prompts_remaining"] = int(job.get("deadline_prompts", 4))
 	job["time_remaining_ratio"] = 1.0
 	job["bugs_this_job"] = 0

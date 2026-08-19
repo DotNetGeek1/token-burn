@@ -28,6 +28,9 @@ func repair_after_load(sim: Node) -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
 	sim._work_running = false
+	var saved_policy: String = str(sim.run_state.flags.get("work_policy", WorkSession.POLICY_MANUAL))
+	if saved_policy == WorkSession.POLICY_MANUAL or saved_policy == WorkSession.POLICY_AUTO or saved_policy == WorkSession.POLICY_YOLO:
+		sim._work.work_policy = saved_policy
 	sim.debug_invalidate_subscriptions()
 	sim.board_system().ensure_board(sim.run_state, ContentDatabase)
 	sim.compute_system().recalculate(

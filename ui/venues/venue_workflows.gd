@@ -43,6 +43,7 @@ var _prompt: Label = null
 var _diagram: WorkflowDiagram = null
 var _status: Label = null
 var _remove_button: Button = null
+var _add_stage_button: Button = null
 
 var _selection: Selection = Selection.NONE
 var _selected_module_id: String = ""
@@ -170,6 +171,11 @@ func _build_diagram_side() -> void:
 	)
 	_pipeline_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(_pipeline_title)
+
+	_add_stage_button = _board_button("+ STAGE")
+	_add_stage_button.visible = false
+	_add_stage_button.pressed.connect(_add_overflow_stage)
+	title_row.add_child(_add_stage_button)
 
 	_remove_button = _board_button("REMOVE STAGE", true)
 	_remove_button.visible = false
@@ -302,7 +308,11 @@ func _refresh_tray() -> void:
 			),
 			"status": module.category,
 		})
-	_tray_caption.text = "UNUSED MODULES%s%d" % [DOT, entries.size()]
+	_tray_caption.text = "%s%s%d" % [
+		"ON THE BENCH" if Simulation.overflow_unlocked() else "UNUSED MODULES",
+		DOT,
+		entries.size(),
+	]
 	var note: String = ""
 	if entries.is_empty():
 		note = (
@@ -334,6 +344,7 @@ func _refresh_diagram() -> void:
 	_pipeline_title.text = str(
 		Simulation.active_workflow().get("name", "Workflow")
 	).to_upper()
+	_add_stage_button.visible = Simulation.can_append_overflow()
 
 
 func _refresh_prompt() -> void:
@@ -376,6 +387,8 @@ func _slot_entry(
 ) -> Dictionary:
 	var module_id: String = str(slots[index])
 	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	var overflow: bool = index >= Simulation.supported_capacity()
+	var step: String = "STAGE %02d%s" % [index + 1, "!" if overflow else ""]
 	if index < blocked_count:
 		return {
 			"meta": _slot_meta(index),
@@ -383,7 +396,8 @@ func _slot_entry(
 			"slot_index": index,
 			"module_id": module_id,
 			"blocked": true,
-			"step": "STAGE %02d" % (index + 1),
+			"overflow": overflow,
+			"step": step,
 			"name": module.name if module != null else "OCCUPIED",
 			"badge": "\u00d7",
 			"description": blocked_label,
@@ -394,21 +408,23 @@ func _slot_entry(
 			"meta": _slot_meta(index),
 			"role": WorkflowCard.ROLE_SLOT,
 			"slot_index": index,
-			"step": "STAGE %02d" % (index + 1),
+			"overflow": overflow,
+			"step": step,
 			"name": "EMPTY",
 			"description": "Drop a module here",
-			"status": "AVAILABLE",
+			"status": "UNSUPPORTED" if overflow else "AVAILABLE",
 		}
 	return {
 		"meta": _slot_meta(index),
 		"role": WorkflowCard.ROLE_SLOT,
 		"slot_index": index,
 		"module_id": module_id,
-		"step": "STAGE %02d" % (index + 1),
+		"overflow": overflow,
+		"step": step,
 		"name": module.name,
-		"badge": evaluator.render_template(module.badge, module.parameters),
+		"badge": "UNSUPPORTED" if overflow else evaluator.render_template(module.badge, module.parameters),
 		"description": _stage_effect(module, slots, index, blocked_count, evaluator),
-		"status": module.category,
+		"status": "UNSUPPORTED" if overflow else module.category,
 	}
 
 
@@ -493,6 +509,12 @@ func _on_slot_tapped(meta: Variant) -> void:
 			_selected_slot_index = index
 			_selected_module_id = ""
 			_sync_selection_view()
+
+
+func _add_overflow_stage() -> void:
+	if Simulation.append_overflow_stage() < 0:
+		return
+	_clear_selection()
 
 
 func _remove_selected_slot() -> void:

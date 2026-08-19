@@ -23,6 +23,8 @@ func run() -> void:
 	_test_duration_follows_capped_holds()
 	_test_a_repeat_is_its_own_beat()
 	_test_spectacle_flag_disables_preview_beats()
+	_test_clearing_the_bar_is_a_loud_beat()
+	_test_rising_bug_risk_is_a_loud_beat()
 
 
 func _beats_of(kind: String, beats: Array) -> Array:
@@ -282,3 +284,32 @@ func _burn(module_ids: Array, seed_value: int) -> Dictionary:
 	)
 	result["trace"] = resolver.get_trace()
 	return result
+
+
+func _test_clearing_the_bar_is_a_loud_beat() -> void:
+	var burn: Dictionary = _burn(["op.prompt", "op.unit_tests"], 9201)
+	burn["job_quality"] = 58.0
+	burn["job_quality_threshold"] = 60.0
+	burn["quality"] = 12.0
+	burn["job_known_bugs"] = 0
+	burn["job_hidden_bugs"] = 0
+	var beats: Array = BurnSpectacle.compile(burn, [])
+	assert_true(
+		_beats_of(BurnSpectacle.KIND_QUALITY_GATE, beats).size() > 0,
+		"Crossing the client bar is a spectacle beat"
+	)
+
+
+func _test_rising_bug_risk_is_a_loud_beat() -> void:
+	var burn: Dictionary = _burn(["op.prompt", "op.cheap_model"], 9202)
+	burn["job_quality"] = 80.0
+	burn["job_quality_threshold"] = 60.0
+	burn["job_known_bugs"] = 0
+	burn["job_hidden_bugs"] = 0
+	burn["hidden_bugs"] = 2
+	burn["ok"] = true
+	var beats: Array = BurnSpectacle.compile(burn, [])
+	assert_true(
+		_beats_of(BurnSpectacle.KIND_BUG_RISK, beats).size() > 0,
+		"A jump to high ship risk is printed"
+	)

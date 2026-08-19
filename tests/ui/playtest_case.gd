@@ -88,6 +88,9 @@ func burn_until_session_over(harness: UiHarness) -> void:
 			if projected >= capacity and float(Simulation.preview_cool().get("total_heat", 0.0)) < 0.0:
 				if bool(Simulation.cool_hardware().get("ok", false)):
 					continue
+			if JobSystem.is_ready(Simulation.focused_job()):
+				if Simulation.ship_focused_job():
+					continue
 			if not bool(Simulation.burn_batch().get("ok", false)):
 				break
 	await harness.settle()

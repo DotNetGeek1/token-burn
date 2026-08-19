@@ -221,6 +221,7 @@ func _delivered_job(quality: float, known_bugs: int) -> Dictionary:
 		"name": "Final Contract",
 		"token_requirement": 1000.0,
 		"tokens_remaining": 0.0,
+		"shipped": true,
 		"quality": quality,
 		"known_bugs": known_bugs,
 		"hidden_bugs": 0,

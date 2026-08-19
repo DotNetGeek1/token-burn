@@ -530,6 +530,18 @@ func ship_focused_job() -> bool:
 	return _work.ship_focused_job(self)
 
 
+func work_policy() -> String:
+	return _work.work_policy
+
+
+func set_work_policy(policy: String) -> void:
+	_work.set_work_policy(self, policy)
+
+
+func yolo_unlocked() -> bool:
+	return _work.yolo_unlocked(self)
+
+
 func abandon_focused_job() -> bool:
 	return _work.abandon_focused_job(self)
 
@@ -572,6 +584,30 @@ func owned_modules() -> Array:
 
 func filled_slot_count() -> int:
 	return _board_system.filled_slot_count(run_state)
+
+
+func supported_capacity() -> int:
+	return _board_system.derived_supported_capacity(run_state, ContentDatabase)
+
+
+func overflow_unlocked() -> bool:
+	return _board_system.overflow_unlocked(run_state, ContentDatabase)
+
+
+func overflow_count() -> int:
+	return _board_system.overflow_count(run_state, ContentDatabase)
+
+
+func can_append_overflow() -> bool:
+	return _board_system.can_append_overflow(run_state, ContentDatabase)
+
+
+func append_overflow_stage() -> int:
+	var index: int = _board_system.append_overflow_stage(run_state, ContentDatabase)
+	if index < 0:
+		return -1
+	_autosave()
+	return index
 
 
 ## Slots a contract has taken over are locked only on the workflow that contract

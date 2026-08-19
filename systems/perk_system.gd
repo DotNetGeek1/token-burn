@@ -157,18 +157,27 @@ func bench_block_reason(
 		))
 		if incoming != null:
 			perk_bonus += int(incoming.grants.get("board_slots", 0))
-		var resulting_slots: int = clampi(
-			BoardSystem.DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus + upgrade_bonus,
-			1,
-			BoardSystem.MAX_SLOT_COUNT
+		var baseline: int = BoardSystem.location_supported_capacity(run_state, content_db)
+		var ceiling: int = (
+			BoardSystem.MAX_SUPPORTED_CAPACITY
+			if FeatureFlags.is_enabled("workflow_overflow_enabled")
+			else BoardSystem.MAX_SLOT_COUNT
 		)
-		for workflow in board.workflows(run_state):
-			if not workflow is Dictionary:
-				continue
-			var layout: Array = Array(workflow.get("slots", []))
-			for index in range(resulting_slots, layout.size()):
-				if str(layout[index]) != "":
-					return "Clear the extra pipeline slot before benching this perk"
+		var resulting_slots: int = clampi(
+			baseline + meta_bonus + perk_bonus + upgrade_bonus,
+			1,
+			ceiling
+		)
+		# Overflow stages stay overflow after the perk leaves. Only refuse when
+		# overflow is locked and a filled stage would no longer have a home.
+		if not board.overflow_unlocked(run_state, content_db):
+			for workflow in board.workflows(run_state):
+				if not workflow is Dictionary:
+					continue
+				var layout: Array = Array(workflow.get("slots", []))
+				for index in range(resulting_slots, layout.size()):
+					if str(layout[index]) != "":
+						return "Clear the extra pipeline slot before benching this perk"
 	# `requires_tags` is checked when a perk goes in, so it has to be checked
 	# when its provider comes out too. Otherwise the loadout can be walked into
 	# a state the equip rules would have refused outright.

@@ -14,7 +14,29 @@
   "board": {
     "expected_progress_multiplier": 1.6,
     "base_quality_ratio": 0.2,
-    "hidden_bug_discovery_chance": 0.6
+    "hidden_bug_discovery_chance": 0.6,
+    "supported_stages": {
+      "bedroom": 3,
+      "garage": 5,
+      "office_unit": 7,
+      "warehouse": 9,
+      "datacentre_campus": 10,
+      "private_power_grid": 11,
+      "moon_facility": 12
+    },
+    "overflow": {
+      "unlock_location_index": 2,
+      "max_pipeline": 24,
+      "instability": 0.05,
+      "cascade_chance": 0.03,
+      "heat_pct": 0.04,
+      "heat_flat": 2.0
+    },
+    "production_risk": {
+      "elevated": 1,
+      "high": 2,
+      "insane": 4
+    }
   },
   "reward_scaling": {
     "base_multiplier": 1.0,

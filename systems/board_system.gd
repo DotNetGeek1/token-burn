@@ -29,9 +29,13 @@ const EVENT_BATCH_FINISHED := "board.batch_finished"
 
 ## A run starts with fewer slots than the player owns modules. Room on the board
 ## is the scarce resource: new modules arrive benched, and taking one into the
-## pipeline means taking something else out.
+## pipeline means taking something else out. Overflow (when unlocked) lets the
+## pipeline grow past supported capacity; those extra stages still resolve, but
+## they are unstable.
 const DEFAULT_SLOT_COUNT := 3
 const MAX_SLOT_COUNT := 8
+const MAX_SUPPORTED_CAPACITY := 16
+const MAX_PIPELINE_STAGES := 24
 
 ## A run opens with one workflow. Capacity is earned: a Market upgrade, a perk,
 ## and the Simulation ascension ending each hand over another one.
@@ -97,7 +101,7 @@ func ensure_board(run_state: RunState, content_db: Node) -> void:
 	if not board is Dictionary:
 		board = {}
 	_migrate_legacy_board_bonuses(run_state, content_db)
-	var slot_count_value: int = derived_slot_count(run_state, content_db)
+	var slot_count_value: int = derived_supported_capacity(run_state, content_db)
 	board["slot_count"] = slot_count_value
 	run_state.build["board"] = board
 
@@ -157,9 +161,9 @@ func _migrate_board_to_workflows(run_state: RunState) -> void:
 	board.erase("active_lane")
 
 
-## Normalises the list: every workflow has an id, a name and exactly
-## `slot_count` string slots, and the run never holds more of them than its
-## capacity allows.
+## Normalises the list: every workflow has an id, a name, and at least
+## `supported` string slots. Occupied overflow is never trimmed. Empty overflow
+## is kept only while overflow is unlocked.
 func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: Node = null) -> void:
 	var workflows: Array = Array(run_state.build.get("workflows", []))
 	var capacity: int = workflow_capacity(run_state, content_db)
@@ -167,6 +171,7 @@ func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: N
 		workflows.resize(capacity)
 	if workflows.is_empty():
 		workflows.append({"id": "workflow.1", "name": _default_workflow_name(0), "slots": []})
+	var overflow_ok: bool = overflow_unlocked(run_state, content_db)
 	for index in range(workflows.size()):
 		var workflow: Variant = workflows[index]
 		if not workflow is Dictionary:
@@ -176,8 +181,9 @@ func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: N
 		if str(workflow.get("name", "")) == "":
 			workflow["name"] = _default_workflow_name(index)
 		var layout: Array = Array(workflow.get("slots", []))
-		layout.resize(slot_count_value)
-		for i in range(slot_count_value):
+		var target: int = _normalized_layout_length(layout, slot_count_value, overflow_ok)
+		layout.resize(target)
+		for i in range(target):
 			if not layout[i] is String:
 				layout[i] = ""
 		workflow["slots"] = layout
@@ -187,6 +193,17 @@ func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: N
 	board["active_workflow"] = clampi(
 		int(board.get("active_workflow", 0)), 0, workflows.size() - 1
 	)
+
+
+func _normalized_layout_length(layout: Array, supported: int, overflow_ok: bool) -> int:
+	var occupied_end: int = 0
+	for i in range(layout.size()):
+		if str(layout[i]) != "":
+			occupied_end = i + 1
+	var ceiling: int = MAX_PIPELINE_STAGES if FeatureFlags.is_enabled("workflow_overflow_enabled") else MAX_SLOT_COUNT
+	if overflow_ok:
+		return clampi(maxi(supported, maxi(occupied_end, layout.size())), 1, ceiling)
+	return clampi(maxi(supported, occupied_end), 1, ceiling)
 
 
 func _default_workflow_name(index: int) -> String:
@@ -228,17 +245,83 @@ static func active_perk_grant_total(run_state: RunState, content_db: Node, grant
 
 
 func derived_slot_count(run_state: RunState, content_db: Node) -> int:
+	return derived_supported_capacity(run_state, content_db)
+
+
+## How many stages the room will back without complaining. Location sets the
+## floor; monitors, desks, perks and meta unlocks still add. Overflow is
+## anything past this number.
+func derived_supported_capacity(run_state: RunState, content_db: Node) -> int:
 	var board: Dictionary = run_state.build.get("board", {})
 	var meta_bonus: int = int(board.get("meta_slot_bonus", 0))
 	var perk_bonus: int = active_perk_grant_total(run_state, content_db, "board_slots")
 	var upgrade_bonus: int = int(UpgradeSystem.additive_effect_total(
 		run_state, content_db, "build.board.slot_count"
 	))
-	return clampi(
-		DEFAULT_SLOT_COUNT + meta_bonus + perk_bonus + upgrade_bonus,
-		1,
-		MAX_SLOT_COUNT
+	var baseline: int = location_supported_capacity(run_state, content_db)
+	var ceiling: int = (
+		MAX_SUPPORTED_CAPACITY
+		if FeatureFlags.is_enabled("workflow_overflow_enabled")
+		else MAX_SLOT_COUNT
 	)
+	return clampi(baseline + meta_bonus + perk_bonus + upgrade_bonus, 1, ceiling)
+
+
+static func location_supported_capacity(run_state: RunState, content_db: Node = null) -> int:
+	if content_db == null or not FeatureFlags.is_enabled("workflow_overflow_enabled"):
+		return DEFAULT_SLOT_COUNT
+	var table: Dictionary = Dictionary(
+		Dictionary(content_db.balance.get("job_scaling", {})).get("board", {})
+	).get("supported_stages", {})
+	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
+	return maxi(1, int(table.get(dwelling, DEFAULT_SLOT_COUNT)))
+
+
+static func overflow_config(content_db: Node = null) -> Dictionary:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	return Dictionary(
+		Dictionary(db.balance.get("job_scaling", {})).get("board", {})
+	).get("overflow", {})
+
+
+func overflow_unlocked(run_state: RunState, content_db: Node = null) -> bool:
+	if not FeatureFlags.is_enabled("workflow_overflow_enabled"):
+		return false
+	var db: Node = content_db if content_db != null else ContentDatabase
+	var unlock_at: int = int(overflow_config(db).get("unlock_location_index", 2))
+	return JobSystem.location_tier(run_state, db) >= unlock_at
+
+
+func is_overflow_index(run_state: RunState, index: int, content_db: Node = null) -> bool:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	return index >= derived_supported_capacity(run_state, db)
+
+
+func can_append_overflow(run_state: RunState, content_db: Node = null) -> bool:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	if not overflow_unlocked(run_state, db):
+		return false
+	var ceiling: int = maxi(1, int(overflow_config(db).get("max_pipeline", MAX_PIPELINE_STAGES)))
+	return slots(run_state).size() < ceiling
+
+
+func append_overflow_stage(run_state: RunState, content_db: Node = null) -> int:
+	if not can_append_overflow(run_state, content_db):
+		return -1
+	var layout: Array = slots(run_state)
+	layout.append("")
+	return layout.size() - 1
+
+
+func overflow_count(run_state: RunState, content_db: Node = null) -> int:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	var supported: int = derived_supported_capacity(run_state, db)
+	var count: int = 0
+	var layout: Array = slots(run_state)
+	for i in range(supported, layout.size()):
+		if str(layout[i]) != "":
+			count += 1
+	return count
 
 
 func derived_workflow_capacity(run_state: RunState, content_db: Node) -> int:
@@ -448,7 +531,8 @@ func grant_module(run_state: RunState, module_id: String) -> bool:
 	owned.append(module_id)
 	run_state.build["modules"] = owned
 	# A newly drafted module goes straight into the first free slot so it is
-	# in play without a detour through the board screen.
+	# in play without a detour through the board screen. Overflow is a player
+	# decision — drafting never grows the pipe past supported capacity.
 	var board_slots: Array = slots(run_state)
 	for i in range(board_slots.size()):
 		if str(board_slots[i]) == "":
@@ -496,6 +580,8 @@ func compact_for_job(run_state: RunState, job: Dictionary) -> Array:
 
 
 func place_module(run_state: RunState, job: Dictionary, module_id: String, index: int) -> bool:
+	if index == slot_count(run_state) and can_append_overflow(run_state):
+		append_overflow_stage(run_state)
 	if not is_slot_usable(run_state, job, index):
 		return false
 	if module_id != "" and not (module_id in owned_modules(run_state)):
@@ -507,6 +593,7 @@ func place_module(run_state: RunState, job: Dictionary, module_id: String, index
 			if str(board_slots[i]) == module_id:
 				board_slots[i] = ""
 	board_slots[index] = module_id
+	_trim_trailing_overflow(run_state)
 	return true
 
 
@@ -514,7 +601,17 @@ func clear_slot(run_state: RunState, job: Dictionary, index: int) -> bool:
 	if not is_slot_usable(run_state, job, index):
 		return false
 	slots(run_state)[index] = ""
+	_trim_trailing_overflow(run_state)
 	return true
+
+
+func _trim_trailing_overflow(run_state: RunState) -> void:
+	if not FeatureFlags.is_enabled("workflow_overflow_enabled"):
+		return
+	var layout: Array = slots(run_state)
+	var supported: int = derived_supported_capacity(run_state, ContentDatabase)
+	while layout.size() > supported and str(layout[layout.size() - 1]) == "":
+		layout.resize(layout.size() - 1)
 
 
 func swap_slots(run_state: RunState, job: Dictionary, from_index: int, to_index: int) -> bool:
@@ -614,6 +711,7 @@ func resolve_burn(
 			run_state, job, batch, stage, module, rng, effect_resolver, subscriptions,
 			board_slots, order, position, index
 		)
+		var overflow_stage: bool = _apply_overflow_penalties(run_state, stage, index)
 		var rule_multiplier: float = _tag_bonus_for(rules, module)
 		var effective_multiplier: float = pending_multiplier * rule_multiplier
 		var before: Dictionary = _snapshot(batch)
@@ -677,6 +775,7 @@ func resolve_burn(
 			"cascaded": cascaded,
 			"cascade_depth": cascade_depth,
 			"dropped": dropped,
+			"overflow": overflow_stage,
 			"stage": stage,
 			"before": before,
 			"after": _snapshot(batch),
@@ -755,6 +854,10 @@ func resolve_burn(
 		"stage_count": stages.size(),
 		"truncated": limit < order.size(),
 		"messages": messages,
+		"job_quality": float(job.get("quality", 0.0)),
+		"job_quality_threshold": float(job.get("quality_threshold", 0.0)),
+		"job_known_bugs": maxi(0, int(job.get("known_bugs", 0))),
+		"job_hidden_bugs": maxi(0, int(job.get("hidden_bugs", 0))),
 	}
 
 
@@ -946,7 +1049,8 @@ func _dispatch_stage(
 		"module_category": module.category,
 		"heat_ratio": _heat_ratio(run_state),
 		"stage_roll": rng.derive("stage_roll_%d_%s" % [index, module.id]).next_float(),
-		"instability": float(run_state.compute.get("instability", 0.0)),
+		"instability": float(run_state.compute.get("instability", 0.0)) + _overflow_instability(run_state, index),
+		"overflow": is_overflow_index(run_state, index),
 	}
 	for key in stage.keys():
 		mod_ctx.set_value("stage.%s" % key, stage[key])
@@ -1011,7 +1115,8 @@ func _maybe_drop_stage(run_state: RunState, rng: DeterministicRng, index: int) -
 	if tier < 2 or ratio < 1.0:
 		return false
 	var band_t: float = clampf((ratio - 1.0) / 0.40, 0.0, 1.0)
-	return rng.derive("drop_%d" % index).next_float() < 0.10 * band_t
+	var chance: float = 0.10 * band_t + _overflow_instability(run_state, index)
+	return rng.derive("drop_%d" % index).next_float() < chance
 
 
 func _maybe_redline_twist(
@@ -1258,6 +1363,22 @@ func _snapshot(batch: Dictionary) -> Dictionary:
 
 func _heat_ratio(run_state: RunState) -> float:
 	return float(run_state.compute.get("heat", 0.0)) / maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
+
+
+func _overflow_instability(run_state: RunState, index: int) -> float:
+	if not is_overflow_index(run_state, index):
+		return 0.0
+	return float(overflow_config().get("instability", 0.05))
+
+
+func _apply_overflow_penalties(run_state: RunState, stage: Dictionary, index: int) -> bool:
+	if not is_overflow_index(run_state, index):
+		return false
+	var cfg: Dictionary = overflow_config()
+	stage["cascade_chance"] = float(stage.get("cascade_chance", 0.0)) + float(cfg.get("cascade_chance", 0.03))
+	var heat: float = float(stage.get("heat", 0.0))
+	stage["heat"] = heat + maxf(0.0, heat) * float(cfg.get("heat_pct", 0.04)) + float(cfg.get("heat_flat", 2.0))
+	return true
 
 
 func _as_float(value: Variant, fallback: float = 0.0) -> float:

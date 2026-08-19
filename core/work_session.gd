@@ -9,6 +9,10 @@ extends RefCounted
 ## circular class reference. Cross-concern calls (end round, victory) go back
 ## through Simulation routing methods, not to RunLifecycle directly.
 
+const POLICY_MANUAL := "manual"
+const POLICY_AUTO := "auto"
+const POLICY_YOLO := "yolo"
+
 var work_running: bool = false
 var work_tick: int = 0
 var action_counter: int = 0
@@ -16,6 +20,7 @@ var session_cash_start: float = 0.0
 var queued_boost: bool = false
 var queued_cloud: bool = false
 var last_session_summary: Dictionary = {}
+var work_policy: String = POLICY_MANUAL
 
 
 func reset() -> void:
@@ -26,6 +31,7 @@ func reset() -> void:
 	queued_boost = false
 	queued_cloud = false
 	last_session_summary = {}
+	work_policy = POLICY_MANUAL
 
 
 func can_start_work(sim: Node) -> bool:
@@ -117,6 +123,11 @@ func start_work_sync(sim: Node) -> Dictionary:
 	var safety: int = 0
 	while sim.phase == sim.Phase.IN_ROUND and safety < 500:
 		safety += 1
+		if _should_auto_ship(sim):
+			ship_focused_job(sim)
+			if sim.phase != sim.Phase.IN_ROUND:
+				break
+			continue
 		var result: Dictionary = _execute_tick(sim)
 		if not result.get("ok", true):
 			end_session(sim, "collapsed")
@@ -274,6 +285,8 @@ func record_completed_quality(sim: Node, state: RunState) -> void:
 	for job in state.business.get("active_jobs", []):
 		if not job is Dictionary:
 			continue
+		if FeatureFlags.is_enabled("ready_to_ship_enabled") and not JobSystem.is_shipped(job):
+			continue
 		if float(job.get("tokens_remaining", 0.0)) > 0.0:
 			continue
 		if bool(job.get("_ascension_quality_recorded", false)):
@@ -343,7 +356,14 @@ func _settle_if_resolved(sim: Node) -> void:
 	for job in sim.run_state.business.get("active_jobs", []):
 		if not job is Dictionary:
 			continue
-		if float(job.get("tokens_remaining", 0.0)) > 0.0 and int(job.get("prompts_remaining", 0)) > 0:
+		if JobSystem.is_shipped(job) or bool(job.get("abandoned", false)):
+			continue
+		if FeatureFlags.is_enabled("ready_to_ship_enabled"):
+			if int(job.get("prompts_remaining", 0)) > 0:
+				sim.work_tick_completed.emit()
+				sim._autosave()
+				return
+		elif float(job.get("tokens_remaining", 0.0)) > 0.0 and int(job.get("prompts_remaining", 0)) > 0:
 			sim.work_tick_completed.emit()
 			sim._autosave()
 			return
@@ -386,6 +406,25 @@ func _session_stop_reason(result: Dictionary) -> String:
 	return ""
 
 
+func _should_auto_ship(sim: Node) -> bool:
+	if work_policy == POLICY_YOLO:
+		return false
+	return JobSystem.is_ready(sim.job_system().focused_job(sim.run_state))
+
+
+func set_work_policy(sim: Node, policy: String) -> void:
+	if policy != POLICY_MANUAL and policy != POLICY_AUTO and policy != POLICY_YOLO:
+		return
+	work_policy = policy
+	sim.run_state.flags["work_policy"] = policy
+
+
+func yolo_unlocked(sim: Node) -> bool:
+	if not FeatureFlags.is_enabled("yolo_mode_enabled"):
+		return false
+	return JobSystem.location_tier(sim.run_state, ContentDatabase) >= 3
+
+
 func _execute_tick(sim: Node) -> Dictionary:
 	var tick_rng: DeterministicRng = sim.rng.derive("work_%d" % work_tick)
 	work_tick += 1
@@ -398,7 +437,8 @@ func _execute_tick(sim: Node) -> Dictionary:
 		sim.compute_system(),
 		sim.heat_system(),
 		sim.economy_system(),
-		sim.board_system()
+		sim.board_system(),
+		work_policy != POLICY_YOLO
 	)
 
 
@@ -410,7 +450,10 @@ func end_session(sim: Node, reason: String) -> void:
 	var completed: Array = []
 	var failed: Array = []
 	for job in sim.run_state.business.get("active_jobs", []):
-		if float(job.get("tokens_remaining", 0.0)) <= 0.0:
+		if JobSystem.is_shipped(job) or (
+			not FeatureFlags.is_enabled("ready_to_ship_enabled")
+			and float(job.get("tokens_remaining", 0.0)) <= 0.0
+		):
 			completed.append(job)
 		else:
 			failed.append(job)

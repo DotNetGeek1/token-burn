@@ -169,7 +169,11 @@ func _refresh_status(job: Dictionary, working: bool) -> void:
 		return
 	var contract_name: String = str(job.get("name", "contract"))
 	var state: String = "ready to burn"
-	if float(job.get("tokens_remaining", 0.0)) <= 0.0:
+	if JobSystem.is_ready(job):
+		var projected: float = float(job.get("reward", 0.0)) * JobSystem.projected_payout_multiplier(job)
+		projected *= 1.0 + JobSystem.early_delivery_bonus(job)
+		state = "ready to ship · %s" % NumberFormat.format_cash(projected)
+	elif float(job.get("tokens_remaining", 0.0)) <= 0.0:
 		state = "ready to deliver"
 	elif working:
 		state = "burning"
@@ -204,23 +208,48 @@ func _refresh_readouts(job: Dictionary, working: bool) -> void:
 		_laptop.set_meter("tokens", "burn", burned / requirement, "%s / %s" % [
 			NumberFormat.format(burned), NumberFormat.format(requirement),
 		])
-		var quality: float = float(job.get("quality", 0.0))
 		var threshold: float = maxf(1.0, float(job.get("quality_threshold", 1.0)))
+		var delivered: float = JobSystem.delivered_quality(job)
+		var pay: float = JobSystem.projected_payout_multiplier(job)
 		var known: int = int(job.get("known_bugs", 0))
-		# Bugs share the quality row: they are the same judgement about the same
-		# work, and the glass has no line to spare for a number that is usually
-		# zero.
-		var quality_text: String = "%s of %s" % [
-			JobPresentation.quality_mark(quality), JobPresentation.quality_mark(threshold),
+		var risk: String = JobSystem.production_risk_class(job)
+		var quality_text: String = "%s / %s  PAY ×%.2f" % [
+			JobPresentation.quality_mark(delivered),
+			JobPresentation.quality_mark(threshold),
+			pay,
 		]
-		if known > 0:
-			quality_text += " · %d bug(s)" % known
 		_laptop.set_stat("quality", "qual", quality_text, (
-			ConsoleStyle.DANGER if known > 0
-			else (ConsoleStyle.PHOSPHOR if quality >= threshold else ConsoleStyle.WARNING)
+			ConsoleStyle.PHOSPHOR if delivered >= threshold else ConsoleStyle.WARNING
 		))
+		if FeatureFlags.is_enabled("quality_consequences_enabled"):
+			var bug_text: String = "%d  −%d DELIVERY Q" % [
+				known, int(JobSystem.known_bug_quality_penalty(job)),
+			] if known > 0 else "0"
+			_laptop.set_stat(
+				"bugs",
+				"bugs",
+				bug_text,
+				ConsoleStyle.DANGER if known > 0 else ConsoleStyle.PHOSPHOR_DIM
+			)
+			_laptop.set_stat(
+				"risk",
+				"risk",
+				risk,
+				ConsoleStyle.DANGER if risk in ["HIGH", "INSANE"] else (
+					ConsoleStyle.WARNING if risk == "ELEVATED" else ConsoleStyle.PHOSPHOR_DIM
+				)
+			)
+		elif known > 0:
+			_laptop.set_stat("quality", "qual", quality_text + " · %d bug(s)" % known, ConsoleStyle.DANGER)
 		var prompts_left: int = maxi(0, int(job.get("prompts_remaining", 0)))
 		_laptop.set_stat("time", "time", "%d prompt(s)" % prompts_left, _deadline_color(prompts_left))
+		if JobSystem.is_ready(job) and float(job.get("overkill_ratio", 0.0)) > 0.0:
+			_laptop.set_stat(
+				"overkill",
+				"over",
+				"+%s%%" % NumberFormat.format(float(job.get("overkill_ratio", 0.0)) * 100.0),
+				ConsoleStyle.PHOSPHOR
+			)
 	# Redline modules read the rig as a burn starts, not the heat that burn goes
 	# on to make, so the player needs to see when they are already in the band
 	# those modules are waiting for.
@@ -239,6 +268,11 @@ func _refresh_readouts(job: Dictionary, working: bool) -> void:
 		ConsoleStyle.DANGER if cash < 0.0 else ConsoleStyle.PHOSPHOR
 	)
 	var keys: Array = ["tokens", "quality", "time", "heat", "cash"]
+	if FeatureFlags.is_enabled("quality_consequences_enabled") and not job.is_empty():
+		keys.insert(2, "bugs")
+		keys.insert(3, "risk")
+	if JobSystem.is_ready(job) and float(job.get("overkill_ratio", 0.0)) > 0.0:
+		keys.append("overkill")
 	keys.append_array(_refresh_lane_rows(job))
 	_laptop.prune_stats(keys)
 
@@ -268,7 +302,18 @@ func _forecast_line(job: Dictionary, working: bool) -> String:
 			),
 		],
 	]
-	if int(preview.get("bugs_added", 0)) > 0:
+	if FeatureFlags.is_enabled("quality_consequences_enabled"):
+		var after: Dictionary = JobSystem.preview_job_after_burn(
+			job, preview, Simulation.run_state
+		)
+		var pay_before: float = JobSystem.projected_payout_multiplier(job)
+		var pay_after: float = JobSystem.projected_payout_multiplier(after)
+		if not is_equal_approx(pay_before, pay_after):
+			parts.append("PAY ×%.2f→×%.2f" % [pay_before, pay_after])
+		var risk_after: String = JobSystem.production_risk_class(after)
+		if risk_after != JobSystem.production_risk_class(job):
+			parts.append("RISK %s" % risk_after)
+	elif int(preview.get("bugs_added", 0)) > 0:
 		parts.append("+%db" % int(preview.get("bugs_added", 0)))
 	if Simulation.boost_engaged():
 		parts.append("boost")
@@ -310,14 +355,15 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 	if Simulation.can_burn() or can_open:
 		var burn_preview: Dictionary = Simulation.preview_next_burn()
 		var projected_kill: bool = _projected_heat_is_lethal(burn_preview)
+		var ready: bool = JobSystem.is_ready(job)
 		rows.append({
-			"headline": "BURN",
+			"headline": "BURN AGAIN" if ready else "BURN",
 			"value": _burn_hint(can_open),
 			"warning": _projected_heat_is_warning(burn_preview) and not projected_kill,
 			"destructive": projected_kill,
 			"pressed": _on_burn,
 		})
-	if working and not job.is_empty():
+	if working and not job.is_empty() and Simulation.work_policy() != WorkSession.POLICY_YOLO:
 		rows.append({"headline": "COOL", "value": _cool_hint(), "pressed": _on_cool})
 	var armable: bool = working or can_open
 	var boosted: bool = Simulation.boost_engaged() or Simulation.queued_boost
@@ -339,13 +385,22 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 		})
 	if not job.is_empty():
 		var complete: bool = float(job.get("tokens_remaining", 0.0)) <= 0.0
-		if working:
+		if working and Simulation.work_policy() != WorkSession.POLICY_YOLO:
+			var ready: bool = JobSystem.is_ready(job)
 			rows.append({
-				"headline": "DELIVER",
-				"value": "ready" if complete else "at %d%%" % _done_percent(job),
-				"destructive": not complete,
+				"headline": "SHIP IT" if ready or complete else "DELIVER",
+				"value": "ready" if ready or complete else "at %d%%" % _done_percent(job),
+				"destructive": not ready and not complete,
 				"pressed": _on_deliver,
 			})
+	if Simulation.yolo_unlocked() and (working or can_open) and Simulation.work_policy() != WorkSession.POLICY_YOLO:
+		rows.append({
+			"headline": "YOLO MODE",
+			"value": "no cool · no kill · no ship",
+			"destructive": true,
+			"pressed": _on_yolo,
+		})
+	if not job.is_empty():
 		rows.append({"headline": "JOB", "value": "the brief", "pressed": _on_job_details})
 	rows.append({
 		"headline": "EDIT PIPELINE",
@@ -587,20 +642,30 @@ func _on_burn() -> void:
 	_proc_depth = 0
 	# KILL aborts the remaining stages. SKIP (and tapping the headline) keeps
 	# the full batch and just drops the rest of the show.
-	_laptop.set_actions([
-		{
-			"headline": "KILL", "value": "stop the batch", "destructive": true,
-			"pressed": _on_kill,
-		},
-		{"headline": "SKIP", "value": "see the result", "pressed": _on_skip},
-	])
+	if Simulation.work_policy() == WorkSession.POLICY_YOLO:
+		_laptop.set_actions([
+			{"headline": "SKIP", "value": "see the result", "pressed": _on_skip},
+		])
+	else:
+		_laptop.set_actions([
+			{
+				"headline": "KILL", "value": "stop the batch", "destructive": true,
+				"pressed": _on_kill,
+			},
+			{"headline": "SKIP", "value": "see the result", "pressed": _on_skip},
+		])
 	_laptop.set_status_pressed(_on_skip)
 	await _animate_batch(preview)
 	_laptop.set_status_pressed(Callable())
-	var stage_limit: int = _stages_completed if _kill_requested else -1
+	var stage_limit: int = (
+		-1 if Simulation.work_policy() == WorkSession.POLICY_YOLO
+		else (_stages_completed if _kill_requested else -1)
+	)
 	_burning = false
 	Simulation.burn_batch(stage_limit)
 	refresh()
+	if Simulation.work_policy() == WorkSession.POLICY_YOLO and Simulation.can_burn():
+		_on_burn()
 
 
 ## Walks the batch as a cascade of beats. Ordinary stages fly past; named
@@ -742,6 +807,32 @@ func _on_cloud() -> void:
 		refresh()
 
 
+func _on_yolo() -> void:
+	if _burning:
+		return
+	_detail_sheet.show_detail(
+		"YOLO MODE",
+		"The software says not to",
+		[
+			{"text": "Cooling disabled. Process kill disabled. Manual delivery disabled."},
+			{"text": "The pipeline will run until contracts resolve, a depth completes, or the company ceases to exist."},
+			{"stat": "Deep Burn", "value": "×1.25 score", "role": "energy"},
+		],
+		[],
+		"DO IT",
+		UiThemeBuilder.semantic("danger")
+	)
+	_clear_sheet_handlers()
+	_detail_sheet.action_confirmed.connect(func() -> void:
+		Simulation.set_work_policy(WorkSession.POLICY_YOLO)
+		if not Simulation.is_work_running() and Simulation.can_start_work():
+			Simulation.start_work()
+		refresh()
+		if Simulation.can_burn():
+			_on_burn()
+	)
+
+
 func _on_cool() -> void:
 	if _burning:
 		return
@@ -761,6 +852,14 @@ func _on_deliver() -> void:
 		return
 	var done_pct: int = _done_percent(job)
 	var complete: bool = float(job.get("tokens_remaining", 0.0)) <= 0.0
+	var ship_preview: Dictionary = job.duplicate(true)
+	if not complete:
+		ship_preview["shipped_unfinished"] = true
+		ship_preview["shipped_progress"] = float(done_pct) / 100.0
+	var pay: float = JobSystem.projected_payout_multiplier(ship_preview)
+	var projected_cash: float = float(job.get("reward", 0.0)) * pay
+	if complete:
+		projected_cash *= 1.0 + JobSystem.early_delivery_bonus(job)
 	var rows: Array = [
 		{
 			"text": (
@@ -770,19 +869,20 @@ func _on_deliver() -> void:
 			),
 		},
 		{"stat": "Progress", "value": "%d%%" % done_pct},
-		{"stat": "Reward", "value": NumberFormat.format_cash(float(job.get("reward", 0.0)))},
+		{"stat": "Projected", "value": NumberFormat.format_cash(projected_cash), "role": "money"},
 		{
 			"stat": "Quality pay",
-			# Shipping unfinished scales the delivered quality down with the
-			# progress, so the sheet quotes what delivering now would actually
-			# earn rather than what the meter reads.
-			"value": "×%.2f" % JobSystem.quality_payout_multiplier(
-				float(job.get("quality", 0.0)) * (1.0 if complete else float(done_pct) / 100.0),
-				float(job.get("quality_threshold", 0.0))
-			),
+			"value": "×%.2f" % pay,
 			"role": "energy",
 		},
-		{"stat": "Known bugs", "value": str(int(job.get("known_bugs", 0)))},
+		{
+			"stat": "Known bugs",
+			"value": "%d  (−%d delivery quality)" % [
+				int(job.get("known_bugs", 0)),
+				int(JobSystem.known_bug_quality_penalty(job)),
+			],
+		},
+		{"stat": "Bug risk", "value": JobSystem.production_risk_class(job)},
 		{"stat": "Prompts left", "value": str(int(job.get("prompts_remaining", 0)))},
 	]
 	var early_bonus: float = JobSystem.early_delivery_bonus(job)

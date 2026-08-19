@@ -147,8 +147,18 @@ func play(harness: UiHarness) -> void:
 		}),
 		"A contract-locked stage rejects a drop"
 	)
+	var overflow_card := WorkflowCard.new()
+	overflow_card.set_card({
+		"meta": "slot:12", "role": WorkflowCard.ROLE_SLOT,
+		"slot_index": 12, "name": "Recursive Compiler",
+		"overflow": true, "step": "STAGE 13!", "badge": "UNSUPPORTED",
+		"status": "UNSUPPORTED",
+	})
+	assert_true(overflow_card.overflow, "An overflow stage is marked unsupported")
+	assert_eq(overflow_card._badge.text, "UNSUPPORTED", "And the card prints the badge")
 	open_card.free()
 	blocked_card.free()
+	overflow_card.free()
 
 	venue._on_module_dropped(module_id, 0)
 	assert_eq(

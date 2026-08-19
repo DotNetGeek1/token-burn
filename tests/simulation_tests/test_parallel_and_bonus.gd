@@ -289,9 +289,10 @@ func _test_the_prompt_that_finishes_a_contract_still_costs_a_deadline() -> void:
 	var missed := DeadlineRig.new(1, 1.0e9)
 	missed.burn()
 	assert_true(
-		float(missed.job.get("tokens_remaining", 0.0)) > 0.0,
+		bool(missed.job.get("shipped_unfinished", false)),
 		"A contract far too big for one prompt is still unfinished"
 	)
+	assert_true(JobSystem.is_shipped(missed.job), "The deadline ships whatever is there")
 	assert_eq(int(missed.job.get("prompts_remaining", -1)), 0, "With no prompts left to finish it in")
 
 	var early := DeadlineRig.new(2, 1.0)

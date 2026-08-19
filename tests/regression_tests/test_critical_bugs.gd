@@ -195,7 +195,7 @@ func _test_mixed_job_finalization() -> void:
 	sim.start_run(105)
 	sim.run_state.economy["cash"] = 0.0
 	sim.run_state.business["active_jobs"] = [
-		{"id": "done", "name": "Done", "tokens_remaining": 0.0, "token_requirement": 100.0, "reward": 1000.0, "quality": 80.0, "quality_threshold": 50.0},
+		{"id": "done", "name": "Done", "tokens_remaining": 0.0, "token_requirement": 100.0, "reward": 1000.0, "quality": 80.0, "quality_threshold": 50.0, "shipped": true},
 		{"id": "fail", "name": "Fail", "tokens_remaining": 50.0, "token_requirement": 100.0, "reward": 1000.0, "quality": 10.0, "quality_threshold": 50.0},
 	]
 	sim.phase = sim.Phase.IN_ROUND
@@ -232,8 +232,8 @@ func _test_multi_job_tick_counts_once() -> void:
 		sim.tuning, sim._compute_system, sim._heat_system, sim._economy_system
 	)
 	assert_true(bool(result.get("ok", false)), "Multi-job tick runs")
-	assert_eq(result.get("completed_count", -1), 1, "One job completed mid-tick")
-	assert_eq(result.get("failed_count", -1), 1, "One job failed mid-tick")
+	assert_eq(result.get("completed_count", -1), 1, "The late contract is auto-shipped when its deadline hits")
+	assert_eq(result.get("failed_count", -1), 0, "A missed deadline ships rather than failing")
 	assert_false(bool(result.get("all_resolved", true)), "The round is not resolved while a contract continues")
 	sim.free()
 

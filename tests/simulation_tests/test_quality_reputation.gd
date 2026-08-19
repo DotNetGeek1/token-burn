@@ -16,6 +16,8 @@ func run() -> void:
 	_test_a_session_is_paid_in_reputation_by_quality()
 	_test_a_throughput_only_board_misses_the_bar()
 	_test_a_contract_is_judged_at_the_bar_it_advertises()
+	_test_projected_pay_includes_known_bugs()
+	_test_hidden_bugs_are_a_risk_class()
 
 
 func _payout(quality: float, threshold: float) -> float:
@@ -258,3 +260,32 @@ func _test_a_session_is_paid_in_reputation_by_quality() -> void:
 		"And the loss lands on the run"
 	)
 	sim.free()
+
+
+func _test_projected_pay_includes_known_bugs() -> void:
+	var clean := {
+		"quality": 70.0, "quality_threshold": 60.0, "known_bugs": 0, "hidden_bugs": 0,
+	}
+	var buggy: Dictionary = clean.duplicate()
+	buggy["known_bugs"] = 2
+	assert_almost_eq(
+		JobSystem.known_bug_quality_penalty(buggy), 6.0, 0.001, "Two known bugs cost six quality"
+	)
+	assert_true(
+		JobSystem.projected_payout_multiplier(buggy) < JobSystem.projected_payout_multiplier(clean),
+		"The HUD pay figure includes the known-bug tax, not just the raw meter"
+	)
+	assert_almost_eq(
+		JobSystem.known_bug_fee_multiplier(buggy), 0.84, 0.001, "Two known bugs also cut the fee 8% each"
+	)
+
+
+func _test_hidden_bugs_are_a_risk_class() -> void:
+	assert_eq(JobSystem.production_risk_class({"hidden_bugs": 0}), "LOW", "No buried defects is low risk")
+	assert_eq(JobSystem.production_risk_class({"hidden_bugs": 1}), "ELEVATED", "One is elevated")
+	assert_eq(JobSystem.production_risk_class({"hidden_bugs": 2}), "HIGH", "Two is high")
+	assert_eq(JobSystem.production_risk_class({"hidden_bugs": 4}), "INSANE", "Four is insane")
+	assert_almost_eq(
+		JobSystem.expected_reputation_hit({"hidden_bugs": 2}), 1.2, 0.001,
+		"Expected reputation loss stays a band, not a roll"
+	)
