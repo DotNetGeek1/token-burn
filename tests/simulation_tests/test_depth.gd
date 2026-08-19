@@ -15,6 +15,7 @@ func run() -> void:
 	_test_choose_affix_refuses_ids_that_were_not_offered()
 	_test_affixes_stack_when_authored_repeatable()
 	_test_continue_after_depth_resumes_without_victory()
+	_test_continue_after_depth_refuses_a_loss()
 	_test_target_x5_is_unlimited()
 	_test_later_prompt_does_not_recomplete()
 	_test_depth_complete_settles_the_active_session()
@@ -101,6 +102,7 @@ func _test_scoreboard_names_depth() -> void:
 	for row in RunScore.rows(score):
 		labels.append(str(row.get("label", "")))
 	assert_true("Deep Burn depth" in labels, "The debrief names the depth")
+	assert_true("Deep Burn score" in labels, "And prints the accrued depth score")
 
 
 func _test_depth_one_completes_into_depth_two() -> void:
@@ -186,6 +188,23 @@ func _test_continue_after_depth_resumes_without_victory() -> void:
 	assert_eq(sim.phase, sim.Phase.ROUND_PREP, "Play resumes at the remembered boundary")
 	assert_false(bool(sim.run_state.flags.get("depth_complete", true)), "The complete flag is cleared")
 	assert_eq(str(sim.run_state.flags.get("outcome", "x")), "", "The depth-complete outcome is cleared")
+	sim.free()
+
+
+func _test_continue_after_depth_refuses_a_loss() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(9710)
+	sim.run_state.flags["post_victory"] = true
+	sim.run_state.flags["outcome"] = "collapsed"
+	sim.run_state.flags["depth_complete"] = false
+	sim.run_state.depth["level"] = 4
+	sim.phase = sim.Phase.RUN_END
+	assert_false(
+		sim.continue_after_depth(),
+		"A Deep Burn loss cannot be continued just because the run was already endless"
+	)
+	assert_eq(sim.phase, sim.Phase.RUN_END, "The failed run stays ended")
 	sim.free()
 
 

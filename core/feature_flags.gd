@@ -16,6 +16,11 @@ static func is_enabled(flag: String) -> bool:
 	return bool(_flags.get(flag, false))
 
 
+static func set_enabled(flag: String, enabled: bool) -> void:
+	_ensure_loaded()
+	_flags[flag] = enabled
+
+
 static func get_all() -> Dictionary:
 	_ensure_loaded()
 	return _flags.duplicate(true)

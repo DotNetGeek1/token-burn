@@ -66,9 +66,6 @@ static func total_duration_ms(beats: Array) -> int:
 	for beat in beats:
 		if not beat is Dictionary:
 			continue
-		if beat.has("duration_ms"):
-			total += int(beat.get("duration_ms", 0))
-			continue
 		total += int(round(float(beat.get("hold", QUIET_HOLD)) * 1000.0))
 	return total
 
@@ -174,7 +171,6 @@ static func _beat(
 		"stage_position": int(stage.get("position", -1)),
 		"heat": float(Dictionary(stage.get("after", {})).get("heat", 0.0)),
 		"hold": LOUD_HOLD if loud else QUIET_HOLD,
-		"duration_ms": int(round((LOUD_HOLD if loud else QUIET_HOLD) * 1000.0)),
 		"closes_stage": false,
 	}
 

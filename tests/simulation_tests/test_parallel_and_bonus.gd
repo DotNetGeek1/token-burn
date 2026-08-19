@@ -11,6 +11,7 @@ func run() -> void:
 	_test_a_second_machine_opens_a_second_lane()
 	_test_parallel_lanes_split_one_batch()
 	_test_parallel_lanes_move_two_deadlines_at_once()
+	_test_peak_prompt_tokens_sums_every_lane()
 	_test_two_contracts_run_through_two_workflows_in_one_prompt()
 	_test_early_delivery_pays_a_bonus()
 	_test_shipping_unfinished_earns_no_early_bonus()
@@ -127,6 +128,36 @@ func _test_parallel_lanes_move_two_deadlines_at_once() -> void:
 			float(job.get("tokens_remaining", 0.0)) < before[i],
 			"Contract %d made progress on the same prompt" % i
 		)
+	sim.free()
+
+
+func _test_peak_prompt_tokens_sums_every_lane() -> void:
+	var sim: Node = _sim(4106)
+	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "Two machines on the floor")
+	_load_two_contracts(sim)
+	var lifetime_before: float = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
+	sim.run_state.statistics["peak_prompt_tokens"] = 0.0
+	var result: Dictionary = sim.burn_batch()
+	assert_true(result.get("ok", false), "A two-lane prompt lands")
+	var lanes: Array = Dictionary(result.get("burn", {})).get("lanes", [])
+	assert_eq(lanes.size(), 2, "Both lanes report")
+	var lane_total: float = (
+		float(Dictionary(lanes[0]).get("tokens", 0.0))
+		+ float(Dictionary(lanes[1]).get("tokens", 0.0))
+	)
+	assert_true(lane_total > 0.0, "The prompt produced tokens")
+	assert_almost_eq(
+		float(sim.run_state.statistics.get("lifetime_tokens", 0.0)) - lifetime_before,
+		lane_total,
+		0.01,
+		"Lifetime tokens count every lane of the prompt"
+	)
+	assert_almost_eq(
+		float(sim.run_state.statistics.get("peak_prompt_tokens", 0.0)),
+		lane_total,
+		0.01,
+		"Peak burn in one prompt is the sum, not the busiest lane"
+	)
 	sim.free()
 
 

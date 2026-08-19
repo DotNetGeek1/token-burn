@@ -613,7 +613,7 @@ func _animate_batch(preview: Dictionary) -> void:
 		0.0, requirement - maxf(0.0, float(job.get("tokens_remaining", 0.0)))
 	)
 	var beats: Array = preview.get("spectacle", [])
-	if beats.is_empty():
+	if beats.is_empty() and FeatureFlags.is_enabled("burn_spectacle_enabled"):
 		beats = BurnSpectacle.compile(preview, [])
 	_laptop.set_status("×1.00", "burning")
 	for beat in beats:

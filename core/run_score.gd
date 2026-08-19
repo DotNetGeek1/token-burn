@@ -75,4 +75,9 @@ static func rows(score: Dictionary) -> Array:
 				float(score.get("depth_score_mult", 1.0)),
 			],
 		})
+	if float(score.get("depth_score", 0.0)) > 0.0:
+		result.append({
+			"label": "Deep Burn score",
+			"value": NumberFormat.format(float(score.get("depth_score", 0.0))),
+		})
 	return result

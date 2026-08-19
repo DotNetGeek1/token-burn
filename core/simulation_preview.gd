@@ -42,7 +42,7 @@ static func preview_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 		burn = burn.duplicate(true)
 		burn["trace"] = preview_resolver.get_trace()
 		_decorate_burn_outlook(burn, heat_before, clone)
-		burn["spectacle"] = BurnSpectacle.compile(burn, preview_resolver.get_trace())
+		burn["spectacle"] = _compile_spectacle(burn, preview_resolver.get_trace())
 	return burn
 
 
@@ -85,8 +85,14 @@ static func preview_next_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 		burn = burn.duplicate(true)
 		burn["trace"] = preview_resolver.get_trace()
 		_decorate_burn_outlook(burn, heat_before, clone)
-		burn["spectacle"] = BurnSpectacle.compile(burn, preview_resolver.get_trace())
+		burn["spectacle"] = _compile_spectacle(burn, preview_resolver.get_trace())
 	return burn
+
+
+static func _compile_spectacle(burn: Dictionary, traces: Array) -> Array:
+	if not FeatureFlags.is_enabled("burn_spectacle_enabled"):
+		return []
+	return BurnSpectacle.compile(burn, traces)
 
 
 static func _decorate_burn_outlook(burn: Dictionary, heat_before: float, state: RunState) -> void:

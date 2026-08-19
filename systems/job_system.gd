@@ -433,6 +433,7 @@ func run_burn(
 	var share: float = batch / float(lanes.size())
 	var primary: Dictionary = {}
 	var lane_reports: Array = []
+	var prompt_tokens: float = 0.0
 	# Snapshot before resolving so a completion can be told apart from a job
 	# that was already done: scope creep further down can even un-finish one.
 	var was_complete_before: Dictionary = {}
@@ -449,6 +450,7 @@ func run_burn(
 			if primary.is_empty():
 				return {"ok": false, "reason": str(lane_burn.get("reason", "The pipeline produced nothing."))}
 			continue
+		prompt_tokens += float(lane_burn.get("tokens", 0.0))
 		_apply_burn(
 			run_state, job, lane_burn, rng, messages, mode, heat_system, economy_system,
 			effect_resolver, subscriptions
@@ -462,11 +464,15 @@ func run_burn(
 			"job_id": str(job.get("id", "")),
 			"name": str(job.get("name", "Contract")),
 			"workflow_name": str(lane_burn.get("workflow_name", "")),
+			"tokens": float(lane_burn.get("tokens", 0.0)),
 			"progress_tokens": float(lane_burn.get("progress_tokens", 0.0)),
 			"quality": float(lane_burn.get("quality", 0.0)),
 			"tokens_remaining": float(job.get("tokens_remaining", 0.0)),
 			"prompts_remaining": int(job.get("prompts_remaining", 0)),
 		})
+	run_state.statistics["peak_prompt_tokens"] = maxf(
+		float(run_state.statistics.get("peak_prompt_tokens", 0.0)), prompt_tokens
+	)
 	if lane_reports.size() > 1:
 		messages.append("Ran %d contracts in parallel — the batch was split %d ways." % [
 			lane_reports.size(), lane_reports.size()
@@ -601,9 +607,6 @@ func _apply_burn(
 
 	var tokens_burned: float = float(burn.get("tokens", 0.0))
 	run_state.statistics["lifetime_tokens"] = float(run_state.statistics.get("lifetime_tokens", 0.0)) + tokens_burned
-	run_state.statistics["peak_prompt_tokens"] = maxf(
-		float(run_state.statistics.get("peak_prompt_tokens", 0.0)), tokens_burned
-	)
 	if mode == ResolveMode.COMMIT:
 		DepthSystem.record_tokens(run_state, tokens_burned)
 		EventBus.emit_event(EventBus.EVENT_TOKENS_CONSUMED, {"amount": tokens_burned})

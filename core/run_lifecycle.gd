@@ -468,10 +468,7 @@ func continue_after_depth(sim: Node) -> bool:
 	if not bool(sim.run_state.flags.get("depth_complete", false)) and str(
 		sim.run_state.flags.get("outcome", "")
 	) != "depth_complete":
-		if not bool(sim.run_state.flags.get("post_victory", false)):
-			return false
-		if int(sim.run_state.depth.get("level", 0)) <= 0:
-			return false
+		return false
 	sim.run_state.flags["depth_complete"] = false
 	sim.run_state.flags["depth_complete_pending"] = false
 	if str(sim.run_state.flags.get("outcome", "")) == "depth_complete":

@@ -20,7 +20,9 @@ func run() -> void:
 	_test_preview_does_not_touch_the_live_resolver()
 	_test_warm_cache_is_a_named_beat()
 	_test_ordinary_stages_are_faster_than_the_old_crawl()
+	_test_duration_follows_capped_holds()
 	_test_a_repeat_is_its_own_beat()
+	_test_spectacle_flag_disables_preview_beats()
 
 
 func _beats_of(kind: String, beats: Array) -> Array:
@@ -203,6 +205,45 @@ func _test_ordinary_stages_are_faster_than_the_old_crawl() -> void:
 		BurnSpectacle.total_duration_ms(beats) < stages * 900,
 		"Spectacle time is shorter than the old %.1fs-per-stage crawl" % 0.9
 	)
+
+
+func _test_duration_follows_capped_holds() -> void:
+	var preview: Dictionary = _burn(
+		["op.prompt", "op.cheap_model", "op.premium_model", "op.foundation_model"], 9104
+	)
+	var beats: Array = BurnSpectacle.compile(preview, [])
+	assert_true(not beats.is_empty(), "A long pipeline still compiles beats")
+	var from_holds: int = 0
+	for beat in beats:
+		if beat is Dictionary:
+			from_holds += int(round(float(beat.get("hold", 0.0)) * 1000.0))
+	assert_eq(
+		BurnSpectacle.total_duration_ms(beats), from_holds,
+		"Duration is the capped holds, not the original duration_ms"
+	)
+	assert_true(
+		BurnSpectacle.total_duration_ms(beats) <= int(round(BurnSpectacle.MAX_SECONDS * 1000.0)) + 1,
+		"A long pipeline stays inside the spectacle cap"
+	)
+
+
+func _test_spectacle_flag_disables_preview_beats() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(9105)
+	var offers: Array = sim.run_state.business.get("job_offers", [])
+	assert_true(offers.size() > 0, "A run opens with work to preview")
+	sim.accept_job(str(Dictionary(offers[0]).get("id", "")))
+	sim.start_work()
+	FeatureFlags.set_enabled("burn_spectacle_enabled", false)
+	var preview: Dictionary = sim.preview_burn()
+	FeatureFlags.reload()
+	assert_true(preview.get("ok", false), "The board can still preview a burn")
+	assert_eq(
+		Array(preview.get("spectacle", [])).size(), 0,
+		"Turning the flag off strips the spectacle log"
+	)
+	sim.free()
 
 
 func _test_a_repeat_is_its_own_beat() -> void:
