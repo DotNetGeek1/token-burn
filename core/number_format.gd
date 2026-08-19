@@ -7,12 +7,32 @@ const SUFFIXES := ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc"]
 static func format(value: float, decimals: int = 1) -> String:
 	if is_nan(value) or is_inf(value):
 		return "???"
-	if absf(value) < 1000.0:
+	var magnitude: float = absf(value)
+	if magnitude < 1000.0:
 		return str(int(value)) if value == int(value) else ("%%.%df" % decimals) % value
-	var tier: int = int(floor(log(absf(value)) / log(1000.0)))
-	tier = clampi(tier, 0, SUFFIXES.size() - 1)
-	var scaled: float = value / pow(1000.0, tier)
+	var tier: int = int(floor(log(magnitude) / log(1000.0)))
+	if tier >= SUFFIXES.size():
+		return _scientific(value)
+	var scaled: float = value / pow(1000.0, float(tier))
 	return ("%%.%df%s" % [decimals, SUFFIXES[tier]]) % scaled
+
+
+static func _scientific(value: float) -> String:
+	var magnitude: float = absf(value)
+	var exponent: int = int(floor(log(magnitude) / log(10.0) + 1e-12))
+	var mantissa: float = value / pow(10.0, float(exponent))
+	while absf(mantissa) >= 10.0:
+		mantissa /= 10.0
+		exponent += 1
+	while absf(mantissa) < 1.0 and mantissa != 0.0:
+		mantissa *= 10.0
+		exponent -= 1
+	# 1e100 is not an exact float; the mantissa can sit at 9.999… and then
+	# two-decimal rounding would print 10.00e99.
+	if absf(mantissa) + 0.005 >= 10.0:
+		mantissa /= 10.0
+		exponent += 1
+	return "%.2fe%d" % [mantissa, exponent]
 
 
 static func format_tokens(value: float) -> String:

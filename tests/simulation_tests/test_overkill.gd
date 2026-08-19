@@ -43,7 +43,7 @@ func _test_scoreboard_names_peak_overkill() -> void:
 	state.statistics["lifetime_overkill"] = 3.12
 	var score: Dictionary = RunScore.compute(state, ContentDatabase)
 	assert_almost_eq(float(score.get("peak_overkill", 0.0)), 4.12, 0.001, "Peak overkill is scored")
-	assert_eq(int(score.get("overkill_score", 0)), 312, "Overflow becomes an overkill score")
+	assert_almost_eq(float(score.get("overkill_score", 0.0)), 312.0, 0.01, "Overflow becomes an overkill score")
 	var labels: Array = []
 	for row in RunScore.rows(score):
 		labels.append(str(row.get("label", "")))

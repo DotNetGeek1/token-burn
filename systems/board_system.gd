@@ -1120,14 +1120,19 @@ func _drain_cascade_queue(
 			run_state.statistics.get("cascades_triggered", 0)
 		) + 1
 		var heat_ratio: float = _heat_ratio(run_state)
-		var module_id: String = str(entry.get("module_id", proc.get("source_id", "")))
+		var source_module_id: String = str(proc.get("source_id", ""))
+		var replayed_module_id: String = str(entry.get("module_id", ""))
+		var payload := {
+			"module_id": source_module_id if source_module_id != "" else replayed_module_id,
+			"source_module_id": source_module_id,
+			"replayed_module_id": replayed_module_id,
+			"heat_ratio": heat_ratio,
+		}
 		if mode == ResolveMode.COMMIT:
-			EventBus.emit_event(EventBus.EVENT_CASCADE_TRIGGERED, {
-				"module_id": module_id, "heat_ratio": heat_ratio,
-			})
+			EventBus.emit_event(EventBus.EVENT_CASCADE_TRIGGERED, payload)
 		_dispatch_batch_event(
 			EventBus.EVENT_CASCADE_TRIGGERED, run_state, job, batch, rng, effect_resolver,
-			subscriptions, {"module_id": module_id, "heat_ratio": heat_ratio}, board_slots
+			subscriptions, payload, board_slots
 		)
 		var prior: Dictionary = {}
 		if hist_index > 0:
@@ -1151,7 +1156,7 @@ func _drain_cascade_queue(
 					"depth": next_depth + 1,
 					"multiplier": maxf(0.0, float(replay.get("cascade_strength", 1.0))) * multiplier,
 					"cost_mult": cost_mult,
-					"source_id": module_id,
+					"source_id": replayed_module_id,
 				})
 	return triggered
 

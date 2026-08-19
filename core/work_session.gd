@@ -326,14 +326,24 @@ func finish_prompt(sim: Node, result: Dictionary) -> void:
 		var depth_result: Dictionary = sim.depth_system().evaluate_prompt(sim.run_state)
 		for message in depth_result.get("messages", []):
 			sim.round_log.append(str(message))
-		if str(depth_result.get("outcome", "")) == DepthSystem.STATUS_COMPLETE:
-			work_running = false
-			sim._reach_depth_complete()
-			sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
-			return
+		# Latch the crossing here, then settle the desk. Overlaying RUN_END
+		# before end_session left completed jobs in active_jobs and let live
+		# Depth N contracts ride into Depth N+1.
+		if bool(depth_result.get("newly_complete", false)):
+			sim.run_state.flags["depth_complete_pending"] = true
 	var stop: String = _session_stop_reason(result)
-	if stop != "":
+	var depth_pending: bool = bool(sim.run_state.flags.get("depth_complete_pending", false))
+	if stop != "" or depth_pending:
+		if depth_pending:
+			sim._settling_depth = true
+			if stop == "":
+				stop = "depth_complete"
 		end_session(sim, stop)
+		sim._settling_depth = false
+		if depth_pending and sim.phase != sim.Phase.RUN_END:
+			sim._reach_depth_complete()
+		elif depth_pending:
+			sim.run_state.flags["depth_complete_pending"] = false
 		sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
 	else:
 		sim._autosave()
@@ -466,8 +476,8 @@ func end_session(sim: Node, reason: String) -> void:
 	# `_reach_victory` flips to RUN_END. Saving here would write a live next
 	# round under the verdict; Continue from title then resurrected a run the
 	# overlay had just called closed. The victory path saves once, after the
-	# phase is honest.
-	if not sim._settling_victory:
+	# phase is honest. Depth complete does the same: settle, then overlay.
+	if not sim._settling_victory and not sim._settling_depth:
 		sim._autosave()
 
 

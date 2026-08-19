@@ -84,12 +84,13 @@ func progress(run_state: RunState) -> Dictionary:
 
 func evaluate_prompt(run_state: RunState) -> Dictionary:
 	if str(run_state.depth.get("status", STATUS_NONE)) == STATUS_COMPLETE:
-		return {"outcome": STATUS_COMPLETE, "messages": []}
+		return {"outcome": STATUS_COMPLETE, "newly_complete": false, "messages": []}
 	if not is_active(run_state):
 		return {}
 	if not is_complete(run_state):
 		return {
 			"outcome": STATUS_ACTIVE,
+			"newly_complete": false,
 			"messages": [],
 			"tokens_burned": tokens_burned(run_state),
 			"tokens_needed": float(run_state.depth.get("tokens_needed", 0.0)),
@@ -99,6 +100,7 @@ func evaluate_prompt(run_state: RunState) -> Dictionary:
 	EventBus.emit_event(EventBus.EVENT_DEPTH_COMPLETE, {"level": level})
 	return {
 		"outcome": STATUS_COMPLETE,
+		"newly_complete": true,
 		"messages": ["Depth %d complete." % level],
 		"tokens_burned": tokens_burned(run_state),
 		"tokens_needed": float(run_state.depth.get("tokens_needed", 0.0)),

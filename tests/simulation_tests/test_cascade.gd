@@ -11,6 +11,7 @@ func run() -> void:
 	_test_new_modules_resolve()
 	_test_cascade_can_chain()
 	_test_cascade_queue_stops_at_the_guard()
+	_test_cascade_names_the_source_and_the_replay()
 	_test_dead_mans_switch_needs_to_have_run()
 
 
@@ -122,6 +123,71 @@ func _test_cascade_queue_stops_at_the_guard() -> void:
 	assert_eq(
 		triggered, EffectOps.MAX_SAME_EVENT_RECURSION,
 		"A forced cascade queue stops at the ChainGuard cap"
+	)
+
+
+func _test_cascade_names_the_source_and_the_replay() -> void:
+	var board := BoardSystem.new()
+	var seen: Array = []
+	var on_cascade := func(module_id: String) -> void:
+		seen.append(module_id)
+	EventBus.cascade_triggered.connect(on_cascade)
+	var history: Array = [
+		{
+			"stage": BoardSystem.STAGE_DEFAULTS.duplicate(true),
+			"module_id": "op.prompt",
+			"index": 0,
+		},
+		{
+			"stage": BoardSystem.STAGE_DEFAULTS.duplicate(true),
+			"module_id": "op.recursive_compiler",
+			"index": 1,
+		},
+	]
+	var queue: Array = [{
+		"hist": 0,
+		"depth": 1,
+		"multiplier": 1.0,
+		"cost_mult": 1.0,
+		"source_id": "op.recursive_compiler",
+	}]
+	var batch: Dictionary = {
+		"tokens": 1000.0,
+		"token_mult": 1.0,
+		"progress_mult": 1.0,
+		"quality": 0.0,
+		"heat": 0.0,
+		"cost": 0.0,
+		"hide_bugs": 0.0,
+		"quality_to_progress": 0.0,
+		"known_bugs": 0.0,
+		"hidden_bugs": 0.0,
+		"revealed": 0.0,
+		"fixed": 0.0,
+		"scope_tokens": 0.0,
+	}
+	var job := {
+		"id": "job.cascade_meta",
+		"name": "Cascade meta",
+		"token_requirement": 10000.0,
+		"tokens_remaining": 10000.0,
+		"quality": 0.0,
+		"quality_threshold": 0.0,
+		"known_bugs": 0,
+		"hidden_bugs": 0,
+		"blocked_slots": 0,
+		"board_rules": [],
+		"tags": [],
+	}
+	board._drain_cascade_queue(
+		queue, history, ChainGuard.new("board.cascade"), RunState.new(), job, batch,
+		DeterministicRng.new(1), EffectResolver.new(), [], [], ResolveMode.COMMIT
+	)
+	EventBus.cascade_triggered.disconnect(on_cascade)
+	assert_eq(seen.size(), 1, "One cascade is emitted")
+	assert_eq(
+		str(seen[0]), "op.recursive_compiler",
+		"The typed signal names the module that caused the cascade, not the one being replayed"
 	)
 
 

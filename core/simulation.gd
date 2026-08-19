@@ -114,6 +114,12 @@ var _settling_victory: bool:
 		return _life.settling_victory
 	set(value):
 		_life.settling_victory = value
+
+var _settling_depth: bool:
+	get:
+		return _life.settling_depth
+	set(value):
+		_life.settling_depth = value
 var _subscriptions_cache: Array = []
 var _subscriptions_dirty: bool = true
 

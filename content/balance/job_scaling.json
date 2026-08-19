@@ -107,7 +107,7 @@
       "score_mult": 3.0,
       "requirement_mult": 5.0,
       "repeatable": true,
-      "max_stacks": 5
+      "max_stacks": 0
     },
     {
       "id": "depth.thin_cooling",

@@ -11,11 +11,13 @@ extends RefCounted
 
 var round_end_pending: bool = false
 var settling_victory: bool = false
+var settling_depth: bool = false
 
 
 func reset() -> void:
 	round_end_pending = false
 	settling_victory = false
+	settling_depth = false
 
 
 func ensure_job_board(sim: Node) -> void:
@@ -106,6 +108,7 @@ func reset_run(sim: Node, p_seed: int = 0, difficulty_override: String = "") -> 
 	sim.reset_session_ephemerals()
 	round_end_pending = false
 	settling_victory = false
+	settling_depth = false
 	sim.last_round_statement = {}
 	sim.debug_invalidate_subscriptions()
 	# Where the run happens is decided before it starts and never moves again,
@@ -435,17 +438,19 @@ func continue_after_victory(sim: Node) -> bool:
 	return true
 
 
-## A Deep Burn target was met. The run is not over: this is the beat between
-## depths, the same way the Moon win is the beat before Depth 1. Chapter
-## bonuses stay put — this is not `_reach_victory`.
+## A Deep Burn target was met. Called after the current session has already
+## been settled: contracts never cross a depth boundary. Chapter bonuses stay
+## put — this is not `_reach_victory`.
 func reach_depth_complete(sim: Node) -> void:
 	sim._work_running = false
+	sim.run_state.flags["depth_complete_pending"] = false
 	sim.run_state.flags["outcome"] = "depth_complete"
 	sim.run_state.flags["depth_complete"] = true
-	if str(sim.run_state.flags.get("post_victory_phase", "")) == "":
-		sim.run_state.flags["post_victory_phase"] = sim._phase_name(
-			sim.Phase.IN_ROUND if sim.phase == sim.Phase.IN_ROUND else sim.Phase.ROUND_PREP
-		)
+	# Settlement already closed the desk into the next calendar. Resume is
+	# always a fresh ROUND_PREP so Depth N+1 contracts are generated after
+	# the affix pick, not leftover Depth N work.
+	sim.run_state.flags["post_victory_phase"] = sim._phase_name(sim.Phase.ROUND_PREP)
+	sim.pending_choices.clear()
 	sim.round_log.append(
 		"Depth %d complete. The next contract is waiting."
 		% int(sim.run_state.depth.get("level", 0))
@@ -468,11 +473,17 @@ func continue_after_depth(sim: Node) -> bool:
 		if int(sim.run_state.depth.get("level", 0)) <= 0:
 			return false
 	sim.run_state.flags["depth_complete"] = false
+	sim.run_state.flags["depth_complete_pending"] = false
 	if str(sim.run_state.flags.get("outcome", "")) == "depth_complete":
 		sim.run_state.flags["outcome"] = ""
-	sim.phase = sim._phase_from_name(str(sim.run_state.flags.get("post_victory_phase", "ROUND_PREP")))
-	if sim.phase == sim.Phase.RUN_END or sim.phase == sim.Phase.IDLE:
-		sim.phase = sim.Phase.ROUND_PREP
+	sim.pending_choices.clear()
+	# Settlement may have already stamped a board at the old requirement_mult.
+	# The affix pick is what starts Depth N+1, so the offers have to be
+	# rebuilt against that multiplier.
+	sim.run_state.business["job_offers"] = []
+	sim.run_state.business["job_queue"] = []
+	sim.run_state.business["job_board_stamp"] = ""
+	sim.phase = sim.Phase.ROUND_PREP
 	_ensure_job_offers(sim)
 	sim._autosave()
 	return true
@@ -776,7 +787,7 @@ func end_round(sim: Node) -> void:
 	# is the price of admission; miss the rent and nobody with money wants to be
 	# seen anywhere near the operation. `_begin_round` has already opened round
 	# prep, which is where a defaulting run stays.
-	if bool(statement.get("paid_in_full", false)):
+	if bool(statement.get("paid_in_full", false)) and not settling_depth:
 		present_angel_offers(sim)
 
 

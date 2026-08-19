@@ -27,10 +27,10 @@ static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 		"contract_name": _contract_name(run_state, content_db),
 		"peak_overkill": float(stats.get("peak_overkill", 0.0)),
 		"lifetime_overkill": lifetime_overkill,
-		"overkill_score": floori(lifetime_overkill * 100.0),
+		"overkill_score": lifetime_overkill * 100.0,
 		"depth_reached": int(stats.get("depth_reached", 0)),
 		"depth_score_mult": depth_mult,
-		"depth_score": floori(lifetime_tokens * maxf(0.0, depth_mult - 1.0)),
+		"depth_score": lifetime_tokens * maxf(0.0, depth_mult - 1.0),
 	}
 
 
@@ -62,10 +62,10 @@ static func rows(score: Dictionary) -> Array:
 			"label": "Peak overkill",
 			"value": "%d%%" % int(float(score.get("peak_overkill", 0.0)) * 100.0),
 		})
-	if int(score.get("overkill_score", 0)) > 0:
+	if float(score.get("overkill_score", 0.0)) > 0.0:
 		result.append({
 			"label": "Overkill score",
-			"value": str(int(score.get("overkill_score", 0))),
+			"value": NumberFormat.format(float(score.get("overkill_score", 0.0))),
 		})
 	if int(score.get("depth_reached", 0)) > 0:
 		result.append({
