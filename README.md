@@ -1,16 +1,26 @@
 # Token Burn
 
-Mobile-first roguelike economic engine-builder about taking software jobs, burning absurd quantities of AI tokens, and constructing increasingly unstable compute infrastructure.
+Roguelike economic engine-builder about taking software jobs, burning absurd quantities of AI tokens, and constructing increasingly unstable compute infrastructure.
 
-Built with **Godot 4** and **GDScript**.
+Built with **Godot 4.7** and **GDScript**. Landscape desk-and-venue UI; playable in the editor, on the web, and as an Android playtest APK.
+
+Play in the browser at [tokenburn.dotnetgeek.co.uk](https://tokenburn.dotnetgeek.co.uk).
 
 ## Getting started
 
-1. Install [Godot 4.x](https://godotengine.org/download).
+1. Install [Godot 4.7.x](https://godotengine.org/download) (CI uses 4.7.1). Put `godot` on your `PATH`.
 2. Open this folder as a Godot project (`project.godot`).
-3. Press **F5** (or **Play**) to run the placeholder app.
+3. Press **F5** (or **Play**) to run the game.
+
+On a fresh clone, import the project once before the first headless run:
+
+```bash
+godot --headless --import
+```
 
 ### Headless tests
+
+Fast correctness suite: simulation, effects, content validation, and a short batch of campaign runs.
 
 ```bash
 godot --headless res://tests/run_tests.tscn
@@ -19,19 +29,13 @@ godot --headless res://tests/run_tests.tscn
 The runner exits with a status code equal to the number of failed assertions.
 
 It must be launched as a scene. Godot does not register project autoloads
-(`ContentDatabase`, `EventBus`, `Simulation`) under `--script`, so the systems
-under test fail to compile in that mode.
-
-On a fresh clone, import the project once before the first run:
-
-```bash
-godot --headless --import
-```
+(`ContentDatabase`, `EventBus`, `Simulation`, `SceneRouter`, `MetaProgress`)
+under `--script`, so the systems under test fail to compile in that mode.
 
 ### UI playtests
 
-Slower suite that boots the real `ui/main.tscn` shell. Separate from the
-fast headless tests.
+Slower suite that boots the real `ui/main.tscn` shell and walks the venues.
+Separate from the fast headless tests.
 
 ```bash
 godot --headless res://tests/run_playtests.tscn
@@ -61,28 +65,67 @@ For those checks, run windowed with the dummy rendering driver:
 ./tools/run_playtests.ps1 -Windowed
 ```
 
+### Campaign balance sweeps
+
+Longer pacing runs, separate from the correctness suite:
+
+```bash
+godot --headless --path . res://tests/run_balance.tscn -- --runs=50
+```
+
+Thresholds live in `content/balance/pacing_targets.json`.
+
+## Web export and promo site
+
+The promo site (Next.js, Azure Static Web Apps) lives in `site/` and hosts
+the Godot HTML5 export at `/game/`. Local site docs: [site/README.md](site/README.md).
+
+```powershell
+./tools/export_web.ps1
+cd site
+npm install
+npm run dev
+```
+
+Requires web export templates in Godot (including the no-threads variant).
+Pushes to `main` that touch the game or site rebuild and deploy automatically.
+
 ## Documentation
 
-See [docs/README.md](docs/README.md) for the full design overview and linked specs:
+See [docs/README.md](docs/README.md) for the design overview and linked specs:
 
 - [Game Design Overview](docs/GAME_DESIGN.md)
 - [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
 - [UX and Production Plan](docs/UX_AND_PRODUCTION.md)
+- [Late-game escalation plan](docs/plans/late-game-escalation.md)
+
+Feature toggles live in `config/feature_flags.json` ([ADR-003](docs/decisions/ADR-003-feature-flags.md)).
 
 ## Project structure
 
 ```text
 token-burn/
-├── core/           # Simulation engine (run state, events, effects, RNG)
-├── definitions/    # Godot Resource types for content definitions
-├── systems/        # Domain systems (jobs, economy, compute, heat, etc.)
-├── content/        # Game data (jobs, perks, upgrades, events, balance)
-├── ui/             # Screens and navigation
-├── presentation/   # Office diorama, effects, audio
-├── tests/          # Headless test runner and test suites
-└── docs/           # Design and architecture documents
+├── core/           # Simulation, autoloads, routing, save
+├── definitions/    # Godot Resource types for content
+├── systems/        # Domain systems (jobs, economy, compute, heat, …)
+├── content/        # JSON: jobs, perks, upgrades, events, balance
+├── config/         # Feature flags
+├── ui/             # Desk shell, venues, board, overlays
+├── presentation/   # Art, fonts, asset catalog
+├── tests/          # Headless suites, playtests, balance sweeps
+├── tools/          # Playtest runner, web export, asset scripts
+├── export/         # Web export preset and HTML shell
+├── site/           # Promo site (Next.js → Azure Static Web Apps)
+└── docs/           # Design and architecture
 ```
+
+The player sits at the desk (`ui/main.tscn`). Jobs, market, build, workflows,
+and records are separate venue scenes; `SceneRouter` swaps them without tearing
+down the tree (required for the web export).
 
 ## Current status
 
-**Vertical slice (Milestone 1-3)** — playable turn-based 12-month run with jobs, perks, upgrades, events, save/load, Burn Lab, and headless batch testing.
+**0.7.1** — playable twelve-month campaign from the bedroom through later
+compute ages. Jobs, workflows, perks, hardware, heat and fire, angel rounds,
+meta unlocks, save/load, title screen, and Burn Lab. Headless tests, UI
+playtests, and a public web build plus Android playtest APK.
