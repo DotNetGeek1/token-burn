@@ -7,12 +7,12 @@ extends Node
 ## than a slab sliding over the room. They used to swap with `change_scene`,
 ## which on web frees the whole current world while WebGL still has buffers
 ## bound and kills the canvas. Screens are children of a host this autoload
-## owns, so the tree root never tears down. A swap fades, tears the old tree
-## down, then mounts the new one — never both live at once, which overflowed
-## the message queue. This also owns everything that has to outlive the screen
-## it was started from: the fade over the seam, the phone the investor rings
-## on, the award splash, and any round-end report that lands while the player
-## is out of the room.
+## owns, so the tree root never tears down. Normal navigation keeps each routed
+## screen alive once mounted and only hides/disables it; the web renderer never
+## has to destroy the live desk or venue render tree during a route change.
+## This also owns everything that has to outlive the screen it was started from:
+## the fade over the seam, the phone the investor rings on, the award splash,
+## and any round-end report that lands while the player is out of the room.
 
 ## Emitted once the new scene is mounted, for anything tracking where the player
 ## is rather than driving where they go.
@@ -57,8 +57,9 @@ var current: String = DESK
 
 var _stack: Array[String] = []
 var _switching: bool = false
-## Reports that arrived while the player was somewhere the shell could not show
-## them. Drained by `main.tscn` once it is back on screen.
+## Reports that arrived while the desk genuinely did not exist (primarily tools
+## booting directly into a venue). In the normal game the cached desk remains
+## connected to the simulation and receives these itself while hidden.
 var _pending_flow: Array[Dictionary] = []
 var _theme: Theme = null
 var _fade: ColorRect = null
@@ -66,9 +67,11 @@ var _overlay_host: Control = null
 var _investor_call: Control = null
 var _splash: AchievementSplash = null
 ## Lives under `/root` so Controls get a full viewport the way `current_scene`
-## used to. Never freed. The visible screen is its only child.
+## used to. Never freed. Cached routed screens are all children; exactly one is
+## visible and processing at a time.
 var _screen_host: Node = null
 var _screen: Node = null
+var _screen_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -80,7 +83,7 @@ func _ready() -> void:
 
 
 ## The screen the player is looking at. Playtests and the screenshot tool ask
-## this rather than `SceneTree.current_scene`, which is no longer swapped.
+## this rather than `SceneTree.current_scene`, which points at the persistent host.
 func current_screen() -> Node:
 	if _screen != null and is_instance_valid(_screen):
 		return _screen
@@ -183,11 +186,13 @@ func goto(route: String) -> bool:
 
 ## Starts the router's world from outside it, for tools whose own scene is the
 ## one being replaced. The game itself never needs this: it boots into the desk
-## because the desk is the project's main scene.
+## because the desk is the project's main scene. Tools/tests need a genuinely
+## fresh screen graph, so this is the one path allowed to clear the route cache.
 func boot_into(route: String) -> void:
 	if not has_route(route):
 		return
 	_stack.clear()
+	_clear_screen_cache()
 	_switch_to(route)
 
 
@@ -218,16 +223,25 @@ func _switch_to(route: String) -> void:
 	if not is_inside_tree():
 		_switching = false
 		return
-	await _teardown_outgoing()
-	if not is_inside_tree():
-		_switching = false
-		return
-	var incoming: Node = packed.instantiate()
+	_suspend_screen(_screen)
+	var incoming: Node = _cached_screen(route)
+	if incoming == null:
+		incoming = packed.instantiate()
+		_screen_cache[route] = incoming
 	_mount_screen(incoming)
 	current = route
-	_switching = false
+	_activate_screen(route, incoming)
 	route_changed.emit(route)
 	await _fade_to(0.0, FADE_IN_SECONDS)
+	_switching = false
+
+
+func _cached_screen(route: String) -> Node:
+	var cached: Variant = _screen_cache.get(route, null)
+	if cached is Node and is_instance_valid(cached):
+		return cached
+	_screen_cache.erase(route)
+	return null
 
 
 func _ensure_host() -> void:
@@ -257,6 +271,7 @@ func _adopt_boot_scene() -> void:
 		return
 	_ensure_host()
 	get_tree().current_scene = _screen_host
+	_screen_cache[DESK] = boot
 	_mount_screen(boot)
 
 
@@ -271,55 +286,56 @@ func _mount_screen(screen: Node) -> void:
 			_screen_host.add_child(screen)
 	if screen is Control:
 		(screen as Control).set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if screen is CanvasItem:
+		(screen as CanvasItem).visible = true
+	screen.process_mode = Node.PROCESS_MODE_INHERIT
 	_screen = screen
 	if is_inside_tree() and get_tree().current_scene != _screen_host:
 		get_tree().current_scene = _screen_host
 
 
-## Hide, drain, then free the outgoing screen before the next one is even
-## instantiated. Mounting both at once left debrief tweens and layout callbacks
-## running against a tree that was already `queue_free`'d.
-func _teardown_outgoing() -> void:
-	var outgoing: Node = _screen
-	if outgoing == null or not is_instance_valid(outgoing):
+## Normal route changes deliberately do not free render-bearing screens. On the
+## web Compatibility renderer, repeatedly destroying the desk after a round can
+## leave a blank canvas without a useful console error. Hiding the root stops
+## drawing it and disabling processing makes the cache cheap while preserving
+## all render resources for the next visit.
+func _suspend_screen(screen: Node) -> void:
+	if screen == null or not is_instance_valid(screen):
 		return
-	if outgoing == _screen_host:
-		return
-	_quiesce_node(outgoing)
-	if is_inside_tree():
-		await get_tree().process_frame
-	if not is_instance_valid(outgoing):
-		if _screen == outgoing:
-			_screen = null
-		return
-	if _screen == outgoing:
-		_screen = null
-	outgoing.queue_free()
-	if is_inside_tree():
-		await get_tree().process_frame
-	if is_instance_valid(outgoing) and is_inside_tree():
-		await get_tree().process_frame
+	if screen.has_method("route_deactivated"):
+		screen.call("route_deactivated")
+	if screen is CanvasItem:
+		(screen as CanvasItem).visible = false
+	screen.process_mode = Node.PROCESS_MODE_DISABLED
 
 
-func _quiesce_node(node: Node) -> void:
-	if node == null or not is_instance_valid(node):
+func _activate_screen(route: String, screen: Node) -> void:
+	if screen == null or not is_instance_valid(screen):
 		return
-	if node is CanvasItem:
-		(node as CanvasItem).visible = false
-	node.process_mode = Node.PROCESS_MODE_DISABLED
-	_stop_gpu_nodes(node)
+	if screen.has_method("route_activated"):
+		screen.call("route_activated")
+	elif route == DESK:
+		_ask_shell("refresh_all")
+	elif screen.has_method("refresh"):
+		screen.call("refresh")
+	# A direct-to-venue tool can still produce reports before a desk has ever
+	# existed. Once the desk is active, replay that exceptional backlog.
+	if route == DESK and not _pending_flow.is_empty():
+		var queued: Array[Dictionary] = _pending_flow.duplicate()
+		_pending_flow.clear()
+		for entry in queued:
+			_replay(entry)
 
 
-func _stop_gpu_nodes(node: Node) -> void:
-	if node is GPUParticles2D or node is GPUParticles3D:
-		node.emitting = false
-		node.visible = false
-	elif node is CPUParticles2D or node is CPUParticles3D:
-		node.emitting = false
-	elif node is SubViewport:
-		node.render_target_update_mode = SubViewport.UPDATE_DISABLED
-	for child in node.get_children():
-		_stop_gpu_nodes(child)
+## Test/screenshot booting is allowed to throw away cached screens because it is
+## outside normal gameplay navigation. This keeps persona isolation intact while
+## the shipped web loop never tears down a route mid-session.
+func _clear_screen_cache() -> void:
+	for cached in _screen_cache.values():
+		if cached is Node and is_instance_valid(cached):
+			(cached as Node).queue_free()
+	_screen_cache.clear()
+	_screen = null
 
 
 func _fade_to(target: float, seconds: float) -> void:
@@ -420,10 +436,9 @@ func _request_on_desk(kind: String) -> void:
 
 # --- Reports that land while the player is out ------------------------------
 
-## Work runs on while the player is reading the market, so the debrief and the
-## bills can both come due in a scene that has no way to print them. They are
-## kept here and replayed the moment the desk is back, because the signal that
-## carried them will not fire twice.
+## A cached desk remains connected to the simulation while hidden, so in normal
+## gameplay it has already received the debrief/bills signals by the time the
+## router walks home. Pending copies are only required when no desk exists yet.
 func _connect_flow() -> void:
 	Simulation.work_session_finished.connect(_on_work_session_finished)
 	Simulation.round_statement_ready.connect(_on_round_statement_ready)
@@ -438,14 +453,16 @@ func _connect_flow() -> void:
 func _on_work_session_finished(result: Dictionary) -> void:
 	if current == DESK:
 		return
-	_pending_flow.append({"kind": "session", "result": result.duplicate(true)})
+	if _cached_screen(DESK) == null:
+		_pending_flow.append({"kind": "session", "result": result.duplicate(true)})
 	goto(DESK)
 
 
 func _on_round_statement_ready(statement: Dictionary) -> void:
 	if current == DESK:
 		return
-	_pending_flow.append({"kind": "statement", "statement": statement.duplicate(true)})
+	if _cached_screen(DESK) == null:
+		_pending_flow.append({"kind": "statement", "statement": statement.duplicate(true)})
 	goto(DESK)
 
 

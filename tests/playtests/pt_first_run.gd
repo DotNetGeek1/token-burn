@@ -5,8 +5,8 @@ extends PlaytestCase
 ##
 ## Those overlays set dismiss_on_scrim false, so a click on the glass does
 ## nothing. The bug this guards is a player stuck on a report they cannot
-## dismiss. Winning the campaign is a different persona; this one stops
-## once the first month has closed.
+## dismiss. It also leaves the desk after settlement and comes back repeatedly:
+## web used to blank the canvas when the settled desk render tree was destroyed.
 
 
 func play(harness: UiHarness) -> void:
@@ -14,6 +14,7 @@ func play(harness: UiHarness) -> void:
 	var driver: UiDriver = harness.driver
 
 	driver.audit_screen("desk", "desk")
+	var original_desk: Node = harness.current_scene()
 
 	await accept_first_job(harness)
 	var queued: Array = Simulation.run_state.business.get("job_queue", [])
@@ -31,3 +32,25 @@ func play(harness: UiHarness) -> void:
 	)
 	if Simulation.phase == Simulation.Phase.ROUND_PREP:
 		driver.audit_screen("desk", "desk")
+		# Regression for the web-only blank canvas: the first navigation after a
+		# settled round must not destroy the desk, and repeated route changes must
+		# keep producing a visible current screen.
+		for trip in 5:
+			await harness.goto_route("jobs")
+			var jobs: Node = harness.current_scene()
+			assert_true(jobs != null, "Post-round Jobs route mounted on trip %d" % trip)
+			assert_true(
+				jobs is CanvasItem and (jobs as CanvasItem).is_visible_in_tree(),
+				"Post-round Jobs route is visible on trip %d" % trip
+			)
+			driver.audit_screen("jobs", "jobs")
+			await harness.go_desk()
+			assert_true(
+				harness.current_scene() == original_desk,
+				"Returning from Jobs reuses the live desk instead of destroying it"
+			)
+			assert_true(
+				original_desk is CanvasItem and (original_desk as CanvasItem).is_visible_in_tree(),
+				"Cached desk is visible again after trip %d" % trip
+			)
+			driver.audit_screen("desk", "desk")
