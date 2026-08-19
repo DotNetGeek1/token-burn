@@ -15,6 +15,7 @@ var cooling: float = 0.0
 var meta_cooling: float = 0.0
 var heat: float = 0.0
 var heat_capacity: float = 100.0
+var instability: float = 0.0
 var efficiency: float = 1.0
 var efficiency_base: float = 1.0
 var rate_modifiers: Array = []
@@ -33,6 +34,7 @@ static func from_dict(data: Dictionary) -> ComputeState:
 	state.meta_cooling = float(data.get("meta_cooling", state.meta_cooling))
 	state.heat = float(data.get("heat", state.heat))
 	state.heat_capacity = float(data.get("heat_capacity", state.heat_capacity))
+	state.instability = float(data.get("instability", state.instability))
 	state.efficiency = float(data.get("efficiency", state.efficiency))
 	state.efficiency_base = float(data.get("efficiency_base", state.efficiency_base))
 	state.rate_modifiers = Array(data.get("rate_modifiers", state.rate_modifiers)).duplicate(true)
@@ -52,6 +54,7 @@ func to_dict() -> Dictionary:
 		"meta_cooling": meta_cooling,
 		"heat": heat,
 		"heat_capacity": heat_capacity,
+		"instability": instability,
 		"efficiency": efficiency,
 		"efficiency_base": efficiency_base,
 		"rate_modifiers": rate_modifiers.duplicate(true),

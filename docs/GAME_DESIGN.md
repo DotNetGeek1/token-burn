@@ -79,12 +79,12 @@ Players may eventually bid on contracts, trading a higher chance of winning work
 
 Hardware increases local throughput but raises power, heat, maintenance, and space requirements.
 
-Same-model stacking is allowed; the room, the bill, and the heat are the
-caps. A bigger floor can hold more of the same machine and run more
-contracts in parallel. Custom desktops still stop at four — that is the
-early-game identity cap, not a rack-scale wall. When a rig reaches the
-next compute era, the board keeps one familiar local posting and fills
-the rest from the rig's service tier. Existing postings never resize from
+Early desktops still cap at four copies so the bedroom and garage teach floor
+space. From GPU Rack onward the shop does not invent a MAX_LEVEL: money, floor
+slots, electricity, cooling and instability are the limits. A bigger floor can
+hold more of the same machine and run more contracts in parallel. When a rig
+reaches the next compute era, the board keeps one familiar local posting and
+fills the rest from the rig's service tier. Existing postings never resize from
 the live token rate.
 
 ### Dwelling

@@ -8,6 +8,8 @@ extends RefCounted
 static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 	var stats: Dictionary = run_state.statistics
 	var lifetime_tokens: float = float(stats.get("lifetime_tokens", 0.0))
+	var lifetime_overkill: float = float(stats.get("lifetime_overkill", 0.0))
+	var depth_mult: float = maxf(1.0, float(run_state.depth.get("score_mult", 1.0)))
 	var ascension_system := AscensionSystem.new()
 	return {
 		"total_tokens_burned": lifetime_tokens,
@@ -23,6 +25,12 @@ static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 		"outcome": str(run_state.flags.get("outcome", "")),
 		"ascension_tier": int(run_state.flags.get("ascension_tier", 0)),
 		"contract_name": _contract_name(run_state, content_db),
+		"peak_overkill": float(stats.get("peak_overkill", 0.0)),
+		"lifetime_overkill": lifetime_overkill,
+		"overkill_score": floori(lifetime_overkill * 100.0),
+		"depth_reached": int(stats.get("depth_reached", 0)),
+		"depth_score_mult": depth_mult,
+		"depth_score": floori(lifetime_tokens * maxf(0.0, depth_mult - 1.0)),
 	}
 
 
@@ -49,4 +57,22 @@ static func rows(score: Dictionary) -> Array:
 		{"label": "Peak cash", "value": NumberFormat.format_cash(float(score.get("peak_cash", 0.0)))},
 		{"label": "Rounds survived", "value": str(int(score.get("rounds_survived", 1)))},
 	]
+	if float(score.get("peak_overkill", 0.0)) >= 1.25:
+		result.append({
+			"label": "Peak overkill",
+			"value": "%d%%" % int(float(score.get("peak_overkill", 0.0)) * 100.0),
+		})
+	if int(score.get("overkill_score", 0)) > 0:
+		result.append({
+			"label": "Overkill score",
+			"value": str(int(score.get("overkill_score", 0))),
+		})
+	if int(score.get("depth_reached", 0)) > 0:
+		result.append({
+			"label": "Deep Burn depth",
+			"value": "Depth %d ×%.1f" % [
+				int(score.get("depth_reached", 0)),
+				float(score.get("depth_score_mult", 1.0)),
+			],
+		})
 	return result

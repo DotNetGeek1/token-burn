@@ -21,6 +21,9 @@ const KIND_COMBO := "combo"
 const KIND_PERK := "perk"
 const KIND_SYNERGY := "synergy"
 const KIND_FORK := "fork"
+const KIND_REPEAT := "repeat"
+const KIND_CASCADE := "cascade"
+const KIND_FAULT := "fault"
 const KIND_CONVERT := "convert"
 const KIND_FINAL := "final"
 
@@ -53,6 +56,23 @@ static func compile(burn: Dictionary, traces: Array = []) -> Array:
 	return beats
 
 
+## Older board code and incoming tests called `build`. Compile is the live path.
+static func build(preview: Dictionary, traces: Array = [], _board_slots: Array = []) -> Array:
+	return compile(preview, traces)
+
+
+static func total_duration_ms(beats: Array) -> int:
+	var total: int = 0
+	for beat in beats:
+		if not beat is Dictionary:
+			continue
+		if beat.has("duration_ms"):
+			total += int(beat.get("duration_ms", 0))
+			continue
+		total += int(round(float(beat.get("hold", QUIET_HOLD)) * 1000.0))
+	return total
+
+
 static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> Array:
 	var beats: Array = []
 	var after: Dictionary = stage.get("after", {})
@@ -71,6 +91,8 @@ static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> 
 		]),
 		str(stage.get("module_id", ""))
 	)
+	if bool(stage.get("dropped", false)):
+		beats.append(_beat(KIND_FAULT, "DROPPED", true, progress_mult, tokens, stage))
 	if not combos.is_empty():
 		for combo in combos:
 			var combo_name: String = str(combo.get("name", "")).strip_edges()
@@ -81,6 +103,8 @@ static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> 
 			))
 	if forked:
 		beats.append(_beat(KIND_FORK, FORK_LABEL, true, progress_mult, tokens, stage))
+	if bool(stage.get("cascaded", false)):
+		beats.append(_beat(KIND_CASCADE, "CASCADE", true, progress_mult, tokens, stage))
 	for proc in procs:
 		beats.append(_beat(
 			str(proc.get("kind", KIND_PERK)),
@@ -150,6 +174,7 @@ static func _beat(
 		"stage_position": int(stage.get("position", -1)),
 		"heat": float(Dictionary(stage.get("after", {})).get("heat", 0.0)),
 		"hold": LOUD_HOLD if loud else QUIET_HOLD,
+		"duration_ms": int(round((LOUD_HOLD if loud else QUIET_HOLD) * 1000.0)),
 		"closes_stage": false,
 	}
 

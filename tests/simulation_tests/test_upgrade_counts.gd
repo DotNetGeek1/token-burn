@@ -15,6 +15,7 @@ func run() -> void:
 	_test_carriable_rig_reads_the_unified_ledger()
 	_test_legacy_save_migrates_counts_from_the_split_fields()
 	_test_major_machines_are_capped_by_floor_space()
+	_test_major_machines_are_capped_by_floor_not_model()
 
 
 func _shop(location: String = "bedroom") -> Dictionary:
@@ -123,4 +124,21 @@ func _test_major_machines_are_capped_by_floor_space() -> void:
 	assert_false(
 		UpgradeSystem.is_maxed(shop["state"], rack),
 		"The refusal is floor space, not MAX_LEVEL"
+	)
+
+
+func _test_major_machines_are_capped_by_floor_not_model() -> void:
+	var shop: Dictionary = _shop("warehouse")
+	assert_true(_buy(shop, "upgrade.gpu_rack"), "First GPU rack")
+	assert_true(_buy(shop, "upgrade.gpu_rack"), "Second GPU rack")
+	assert_true(_buy(shop, "upgrade.gpu_rack"), "A third GPU rack is allowed when the floor is free")
+	assert_eq(
+		UpgradeSystem.installed_count(shop["state"], "gpu_rack"), 3,
+		"The ledger counts every purchased rack"
+	)
+
+	var tight: Dictionary = _shop("bedroom")
+	assert_false(
+		_buy(tight, "upgrade.gpu_rack"),
+		"A GPU rack still will not fit beside a bed"
 	)

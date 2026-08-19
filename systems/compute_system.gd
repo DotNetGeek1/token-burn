@@ -31,8 +31,13 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	# Rule-changer: heat above 60% of capacity feeds back into throughput
 	# instead of just risking a fire. A build that leans into this runs hot on
 	# purpose.
+	var heat_ratio: float = HeatSystem.heat_ratio(run_state)
+	var work_tier: int = HeatSystem.work_tier(run_state)
+	base_rate *= HeatSystem.overclock_band_bonus(heat_ratio, work_tier)
+	# Rule-changer: heat above 60% of capacity feeds back into throughput
+	# instead of just risking a fire. A build that leans into this runs hot on
+	# purpose. Stacks on the GPU-rack overclock band.
 	if "unlock.rule_heat_recycler" in Array(run_state.build.get("meta_unlocks", [])):
-		var heat_ratio: float = float(run_state.compute.get("heat", 0.0)) / maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 		if heat_ratio > 0.6:
 			base_rate *= 1.0 + (heat_ratio - 0.6) * 0.5
 	# Metered cloud spend is re-derived from what the cloud shelf bills, so a
@@ -55,6 +60,8 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	mod_ctx.set_value("compute.cloud_rate", cloud_rate)
 	mod_ctx.set_value("economy.cloud_cost_per_prompt", base_cloud_cost)
 	mod_ctx.set_value("economy.recurring_costs", base_recurring)
+	mod_ctx.extras["heat_ratio"] = heat_ratio
+	mod_ctx.extras["instability"] = float(run_state.compute.get("instability", 0.0))
 	effect_resolver.dispatch(EventBus.EVENT_COMPUTE_RECALCULATE, mod_ctx, subscriptions)
 	var efficiency: float = float(mod_ctx.get_value("compute.efficiency", base_efficiency))
 	run_state.compute["efficiency"] = efficiency

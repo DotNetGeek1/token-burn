@@ -8,8 +8,10 @@ const MIN_BAND_POOL := 3
 
 
 func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Node, tuning: Dictionary) -> void:
-	var interest: int = clampi(int(run_state.business.get("demand", 3.0)), 1, DemandSystem.MAX_DEMAND)
-	var count: int = maxi(interest, ComputeSystem.job_slots(run_state))
+	var slots: int = ComputeSystem.job_slots(run_state)
+	var offer_cap: int = maxi(DemandSystem.MAX_DEMAND, slots)
+	var interest: int = clampi(int(run_state.business.get("demand", 3.0)), 1, offer_cap)
+	var count: int = maxi(interest, slots)
 	var round_number: int = int(run_state.calendar.get("round", 1))
 	var here: int = location_tier(run_state, content_db)
 	var eligible: Array = _collect_eligible_jobs(content_db, round_number, here)
@@ -591,8 +593,11 @@ func _apply_burn(
 	subscriptions: Array = []
 ) -> void:
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
-	var progress: float = minf(float(job.get("tokens_remaining", 0.0)), float(burn.get("progress_tokens", 0.0)))
-	job["tokens_remaining"] = maxf(0.0, float(job.get("tokens_remaining", 0.0)) - progress)
+	var remaining_before: float = float(job.get("tokens_remaining", 0.0))
+	var progress: float = minf(remaining_before, float(burn.get("progress_tokens", 0.0)))
+	job["tokens_remaining"] = maxf(0.0, remaining_before - progress)
+	if remaining_before > 0.0 and float(job["tokens_remaining"]) <= 0.0:
+		_record_overkill(run_state, job, burn, requirement, mode)
 
 	var tokens_burned: float = float(burn.get("tokens", 0.0))
 	run_state.statistics["lifetime_tokens"] = float(run_state.statistics.get("lifetime_tokens", 0.0)) + tokens_burned
@@ -639,10 +644,7 @@ func _apply_burn(
 		job["token_requirement"] = requirement + scope_tokens
 		job["tokens_remaining"] = float(job.get("tokens_remaining", 0.0)) + scope_tokens
 
-	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
-	heat_system.add_heat(
-		run_state, HeatSystem.scale_authored_heat(float(burn.get("heat", 0.0)), capacity)
-	)
+	HeatSystem.apply_pipeline_heat(heat_system, run_state, float(burn.get("heat", 0.0)))
 	var cost: float = float(burn.get("cost", 0.0))
 	if cost > 0.0:
 		economy_system.debit(run_state, cost, "pipeline_cost", {"job_id": job.get("id", "")})
@@ -652,6 +654,30 @@ func _apply_burn(
 		messages.append(str(message))
 	if bool(burn.get("truncated", false)):
 		messages.append("Process killed mid-batch. The rest of the tokens are gone.")
+
+
+func _record_overkill(
+	run_state: RunState,
+	job: Dictionary,
+	burn: Dictionary,
+	requirement: float,
+	mode: int
+) -> void:
+	var delivered: float = maxf(float(burn.get("progress_tokens", 0.0)), requirement)
+	var ratio: float = delivered / maxf(1.0, requirement)
+	burn["overkill_ratio"] = ratio
+	job["overkill_ratio"] = ratio
+	run_state.statistics["peak_overkill"] = maxf(
+		float(run_state.statistics.get("peak_overkill", 0.0)), ratio
+	)
+	run_state.statistics["lifetime_overkill"] = float(
+		run_state.statistics.get("lifetime_overkill", 0.0)
+	) + maxf(0.0, ratio - 1.0)
+	if mode == ResolveMode.COMMIT and ratio >= 1.25:
+		EventBus.emit_event(EventBus.EVENT_OVERKILL, {
+			"ratio": ratio,
+			"job_id": str(job.get("id", "")),
+		})
 
 
 ## Contract-side risk: revisions, defects the pipeline never noticed, and the
@@ -1231,6 +1257,9 @@ func _scale_job(
 	) + round_rent
 	# Snapped so varied offers still advertise tidy figures.
 	reward = snappedf(maxf(reward, min_reward), 5.0)
+	var depth_mult: float = maxf(1.0, float(run_state.depth.get("requirement_mult", 1.0)))
+	if depth_mult > 1.0:
+		token_requirement *= depth_mult
 
 	var revision_caps: Array = scaling.get("revision_risk_cap_by_tier", [0.04, 0.08, 0.12, 0.16, 0.2, 0.25])
 	var revision_risk: float = minf(job_def.revision_risk, float(revision_caps[mini(tier, revision_caps.size() - 1)]))

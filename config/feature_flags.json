@@ -6,5 +6,10 @@
   "auto_work_loop_enabled": false,
   "meta_progression_enabled": true,
   "ui_sound_enabled": true,
-  "analytics_enabled": false
+  "analytics_enabled": false,
+  "thermal_load_enabled": true,
+  "burn_spectacle_enabled": true,
+  "instability_enabled": true,
+  "cascade_enabled": true,
+  "depth_ladder_enabled": true
 }

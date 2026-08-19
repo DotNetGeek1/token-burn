@@ -470,6 +470,7 @@ func _load_modules() -> void:
 		module.draft_weight = float(entry.get("draft_weight", 1.0))
 		module.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
 		module.combos = Array(entry.get("combos", []), TYPE_DICTIONARY, "", null)
+		module.finalizing_effects = Array(entry.get("finalizing_effects", []), TYPE_DICTIONARY, "", null)
 		modules.append(module)
 		_modules_by_id[module.id] = module
 
@@ -602,6 +603,9 @@ func collect_validation_errors() -> Array[String]:
 					module.id, partner_id,
 				])
 		_validate_effect_list(errors, known_paths, "module '%s'" % module.id, module.slot_effects)
+		_validate_effect_list(
+			errors, known_paths, "module '%s' finalizing" % module.id, module.finalizing_effects
+		)
 		for combo in module.combos:
 			if combo is Dictionary:
 				_validate_effect_list(

@@ -40,6 +40,7 @@ static func preview_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 	var burn: Dictionary = result.get("burn", {"ok": false, "reason": "The pipeline is empty."})
 	if burn.get("ok", false):
 		burn = burn.duplicate(true)
+		burn["trace"] = preview_resolver.get_trace()
 		_decorate_burn_outlook(burn, heat_before, clone)
 		burn["spectacle"] = BurnSpectacle.compile(burn, preview_resolver.get_trace())
 	return burn
@@ -82,6 +83,7 @@ static func preview_next_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 	var burn: Dictionary = result.get("burn", {"ok": false, "reason": "The pipeline is empty."})
 	if burn.get("ok", false):
 		burn = burn.duplicate(true)
+		burn["trace"] = preview_resolver.get_trace()
 		_decorate_burn_outlook(burn, heat_before, clone)
 		burn["spectacle"] = BurnSpectacle.compile(burn, preview_resolver.get_trace())
 	return burn
@@ -260,7 +262,8 @@ static func heat_outlook(sim: Node, extra_power: float = 0.0, extra_cooling: flo
 	var power: float = float(sim.run_state.compute.get("power_draw", 0.0)) + extra_power
 	var cooling: float = float(sim.run_state.compute.get("cooling", 0.0)) + extra_cooling
 	var capacity: float = maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))
-	return HeatSystem.outlook(power, cooling, capacity)
+	var tier: int = HeatSystem.work_tier(sim.run_state)
+	return HeatSystem.outlook(power, cooling, capacity, tier)
 
 
 ## Warning text for a hardware purchase that cooling could not keep up with.

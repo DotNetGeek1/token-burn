@@ -22,6 +22,9 @@ const CUES := {
 	"proc_mid": [620.0, 920.0, 0.07, "sine", 0.22],
 	"proc_high": [780.0, 1180.0, 0.08, "sine", 0.24],
 	"complete": [660.0, 1320.0, 0.34, "sine", 0.32],
+	# Rising pitch on a cascade / recursive fork, so the slam is audible as well
+	# as printed.
+	"cascade": [220.0, 980.0, 0.28, "square", 0.28],
 	"error": [240.0, 150.0, 0.2, "square", 0.24],
 	# Two-tone klaxon for the rig's heat beacon: a long fall, loud enough to be
 	# read as a warning rather than a confirmation.

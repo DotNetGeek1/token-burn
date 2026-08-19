@@ -925,5 +925,97 @@
       {"operation": "set", "target": "stage.repeat_count", "value": "$forks"},
       {"operation": "multiply", "target": "stage.progress_mult", "value": 0.85}
     ]
+  },
+  {
+    "id": "op.recursive_compiler",
+    "name": "Recursive Compiler",
+    "category": "agent",
+    "rarity": "rare",
+    "starter": false,
+    "tags": ["agent", "recursion", "risk"],
+    "min_location_tier": 3,
+    "badge": "Cascade {chance_pct}%",
+    "description_template": "{chance_pct}% chance to replay the stage above after this one resolves. Heat makes that likelier.",
+    "parameters": {"chance": 0.25, "chance_pct": 25, "strength": 1.0},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.cascade_chance", "value": "$chance"},
+      {"operation": "set", "target": "stage.cascade_strength", "value": "$strength"}
+    ]
+  },
+  {
+    "id": "op.memory_leak",
+    "name": "Memory Leak",
+    "category": "hardware",
+    "rarity": "uncommon",
+    "starter": false,
+    "tags": ["hardware", "recursion", "heat", "risk"],
+    "min_location_tier": 3,
+    "badge": "Leak",
+    "description_template": "Every replay runs hotter and harder: +{heat} heat and +{boost_pct}% repeat strength on this stage.",
+    "parameters": {"heat": 8, "boost": 0.15, "boost_pct": 15},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {"operation": "add", "target": "stage.repeat_strength", "value": "$boost"},
+      {"operation": "add", "target": "stage.cascade_chance", "value": 0.05}
+    ]
+  },
+  {
+    "id": "op.thermal_lottery",
+    "name": "Thermal Lottery",
+    "category": "hardware",
+    "rarity": "rare",
+    "starter": false,
+    "tags": ["hardware", "heat", "risk"],
+    "min_location_tier": 2,
+    "badge": "Crit ×{crit}",
+    "description_template": "Above {threshold_pct}% heat, a {chance_pct}% chance the stage crits at ×{crit} progress and +{heat} heat.",
+    "parameters": {"threshold": 0.9, "threshold_pct": 90, "chance": 0.25, "chance_pct": 25, "crit": 3.0, "heat": 12},
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$crit",
+        "conditions": [
+          {"left": "$heat_ratio", "operator": ">=", "right": "$threshold"},
+          {"left": "$stage_roll", "operator": "<", "right": "$chance"}
+        ]
+      },
+      {
+        "operation": "add",
+        "target": "stage.heat",
+        "value": "$heat",
+        "conditions": [
+          {"left": "$heat_ratio", "operator": ">=", "right": "$threshold"},
+          {"left": "$stage_roll", "operator": "<", "right": "$chance"}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.dead_mans_switch",
+    "name": "Dead Man's Switch",
+    "category": "hardware",
+    "rarity": "legendary",
+    "starter": false,
+    "tags": ["hardware", "heat", "risk"],
+    "min_location_tier": 4,
+    "badge": "×{survive}",
+    "description_template": "If the batch starts already past 100% heat and no stage drops, final progress ×{survive}. A dropped stage instead ×{fault}.",
+    "parameters": {"survive": 10.0, "fault": 0.4},
+    "slot_effects": [],
+    "finalizing_effects": [
+      {
+        "operation": "multiply",
+        "target": "batch.progress_mult",
+        "value": "$survive",
+        "conditions": [{"left": "$batch_survived", "operator": "==", "right": true}]
+      },
+      {
+        "operation": "multiply",
+        "target": "batch.progress_mult",
+        "value": "$fault",
+        "conditions": [{"left": "$batch_faulted", "operator": "==", "right": true}]
+      }
+    ]
   }
 ]

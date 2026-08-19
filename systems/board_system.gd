@@ -85,6 +85,8 @@ const STAGE_DEFAULTS := {
 	"fix_hidden_bugs": 0.0,
 	"next_multiplier": 1.0,
 	"next_cost_mult": 1.0,
+	"cascade_chance": 0.0,
+	"cascade_strength": 1.0,
 }
 
 
@@ -579,11 +581,15 @@ func resolve_burn(
 	var bugs_before: float = batch["known_bugs"]
 	var hidden_before: float = batch["hidden_bugs"]
 
+	var start_heat_ratio: float = _heat_ratio(run_state)
+	var dropped_stages: int = 0
 	_dispatch_batch_event(
 		EVENT_BATCH_STARTED, run_state, job, batch, rng, effect_resolver, subscriptions, {
 			"stage_count": order.size(),
 			"slot_count": board_slots.size(),
-		}
+			"heat_ratio": start_heat_ratio,
+			"start_heat_ratio": start_heat_ratio,
+		}, board_slots
 	)
 
 	var stages: Array = []
@@ -604,21 +610,34 @@ func resolve_burn(
 		var rule_multiplier: float = _tag_bonus_for(rules, module)
 		var effective_multiplier: float = pending_multiplier * rule_multiplier
 		var before: Dictionary = _snapshot(batch)
-
-		_fold(batch, stage, effective_multiplier, pending_cost_mult)
+		var dropped: bool = _maybe_drop_stage(run_state, rng, index)
+		var cascaded: bool = false
 		var repeat: float = maxf(0.0, float(stage["repeat_previous"]))
 		var repeat_strength: float = maxf(0.0, float(stage["repeat_strength"]))
 		var repeat_count: int = maxi(0, int(round(float(stage["repeat_count"]))))
-		if repeat > 0.0 and repeat_count > 0 and not previous_stage.is_empty():
-			for _fork in range(repeat_count):
-				_fold(
-					batch, previous_stage,
-					repeat * repeat_strength * effective_multiplier, pending_cost_mult
-				)
-			run_state.statistics["stage_repeats"] = int(
-				run_state.statistics.get("stage_repeats", 0)
-			) + repeat_count
-		_apply_stage_rules(rules, module, stage, batch, job, messages)
+		if dropped:
+			dropped_stages += 1
+			messages.append("%s dropped — the rack blinked." % module.name)
+		else:
+			_maybe_redline_twist(run_state, rng, stage, batch, index)
+			_fold(batch, stage, effective_multiplier, pending_cost_mult)
+			if repeat > 0.0 and repeat_count > 0 and not previous_stage.is_empty():
+				for _fork in range(repeat_count):
+					_fold(
+						batch, previous_stage,
+						repeat * repeat_strength * effective_multiplier, pending_cost_mult
+					)
+				run_state.statistics["stage_repeats"] = int(
+					run_state.statistics.get("stage_repeats", 0)
+				) + repeat_count
+			_apply_stage_rules(rules, module, stage, batch, job, messages)
+			cascaded = _maybe_cascade(
+				run_state, job, batch, stage, previous_stage, module, rng,
+				effect_resolver, subscriptions, board_slots, effective_multiplier,
+				pending_cost_mult, index
+			)
+			if cascaded:
+				messages.append("%s cascaded." % module.name)
 
 		var previous_id: String = str(board_slots[int(order[position - 1])]) if position > 0 else ""
 		var next_id: String = (
@@ -636,10 +655,12 @@ func resolve_burn(
 			"badge": module.badge,
 			"category": module.category,
 			"multiplier": effective_multiplier,
-			"repeated_previous": repeat,
+			"repeated_previous": 0.0 if dropped else repeat,
 			"repeat_strength": repeat_strength,
-			"repeat_count": repeat_count,
+			"repeat_count": 0 if dropped else repeat_count,
 			"combos": live_combos,
+			"cascaded": cascaded,
+			"dropped": dropped,
 			"stage": stage,
 			"before": before,
 			"after": _snapshot(batch),
@@ -659,7 +680,10 @@ func resolve_burn(
 		EVENT_BATCH_FINALIZING, run_state, job, batch, rng, effect_resolver, subscriptions, {
 			"stage_count": limit,
 			"slot_count": board_slots.size(),
-		}
+			"start_heat_ratio": start_heat_ratio,
+			"batch_faulted": dropped_stages > 0,
+			"batch_survived": dropped_stages == 0 and start_heat_ratio >= 1.0,
+		}, board_slots
 	)
 
 	var tokens: float = maxf(0.0, base_tokens * maxf(0.0, float(batch["token_mult"])))
@@ -677,7 +701,9 @@ func resolve_burn(
 		EVENT_BATCH_FINISHED, run_state, job, batch, rng, effect_resolver, subscriptions, {
 			"stage_count": limit,
 			"slot_count": board_slots.size(),
-		}
+			"start_heat_ratio": start_heat_ratio,
+			"batch_faulted": dropped_stages > 0,
+		}, board_slots
 	)
 
 	return {
@@ -903,6 +929,8 @@ func _dispatch_stage(
 		"module_id": module.id,
 		"module_category": module.category,
 		"heat_ratio": _heat_ratio(run_state),
+		"stage_roll": rng.derive("stage_roll_%d_%s" % [index, module.id]).next_float(),
+		"instability": float(run_state.compute.get("instability", 0.0)),
 	}
 	for key in stage.keys():
 		mod_ctx.set_value("stage.%s" % key, stage[key])
@@ -928,7 +956,8 @@ func _dispatch_batch_event(
 	rng: DeterministicRng,
 	effect_resolver: EffectResolver,
 	subscriptions: Array,
-	extras: Dictionary
+	extras: Dictionary,
+	board_slots: Array = []
 ) -> void:
 	var mod_ctx := ModifierContext.new(event_name, run_state)
 	mod_ctx.rng = rng.derive(event_name)
@@ -938,10 +967,100 @@ func _dispatch_batch_event(
 	mod_ctx.extras["heat_ratio"] = _heat_ratio(run_state)
 	for key in batch.keys():
 		mod_ctx.set_value("batch.%s" % key, batch[key])
+	var event_subscriptions: Array = subscriptions.duplicate()
+	event_subscriptions.append_array(_module_event_subscriptions(board_slots, event_name))
 	effect_resolver.begin_action(event_name)
-	effect_resolver.dispatch(event_name, mod_ctx, subscriptions)
+	effect_resolver.dispatch(event_name, mod_ctx, event_subscriptions)
 	for key in batch.keys():
 		batch[key] = _as_float(mod_ctx.get_value("batch.%s" % key, batch[key]))
+
+
+func _module_event_subscriptions(board_slots: Array, event_name: String) -> Array:
+	var extra: Array = []
+	if event_name != EVENT_BATCH_FINALIZING:
+		return extra
+	for module_id in board_slots:
+		var module: ModuleDefinition = ContentDatabase.get_module(str(module_id))
+		if module == null:
+			continue
+		extra.append_array(module.to_finalizing_subscriptions(event_name))
+	return extra
+
+
+func _maybe_drop_stage(run_state: RunState, rng: DeterministicRng, index: int) -> bool:
+	if not FeatureFlags.is_enabled("instability_enabled"):
+		return false
+	var tier: int = HeatSystem.work_tier(run_state)
+	var ratio: float = _heat_ratio(run_state)
+	if tier < 2 or ratio < 1.0:
+		return false
+	var band_t: float = clampf((ratio - 1.0) / 0.40, 0.0, 1.0)
+	return rng.derive("drop_%d" % index).next_float() < 0.10 * band_t
+
+
+func _maybe_redline_twist(
+	run_state: RunState,
+	rng: DeterministicRng,
+	stage: Dictionary,
+	batch: Dictionary,
+	index: int
+) -> void:
+	if not FeatureFlags.is_enabled("instability_enabled"):
+		return
+	var tier: int = HeatSystem.work_tier(run_state)
+	var ratio: float = _heat_ratio(run_state)
+	if tier < 2 or ratio < 1.0:
+		return
+	var band_t: float = clampf((ratio - 1.0) / 0.40, 0.0, 1.0)
+	if rng.derive("corrupt_%d" % index).next_float() < 0.12 * band_t:
+		batch["quality"] = maxf(0.0, float(batch["quality"]) - 4.0)
+	if rng.derive("rerun_%d" % index).next_float() < 0.10 * band_t:
+		stage["repeat_count"] = float(stage["repeat_count"]) + 1.0
+		stage["heat"] = float(stage["heat"]) + 6.0
+
+
+func _maybe_cascade(
+	run_state: RunState,
+	job: Dictionary,
+	batch: Dictionary,
+	stage: Dictionary,
+	previous_stage: Dictionary,
+	module: ModuleDefinition,
+	rng: DeterministicRng,
+	effect_resolver: EffectResolver,
+	subscriptions: Array,
+	board_slots: Array,
+	effective_multiplier: float,
+	pending_cost_mult: float,
+	index: int
+) -> bool:
+	if not FeatureFlags.is_enabled("cascade_enabled"):
+		return false
+	if previous_stage.is_empty():
+		return false
+	var chance: float = maxf(0.0, float(stage.get("cascade_chance", 0.0)))
+	var heat_ratio: float = _heat_ratio(run_state)
+	if heat_ratio >= 0.85:
+		chance += (heat_ratio - 0.85) * float(HeatSystem.heat_config().get("cascade_heat_scale", 0.40))
+	var work_tier: int = HeatSystem.work_tier(run_state)
+	if chance <= 0.0 or (work_tier < 4 and float(stage.get("cascade_chance", 0.0)) <= 0.0):
+		return false
+	chance = clampf(chance, 0.0, 0.65)
+	if rng.derive("cascade_%d" % index).next_float() >= chance:
+		return false
+	var strength: float = maxf(0.0, float(stage.get("cascade_strength", 1.0)))
+	_fold(batch, previous_stage, strength * effective_multiplier, pending_cost_mult)
+	run_state.statistics["cascades_triggered"] = int(
+		run_state.statistics.get("cascades_triggered", 0)
+	) + 1
+	EventBus.emit_event(EventBus.EVENT_CASCADE_TRIGGERED, {"module_id": module.id, "heat_ratio": heat_ratio})
+	_dispatch_batch_event(
+		EventBus.EVENT_CASCADE_TRIGGERED, run_state, job, batch, rng, effect_resolver, subscriptions, {
+			"module_id": module.id,
+			"heat_ratio": heat_ratio,
+		}, board_slots
+	)
+	return true
 
 
 ## Folds one stage's contribution into the batch at `multiplier` strength. A

@@ -34,6 +34,8 @@ var _loss_reason: String = ""
 ## An aside the player's own last choice wrote, which survives the redraws that
 ## spending a pick triggers.
 var _keep_note: String = ""
+## Moon victory can open a Deep Burn affix picker before the endless tail.
+var _picking_depth: bool = false
 
 
 func _ready() -> void:
@@ -94,6 +96,7 @@ func show_from_state(victory: bool, loss_reason: String) -> void:
 		refresh()
 		return
 	_keep_note = ""
+	_picking_depth = false
 	open()
 
 
@@ -212,6 +215,9 @@ func _refresh_debrief() -> void:
 	for child in _pick_list.get_children():
 		_pick_list.remove_child(child)
 		child.queue_free()
+	if _picking_depth:
+		_show_depth_picks()
+		return
 	var choices: Array = Simulation.debrief_choices()
 	var has_pick: bool = not choices.is_empty()
 	_pick_rule.visible = has_pick
@@ -265,7 +271,7 @@ func _set_exits(has_pick: bool) -> void:
 		entries.append({
 			"index": "1",
 			"headline": "KEEP PLAYING",
-			"value": "Endless",
+			"value": "Deep Burn" if FeatureFlags.is_enabled("depth_ladder_enabled") else "Endless",
 			"enabled": not has_pick,
 			"pressed": _on_continue,
 		})
@@ -307,6 +313,64 @@ func _keep(unlock_id: String) -> void:
 
 
 func _on_continue() -> void:
+	if _should_offer_depth():
+		var picks: Array = Simulation.offer_depth_picks()
+		if not picks.is_empty():
+			_picking_depth = true
+			_refresh_debrief()
+			return
+	_leave_into_continuation()
+
+
+func _should_offer_depth() -> bool:
+	if _picking_depth:
+		return false
+	if not FeatureFlags.is_enabled("depth_ladder_enabled"):
+		return false
+	if int(Simulation.run_state.depth.get("level", 0)) > 0:
+		return false
+	return Simulation.can_begin_depth()
+
+
+func _show_depth_picks() -> void:
+	var picks: Array = Array(Simulation.run_state.depth.get("pending_picks", []))
+	_pick_rule.visible = true
+	_pick_caption.visible = true
+	_pick_list.visible = true
+	_pick_caption.text = "CHOOSE A DEEP BURN AFFIX"
+	set_actions([{
+		"index": "1",
+		"headline": "PICK AN AFFIX",
+		"value": "The next contract grows",
+		"enabled": false,
+	}])
+	for affix in picks:
+		if not affix is Dictionary:
+			continue
+		var card: GameCard = CARD_SCENE.instantiate()
+		card.setup(
+			str(affix.get("name", "Affix")),
+			str(affix.get("description", "")),
+			"Score ×%s" % str(affix.get("score_mult", 1.0)),
+			"TAKE THIS",
+			null,
+			"danger"
+		)
+		card.set_action_style("reputation", "danger")
+		card.pressed.connect(_choose_depth.bind(str(affix.get("id", ""))))
+		_pick_list.add_child(card)
+	UiTransition.stagger(_pick_list)
+
+
+func _choose_depth(affix_id: String) -> void:
+	var result: Dictionary = Simulation.choose_depth_affix(affix_id)
+	if not bool(result.get("ok", false)):
+		return
+	_picking_depth = false
+	_leave_into_continuation()
+
+
+func _leave_into_continuation() -> void:
 	if not Simulation.continue_after_victory():
 		return
 	hide_overlay()

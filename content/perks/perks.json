@@ -827,5 +827,28 @@
       "conditions": [],
       "effects": [{"operation": "multiply", "target": "stage.repeat_strength", "value": "$multiplier"}]
     }]
+  },
+  {
+    "id": "perk.redline_rider",
+    "name": "Redline Rider",
+    "rarity": "rare",
+    "tags": ["board", "heat", "risk", "thermal_runaway"],
+    "min_location_tier": 3,
+    "description_template": "While the rig sits at or above {threshold_pct}% heat, cascade chance +{chance_pct}% and cooling ×{cooling}.",
+    "parameters": {"threshold": 0.85, "threshold_pct": 85, "chance": 0.10, "chance_pct": 10, "cooling": 0.85},
+    "subscriptions": [
+      {
+        "event": "board.stage_resolved",
+        "priority": 15,
+        "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": "$threshold"}],
+        "effects": [{"operation": "add", "target": "stage.cascade_chance", "value": "$chance"}]
+      },
+      {
+        "event": "compute.recalculate",
+        "priority": 15,
+        "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": "$threshold"}],
+        "effects": [{"operation": "multiply", "target": "compute.cooling", "value": "$cooling"}]
+      }
+    ]
   }
 ]

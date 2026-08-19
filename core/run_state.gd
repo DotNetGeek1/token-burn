@@ -65,6 +65,7 @@ var compute: Dictionary = {
 	"meta_cooling": 0.0,
 	"heat": 0.0,
 	"heat_capacity": 100.0,
+	"instability": 0.0,
 	"efficiency": 1.0,
 	"efficiency_base": 1.0,
 	"rate_modifiers": [],
@@ -136,6 +137,12 @@ var statistics: Dictionary = {
 	"angel_offers_declined": 0,
 	"hardware_sold": 0,
 	"modules_drafted": 0,
+	"cascades_triggered": 0,
+	"faults_suffered": 0,
+	"max_instability": 0.0,
+	"peak_overkill": 0.0,
+	"lifetime_overkill": 0.0,
+	"depth_reached": 0,
 }
 
 ## The location's contract, which is live from the first prompt of the run; see
@@ -149,6 +156,16 @@ var ascension: Dictionary = {
 	"deadline_round": 0,
 	"quality_sum": 0.0,
 	"quality_count": 0,
+}
+
+var depth: Dictionary = {
+	"level": 0,
+	"affixes": [],
+	"score_mult": 1.0,
+	"requirement_mult": 1.0,
+	"tokens_needed": 0.0,
+	"baseline_tokens": 0.0,
+	"pending_picks": [],
 }
 
 var flags: Dictionary = {
@@ -336,6 +353,7 @@ func to_dict() -> Dictionary:
 		"build": build.duplicate(true),
 		"statistics": statistics.duplicate(true),
 		"ascension": ascension.duplicate(true),
+		"depth": depth.duplicate(true),
 		"flags": flags.duplicate(true),
 	}
 
@@ -349,6 +367,7 @@ func from_dict(data: Dictionary) -> void:
 	build = _merge_section(_default_build(), data.get("build", {}))
 	statistics = _merge_section(_default_statistics(), data.get("statistics", {}))
 	ascension = _merge_section(_default_ascension(), data.get("ascension", {}))
+	depth = _merge_section(_default_depth(), data.get("depth", {}))
 	flags = _merge_section(_default_flags(), data.get("flags", {}))
 	_migrate(version)
 
@@ -755,6 +774,7 @@ func _default_compute() -> Dictionary:
 		"meta_cooling": 0.0,
 		"heat": 0.0,
 		"heat_capacity": 100.0,
+		"instability": 0.0,
 		"efficiency": 1.0,
 		"efficiency_base": 1.0,
 		"rate_modifiers": [],
@@ -820,9 +840,15 @@ func _default_statistics() -> Dictionary:
 		"jobs_accepted": 0,
 		"angel_offers_taken": 0,
 		"angel_offers_declined": 0,
-		"hardware_sold": 0,
-		"modules_drafted": 0,
-	}
+	"hardware_sold": 0,
+	"modules_drafted": 0,
+	"cascades_triggered": 0,
+	"faults_suffered": 0,
+	"max_instability": 0.0,
+	"peak_overkill": 0.0,
+	"lifetime_overkill": 0.0,
+	"depth_reached": 0,
+}
 
 
 func _default_ascension() -> Dictionary:
@@ -834,6 +860,18 @@ func _default_ascension() -> Dictionary:
 		"deadline_round": 0,
 		"quality_sum": 0.0,
 		"quality_count": 0,
+	}
+
+
+func _default_depth() -> Dictionary:
+	return {
+		"level": 0,
+		"affixes": [],
+		"score_mult": 1.0,
+		"requirement_mult": 1.0,
+		"tokens_needed": 0.0,
+		"baseline_tokens": 0.0,
+		"pending_picks": [],
 	}
 
 
@@ -871,6 +909,8 @@ func _get_section(section_name: String) -> Variant:
 			return statistics
 		"ascension":
 			return ascension
+		"depth":
+			return depth
 		"flags":
 			return flags
 		_:
