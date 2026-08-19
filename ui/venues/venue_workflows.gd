@@ -9,22 +9,19 @@ enum Selection { NONE, MODULE, SLOT }
 
 const LEFT_SHARE := 0.238
 const RIGHT_SHARE := 0.762
-const SECTION_GAP := 48
+## Clears the photographed metal rail without opening a second gutter of empty
+## board between the divider and the first stage.
+const SECTION_GAP := 16
 const LEFT_INSET := 10
 ## More of the divider gutter belongs to the diagram side: its heading and first
 ## stage should begin clearly beyond the metal rail, not straddle it.
 const DIVIDER_RIGHT_WEIGHT := 0.65
-## Clears the photographed metal rail. Keep this at the measured inset while
-## the live notes are re-aligned to the writing surface; padding the panel is
-## not a substitute.
-const TOP_INSET := 24
 const DOT := " \u00b7 "
 const BOARD_INK := Color(0.025, 0.12, 0.072)
 const BOARD_INK_DIM := Color(0.055, 0.22, 0.13)
 const BOARD_WARNING := Color(0.38, 0.23, 0.035)
 
 var _board_panel: VenuePanel = null
-var _top_spacer: Control = null
 var _body: Control = null
 var _left: VBoxContainer = null
 var _right: VBoxContainer = null
@@ -76,9 +73,6 @@ func _build_venue() -> void:
 	})
 	_board_panel.set_whiteboard(true)
 	var root: VBoxContainer = _board_panel.content()
-	_top_spacer = Control.new()
-	_top_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(_top_spacer)
 
 	_body = Control.new()
 	_body.clip_contents = true
@@ -603,9 +597,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _on_venue_layout() -> void:
 	var scale: float = console_scale()
-	_top_spacer.custom_minimum_size.y = (
-		0.0 if console_mode() else float(ConsoleMetrics.px(TOP_INSET, scale))
-	)
 	_left.add_theme_constant_override("separation", ConsoleMetrics.px(6, scale))
 	_right.add_theme_constant_override("separation", ConsoleMetrics.px(6, scale))
 
@@ -626,7 +617,7 @@ func _on_venue_layout() -> void:
 	# exit in each layout avoids the duplicate controls the venue pass removed.
 	_back_button.visible = not console_mode()
 
-	# The tray fills leftover column space and scrolls. Paper-sized cards must
+	# The tray fills leftover column space and scrolls. Compact notes must
 	# not set the VBox's minimum height, or BACK is pushed below `_body`'s clip.
 	_tray.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_tray.custom_minimum_size.y = ConsoleMetrics.px(260 if console_mode() else 0, scale)
@@ -664,7 +655,7 @@ func _layout_whiteboard_columns() -> void:
 	var left_inset: float = float(ConsoleMetrics.px(LEFT_INSET, console_scale()))
 	_left.position = Vector2(left_inset, 0.0)
 	_left.size = Vector2(
-		maxf(1.0, divider_x - left_gutter),
+		maxf(1.0, divider_x - left_gutter - left_inset),
 		_body.size.y
 	)
 	_right.position = Vector2(divider_x + right_gutter, 0.0)

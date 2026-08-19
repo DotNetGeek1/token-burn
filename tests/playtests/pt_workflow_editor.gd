@@ -45,11 +45,24 @@ func play(harness: UiHarness) -> void:
 	assert_true(
 		venue._right.position.x - (venue._left.position.x + venue._left.size.x)
 		>= venue.LEFT_INSET * venue.console_scale() - 1.0,
-		"The inset menu still leaves a generous divider gutter"
+		"The inset menu still leaves a divider gutter"
+	)
+	var board_plane: PackedVector2Array = AssetCatalog.venue_plane("workflows", "board")
+	var writing: Rect2 = AssetCatalog.venue_axis_aligned_region("workflows", "board")
+	var bounds: Rect2 = AssetCatalog.venue_region("workflows", "board")
+	assert_true(board_plane.size() == 4, "The workflow board has a photographed plane")
+	assert_almost_eq(
+		writing.position.y, 0.160, 0.001,
+		"The Web-safe board starts at the left top of the photographed plane"
+	)
+	assert_almost_eq(
+		writing.end.y, 0.660, 0.001,
+		"The Web-safe board ends at the left bottom of the photographed plane"
 	)
 	assert_true(
-		venue._body.position.y >= venue._top_spacer.custom_minimum_size.y - 1.0,
-		"The whiteboard content keeps its measured top inset"
+		writing.position.y > bounds.position.y + 0.02
+		and writing.end.y < bounds.end.y - 0.02,
+		"The Web-safe board is inside the bounding rectangle, not equal to it"
 	)
 	var paper_card: WorkflowCard = _first_visible_card(venue._tray)
 	assert_true(paper_card != null, "The unused tray prints a module card")
@@ -87,31 +100,47 @@ func play(harness: UiHarness) -> void:
 			"Clicking the selected module again clears it"
 		)
 	var first_stage: WorkflowCard = venue._diagram._cards[0]
+	var compact_height: float = venue._diagram.CARD_HEIGHT * venue.console_scale()
 	assert_true(
-		first_stage.size.y + 1.0 >= venue._diagram.CARD_HEIGHT * venue.console_scale(),
-		"Workflow notes keep a readable paper height"
-	)
-	assert_true(
-		absf(first_stage.size.x / maxf(1.0, first_stage.size.y) - WorkflowCard.PAPER_ASPECT) < 0.25,
-		"Workflow notes follow the stuck-down paper aspect"
+		first_stage.size.y <= compact_height + 1.0,
+		"Workflow notes stay compact rather than filling the board as portrait paper"
 	)
 	assert_true(
 		first_stage.position.y >= venue._diagram.TOP_PAD * venue.console_scale() - 1.0,
 		"Workflow notes sit below the diagram's top pad"
 	)
-	if venue._diagram.size.y > first_stage.size.y * 2.0:
-		assert_true(
-			first_stage.position.y > venue._diagram.TOP_PAD * venue.console_scale() + 1.0,
-			"Spare whiteboard height drops the notes off the top rail"
-		)
+	assert_true(
+		first_stage.position.x <= 1.0,
+		"Stages start under the heading, not in a centred island"
+	)
+	assert_true(
+		absf(first_stage.position.y - venue._diagram.TOP_PAD * venue.console_scale()) <= 1.0,
+		"Spare whiteboard height stays below the notes rather than floating them"
+	)
 	if paper_card != null:
 		assert_true(
-			absf(
-				(paper_card.size.x / maxf(1.0, paper_card.size.y))
-				- (first_stage.size.x / maxf(1.0, first_stage.size.y))
-			) < 0.25,
-			"Unused tray notes use the same paper aspect as the workflow"
+			paper_card.size.y <= WorkflowCard.compact_height(venue.console_scale()) + 1.0,
+			"Unused tray notes stay compact rather than growing with the tray width"
 		)
+	for card in venue._diagram._cards:
+		if not card.visible:
+			continue
+		assert_true(
+			card.position.y + card.size.y <= venue._diagram.size.y + 1.0,
+			"A workflow stage stays on the diagram, not below the board"
+		)
+		assert_true(
+			card.position.x + card.size.x <= venue._diagram.size.x + 1.0,
+			"A workflow stage stays within the diagram width"
+		)
+	var row_right: float = 0.0
+	for card in venue._diagram._cards:
+		if card.visible and absf(card.position.y - first_stage.position.y) < 2.0:
+			row_right = maxf(row_right, card.position.x + card.size.x)
+	assert_true(
+		row_right >= venue._diagram.size.x - 2.0,
+		"The snake spans the writing surface instead of leaving a right-hand margin"
+	)
 	if first_stage.module_id != "":
 		var stage_module: ModuleDefinition = ContentDatabase.get_module(first_stage.module_id)
 		assert_true(
@@ -193,11 +222,25 @@ func play(harness: UiHarness) -> void:
 		venue._back_button != null and venue._back_button.is_visible_in_tree(),
 		"The painted workflow whiteboard has a visible way back"
 	)
-	var board_rect: Rect2 = venue._body.get_global_rect()
 	assert_true(
-		board_rect.grow(1.0).encloses(venue._back_button.get_global_rect()),
+		venue._body.get_global_rect().grow(1.0).encloses(venue._back_button.get_global_rect()),
 		"The back control sits inside the clipped whiteboard, not below it"
 	)
+	if not venue.console_mode() and not venue._uses_warped_surface(board_plane):
+		var safe: Rect2 = venue.writing_surface_rect("board")
+		var origin: Vector2 = venue.get_global_rect().position
+		assert_true(
+			safe.grow(2.0).encloses(_local_rect(venue._back_button, origin)),
+			"The back control sits on the photographed writing surface, not the brick"
+		)
+		assert_true(
+			safe.grow(2.0).encloses(_local_rect(venue._left, origin)),
+			"The module tray stays inside the photographed writing surface"
+		)
+		assert_true(
+			safe.grow(2.0).encloses(_local_rect(venue._right, origin)),
+			"The workflow diagram stays inside the photographed writing surface"
+		)
 	await harness.driver.press(venue._back_button)
 	assert_eq(SceneRouter.current, SceneRouter.DESK, "Back to desk leaves the workflow venue")
 
@@ -230,3 +273,8 @@ func _first_visible_card(tray: WorkflowModuleTray) -> WorkflowCard:
 		if card.visible:
 			return card as WorkflowCard
 	return null
+
+
+func _local_rect(control: Control, origin: Vector2) -> Rect2:
+	var global: Rect2 = control.get_global_rect()
+	return Rect2(global.position - origin, global.size)

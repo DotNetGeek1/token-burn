@@ -744,6 +744,16 @@ func _region_rect(region: String, view: Vector2) -> Rect2:
 	return Rect2(authored.position * view, authored.size * view)
 
 
+## Axis-aligned mount of a photographed plane: the largest rectangle that still
+## sits on the writing surface. Lean-in and warped surfaces keep using the
+## bounding region; this is only for the Web/Compatibility fallback.
+func _axis_aligned_region_rect(region: String, view: Vector2) -> Rect2:
+	var authored: Rect2 = AssetCatalog.venue_axis_aligned_region(venue_key(), region)
+	if authored.size.x <= 0.0 or authored.size.y <= 0.0:
+		return Rect2()
+	return Rect2(authored.position * view, authored.size * view)
+
+
 func _layout_painted(view: Vector2) -> void:
 	_stage.visible = true
 	_console.visible = false
@@ -786,6 +796,18 @@ func _place_panels(view: Vector2) -> void:
 		if plane.size() == 4 and entry["surface"] is VenueSurface:
 			_place_panel_on_plane(entry, panel, plane, view)
 			continue
+		# A measured trapezoid that cannot be warped still has an honest inner
+		# rectangle. Growing to the panel's minimum size would walk that inner
+		# rect back out onto the frame, so the live controls stay put.
+		if plane.size() == 4:
+			var inner: Rect2 = _axis_aligned_region_rect(region, view)
+			if inner.size.x > 0.0 and inner.size.y > 0.0:
+				rect = _camera(inner)
+				panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
+				panel.custom_minimum_size = Vector2.ZERO
+				panel.position = rect.position
+				panel.size = rect.size
+				continue
 		rect = _camera(rect)
 		panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
 		panel.custom_minimum_size = Vector2.ZERO
@@ -974,3 +996,9 @@ func region_rect(region: String) -> Rect2:
 	if rect.size.x <= 0.0:
 		return Rect2()
 	return _clamp_to_window(_camera(rect), view)
+
+
+## Where an unwarped live panel sits after the camera: the inscribed writing
+## surface of a measured plane, or the authored region when there is no plane.
+func writing_surface_rect(region: String) -> Rect2:
+	return _camera(_axis_aligned_region_rect(region, _view()))

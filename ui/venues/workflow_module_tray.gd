@@ -33,7 +33,7 @@ func _init() -> void:
 	_column.add_child(_note)
 
 
-## Paper-sized cards live inside the scroll. The tray itself only reports the
+## Compact notes live inside the scroll. The tray itself only reports the
 ## height the whiteboard assigned it, so a stack of notes cannot shove BACK
 ## off the clipped board. Do not call `super`: ScrollContainer's C++ minimum
 ## size walks back into this override and overflows the stack.
@@ -88,7 +88,7 @@ func _notification(what: int) -> void:
 func _size_cards() -> void:
 	if size.x <= 1.0:
 		return
-	var height: float = WorkflowCard.paper_height(size.x, _scale)
+	var height: float = WorkflowCard.compact_height(_scale)
 	for card in _cards:
 		if not card.visible:
 			continue

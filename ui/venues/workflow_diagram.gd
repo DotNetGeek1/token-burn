@@ -12,8 +12,7 @@ signal slot_dropped(from_index: int, to_index: int)
 const GAP := 18.0
 const TOP_PAD := 12.0
 const MIN_CARD_WIDTH := 165.0
-const MAX_CARD_WIDTH := 188.0
-const CARD_HEIGHT := 96.0
+const CARD_HEIGHT := WorkflowCard.MIN_HEIGHT
 
 var _cards: Array[WorkflowCard] = []
 var _entries: Array = []
@@ -79,29 +78,27 @@ func _layout_cards() -> void:
 		return
 	var gap: float = GAP * _scale
 	var fit: int = clampi(int((size.x + gap) / (MIN_CARD_WIDTH * _scale + gap)), 1, 4)
-	var columns: int = clampi(mini(fit, maxi(1, _entries.size())), 1, 4)
+	# Five or six stages stay a two-row snake (3+2 / 3+3). A fourth column on a
+	# wide board would leave a single card on the second row.
+	var column_cap: int = 3 if _entries.size() <= 6 else 4
+	var columns: int = clampi(mini(fit, maxi(1, _entries.size())), 1, column_cap)
 	var rows: int = ceili(float(_entries.size()) / float(columns))
 	var available_card_width: float = (size.x - gap * float(columns - 1)) / float(columns)
-	var card_width: float = minf(available_card_width, MAX_CARD_WIDTH * _scale)
-	var paper_height: float = WorkflowCard.paper_height(card_width, _scale)
+	var card_width: float = available_card_width
 	var top_pad: float = TOP_PAD * _scale
-	var card_height: float = paper_height
+	var card_height: float = CARD_HEIGHT * _scale
 	if rows > 0 and size.y > 1.0:
 		var room: float = (
 			size.y - top_pad * 2.0 - gap * float(maxi(0, rows - 1))
 		) / float(rows)
 		if room > 1.0:
-			card_height = minf(paper_height, room)
-	var block_width: float = (
-		float(columns) * card_width + float(maxi(0, columns - 1)) * gap
-	)
+			card_height = minf(card_height, room)
 	var block_height: float = (
 		float(rows) * card_height + float(maxi(0, rows - 1)) * gap
 	)
-	var origin := Vector2(
-		maxf(0.0, (size.x - block_width) * 0.5),
-		maxf(top_pad, (size.y - block_height) * 0.5) if size.y > 1.0 else top_pad
-	)
+	# Notes sit under the heading and against the photographed divider, not in a
+	# centred island that leaves the writing surface empty on three sides.
+	var origin := Vector2(0.0, top_pad)
 	_card_rects.clear()
 	_card_rects.resize(_entries.size())
 	for index in range(_entries.size()):

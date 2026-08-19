@@ -231,6 +231,35 @@ static func venue_plane(venue: String, key: String) -> PackedVector2Array:
 	return quad
 
 
+## Largest axis-aligned rectangle inside a convex quadrilateral, in the same
+## fraction space the corners were authored in. Empty when the points do not
+## enclose a rectangle.
+##
+## Native venues warp a live panel onto the photographed plane. The Web
+## Compatibility renderer cannot, so the axis-aligned fallback has to sit inside
+## the writing surface rather than on the bounding box — otherwise the top rail
+## and the brick below the board receive controls.
+static func inscribed_rect(corners: PackedVector2Array) -> Rect2:
+	if corners.size() != 4:
+		return Rect2()
+	var left: float = maxf(corners[0].x, corners[3].x)
+	var right: float = minf(corners[1].x, corners[2].x)
+	var top: float = maxf(corners[0].y, corners[1].y)
+	var bottom: float = minf(corners[2].y, corners[3].y)
+	if right - left < 0.0001 or bottom - top < 0.0001:
+		return Rect2()
+	return Rect2(left, top, right - left, bottom - top)
+
+
+## Where an unwarped live panel may sit. Prefers the inscribed writing surface
+## of a measured plane and falls back to the authored bounding region.
+static func venue_axis_aligned_region(venue: String, key: String) -> Rect2:
+	var inner: Rect2 = inscribed_rect(venue_plane(venue, key))
+	if inner.size.x > 0.0 and inner.size.y > 0.0:
+		return inner
+	return venue_region(venue, key)
+
+
 static func _venue_defaults() -> Dictionary:
 	_ensure_loaded()
 	var defaults: Variant = _data.get("venue_defaults")

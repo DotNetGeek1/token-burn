@@ -13,9 +13,8 @@ const ROLE_MODULE := "module"
 const ROLE_SLOT := "slot"
 const PAD := 8
 const GAP := 2
-## Width over height of a stuck-down note. Tray cards and diagram stages share
-## this so a module looks like the same piece of paper on either side of the rail.
-const PAPER_ASPECT := 0.84
+## Compact note height in design pixels. Tray cards and diagram stages share it
+## so a module stays a readable slip of paper instead of a portrait slab.
 const MIN_HEIGHT := 96.0
 
 const PAPER_MODULE := Color("e7d98f")
@@ -123,9 +122,9 @@ func _build() -> void:
 	_apply_palette()
 
 
-## Height of a note that is `width` wide, never shorter than the readable floor.
-static func paper_height(width: float, scale: float = 1.0) -> float:
-	return maxf(MIN_HEIGHT * scale, width / PAPER_ASPECT)
+## Height of a compact note at the current UI scale.
+static func compact_height(scale: float = 1.0) -> float:
+	return MIN_HEIGHT * scale
 
 
 func set_card(entry: Dictionary) -> void:
@@ -170,6 +169,14 @@ func set_metrics(scale: float) -> void:
 	_badge.add_theme_font_size_override("font_size", ConsoleMetrics.font_small(scale))
 	_description.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
 	_status.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
+	update_minimum_size()
+
+
+## Compact notes keep a fixed height even when their labels would rather stack
+## taller. The diagram assigns that height explicitly; the tray has to learn it
+## from this minimum or a description would shove BACK off the board.
+func _get_minimum_size() -> Vector2:
+	return Vector2(0.0, compact_height(_scale))
 
 
 func _gui_input(event: InputEvent) -> void:
