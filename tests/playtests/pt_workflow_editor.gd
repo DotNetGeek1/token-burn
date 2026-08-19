@@ -27,6 +27,10 @@ func play(harness: UiHarness) -> void:
 	assert_true(venue._diagram is WorkflowDiagram, "The active workflow has a diagram")
 	var photographed_split: float = venue._body.size.x * venue.LEFT_SHARE
 	assert_true(
+		absf(venue._body.size.x - venue._board_panel.content().size.x) < 2.0,
+		"Whiteboard columns are registered against the photographed panel, not an inner pad"
+	)
+	assert_true(
 		venue._left.position.x >= venue.LEFT_INSET * venue.console_scale() - 1.0,
 		"The module menu keeps clear of the left whiteboard frame"
 	)
@@ -188,6 +192,11 @@ func play(harness: UiHarness) -> void:
 	assert_true(
 		venue._back_button != null and venue._back_button.is_visible_in_tree(),
 		"The painted workflow whiteboard has a visible way back"
+	)
+	var board_rect: Rect2 = venue._body.get_global_rect()
+	assert_true(
+		board_rect.grow(1.0).encloses(venue._back_button.get_global_rect()),
+		"The back control sits inside the clipped whiteboard, not below it"
 	)
 	await harness.driver.press(venue._back_button)
 	assert_eq(SceneRouter.current, SceneRouter.DESK, "Back to desk leaves the workflow venue")

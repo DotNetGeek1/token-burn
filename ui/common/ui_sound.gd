@@ -55,14 +55,17 @@ const SEQUENCES := {
 }
 
 static var _instance: UiSound = null
+## Web Audio starts suspended until a click, tap, or key. Desktop never needs
+## this; on web, cues stay silent until `unlock()` runs inside that gesture.
+static var _unlocked: bool = false
 
 var _players: Array[AudioStreamPlayer] = []
 var _streams: Dictionary = {}
 var _next_voice: int = 0
 
 
-## Called once by the main scene. Later calls are ignored so the service
-## survives scene reloads without stacking players.
+## Called once by SceneRouter. Later calls are ignored so the service outlives
+## every screen swap without stacking players or dying with the outgoing scene.
 static func attach(root: Node) -> void:
 	if _instance != null and is_instance_valid(_instance):
 		return
@@ -73,8 +76,28 @@ static func attach(root: Node) -> void:
 	root.add_child(_instance)
 
 
+## Resumes the browser AudioContext from a user gesture. Godot's web export
+## still uses Web Audio / Sample playback; starting that graph is a click, not
+## a driver change.
+static func unlock() -> void:
+	if _unlocked:
+		return
+	_unlocked = true
+	if not OS.has_feature("web"):
+		return
+	if not Engine.has_singleton("JavaScriptBridge"):
+		return
+	Engine.get_singleton("JavaScriptBridge").call(
+		"eval",
+		"(function(){var a=window.GodotAudio;if(!a)return;var c=a.ctx||a.audioContext||a.audio_ctx;if(c&&c.resume)c.resume();})();",
+		true
+	)
+
+
 static func play(cue: String) -> void:
 	if _instance == null or not is_instance_valid(_instance):
+		return
+	if OS.has_feature("web") and not _unlocked:
 		return
 	_instance._play_cue(cue)
 

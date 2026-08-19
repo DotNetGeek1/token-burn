@@ -7,10 +7,12 @@ extends Node
 ## than a slab sliding over the room. They used to swap with `change_scene`,
 ## which on web frees the whole current world while WebGL still has buffers
 ## bound and kills the canvas. Screens are children of a host this autoload
-## owns, so the tree root never tears down. This also owns everything that has
-## to outlive the screen it was started from: the fade over the seam, the phone
-## the investor rings on, the award splash, and any round-end report that lands
-## while the player is out of the room.
+## owns, so the tree root never tears down. A swap fades, tears the old tree
+## down, then mounts the new one — never both live at once, which overflowed
+## the message queue. This also owns everything that has to outlive the screen
+## it was started from: the fade over the seam, the phone the investor rings
+## on, the award splash, and any round-end report that lands while the player
+## is out of the room.
 
 ## Emitted once the new scene is mounted, for anything tracking where the player
 ## is rather than driving where they go.
@@ -72,6 +74,7 @@ var _screen: Node = null
 func _ready() -> void:
 	_theme = UiThemeBuilder.build()
 	_build_layers()
+	UiSound.attach(self)
 	_connect_flow()
 	call_deferred("_adopt_boot_scene")
 
@@ -134,6 +137,17 @@ func _size_layers() -> void:
 			continue
 		control.position = Vector2.ZERO
 		control.size = view
+
+
+func _input(event: InputEvent) -> void:
+	if event.is_echo() or not event.is_pressed():
+		return
+	if (
+		event is InputEventMouseButton
+		or event is InputEventKey
+		or event is InputEventScreenTouch
+	):
+		UiSound.unlock()
 
 
 # --- Navigation --------------------------------------------------------------
@@ -204,24 +218,13 @@ func _switch_to(route: String) -> void:
 	if not is_inside_tree():
 		_switching = false
 		return
-	var outgoing: Node = _screen
-	if outgoing == null or not is_instance_valid(outgoing):
-		outgoing = get_tree().current_scene
-	_quiesce_node(outgoing)
-	await get_tree().process_frame
+	await _teardown_outgoing()
 	if not is_inside_tree():
 		_switching = false
 		return
 	var incoming: Node = packed.instantiate()
 	_mount_screen(incoming)
 	current = route
-	if outgoing != null and is_instance_valid(outgoing) and outgoing != incoming:
-		outgoing.visible = false
-		_quiesce_node(outgoing)
-		outgoing.queue_free()
-	if is_inside_tree():
-		await get_tree().process_frame
-		await get_tree().process_frame
 	_switching = false
 	route_changed.emit(route)
 	await _fade_to(0.0, FADE_IN_SECONDS)
@@ -273,9 +276,37 @@ func _mount_screen(screen: Node) -> void:
 		get_tree().current_scene = _screen_host
 
 
+## Hide, drain, then free the outgoing screen before the next one is even
+## instantiated. Mounting both at once left debrief tweens and layout callbacks
+## running against a tree that was already `queue_free`'d.
+func _teardown_outgoing() -> void:
+	var outgoing: Node = _screen
+	if outgoing == null or not is_instance_valid(outgoing):
+		return
+	if outgoing == _screen_host:
+		return
+	_quiesce_node(outgoing)
+	if is_inside_tree():
+		await get_tree().process_frame
+	if not is_instance_valid(outgoing):
+		if _screen == outgoing:
+			_screen = null
+		return
+	if _screen == outgoing:
+		_screen = null
+	outgoing.queue_free()
+	if is_inside_tree():
+		await get_tree().process_frame
+	if is_instance_valid(outgoing) and is_inside_tree():
+		await get_tree().process_frame
+
+
 func _quiesce_node(node: Node) -> void:
 	if node == null or not is_instance_valid(node):
 		return
+	if node is CanvasItem:
+		(node as CanvasItem).visible = false
+	node.process_mode = Node.PROCESS_MODE_DISABLED
 	_stop_gpu_nodes(node)
 
 

@@ -15,7 +15,6 @@ extends PanelContainer
 signal pressed
 
 const PAD := 10
-const WHITEBOARD_PAD := 18
 const HEADING_GAP := 6
 
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
@@ -177,6 +176,9 @@ func set_metrics(scale: float) -> void:
 
 
 func _apply_pad(scale: float) -> void:
-	var pad: int = ConsoleMetrics.px(WHITEBOARD_PAD if _whiteboard else PAD, scale)
+	# Whiteboards are registered against the photographed panel rect. A generic
+	# inset would shift `_body` inside that artwork, so the measured divider
+	# would land on the rail while the live cards sit somewhere else.
+	var pad: int = 0 if _whiteboard else ConsoleMetrics.px(PAD, scale)
 	for side in ["left", "right", "top", "bottom"]:
 		_margin.add_theme_constant_override("margin_%s" % side, pad)

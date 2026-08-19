@@ -91,7 +91,6 @@ func _ready() -> void:
 	var resuming: bool = SceneRouter.booted
 	SceneRouter.booted = true
 	UiThemeBuilder.apply(self)
-	UiSound.attach(self)
 	add_to_group("main_ui")
 	background.color = UiThemeBuilder.color("bg")
 	scrim.color = UiThemeBuilder.color("bg")

@@ -591,6 +591,7 @@ func _input(event: InputEvent) -> void:
 		return
 	var click := event as InputEventMouseButton
 	if click != null and click.pressed:
+		UiSound.unlock()
 		_skip_boot()
 		get_viewport().set_input_as_handled()
 
@@ -600,6 +601,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not visible or key_event == null or not key_event.pressed or key_event.echo:
 		return
 	if not _booted:
+		UiSound.unlock()
 		_skip_boot()
 		get_viewport().set_input_as_handled()
 		return
@@ -639,6 +641,7 @@ func _refresh_clock() -> void:
 # --- Actions -----------------------------------------------------------------
 
 func _activate(entry_id: String) -> void:
+	UiSound.unlock()
 	match entry_id:
 		"continue":
 			if Simulation.load_saved_run():
@@ -688,6 +691,7 @@ func _confirm_delete_save() -> void:
 
 
 func _leave() -> void:
+	UiSound.unlock()
 	start_requested.emit()
 	var tween: Tween = create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.32)

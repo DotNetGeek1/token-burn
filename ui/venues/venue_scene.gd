@@ -173,7 +173,6 @@ func _room_layout_supported() -> bool:
 
 func _ready() -> void:
 	UiThemeBuilder.apply(self)
-	UiSound.attach(self)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_to_group("ui_refresh")
 	add_to_group("console_screens")

@@ -14,10 +14,10 @@ const LEFT_INSET := 10
 ## More of the divider gutter belongs to the diagram side: its heading and first
 ## stage should begin clearly beyond the metal rail, not straddle it.
 const DIVIDER_RIGHT_WEIGHT := 0.65
-## Clears the photographed metal rail. A 24px spacer left the picker and the
-## first stage sitting on the frame; the live notes have to sit on the writing
-## surface, not the housing.
-const TOP_INSET := 52
+## Clears the photographed metal rail. Keep this at the measured inset while
+## the live notes are re-aligned to the writing surface; padding the panel is
+## not a substitute.
+const TOP_INSET := 24
 const DOT := " \u00b7 "
 const BOARD_INK := Color(0.025, 0.12, 0.072)
 const BOARD_INK_DIM := Color(0.055, 0.22, 0.13)
@@ -626,6 +626,9 @@ func _on_venue_layout() -> void:
 	# exit in each layout avoids the duplicate controls the venue pass removed.
 	_back_button.visible = not console_mode()
 
+	# The tray fills leftover column space and scrolls. Paper-sized cards must
+	# not set the VBox's minimum height, or BACK is pushed below `_body`'s clip.
+	_tray.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_tray.custom_minimum_size.y = ConsoleMetrics.px(260 if console_mode() else 0, scale)
 	_tray.set_metrics(scale)
 	_diagram.set_metrics(scale)

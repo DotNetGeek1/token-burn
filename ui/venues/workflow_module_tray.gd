@@ -33,6 +33,14 @@ func _init() -> void:
 	_column.add_child(_note)
 
 
+## Paper-sized cards live inside the scroll. The tray itself only reports the
+## height the whiteboard assigned it, so a stack of notes cannot shove BACK
+## off the clipped board. Do not call `super`: ScrollContainer's C++ minimum
+## size walks back into this override and overflows the stack.
+func _get_minimum_size() -> Vector2:
+	return Vector2(0.0, custom_minimum_size.y)
+
+
 func set_modules(entries: Array, note: String = "") -> void:
 	while _cards.size() < entries.size():
 		var card := WorkflowCard.new()
