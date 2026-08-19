@@ -161,6 +161,8 @@ var ascension: Dictionary = {
 var depth: Dictionary = {
 	"level": 0,
 	"affixes": [],
+	"stacks": {},
+	"status": "",
 	"score_mult": 1.0,
 	"requirement_mult": 1.0,
 	"tokens_needed": 0.0,
@@ -176,6 +178,7 @@ var flags: Dictionary = {
 	"fire_risk": false,
 	"post_victory": false,
 	"post_victory_phase": "",
+	"depth_complete": false,
 	"legacy_banked": false,
 	"location_completed": false,
 	"next_location": "",
@@ -199,6 +202,7 @@ func reset(profile: Dictionary = {}) -> void:
 	build = _default_build()
 	statistics = _default_statistics()
 	ascension = _default_ascension()
+	depth = _default_depth()
 	flags = _default_flags()
 
 
@@ -867,6 +871,8 @@ func _default_depth() -> Dictionary:
 	return {
 		"level": 0,
 		"affixes": [],
+		"stacks": {},
+		"status": "",
 		"score_mult": 1.0,
 		"requirement_mult": 1.0,
 		"tokens_needed": 0.0,
@@ -884,6 +890,7 @@ func _default_flags() -> Dictionary:
 		"fire_risk": false,
 		"post_victory": false,
 		"post_victory_phase": "",
+		"depth_complete": false,
 		"legacy_banked": false,
 		"location_completed": false,
 		"next_location": "",

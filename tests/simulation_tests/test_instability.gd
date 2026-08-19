@@ -9,6 +9,8 @@ func run() -> void:
 		ContentDatabase.reload()
 	_test_bedroom_has_no_instability()
 	_test_office_overclock_band()
+	_test_overclock_does_not_accelerate_cloud()
+	_test_redline_rerun_reaches_the_repeat_fold()
 	_test_cluster_can_fault_without_ending_the_run()
 	_test_fire_thresholds()
 	_test_fault_expires()
@@ -45,6 +47,76 @@ func _test_office_overclock_band() -> void:
 	)
 	cold.free()
 	hot.free()
+
+
+func _test_overclock_does_not_accelerate_cloud() -> void:
+	var cold := _sim_office(9203)
+	cold.run_state.compute["cloud_capacity"] = 50000.0
+	cold.run_state.compute["heat"] = 0.0
+	cold.compute_system().recalculate(
+		cold.run_state, cold.effect_resolver, cold.debug_collect_subscriptions(), cold.rng
+	)
+	var cold_local: float = float(cold.run_state.compute.get("local_rate", 0.0))
+	var cold_cloud: float = float(cold.run_state.compute.get("cloud_rate", 0.0))
+	assert_true(cold_cloud > 0.0, "The office has rented compute to compare")
+	var hot := _sim_office(9203)
+	hot.run_state.compute["cloud_capacity"] = 50000.0
+	hot.run_state.compute["heat"] = float(hot.run_state.compute.get("heat_capacity", 100.0)) * 0.75
+	hot.compute_system().recalculate(
+		hot.run_state, hot.effect_resolver, hot.debug_collect_subscriptions(), hot.rng
+	)
+	assert_almost_eq(
+		float(hot.run_state.compute.get("cloud_rate", 0.0)), cold_cloud, 0.01,
+		"A hot rack does not overclock rented compute"
+	)
+	assert_true(
+		float(hot.run_state.compute.get("local_rate", 0.0)) > cold_local,
+		"The overclock bonus lands on the local machines"
+	)
+	cold.free()
+	hot.free()
+
+
+func _test_redline_rerun_reaches_the_repeat_fold() -> void:
+	var hit := false
+	for seed_value in range(80):
+		var board := BoardSystem.new()
+		var state := RunState.new()
+		board.ensure_board(state, ContentDatabase)
+		state.build["hardware"] = ["gpu_rack"]
+		state.build["modules"] = ["op.prompt", "op.fractal_split"]
+		state.compute["heat"] = 140.0
+		state.compute["heat_capacity"] = 100.0
+		var slots: Array = board.slots(state)
+		for i in range(slots.size()):
+			slots[i] = str(["op.prompt", "op.fractal_split"][i]) if i < 2 else ""
+		var job := {
+			"id": "job.redline",
+			"name": "Redline",
+			"token_requirement": 10000.0,
+			"tokens_remaining": 10000.0,
+			"quality": 0.0,
+			"quality_threshold": 0.0,
+			"known_bugs": 0,
+			"hidden_bugs": 0,
+			"blocked_slots": 0,
+			"board_rules": [],
+			"tags": [],
+		}
+		var result: Dictionary = board.resolve_burn(
+			state, job, 1000.0, DeterministicRng.new(seed_value + 9600), EffectResolver.new(), []
+		)
+		var split: Dictionary = {}
+		for stage in result.get("stages", []):
+			if stage is Dictionary and str(stage.get("module_id", "")) == "op.fractal_split":
+				split = stage
+				break
+		if split.is_empty() or bool(split.get("dropped", false)):
+			continue
+		if int(split.get("repeat_count", 0)) > 2:
+			hit = true
+			break
+	assert_true(hit, "A redline rerun increases the repeat fold, not just stage heat")
 
 
 func _test_cluster_can_fault_without_ending_the_run() -> void:

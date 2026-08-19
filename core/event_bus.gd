@@ -30,6 +30,7 @@ const EVENT_FAULT_STARTED := "compute.fault_started"
 const EVENT_FAULT_CLEARED := "compute.fault_cleared"
 const EVENT_OVERKILL := "job.overkill"
 const EVENT_DEPTH_ADVANCED := "depth.advanced"
+const EVENT_DEPTH_COMPLETE := "depth.complete"
 const EVENT_ACHIEVEMENT_UNLOCKED := "achievement.unlocked"
 const EVENT_RUN_ENDED := "run.ended"
 
@@ -63,6 +64,7 @@ signal fault_started(id: String)
 signal fault_cleared(id: String)
 signal overkill(ratio: float)
 signal depth_advanced(level: int)
+signal depth_complete(level: int)
 signal achievement_unlocked(achievement_id: String)
 signal run_ended(victory: bool)
 
@@ -115,6 +117,8 @@ func emit_event(event_name: String, payload: Dictionary = {}) -> void:
 			overkill.emit(payload.get("ratio", 0.0))
 		EVENT_DEPTH_ADVANCED:
 			depth_advanced.emit(payload.get("level", 0))
+		EVENT_DEPTH_COMPLETE:
+			depth_complete.emit(payload.get("level", 0))
 		EVENT_ACHIEVEMENT_UNLOCKED:
 			achievement_unlocked.emit(payload.get("achievement_id", ""))
 		EVENT_RUN_ENDED:

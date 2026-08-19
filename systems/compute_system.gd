@@ -20,6 +20,11 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	# Perks and status effects modify efficiency for the length of one
 	# recalculation; only the base carries between prompts.
 	var base_efficiency: float = float(run_state.compute.get("efficiency_base", 1.0))
+	var heat_ratio: float = HeatSystem.heat_ratio(run_state)
+	var work_tier: int = HeatSystem.work_tier(run_state)
+	# Thermal overclock is the room running hot, not AWS. A suicidal rack
+	# must not accelerate rented compute.
+	hardware_rate *= HeatSystem.overclock_band_bonus(heat_ratio, work_tier)
 	var base_rate: float = hardware_rate + cloud_rate
 	for entry in run_state.compute.get("rate_modifiers", []):
 		if entry is Dictionary:
@@ -28,12 +33,6 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 	# modifier the run applied, so it lands on the base the same way a faster
 	# machine would and everything else composes on top of it.
 	base_rate *= float(run_state.business.get("legacy_token_multiplier", 1.0))
-	# Rule-changer: heat above 60% of capacity feeds back into throughput
-	# instead of just risking a fire. A build that leans into this runs hot on
-	# purpose.
-	var heat_ratio: float = HeatSystem.heat_ratio(run_state)
-	var work_tier: int = HeatSystem.work_tier(run_state)
-	base_rate *= HeatSystem.overclock_band_bonus(heat_ratio, work_tier)
 	# Rule-changer: heat above 60% of capacity feeds back into throughput
 	# instead of just risking a fire. A build that leans into this runs hot on
 	# purpose. Stacks on the GPU-rack overclock band.

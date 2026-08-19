@@ -208,7 +208,9 @@ func _install_permanent_rig(sim: Node) -> void:
 			ContentDatabase.balance.get("hardware_curves", {}).get(upgrade.hardware_key, {})
 		)
 		var startup: Dictionary = sim.heat_outlook(
-			float(curve.get("power_draw", 0.0)), UpgradeSystem.cooling_from(upgrade)
+			float(curve.get("power_draw", 0.0)),
+			UpgradeSystem.cooling_from(upgrade),
+			int(curve.get("work_tier", 0))
 		)
 		# A permanent unlock is never allowed to turn a cold chapter start into
 		# an already-cooking rig. Ambient ticks are a fraction of the bar, so
@@ -428,6 +430,49 @@ func continue_after_victory(sim: Node) -> bool:
 		"The contract is signed and the company does not stop. "
 		+ "From here the bills climb every round and nothing is left to prove."
 	)
+	_ensure_job_offers(sim)
+	sim._autosave()
+	return true
+
+
+## A Deep Burn target was met. The run is not over: this is the beat between
+## depths, the same way the Moon win is the beat before Depth 1. Chapter
+## bonuses stay put — this is not `_reach_victory`.
+func reach_depth_complete(sim: Node) -> void:
+	sim._work_running = false
+	sim.run_state.flags["outcome"] = "depth_complete"
+	sim.run_state.flags["depth_complete"] = true
+	if str(sim.run_state.flags.get("post_victory_phase", "")) == "":
+		sim.run_state.flags["post_victory_phase"] = sim._phase_name(
+			sim.Phase.IN_ROUND if sim.phase == sim.Phase.IN_ROUND else sim.Phase.ROUND_PREP
+		)
+	sim.round_log.append(
+		"Depth %d complete. The next contract is waiting."
+		% int(sim.run_state.depth.get("level", 0))
+	)
+	sim.phase = sim.Phase.RUN_END
+	sim._autosave()
+
+
+## Resume after a Deep Burn pick that was not the first one. The first pick
+## still goes through `continue_after_victory` because that is the Moon win
+## becoming endless; later rungs are already in that tail.
+func continue_after_depth(sim: Node) -> bool:
+	if sim.phase != sim.Phase.RUN_END:
+		return false
+	if not bool(sim.run_state.flags.get("depth_complete", false)) and str(
+		sim.run_state.flags.get("outcome", "")
+	) != "depth_complete":
+		if not bool(sim.run_state.flags.get("post_victory", false)):
+			return false
+		if int(sim.run_state.depth.get("level", 0)) <= 0:
+			return false
+	sim.run_state.flags["depth_complete"] = false
+	if str(sim.run_state.flags.get("outcome", "")) == "depth_complete":
+		sim.run_state.flags["outcome"] = ""
+	sim.phase = sim._phase_from_name(str(sim.run_state.flags.get("post_victory_phase", "ROUND_PREP")))
+	if sim.phase == sim.Phase.RUN_END or sim.phase == sim.Phase.IDLE:
+		sim.phase = sim.Phase.ROUND_PREP
 	_ensure_job_offers(sim)
 	sim._autosave()
 	return true

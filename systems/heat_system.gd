@@ -70,7 +70,9 @@ static func ambient_delta_for(
 	var load_ratio: float = gen / maxf(snk, 0.001)
 	var equilibrium: float = 1.0 - float(cfg.get("era_heat_bias", 0.09)) * float(maxi(0, tier - 1))
 	var stress: float = load_ratio - equilibrium
-	return maxf(1.0, capacity) * float(cfg.get("ambient_rate", 0.10)) * stress
+	var raw_delta: float = maxf(1.0, capacity) * float(cfg.get("ambient_rate", 0.10)) * stress
+	var max_delta: float = maxf(1.0, capacity) * float(cfg.get("load_pressure", 0.15))
+	return clampf(raw_delta, -max_delta, max_delta)
 
 
 static func ambient_delta(run_state: RunState) -> float:

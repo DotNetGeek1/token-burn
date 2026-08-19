@@ -105,7 +105,9 @@
       "name": "Target ×5",
       "description": "This depth's workload is five times larger.",
       "score_mult": 3.0,
-      "requirement_mult": 5.0
+      "requirement_mult": 5.0,
+      "repeatable": true,
+      "max_stacks": 5
     },
     {
       "id": "depth.thin_cooling",
@@ -113,6 +115,8 @@
       "description": "Cooling efficiency −35% while this depth is live.",
       "score_mult": 2.0,
       "requirement_mult": 1.0,
+      "repeatable": true,
+      "max_stacks": 5,
       "status": {
         "id": "status.depth.thin_cooling",
         "name": "Thin Cooling",
@@ -130,6 +134,8 @@
       "description": "Every cascade or repeat writes a hidden bug.",
       "score_mult": 4.0,
       "requirement_mult": 1.0,
+      "repeatable": true,
+      "max_stacks": 5,
       "status": {
         "id": "status.depth.hidden_bug",
         "name": "Recursive Bugs",

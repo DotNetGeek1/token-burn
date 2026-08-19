@@ -157,6 +157,14 @@ func _apply_verdict(score: Dictionary) -> void:
 				if contract_name != "" else "The contract is complete."
 			)
 			_statement.set_note("%s %s" % [opening, _campaign_progress_text()])
+		"depth_complete":
+			_statement.set_title("DEPTH COMPLETE", ConsoleStyle.PHOSPHOR)
+			set_context("DEEP BURN")
+			var depth_level: int = int(Simulation.run_state.depth.get("level", 0))
+			_statement.set_note(
+				"Depth %d is done. Keep playing to take another affix and go deeper."
+				% depth_level
+			)
 		"contract_expired":
 			_statement.set_title("TIME UP", ConsoleStyle.DANGER)
 			set_context("CONTRACT EXPIRED", ConsoleStyle.DANGER)
@@ -267,7 +275,7 @@ func _set_exits(has_pick: bool) -> void:
 	# beat the last chapter: a mid-campaign win's continuation is the next
 	# location, and the build has to still exist for there to be anything to
 	# carry.
-	if _earned_this_run and Simulation.next_location_unlocked() == "":
+	if _can_keep_playing():
 		entries.append({
 			"index": "1",
 			"headline": "KEEP PLAYING",
@@ -322,14 +330,27 @@ func _on_continue() -> void:
 	_leave_into_continuation()
 
 
+func _can_keep_playing() -> bool:
+	if _is_depth_complete_overlay():
+		return true
+	return _earned_this_run and Simulation.next_location_unlocked() == ""
+
+
+func _is_depth_complete_overlay() -> bool:
+	return (
+		str(Simulation.run_state.flags.get("outcome", "")) == "depth_complete"
+		or bool(Simulation.run_state.flags.get("depth_complete", false))
+	)
+
+
 func _should_offer_depth() -> bool:
 	if _picking_depth:
 		return false
 	if not FeatureFlags.is_enabled("depth_ladder_enabled"):
 		return false
-	if int(Simulation.run_state.depth.get("level", 0)) > 0:
-		return false
-	return Simulation.can_begin_depth()
+	if Simulation.depth_is_complete() or _is_depth_complete_overlay():
+		return true
+	return Simulation.can_begin_depth() and int(Simulation.run_state.depth.get("level", 0)) == 0
 
 
 func _show_depth_picks() -> void:
@@ -371,7 +392,7 @@ func _choose_depth(affix_id: String) -> void:
 
 
 func _leave_into_continuation() -> void:
-	if not Simulation.continue_after_victory():
+	if not Simulation.continue_after_victory() and not Simulation.continue_after_depth():
 		return
 	hide_overlay()
 	get_tree().call_group("flow_overlay", "hide_overlay")

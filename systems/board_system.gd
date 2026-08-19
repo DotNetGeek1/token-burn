@@ -542,7 +542,8 @@ func resolve_burn(
 	rng: DeterministicRng,
 	effect_resolver: EffectResolver,
 	subscriptions: Array,
-	stage_limit: int = -1
+	stage_limit: int = -1,
+	mode: int = ResolveMode.COMMIT
 ) -> Dictionary:
 	var workflow: Dictionary = workflow_for_job(run_state, job)
 	var board_slots: Array = Array(workflow.get("slots", []))
@@ -596,10 +597,16 @@ func resolve_burn(
 	var pending_multiplier: float = 1.0
 	var pending_cost_mult: float = 1.0
 	var previous_stage: Dictionary = {}
+	var cascade_history: Array = []
+	var cascade_guard := ChainGuard.new("board.cascade")
+	var reached_modules: Array = []
 
 	for position in range(limit):
 		var index: int = int(order[position])
-		var module: ModuleDefinition = ContentDatabase.get_module(str(board_slots[index]))
+		var module_id: String = str(board_slots[index])
+		if module_id != "":
+			reached_modules.append(module_id)
+		var module: ModuleDefinition = ContentDatabase.get_module(module_id)
 		if module == null:
 			continue
 		var stage: Dictionary = STAGE_DEFAULTS.duplicate(true)
@@ -612,6 +619,9 @@ func resolve_burn(
 		var before: Dictionary = _snapshot(batch)
 		var dropped: bool = _maybe_drop_stage(run_state, rng, index)
 		var cascaded: bool = false
+		var cascade_depth: int = 0
+		if not dropped:
+			_maybe_redline_twist(run_state, rng, stage, batch, index)
 		var repeat: float = maxf(0.0, float(stage["repeat_previous"]))
 		var repeat_strength: float = maxf(0.0, float(stage["repeat_strength"]))
 		var repeat_count: int = maxi(0, int(round(float(stage["repeat_count"]))))
@@ -619,7 +629,6 @@ func resolve_burn(
 			dropped_stages += 1
 			messages.append("%s dropped — the rack blinked." % module.name)
 		else:
-			_maybe_redline_twist(run_state, rng, stage, batch, index)
 			_fold(batch, stage, effective_multiplier, pending_cost_mult)
 			if repeat > 0.0 and repeat_count > 0 and not previous_stage.is_empty():
 				for _fork in range(repeat_count):
@@ -631,13 +640,19 @@ func resolve_burn(
 					run_state.statistics.get("stage_repeats", 0)
 				) + repeat_count
 			_apply_stage_rules(rules, module, stage, batch, job, messages)
-			cascaded = _maybe_cascade(
-				run_state, job, batch, stage, previous_stage, module, rng,
+			cascade_depth = _maybe_cascade(
+				run_state, job, batch, stage, cascade_history, module, rng,
 				effect_resolver, subscriptions, board_slots, effective_multiplier,
-				pending_cost_mult, index
+				pending_cost_mult, index, cascade_guard, mode
 			)
+			cascaded = cascade_depth > 0
 			if cascaded:
 				messages.append("%s cascaded." % module.name)
+			cascade_history.append({
+				"stage": stage.duplicate(true),
+				"module_id": module.id,
+				"index": index,
+			})
 
 		var previous_id: String = str(board_slots[int(order[position - 1])]) if position > 0 else ""
 		var next_id: String = (
@@ -660,6 +675,7 @@ func resolve_burn(
 			"repeat_count": 0 if dropped else repeat_count,
 			"combos": live_combos,
 			"cascaded": cascaded,
+			"cascade_depth": cascade_depth,
 			"dropped": dropped,
 			"stage": stage,
 			"before": before,
@@ -683,7 +699,7 @@ func resolve_burn(
 			"start_heat_ratio": start_heat_ratio,
 			"batch_faulted": dropped_stages > 0,
 			"batch_survived": dropped_stages == 0 and start_heat_ratio >= 1.0,
-		}, board_slots
+		}, reached_modules
 	)
 
 	var tokens: float = maxf(0.0, base_tokens * maxf(0.0, float(batch["token_mult"])))
@@ -1024,7 +1040,7 @@ func _maybe_cascade(
 	job: Dictionary,
 	batch: Dictionary,
 	stage: Dictionary,
-	previous_stage: Dictionary,
+	history: Array,
 	module: ModuleDefinition,
 	rng: DeterministicRng,
 	effect_resolver: EffectResolver,
@@ -1032,11 +1048,32 @@ func _maybe_cascade(
 	board_slots: Array,
 	effective_multiplier: float,
 	pending_cost_mult: float,
-	index: int
+	index: int,
+	guard: ChainGuard,
+	mode: int
+) -> int:
+	if history.is_empty():
+		return 0
+	if not _cascade_hits(run_state, stage, rng, index, 0):
+		return 0
+	var strength: float = maxf(0.0, float(stage.get("cascade_strength", 1.0)))
+	var queue: Array = [{
+		"hist": history.size() - 1,
+		"depth": 1,
+		"multiplier": strength * effective_multiplier,
+		"cost_mult": pending_cost_mult,
+		"source_id": module.id,
+	}]
+	return _drain_cascade_queue(
+		queue, history, guard, run_state, job, batch, rng, effect_resolver,
+		subscriptions, board_slots, mode
+	)
+
+
+func _cascade_hits(
+	run_state: RunState, stage: Dictionary, rng: DeterministicRng, index: int, depth: int
 ) -> bool:
 	if not FeatureFlags.is_enabled("cascade_enabled"):
-		return false
-	if previous_stage.is_empty():
 		return false
 	var chance: float = maxf(0.0, float(stage.get("cascade_chance", 0.0)))
 	var heat_ratio: float = _heat_ratio(run_state)
@@ -1046,21 +1083,77 @@ func _maybe_cascade(
 	if chance <= 0.0 or (work_tier < 4 and float(stage.get("cascade_chance", 0.0)) <= 0.0):
 		return false
 	chance = clampf(chance, 0.0, 0.65)
-	if rng.derive("cascade_%d" % index).next_float() >= chance:
-		return false
-	var strength: float = maxf(0.0, float(stage.get("cascade_strength", 1.0)))
-	_fold(batch, previous_stage, strength * effective_multiplier, pending_cost_mult)
-	run_state.statistics["cascades_triggered"] = int(
-		run_state.statistics.get("cascades_triggered", 0)
-	) + 1
-	EventBus.emit_event(EventBus.EVENT_CASCADE_TRIGGERED, {"module_id": module.id, "heat_ratio": heat_ratio})
-	_dispatch_batch_event(
-		EventBus.EVENT_CASCADE_TRIGGERED, run_state, job, batch, rng, effect_resolver, subscriptions, {
-			"module_id": module.id,
-			"heat_ratio": heat_ratio,
-		}, board_slots
-	)
-	return true
+	return rng.derive("cascade_%d_%d" % [index, depth]).next_float() < chance
+
+
+func _drain_cascade_queue(
+	queue: Array,
+	history: Array,
+	guard: ChainGuard,
+	run_state: RunState,
+	job: Dictionary,
+	batch: Dictionary,
+	rng: DeterministicRng,
+	effect_resolver: EffectResolver,
+	subscriptions: Array,
+	board_slots: Array,
+	mode: int
+) -> int:
+	var triggered: int = 0
+	while not queue.is_empty():
+		if not guard.can_continue(EventBus.EVENT_CASCADE_TRIGGERED):
+			break
+		var proc: Dictionary = queue.pop_front()
+		var hist_index: int = int(proc.get("hist", -1))
+		if hist_index < 0 or hist_index >= history.size():
+			continue
+		guard.record(EventBus.EVENT_CASCADE_TRIGGERED)
+		var entry: Dictionary = history[hist_index]
+		var replay: Dictionary = Dictionary(entry.get("stage", {}))
+		if replay.is_empty():
+			continue
+		var multiplier: float = float(proc.get("multiplier", 1.0))
+		var cost_mult: float = float(proc.get("cost_mult", 1.0))
+		_fold(batch, replay, multiplier, cost_mult)
+		triggered += 1
+		run_state.statistics["cascades_triggered"] = int(
+			run_state.statistics.get("cascades_triggered", 0)
+		) + 1
+		var heat_ratio: float = _heat_ratio(run_state)
+		var module_id: String = str(entry.get("module_id", proc.get("source_id", "")))
+		if mode == ResolveMode.COMMIT:
+			EventBus.emit_event(EventBus.EVENT_CASCADE_TRIGGERED, {
+				"module_id": module_id, "heat_ratio": heat_ratio,
+			})
+		_dispatch_batch_event(
+			EventBus.EVENT_CASCADE_TRIGGERED, run_state, job, batch, rng, effect_resolver,
+			subscriptions, {"module_id": module_id, "heat_ratio": heat_ratio}, board_slots
+		)
+		var prior: Dictionary = {}
+		if hist_index > 0:
+			prior = Dictionary(history[hist_index - 1].get("stage", {}))
+		var repeat: float = maxf(0.0, float(replay.get("repeat_previous", 0.0)))
+		var repeat_strength: float = maxf(0.0, float(replay.get("repeat_strength", 1.0)))
+		var repeat_count: int = maxi(0, int(round(float(replay.get("repeat_count", 0.0)))))
+		if repeat > 0.0 and repeat_count > 0 and not prior.is_empty():
+			for _fork in range(repeat_count):
+				_fold(batch, prior, repeat * repeat_strength * multiplier, cost_mult)
+			run_state.statistics["stage_repeats"] = int(
+				run_state.statistics.get("stage_repeats", 0)
+			) + repeat_count
+		var next_depth: int = int(proc.get("depth", 1))
+		if hist_index > 0 and _cascade_hits(
+			run_state, replay, rng, int(entry.get("index", 0)), next_depth
+		):
+			if guard.can_continue(EventBus.EVENT_CASCADE_TRIGGERED):
+				queue.append({
+					"hist": hist_index - 1,
+					"depth": next_depth + 1,
+					"multiplier": maxf(0.0, float(replay.get("cascade_strength", 1.0))) * multiplier,
+					"cost_mult": cost_mult,
+					"source_id": module_id,
+				})
+	return triggered
 
 
 ## Folds one stage's contribution into the batch at `multiplier` strength. A

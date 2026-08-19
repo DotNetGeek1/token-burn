@@ -216,7 +216,9 @@ static func cooling_shortfall(upgrade: UpgradeDefinition) -> Dictionary:
 	for effect in upgrade.effects:
 		if effect.target == "compute.cooling":
 			extra_cooling += float(effect.value)
-	var outlook: Dictionary = Simulation.heat_outlook(float(hardware.get("power_draw", 0.0)), extra_cooling)
+	var outlook: Dictionary = Simulation.heat_outlook(
+		float(hardware.get("power_draw", 0.0)), extra_cooling, int(hardware.get("work_tier", 0))
+	)
 	if bool(outlook.get("sustainable", true)):
 		return {}
 	return {

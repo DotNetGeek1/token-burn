@@ -441,7 +441,7 @@ func run_burn(
 	for job in lanes:
 		var lane_rng: DeterministicRng = rng.derive("lane.%s" % str(job.get("id", "")))
 		var lane_burn: Dictionary = board_system.resolve_burn(
-			run_state, job, share, lane_rng, effect_resolver, subscriptions, stage_limit
+			run_state, job, share, lane_rng, effect_resolver, subscriptions, stage_limit, mode
 		)
 		if not lane_burn.get("ok", false):
 			# The focused lane failing means the pipeline itself cannot run, which

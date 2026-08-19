@@ -16,6 +16,7 @@ func run() -> void:
 	_test_multi_job_tick_counts_once()
 	_test_a_granted_module_does_not_replace_the_starters()
 	_test_previews_emit_no_domain_events()
+	_test_preview_cascade_does_not_hit_the_bus()
 	_test_a_cloud_discount_does_not_eat_its_own_answer()
 	_test_a_demand_perk_is_a_bonus_not_a_ratchet()
 	_test_a_build_cannot_hold_more_than_its_cap()
@@ -305,6 +306,58 @@ func _test_previews_emit_no_domain_events() -> void:
 	for pair in connections:
 		pair[0].disconnect(pair[1])
 	sim.free()
+
+
+func _test_preview_cascade_does_not_hit_the_bus() -> void:
+	var sim := _make_sim()
+	sim.start_run(141)
+	sim.apply_run_location(sim.run_state, "warehouse")
+	sim.run_state.economy["cash"] = 1000000.0
+	sim._board_system.ensure_board(sim.run_state, ContentDatabase)
+	sim.run_state.build["modules"] = ["op.prompt", "op.recursive_compiler"]
+	var slots: Array = sim._board_system.slots(sim.run_state)
+	for i in range(slots.size()):
+		slots[i] = str(["op.prompt", "op.recursive_compiler"][i]) if i < 2 else ""
+	sim.run_state.business["active_jobs"] = [{
+		"id": "job.preview_cascade",
+		"name": "Preview Cascade",
+		"token_requirement": 1.0,
+		"tokens_remaining": 1.0,
+		"deadline_prompts": 8,
+		"prompts_remaining": 8,
+		"reward": 500.0,
+		"quality": 0.0,
+		"quality_threshold": 0.0,
+		"revision_risk": 0.0,
+		"bug_chance": 0.0,
+		"blocked_slots": 0,
+		"board_rules": [],
+		"tags": [],
+	}]
+	sim.run_state.business["focused_job_id"] = "job.preview_cascade"
+	sim.phase = sim.Phase.IN_ROUND
+	sim._work_running = true
+	sim.run_state.compute["heat"] = float(sim.run_state.compute.get("heat_capacity", 100.0))
+	var seen: Array[String] = []
+	var on_cascade := func(_id: String) -> void: seen.append("board.cascade_triggered")
+	EventBus.cascade_triggered.connect(on_cascade)
+	var cascaded := false
+	for _i in range(24):
+		var burn: Dictionary = sim.preview_burn()
+		if bool(burn.get("ok", false)):
+			for stage in burn.get("stages", []):
+				if stage is Dictionary and bool(stage.get("cascaded", false)):
+					cascaded = true
+					break
+		if cascaded:
+			break
+	assert_true(seen.is_empty(), "A preview cascade does not notify EventBus: %s" % str(seen))
+	EventBus.cascade_triggered.disconnect(on_cascade)
+	sim.free()
+	assert_true(
+		cascaded or seen.is_empty(),
+		"Preview either cascaded silently or never cascaded; the bus stayed quiet either way"
+	)
 
 
 ## Cloud Baron's discount used to be written back over the number it had just

@@ -662,6 +662,16 @@ func _set_prop_lines(
 ## deadline attached, so it belongs where the player writes down what they still
 ## have to do.
 func _contract_lines() -> Array:
+	var depth: Dictionary = Simulation.depth_progress()
+	if not depth.is_empty() and DepthSystem.is_active(Simulation.run_state):
+		var burned: float = float(depth.get("tokens_burned", 0.0))
+		var total: float = maxf(1.0, float(depth.get("tokens_needed", 1.0)))
+		var filled: int = clampi(int(round(burned / total * 10.0)), 0, 10)
+		return [
+			"DEEP BURN %d" % int(depth.get("level", 0)),
+			"%s/%s" % [NumberFormat.format(burned), NumberFormat.format(total)],
+			"%s%s" % ["|".repeat(filled), "-".repeat(10 - filled)],
+		]
 	var summary: Dictionary = Simulation.ascension_summary()
 	var contract: Dictionary = Dictionary(summary.get("contract", {}))
 	if contract.is_empty():

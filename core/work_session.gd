@@ -322,6 +322,15 @@ func finish_prompt(sim: Node, result: Dictionary) -> void:
 			sim._end_run(false, "ascension_failed")
 			sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
 			return
+	elif DepthSystem.is_active(sim.run_state):
+		var depth_result: Dictionary = sim.depth_system().evaluate_prompt(sim.run_state)
+		for message in depth_result.get("messages", []):
+			sim.round_log.append(str(message))
+		if str(depth_result.get("outcome", "")) == DepthSystem.STATUS_COMPLETE:
+			work_running = false
+			sim._reach_depth_complete()
+			sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
+			return
 	var stop: String = _session_stop_reason(result)
 	if stop != "":
 		end_session(sim, stop)

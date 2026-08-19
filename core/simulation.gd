@@ -185,6 +185,18 @@ func can_begin_depth() -> bool:
 	return _depth_system.can_begin(run_state)
 
 
+func depth_progress() -> Dictionary:
+	return _depth_system.progress(run_state)
+
+
+func depth_is_complete() -> bool:
+	return DepthSystem.is_complete(run_state)
+
+
+func continue_after_depth() -> bool:
+	return _life.continue_after_depth(self)
+
+
 func last_effect_trace() -> Array:
 	return effect_resolver.get_trace()
 
@@ -381,8 +393,8 @@ func _cooling_from_effects(effects: Array) -> float:
 
 ## Whether cooling can keep up with a given power draw, and by how much. Used to
 ## warn the player before they buy hardware their space cannot cool.
-func heat_outlook(extra_power: float = 0.0, extra_cooling: float = 0.0) -> Dictionary:
-	return SimulationPreview.heat_outlook(self, extra_power, extra_cooling)
+func heat_outlook(extra_power: float = 0.0, extra_cooling: float = 0.0, extra_tier: int = 0) -> Dictionary:
+	return SimulationPreview.heat_outlook(self, extra_power, extra_cooling, extra_tier)
 
 
 ## Warning text for a hardware purchase that cooling could not keep up with.
@@ -780,6 +792,10 @@ func is_settling_victory() -> bool:
 ## Only the last chapter offers this. A mid-campaign win is a level-up — the next
 ## location is the continuation, and an endless tail there would just be a bigger
 ## bedroom. The tail exists for the run with nowhere further up to go.
+func _reach_depth_complete() -> void:
+	_life.reach_depth_complete(self)
+
+
 func continue_after_victory() -> bool:
 	return _life.continue_after_victory(self)
 

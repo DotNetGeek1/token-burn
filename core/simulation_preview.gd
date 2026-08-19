@@ -258,11 +258,13 @@ static func cooling_from_effects(effects: Array) -> float:
 
 ## Whether cooling can keep up with a given power draw, and by how much. Used to
 ## warn the player before they buy hardware their space cannot cool.
-static func heat_outlook(sim: Node, extra_power: float = 0.0, extra_cooling: float = 0.0) -> Dictionary:
+static func heat_outlook(
+	sim: Node, extra_power: float = 0.0, extra_cooling: float = 0.0, extra_tier: int = 0
+) -> Dictionary:
 	var power: float = float(sim.run_state.compute.get("power_draw", 0.0)) + extra_power
 	var cooling: float = float(sim.run_state.compute.get("cooling", 0.0)) + extra_cooling
 	var capacity: float = maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))
-	var tier: int = HeatSystem.work_tier(sim.run_state)
+	var tier: int = maxi(HeatSystem.work_tier(sim.run_state), extra_tier)
 	return HeatSystem.outlook(power, cooling, capacity, tier)
 
 
@@ -273,7 +275,12 @@ static func upgrade_heat_warning(sim: Node, upgrade_id: String) -> String:
 		return ""
 	var hardware: Dictionary = ContentDatabase.balance.get("hardware_curves", {}).get(upgrade.hardware_key, {})
 	var extra_cooling: float = cooling_from_effects(upgrade.effects)
-	var outlook: Dictionary = heat_outlook(sim, float(hardware.get("power_draw", 0.0)), extra_cooling)
+	var outlook: Dictionary = heat_outlook(
+		sim,
+		float(hardware.get("power_draw", 0.0)),
+		extra_cooling,
+		int(hardware.get("work_tier", 0))
+	)
 	if bool(outlook.get("sustainable", true)):
 		return ""
 	var shortfall: float = float(outlook.get("cooling_needed", 0.0)) - float(outlook.get("cooling", 0.0))

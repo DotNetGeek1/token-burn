@@ -108,6 +108,21 @@ func _test_purchase_warning() -> void:
 	assert_true(sim.upgrade_heat_warning("upgrade.gpu_rack") != "", "Bedroom warns about the rack")
 	assert_eq(sim.upgrade_heat_warning("upgrade.portable_ac"), "", "Cooling hardware carries no heat warning")
 	assert_eq(sim.upgrade_heat_warning("upgrade.garage"), "", "Dwellings carry no hardware heat warning")
+	var gpu: Dictionary = ContentDatabase.balance.get("hardware_curves", {}).get("gpu_rack", {})
+	var extra_power: float = float(gpu.get("power_draw", 0.0))
+	var current_tier: Dictionary = sim.heat_outlook(extra_power, 0.0, 0)
+	var prospective: Dictionary = sim.heat_outlook(extra_power, 0.0, int(gpu.get("work_tier", 2)))
+	assert_true(
+		HeatSystem.uses_thermal_load(int(gpu.get("work_tier", 2))),
+		"A GPU Rack purchase is judged on the thermal-load model"
+	)
+	assert_true(
+		not is_equal_approx(
+			float(current_tier.get("heat_per_prompt", 0.0)),
+			float(prospective.get("heat_per_prompt", 0.0))
+		),
+		"The bedroom laptop equation is not the GPU Rack forecast"
+	)
 	sim.free()
 
 
@@ -200,7 +215,7 @@ func _test_first_burn_forecast_marks_a_projected_fire_without_blocking() -> void
 	var offers: Array = sim.run_state.business.get("job_offers", [])
 	sim.accept_job(str(offers[0].get("id", "")))
 	sim.run_state.compute["heat_capacity"] = 1.0
-	sim.run_state.compute["heat"] = 0.95
+	sim.run_state.compute["heat"] = 0.99
 	sim.set_queued_boost(true)
 	var preview: Dictionary = sim.preview_next_burn()
 	assert_true(bool(preview.get("crosses_fire", false)), "The queued forecast flags a cold-start fire")
