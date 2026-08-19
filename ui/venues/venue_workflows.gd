@@ -13,6 +13,11 @@ const RIGHT_SHARE := 0.762
 ## board between the divider and the first stage.
 const SECTION_GAP := 16
 const LEFT_INSET := 10
+## The panel now follows the photographed plane on Web, but its local content
+## still needs breathing room inside the metal frame. Keep this inside the panel
+## rather than padding VenuePanel itself: the divider split is authored against
+## the full board and must not move when the margin changes.
+const FRAME_INSET := 12
 ## More of the divider gutter belongs to the diagram side: its heading and first
 ## stage should begin clearly beyond the metal rail, not straddle it.
 const DIVIDER_RIGHT_WEIGHT := 0.65
@@ -653,13 +658,18 @@ func _layout_whiteboard_columns() -> void:
 	var left_gutter: float = gap * (1.0 - DIVIDER_RIGHT_WEIGHT)
 	var right_gutter: float = gap * DIVIDER_RIGHT_WEIGHT
 	var left_inset: float = float(ConsoleMetrics.px(LEFT_INSET, console_scale()))
-	_left.position = Vector2(left_inset, 0.0)
+	var frame_inset: float = float(ConsoleMetrics.px(FRAME_INSET, console_scale()))
+	var column_height: float = maxf(1.0, _body.size.y - frame_inset * 2.0)
+	_left.position = Vector2(left_inset, frame_inset)
 	_left.size = Vector2(
 		maxf(1.0, divider_x - left_gutter - left_inset),
-		_body.size.y
+		column_height
 	)
-	_right.position = Vector2(divider_x + right_gutter, 0.0)
-	_right.size = Vector2(maxf(1.0, _body.size.x - divider_x - right_gutter), _body.size.y)
+	_right.position = Vector2(divider_x + right_gutter, frame_inset)
+	_right.size = Vector2(
+		maxf(1.0, _body.size.x - divider_x - right_gutter - frame_inset),
+		column_height
+	)
 	_body.custom_minimum_size.y = 0.0
 
 

@@ -14,6 +14,14 @@ func play(harness: UiHarness) -> void:
 
 	await harness.goto_route("build")
 	var venue: Node = harness.current_scene()
+	var index_panel: VenuePanel = _panel_for(venue, "index")
+	assert_true(index_panel != null, "Build keeps its loadout index on the photographed panel")
+	if index_panel != null:
+		var wanted: Vector2 = index_panel.get_combined_minimum_size()
+		assert_true(
+			index_panel.size.x + 1.0 >= wanted.x and index_panel.size.y + 1.0 >= wanted.y,
+			"Build index is sized for WORKFLOWS and BACK instead of clipping them at the frame"
+		)
 	var outgoing: String = str(pair.get("out", ""))
 	var incoming: String = str(pair.get("in", ""))
 	var outgoing_tile: VenueTile = _visible_tile(venue._board, outgoing)
@@ -93,4 +101,11 @@ func _visible_tile(board: VenueBoard, meta: String) -> VenueTile:
 	for tile in board._tiles:
 		if tile.visible and str(tile.meta) == meta:
 			return tile
+	return null
+
+
+func _panel_for(venue: Node, region: String) -> VenuePanel:
+	for entry in venue._entries:
+		if str(entry.get("region", "")) == region:
+			return entry.get("panel") as VenuePanel
 	return null
