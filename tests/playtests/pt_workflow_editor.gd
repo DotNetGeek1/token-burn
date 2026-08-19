@@ -84,9 +84,30 @@ func play(harness: UiHarness) -> void:
 		)
 	var first_stage: WorkflowCard = venue._diagram._cards[0]
 	assert_true(
-		first_stage.size.y <= venue._diagram.CARD_HEIGHT * venue.console_scale() + 1.0,
-		"Workflow notes use the compact card height"
+		first_stage.size.y + 1.0 >= venue._diagram.CARD_HEIGHT * venue.console_scale(),
+		"Workflow notes keep a readable paper height"
 	)
+	assert_true(
+		absf(first_stage.size.x / maxf(1.0, first_stage.size.y) - WorkflowCard.PAPER_ASPECT) < 0.25,
+		"Workflow notes follow the stuck-down paper aspect"
+	)
+	assert_true(
+		first_stage.position.y >= venue._diagram.TOP_PAD * venue.console_scale() - 1.0,
+		"Workflow notes sit below the diagram's top pad"
+	)
+	if venue._diagram.size.y > first_stage.size.y * 2.0:
+		assert_true(
+			first_stage.position.y > venue._diagram.TOP_PAD * venue.console_scale() + 1.0,
+			"Spare whiteboard height drops the notes off the top rail"
+		)
+	if paper_card != null:
+		assert_true(
+			absf(
+				(paper_card.size.x / maxf(1.0, paper_card.size.y))
+				- (first_stage.size.x / maxf(1.0, first_stage.size.y))
+			) < 0.25,
+			"Unused tray notes use the same paper aspect as the workflow"
+		)
 	if first_stage.module_id != "":
 		var stage_module: ModuleDefinition = ContentDatabase.get_module(first_stage.module_id)
 		assert_true(

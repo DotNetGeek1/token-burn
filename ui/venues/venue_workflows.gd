@@ -14,7 +14,11 @@ const LEFT_INSET := 10
 ## More of the divider gutter belongs to the diagram side: its heading and first
 ## stage should begin clearly beyond the metal rail, not straddle it.
 const DIVIDER_RIGHT_WEIGHT := 0.65
-const TOP_INSET := 24
+## Clears the photographed metal rail. A 24px spacer left the picker and the
+## first stage sitting on the frame; the live notes have to sit on the writing
+## surface, not the housing.
+const TOP_INSET := 52
+const DOT := " \u00b7 "
 const BOARD_INK := Color(0.025, 0.12, 0.072)
 const BOARD_INK_DIM := Color(0.055, 0.22, 0.13)
 const BOARD_WARNING := Color(0.38, 0.23, 0.035)
@@ -260,7 +264,7 @@ func _refresh_workflow_picker() -> void:
 		var workflow: Dictionary = Dictionary(workflows[index])
 		var filled: int = _filled_count(Array(workflow.get("slots", [])))
 		_workflow_picker.add_item(
-			"%d  %s  Â·  %d MOD" % [index + 1, str(workflow.get("name", "Workflow")).to_upper(), filled],
+			"%d  %s%s%d MOD" % [index + 1, str(workflow.get("name", "Workflow")).to_upper(), DOT, filled],
 			index
 		)
 	_workflow_picker.select(Simulation.active_workflow_index())
@@ -298,7 +302,7 @@ func _refresh_tray() -> void:
 			),
 			"status": module.category,
 		})
-	_tray_caption.text = "UNUSED MODULES  Â·  %d" % entries.size()
+	_tray_caption.text = "UNUSED MODULES%s%d" % [DOT, entries.size()]
 	var note: String = ""
 	if entries.is_empty():
 		note = (
@@ -335,13 +339,13 @@ func _refresh_diagram() -> void:
 func _refresh_prompt() -> void:
 	match _selection:
 		Selection.MODULE:
-			_prompt.text = "DROP %s ON A STAGE  Â·  OR TAP A STAGE" % _module_name(
-				_selected_module_id
-			).to_upper()
+			_prompt.text = "DROP %s ON A STAGE%sOR TAP A STAGE" % [
+				_module_name(_selected_module_id).to_upper(), DOT
+			]
 		Selection.SLOT:
-			_prompt.text = "DRAG %s TO REORDER  Â·  OR TAP ANOTHER STAGE" % _slot_name(
-				_selected_slot_index
-			).to_upper()
+			_prompt.text = "DRAG %s TO REORDER%sOR TAP ANOTHER STAGE" % [
+				_slot_name(_selected_slot_index).to_upper(), DOT
+			]
 		_:
 			_prompt.text = "DRAG AN UNUSED MODULE FROM THE LEFT INTO THE WORKFLOW"
 	_remove_button.visible = _selection == Selection.SLOT
@@ -357,7 +361,7 @@ func _refresh_status() -> void:
 		if str(job.get("workflow_id", "")) == workflow_id:
 			names.append(str(job.get("name", "a contract")).to_upper())
 	_status.text = (
-		"ACTIVE: %s" % " Â· ".join(names)
+		"ACTIVE: %s" % DOT.join(names)
 		if not names.is_empty()
 		else "NO CONTRACT ASSIGNED"
 	)
@@ -381,7 +385,7 @@ func _slot_entry(
 			"blocked": true,
 			"step": "STAGE %02d" % (index + 1),
 			"name": module.name if module != null else "OCCUPIED",
-			"badge": "Ã—",
+			"badge": "\u00d7",
 			"description": blocked_label,
 			"status": "CONTRACT LOCKED",
 		}
@@ -421,7 +425,7 @@ func _stage_effect(
 		_neighbour(slots, index, 1, blocked_count)
 	)
 	if not combos.is_empty():
-		text += "  â—† %s" % str(Dictionary(combos[0]).get("name", "COMBO")).to_upper()
+		text += "  \u25c6 %s" % str(Dictionary(combos[0]).get("name", "COMBO")).to_upper()
 	return text
 
 

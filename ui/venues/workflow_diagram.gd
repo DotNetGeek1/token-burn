@@ -10,7 +10,7 @@ signal module_dropped(module_id: String, slot_index: int)
 signal slot_dropped(from_index: int, to_index: int)
 
 const GAP := 18.0
-const TOP_PAD := 8.0
+const TOP_PAD := 12.0
 const MIN_CARD_WIDTH := 165.0
 const MAX_CARD_WIDTH := 188.0
 const CARD_HEIGHT := 96.0
@@ -78,11 +78,30 @@ func _layout_cards() -> void:
 	if _cards.is_empty() or size.x <= 1.0:
 		return
 	var gap: float = GAP * _scale
-	var columns: int = clampi(int((size.x + gap) / (MIN_CARD_WIDTH * _scale + gap)), 1, 4)
+	var fit: int = clampi(int((size.x + gap) / (MIN_CARD_WIDTH * _scale + gap)), 1, 4)
+	var columns: int = clampi(mini(fit, maxi(1, _entries.size())), 1, 4)
 	var rows: int = ceili(float(_entries.size()) / float(columns))
 	var available_card_width: float = (size.x - gap * float(columns - 1)) / float(columns)
 	var card_width: float = minf(available_card_width, MAX_CARD_WIDTH * _scale)
-	var card_height: float = CARD_HEIGHT * _scale
+	var paper_height: float = WorkflowCard.paper_height(card_width, _scale)
+	var top_pad: float = TOP_PAD * _scale
+	var card_height: float = paper_height
+	if rows > 0 and size.y > 1.0:
+		var room: float = (
+			size.y - top_pad * 2.0 - gap * float(maxi(0, rows - 1))
+		) / float(rows)
+		if room > 1.0:
+			card_height = minf(paper_height, room)
+	var block_width: float = (
+		float(columns) * card_width + float(maxi(0, columns - 1)) * gap
+	)
+	var block_height: float = (
+		float(rows) * card_height + float(maxi(0, rows - 1)) * gap
+	)
+	var origin := Vector2(
+		maxf(0.0, (size.x - block_width) * 0.5),
+		maxf(top_pad, (size.y - block_height) * 0.5) if size.y > 1.0 else top_pad
+	)
 	_card_rects.clear()
 	_card_rects.resize(_entries.size())
 	for index in range(_entries.size()):
@@ -90,13 +109,13 @@ func _layout_cards() -> void:
 		var along: int = index % columns
 		var column: int = along if row % 2 == 0 else columns - 1 - along
 		var rect := Rect2(
-			Vector2(column * (card_width + gap), TOP_PAD * _scale + row * (card_height + gap)),
+			origin + Vector2(column * (card_width + gap), row * (card_height + gap)),
 			Vector2(card_width, card_height)
 		)
 		_card_rects[index] = rect
 		_cards[index].position = rect.position
 		_cards[index].size = rect.size
-	custom_minimum_size.y = TOP_PAD * _scale * 2.0 + rows * card_height + maxi(0, rows - 1) * gap
+	custom_minimum_size.y = top_pad * 2.0 + block_height
 	queue_redraw()
 
 

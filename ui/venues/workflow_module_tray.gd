@@ -50,6 +50,7 @@ func set_modules(entries: Array, note: String = "") -> void:
 	_note.text = note
 	_note.visible = note != ""
 	_column.move_child(_note, _column.get_child_count() - 1)
+	_size_cards()
 
 
 func select(meta: Variant) -> void:
@@ -68,3 +69,20 @@ func set_metrics(scale: float) -> void:
 	_note.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
 	for card in _cards:
 		card.set_metrics(scale)
+	_size_cards()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_size_cards()
+
+
+func _size_cards() -> void:
+	if size.x <= 1.0:
+		return
+	var height: float = WorkflowCard.paper_height(size.x, _scale)
+	for card in _cards:
+		if not card.visible:
+			continue
+		card.custom_minimum_size = Vector2(0.0, height)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL

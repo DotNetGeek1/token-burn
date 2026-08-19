@@ -11,8 +11,12 @@ signal data_dropped(target_meta: Variant, data: Dictionary)
 
 const ROLE_MODULE := "module"
 const ROLE_SLOT := "slot"
-const PAD := 6
+const PAD := 8
 const GAP := 2
+## Width over height of a stuck-down note. Tray cards and diagram stages share
+## this so a module looks like the same piece of paper on either side of the rail.
+const PAPER_ASPECT := 0.84
+const MIN_HEIGHT := 96.0
 
 const PAPER_MODULE := Color("e7d98f")
 const PAPER_STAGE := Color("dfe2d2")
@@ -39,6 +43,7 @@ var _step: Label = null
 var _name: Label = null
 var _badge: Label = null
 var _description: Label = null
+var _filler: Control = null
 var _status: Label = null
 var _selected: bool = false
 var _scale: float = 1.0
@@ -102,6 +107,11 @@ func _build() -> void:
 	_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_body.add_child(_description)
 
+	_filler = Control.new()
+	_filler.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body.add_child(_filler)
+
 	_status = ConsoleStyle.label("", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM)
 	_status.add_theme_font_override("font", UiThemeBuilder.header_font())
 	_status.clip_text = true
@@ -109,6 +119,11 @@ func _build() -> void:
 	_body.add_child(_status)
 
 	_apply_palette()
+
+
+## Height of a note that is `width` wide, never shorter than the readable floor.
+static func paper_height(width: float, scale: float = 1.0) -> float:
+	return maxf(MIN_HEIGHT * scale, width / PAPER_ASPECT)
 
 
 func set_card(entry: Dictionary) -> void:

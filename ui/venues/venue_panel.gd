@@ -15,6 +15,7 @@ extends PanelContainer
 signal pressed
 
 const PAD := 10
+const WHITEBOARD_PAD := 18
 const HEADING_GAP := 6
 
 const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
@@ -28,6 +29,7 @@ var _content: VBoxContainer = null
 var _crt: Control = null
 ## Takes the press while the panel is across the room. See `set_far_off`.
 var _surface: Button = null
+var _whiteboard: bool = false
 
 
 func _init() -> void:
@@ -122,11 +124,13 @@ func content() -> VBoxContainer:
 ## but the blank board and its physical divider remain visible between them.
 func set_whiteboard(enabled: bool) -> void:
 	_build()
+	_whiteboard = enabled
 	add_theme_stylebox_override(
 		"panel", StyleBoxEmpty.new() if enabled else ConsoleStyle.glass_box()
 	)
 	if _crt != null:
 		_crt.visible = not enabled
+	_apply_pad(1.0)
 
 
 ## Puts a tap-catcher over the whole panel while it is being seen from across the
@@ -165,10 +169,14 @@ func set_scrollable(scrollable: bool) -> void:
 
 func set_metrics(scale: float) -> void:
 	_build()
-	var pad: int = ConsoleMetrics.px(PAD, scale)
-	for side in ["left", "right", "top", "bottom"]:
-		_margin.add_theme_constant_override("margin_%s" % side, pad)
+	_apply_pad(scale)
 	var gap: int = ConsoleMetrics.px(HEADING_GAP, scale)
 	_body.add_theme_constant_override("separation", gap)
 	_content.add_theme_constant_override("separation", gap)
 	_heading.add_theme_font_size_override("font_size", ConsoleMetrics.font_body(scale))
+
+
+func _apply_pad(scale: float) -> void:
+	var pad: int = ConsoleMetrics.px(WHITEBOARD_PAD if _whiteboard else PAD, scale)
+	for side in ["left", "right", "top", "bottom"]:
+		_margin.add_theme_constant_override("margin_%s" % side, pad)
