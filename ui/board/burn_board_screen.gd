@@ -260,10 +260,12 @@ func _forecast_line(job: Dictionary, working: bool) -> String:
 		return str(preview.get("reason", "this pipeline produces nothing"))
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 	var parts: PackedStringArray = [
-		"%s BT ×%.2f +%d%%" % [
+		"%s BT ×%.2f +%s%%" % [
 			NumberFormat.format(float(preview.get("tokens", 0.0))),
 			float(preview.get("progress_mult", 1.0)),
-			int(round(float(preview.get("progress_tokens", 0.0)) / requirement * 100.0)),
+			NumberFormat.format(
+				float(preview.get("progress_tokens", 0.0)) / requirement * 100.0
+			),
 		],
 	]
 	if int(preview.get("bugs_added", 0)) > 0:
@@ -307,12 +309,12 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 	var can_open: bool = Simulation.can_start_work()
 	if Simulation.can_burn() or can_open:
 		var burn_preview: Dictionary = Simulation.preview_next_burn()
-		var projected_fire: bool = bool(burn_preview.get("crosses_fire", false))
+		var projected_kill: bool = _projected_heat_is_lethal(burn_preview)
 		rows.append({
 			"headline": "BURN",
 			"value": _burn_hint(can_open),
-			"warning": bool(burn_preview.get("crosses_throttle", false)) and not projected_fire,
-			"destructive": projected_fire,
+			"warning": _projected_heat_is_warning(burn_preview) and not projected_kill,
+			"destructive": projected_kill,
 			"pressed": _on_burn,
 		})
 	if working and not job.is_empty():
@@ -378,11 +380,31 @@ func _projected_heat_text(preview: Dictionary) -> String:
 	var text: String = "HEAT %d%% \u2192 %d%%" % [
 		int(round(before_ratio * 100.0)), int(round(after_ratio * 100.0)),
 	]
-	if bool(preview.get("crosses_fire", false)) or after_ratio >= 1.0:
-		return "%s \u00b7 FIRE" % text
-	if bool(preview.get("crosses_throttle", false)):
-		return "%s \u00b7 THROTTLE" % text
+	var label: String = str(preview.get("heat_state_label", ""))
+	if label == "":
+		label = HeatSystem.heat_state_label(str(preview.get("heat_state", "")))
+	if label != "":
+		return "%s \u00b7 %s" % [text, label]
 	return text
+
+
+func _projected_heat_is_lethal(preview: Dictionary) -> bool:
+	var state: String = str(preview.get("heat_state", ""))
+	return (
+		state == HeatSystem.HEAT_FIRE
+		or state == HeatSystem.HEAT_CATASTROPHE
+		or bool(preview.get("crosses_catastrophe", preview.get("crosses_fire", false)))
+	)
+
+
+func _projected_heat_is_warning(preview: Dictionary) -> bool:
+	var state: String = str(preview.get("heat_state", ""))
+	return state in [
+		HeatSystem.HEAT_THROTTLE,
+		HeatSystem.HEAT_UNSTABLE,
+		HeatSystem.HEAT_REDLINE,
+		HeatSystem.HEAT_FIRE_RISK,
+	]
 
 
 func _cool_hint() -> String:

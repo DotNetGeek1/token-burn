@@ -90,20 +90,7 @@ static func preview_next_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 
 
 static func _decorate_burn_outlook(burn: Dictionary, heat_before: float, state: RunState) -> void:
-	var heat_after: float = float(state.compute.get("heat", 0.0))
-	var capacity: float = maxf(1.0, float(state.compute.get("heat_capacity", 100.0)))
-	var throttle_ratio: float = float(
-		ContentDatabase.balance.get("economy", {}).get("heat", {}).get("throttle_ratio", 0.8)
-	)
-	burn["heat_before"] = heat_before
-	burn["heat_delta"] = heat_after - heat_before
-	# Kept for callers written against the original preview contract.
-	burn["total_heat"] = heat_after - heat_before
-	burn["heat_after"] = heat_after
-	burn["heat_capacity"] = capacity
-	burn["heat_ratio_after"] = heat_after / capacity
-	burn["crosses_throttle"] = heat_before < capacity * throttle_ratio and heat_after >= capacity * throttle_ratio
-	burn["crosses_fire"] = heat_before < capacity and heat_after >= capacity
+	HeatSystem.decorate_heat_outlook(burn, heat_before, state)
 
 
 static func _apply_queued_preview_options(sim: Node, state: RunState) -> void:

@@ -30,7 +30,7 @@ static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 		"overkill_score": lifetime_overkill * 100.0,
 		"depth_reached": int(stats.get("depth_reached", 0)),
 		"depth_score_mult": depth_mult,
-		"depth_score": lifetime_tokens * maxf(0.0, depth_mult - 1.0),
+		"depth_score": float(stats.get("depth_score", 0.0)),
 	}
 
 
@@ -60,7 +60,7 @@ static func rows(score: Dictionary) -> Array:
 	if float(score.get("peak_overkill", 0.0)) >= 1.25:
 		result.append({
 			"label": "Peak overkill",
-			"value": "%d%%" % int(float(score.get("peak_overkill", 0.0)) * 100.0),
+			"value": "%s%%" % NumberFormat.format(float(score.get("peak_overkill", 0.0)) * 100.0),
 		})
 	if float(score.get("overkill_score", 0.0)) > 0.0:
 		result.append({

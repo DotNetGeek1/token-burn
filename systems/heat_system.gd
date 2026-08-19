@@ -132,6 +132,83 @@ static func fire_risk_ratio(tier: int) -> float:
 	return float(heat_config().get("fire_risk_ratio", 1.4))
 
 
+const HEAT_NONE := ""
+const HEAT_THROTTLE := "throttle"
+const HEAT_UNSTABLE := "unstable"
+const HEAT_REDLINE := "redline"
+const HEAT_FIRE_RISK := "fire_risk"
+const HEAT_FIRE := "fire"
+const HEAT_CATASTROPHE := "catastrophe"
+
+
+## The band the bar is in. Bedroom/garage still treat 100% as FIRE. From GPU
+## Rack the ridiculous region is named instead of being called a fire.
+static func heat_state(ratio: float, tier: int) -> String:
+	var throttle: float = float(heat_config().get("throttle_ratio", 0.8))
+	if not FeatureFlags.is_enabled("instability_enabled") or tier < 2:
+		if ratio >= 1.0:
+			return HEAT_FIRE
+		if ratio >= throttle:
+			return HEAT_THROTTLE
+		return HEAT_NONE
+	if ratio >= catastrophe_ratio(tier):
+		return HEAT_CATASTROPHE
+	if ratio >= fire_risk_ratio(tier):
+		return HEAT_FIRE_RISK
+	if ratio >= 1.0:
+		return HEAT_REDLINE
+	if ratio >= 0.85:
+		return HEAT_UNSTABLE
+	if ratio >= throttle:
+		return HEAT_THROTTLE
+	return HEAT_NONE
+
+
+static func heat_state_label(state: String) -> String:
+	match state:
+		HEAT_THROTTLE:
+			return "THROTTLE"
+		HEAT_UNSTABLE:
+			return "UNSTABLE"
+		HEAT_REDLINE:
+			return "REDLINE"
+		HEAT_FIRE_RISK:
+			return "FIRE RISK"
+		HEAT_FIRE:
+			return "FIRE"
+		HEAT_CATASTROPHE:
+			return "CATASTROPHE"
+		_:
+			return ""
+
+
+static func decorate_heat_outlook(burn: Dictionary, heat_before: float, run_state: RunState) -> void:
+	var heat_after: float = float(run_state.compute.get("heat", 0.0))
+	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
+	var throttle_ratio: float = float(heat_config().get("throttle_ratio", 0.8))
+	var tier: int = work_tier(run_state)
+	var before_ratio: float = heat_before / capacity
+	var after_ratio: float = heat_after / capacity
+	var fire_line: float = fire_risk_ratio(tier)
+	var catastrophe_line: float = catastrophe_ratio(tier)
+	var state: String = heat_state(after_ratio, tier)
+	burn["heat_before"] = heat_before
+	burn["heat_delta"] = heat_after - heat_before
+	burn["total_heat"] = heat_after - heat_before
+	burn["heat_after"] = heat_after
+	burn["heat_capacity"] = capacity
+	burn["heat_ratio_after"] = after_ratio
+	burn["heat_tier"] = tier
+	burn["heat_state"] = state
+	burn["heat_state_label"] = heat_state_label(state)
+	burn["crosses_throttle"] = before_ratio < throttle_ratio and after_ratio >= throttle_ratio
+	burn["crosses_fire_risk"] = before_ratio < fire_line and after_ratio >= fire_line
+	burn["crosses_catastrophe"] = before_ratio < catastrophe_line and after_ratio >= catastrophe_line
+	# Early rooms: catastrophe is 100%, so this stays the old FIRE flag.
+	# Late rooms: it means the 150% loss line, not the redline.
+	burn["crosses_fire"] = bool(burn["crosses_catastrophe"])
+
+
 static func overclock_band_bonus(ratio: float, tier: int) -> float:
 	if not FeatureFlags.is_enabled("instability_enabled") or tier < 2:
 		return 1.0

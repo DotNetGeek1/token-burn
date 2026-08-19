@@ -38,6 +38,8 @@ func _test_run_score_stays_float_past_int64() -> void:
 	var state := RunState.new()
 	state.statistics["lifetime_tokens"] = 4e17
 	state.statistics["lifetime_overkill"] = 1e20
+	state.statistics["depth_score"] = 4e17 * 1024.0
+	state.statistics["peak_overkill"] = 1e20
 	state.depth["score_mult"] = 1025.0
 	var score: Dictionary = RunScore.compute(state, ContentDatabase)
 	var depth_score: float = float(score.get("depth_score", NAN))
@@ -46,9 +48,17 @@ func _test_run_score_stays_float_past_int64() -> void:
 	assert_false(is_inf(depth_score), "Depth score stays finite")
 	assert_false(is_nan(overkill_score), "Overkill score stays a number")
 	assert_false(is_inf(overkill_score), "Overkill score stays finite")
-	assert_almost_eq(depth_score, 4e17 * 1024.0, 1e12, "4e17 tokens × 1024 is kept as a float")
+	assert_almost_eq(depth_score, 4e17 * 1024.0, 1e12, "Accrued depth score is kept as a float")
 	assert_almost_eq(overkill_score, 1e22, 1e6, "Overkill score is not floored into int64")
 	assert_true(
 		NumberFormat.format(depth_score) != "???",
 		"The debrief can print a score past octillion"
+	)
+	var overkill_row := ""
+	for row in RunScore.rows(score):
+		if str(row.get("label", "")) == "Peak overkill":
+			overkill_row = str(row.get("value", ""))
+	assert_eq(
+		overkill_row, "%s%%" % NumberFormat.format(1e22),
+		"Peak overkill is not truncated through int()"
 	)

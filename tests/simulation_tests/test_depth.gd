@@ -18,6 +18,7 @@ func run() -> void:
 	_test_target_x5_is_unlimited()
 	_test_later_prompt_does_not_recomplete()
 	_test_depth_complete_settles_the_active_session()
+	_test_depth_score_accrues_at_the_live_multiplier()
 
 
 func _test_reset_clears_depth() -> void:
@@ -90,11 +91,12 @@ func _test_jobs_grow_by_the_depth_multiplier() -> void:
 func _test_scoreboard_names_depth() -> void:
 	var state := RunState.new()
 	state.statistics["lifetime_tokens"] = 1000.0
+	state.statistics["depth_score"] = 2000.0
 	state.statistics["depth_reached"] = 2
 	state.depth["score_mult"] = 3.0
 	var score: Dictionary = RunScore.compute(state, ContentDatabase)
 	assert_eq(int(score.get("depth_reached", 0)), 2, "Depth reached is scored")
-	assert_almost_eq(float(score.get("depth_score", 0.0)), 2000.0, 0.01, "Score mult is applied as extra score")
+	assert_almost_eq(float(score.get("depth_score", 0.0)), 2000.0, 0.01, "Accrued depth score is what the debrief prints")
 	var labels: Array = []
 	for row in RunScore.rows(score):
 		labels.append(str(row.get("label", "")))
@@ -246,16 +248,41 @@ func _test_depth_complete_settles_the_active_session() -> void:
 	sim.run_state.depth["baseline_tokens"] = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
 	sim.run_state.depth["tokens_needed"] = 1.0
 	sim.run_state.depth["status"] = DepthSystem.STATUS_ACTIVE
+	var failed_before: int = int(sim.run_state.statistics.get("failed_jobs", 0))
 	var result: Dictionary = sim.burn_batch()
 	assert_true(result.get("ok", false), "The completing burn lands")
-	assert_eq(sim.phase, sim.Phase.RUN_END, "DEPTH COMPLETE waits for the session to settle")
+	assert_eq(sim.phase, sim.Phase.IN_ROUND, "Crossing the target does not close the desk")
+	assert_true(
+		not Array(sim.run_state.business.get("active_jobs", [])).is_empty(),
+		"Live contracts stay on the machine"
+	)
+	assert_true(
+		float(sim.focused_job().get("tokens_remaining", 0.0)) > 0.0,
+		"The unfinished contract is not force-failed"
+	)
+	assert_true(
+		bool(sim.run_state.flags.get("depth_complete_pending", false)),
+		"The crossing is latched until the session ends normally"
+	)
+	assert_false(bool(sim.run_state.flags.get("depth_complete", true)), "DEPTH COMPLETE waits")
+	assert_eq(str(sim.run_state.depth.get("status", "")), DepthSystem.STATUS_COMPLETE, "The depth latched")
+	assert_eq(
+		int(sim.run_state.statistics.get("failed_jobs", -1)), failed_before,
+		"Crossing the target is not a reputation of failed contracts"
+	)
+	assert_true(sim.can_burn(), "The session stays burnable after the crossing")
+	assert_true(sim.ship_focused_job(), "The current contract can still be delivered")
+	assert_eq(sim.phase, sim.Phase.RUN_END, "DEPTH COMPLETE opens after a normal settle")
 	assert_true(
 		Array(sim.run_state.business.get("active_jobs", [])).is_empty(),
 		"The live desk is settled before the overlay"
 	)
 	assert_true(sim.focused_job().is_empty(), "Nothing remains focused")
 	assert_true(bool(sim.run_state.flags.get("depth_complete", false)), "The overlay flag is set")
-	assert_eq(str(sim.run_state.depth.get("status", "")), DepthSystem.STATUS_COMPLETE, "The depth latched")
+	assert_eq(
+		int(sim.run_state.statistics.get("failed_jobs", -1)), failed_before,
+		"A finished contract is not counted as a depth-forced failure"
+	)
 	var picks: Array = sim.offer_depth_picks()
 	assert_true(not picks.is_empty(), "The next affix draft is available")
 	var next_id: String = str(Dictionary(picks[0]).get("id", ""))
@@ -280,6 +307,29 @@ func _test_depth_complete_settles_the_active_session() -> void:
 	sim.start_work()
 	assert_true(sim.can_burn(), "Burn remains possible after the depth boundary")
 	sim.free()
+
+
+func _test_depth_score_accrues_at_the_live_multiplier() -> void:
+	var state := RunState.new()
+	state.depth["level"] = 1
+	state.depth["score_mult"] = 3.0
+	state.statistics["lifetime_tokens"] = 1e20
+	DepthSystem.record_tokens(state, 1000.0)
+	assert_almost_eq(
+		float(state.statistics.get("depth_score", 0.0)), 2000.0, 0.01,
+		"Only tokens burned during Deep Burn earn the live multiplier"
+	)
+	state.depth["score_mult"] = 6.0
+	DepthSystem.record_tokens(state, 1000.0)
+	assert_almost_eq(
+		float(state.statistics.get("depth_score", 0.0)), 7000.0, 0.01,
+		"A later stack does not rewrite earlier burns"
+	)
+	var score: Dictionary = RunScore.compute(state, ContentDatabase)
+	assert_almost_eq(
+		float(score.get("depth_score", 0.0)), 7000.0, 0.01,
+		"Campaign tokens burned before Deep Burn are not multiplied in"
+	)
 
 
 func _moon_at_depth(depth: DepthSystem, seed_value: int) -> RunState:

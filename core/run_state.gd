@@ -143,6 +143,7 @@ var statistics: Dictionary = {
 	"peak_overkill": 0.0,
 	"lifetime_overkill": 0.0,
 	"depth_reached": 0,
+	"depth_score": 0.0,
 }
 
 ## The location's contract, which is live from the first prompt of the run; see
@@ -853,6 +854,7 @@ func _default_statistics() -> Dictionary:
 	"peak_overkill": 0.0,
 	"lifetime_overkill": 0.0,
 	"depth_reached": 0,
+	"depth_score": 0.0,
 }
 
 

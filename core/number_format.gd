@@ -51,7 +51,7 @@ static func format_cash(value: float) -> String:
 
 
 static func format_percent(value: float, decimals: int = 0) -> String:
-	return ("%%.%df%%" % decimals) % (value * 100.0)
+	return "%s%%" % format(value * 100.0, decimals)
 
 
 static func comparison(value: float, comparisons: Array) -> String:

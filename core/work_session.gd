@@ -326,25 +326,13 @@ func finish_prompt(sim: Node, result: Dictionary) -> void:
 		var depth_result: Dictionary = sim.depth_system().evaluate_prompt(sim.run_state)
 		for message in depth_result.get("messages", []):
 			sim.round_log.append(str(message))
-		# Latch the crossing here, then settle the desk. Overlaying RUN_END
-		# before end_session left completed jobs in active_jobs and let live
-		# Depth N contracts ride into Depth N+1.
+		# Latch only. Forcing end_session here failed every unfinished
+		# contract on the desk the moment the target was crossed.
 		if bool(depth_result.get("newly_complete", false)):
 			sim.run_state.flags["depth_complete_pending"] = true
 	var stop: String = _session_stop_reason(result)
-	var depth_pending: bool = bool(sim.run_state.flags.get("depth_complete_pending", false))
-	if stop != "" or depth_pending:
-		if depth_pending:
-			sim._settling_depth = true
-			if stop == "":
-				stop = "depth_complete"
-		end_session(sim, stop)
-		sim._settling_depth = false
-		if depth_pending and sim.phase != sim.Phase.RUN_END:
-			sim._reach_depth_complete()
-		elif depth_pending:
-			sim.run_state.flags["depth_complete_pending"] = false
-		sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
+	if stop != "":
+		_close_session(sim, stop)
 	else:
 		sim._autosave()
 
@@ -359,7 +347,22 @@ func _settle_if_resolved(sim: Node) -> void:
 			sim.work_tick_completed.emit()
 			sim._autosave()
 			return
-	end_session(sim, "resolved")
+	_close_session(sim, "resolved")
+
+
+## One place the desk actually closes. Ship, abandon, and a resolved burn all
+## land here so a latched Deep Burn crossing still opens DEPTH COMPLETE after
+## the current contracts settle normally.
+func _close_session(sim: Node, reason: String) -> void:
+	var depth_pending: bool = bool(sim.run_state.flags.get("depth_complete_pending", false))
+	if depth_pending:
+		sim._settling_depth = true
+	end_session(sim, reason)
+	sim._settling_depth = false
+	if depth_pending and sim.phase != sim.Phase.RUN_END:
+		sim._reach_depth_complete()
+	elif depth_pending:
+		sim.run_state.flags["depth_complete_pending"] = false
 	sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
 
 

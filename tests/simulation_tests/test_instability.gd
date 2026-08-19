@@ -14,6 +14,7 @@ func run() -> void:
 	_test_cluster_can_fault_without_ending_the_run()
 	_test_fire_thresholds()
 	_test_fault_expires()
+	_test_heat_state_names_the_late_bands()
 
 
 func _test_bedroom_has_no_instability() -> void:
@@ -158,6 +159,29 @@ func _test_fire_thresholds() -> void:
 	assert_false(progression.check_loss(cluster), "A cluster at 100% heat is not a fire loss")
 	cluster.compute["heat"] = 150.0
 	assert_true(progression.check_loss(cluster), "A cluster fire waits for 150%")
+
+
+func _test_heat_state_names_the_late_bands() -> void:
+	assert_eq(HeatSystem.heat_state(1.0, 0), HeatSystem.HEAT_FIRE, "Bedroom 100% is still FIRE")
+	assert_eq(HeatSystem.heat_state_label(HeatSystem.HEAT_FIRE), "FIRE", "And it is labelled FIRE")
+	assert_eq(HeatSystem.heat_state(0.82, 2), HeatSystem.HEAT_THROTTLE, "A rack at 82% is THROTTLE")
+	assert_eq(HeatSystem.heat_state(0.90, 2), HeatSystem.HEAT_UNSTABLE, "Then UNSTABLE")
+	assert_eq(HeatSystem.heat_state(1.10, 2), HeatSystem.HEAT_REDLINE, "100–140% is REDLINE, not fire")
+	assert_eq(HeatSystem.heat_state(1.40, 2), HeatSystem.HEAT_FIRE_RISK, "140% is FIRE RISK")
+	assert_eq(HeatSystem.heat_state(1.50, 2), HeatSystem.HEAT_CATASTROPHE, "150% is CATASTROPHE")
+	var late := _rig(["gpu_rack"], 110.0)
+	var outlook := {}
+	HeatSystem.decorate_heat_outlook(outlook, 90.0, late)
+	assert_eq(str(outlook.get("heat_state", "")), HeatSystem.HEAT_REDLINE, "A 110% forecast is redline")
+	assert_eq(str(outlook.get("heat_state_label", "")), "REDLINE", "The Burn Board can print REDLINE")
+	assert_false(bool(outlook.get("crosses_fire", true)), "Redline is not a fire")
+	assert_false(bool(outlook.get("crosses_catastrophe", true)), "And does not cross the kill line")
+	late.compute["heat"] = 155.0
+	var lethal := {}
+	HeatSystem.decorate_heat_outlook(lethal, 130.0, late)
+	assert_eq(str(lethal.get("heat_state", "")), HeatSystem.HEAT_CATASTROPHE, "155% is catastrophe")
+	assert_true(bool(lethal.get("crosses_catastrophe", false)), "Crossing 150% is the kill line")
+	assert_true(bool(lethal.get("crosses_fire", false)), "crosses_fire follows the kill line")
 
 
 func _test_fault_expires() -> void:

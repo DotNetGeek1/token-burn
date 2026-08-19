@@ -531,7 +531,10 @@ func _work_round(sim: Node, policy: String) -> void:
 		var preview: Dictionary = sim.preview_next_burn()
 		var projected: float = float(preview.get("heat_after", heat))
 		if not _active_metrics.is_empty() and (
-			bool(preview.get("crosses_fire", false)) or projected >= capacity
+			bool(preview.get("crosses_catastrophe", preview.get("crosses_fire", false)))
+			or projected >= capacity * HeatSystem.catastrophe_ratio(
+				HeatSystem.work_tier(sim.run_state)
+			)
 		):
 			_active_metrics["dangerous_forecasts"] = int(
 				_active_metrics.get("dangerous_forecasts", 0)

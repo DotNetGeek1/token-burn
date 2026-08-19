@@ -38,6 +38,18 @@ static func growth_for(level: int, content_db: Node) -> float:
 	return float(growth[mini(maxi(0, level - 1), growth.size() - 1)])
 
 
+## Score is earned as tokens land, at the multiplier that was live then.
+## A later Depth 8 stack must not retrospectively multiply the campaign or
+## Depth 1.
+static func record_tokens(run_state: RunState, tokens: float) -> void:
+	if not is_active(run_state):
+		return
+	var bonus: float = maxf(0.0, tokens) * maxf(0.0, float(run_state.depth.get("score_mult", 1.0)) - 1.0)
+	if bonus <= 0.0:
+		return
+	run_state.statistics["depth_score"] = float(run_state.statistics.get("depth_score", 0.0)) + bonus
+
+
 static func tokens_burned(run_state: RunState) -> float:
 	return maxf(
 		0.0,

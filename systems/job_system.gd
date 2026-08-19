@@ -605,6 +605,7 @@ func _apply_burn(
 		float(run_state.statistics.get("peak_prompt_tokens", 0.0)), tokens_burned
 	)
 	if mode == ResolveMode.COMMIT:
+		DepthSystem.record_tokens(run_state, tokens_burned)
 		EventBus.emit_event(EventBus.EVENT_TOKENS_CONSUMED, {"amount": tokens_burned})
 
 	# Shipped work is worth something even from a pipeline that generates no
