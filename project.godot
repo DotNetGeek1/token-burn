@@ -48,6 +48,10 @@ window/dpi/allow_hidpi.web=false
 
 common/default_scroll_deadzone=24
 
+[memory]
+
+limits/message_queue/max_size_mb=64
+
 [input_devices]
 
 pointing/emulate_touch_from_mouse=true

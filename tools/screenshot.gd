@@ -117,7 +117,7 @@ class Walker:
 	## Picks the first thing on the venue's board, if it has one that can be
 	## picked. Returns whether anything was selected.
 	func _select_first() -> bool:
-		var venue: Node = get_tree().current_scene
+		var venue: Node = SceneRouter.current_screen()
 		if venue == null or not venue.has_method("_on_tile_selected"):
 			return false
 		var board: VenueBoard = _find_board(venue)
@@ -181,7 +181,7 @@ class Walker:
 	## A save loaded mid-flow puts a debrief or an investor over the room, and the
 	## room is the whole point of the shot.
 	func _hide_desk_overlays() -> void:
-		var shell: Node = get_tree().current_scene
+		var shell: Node = SceneRouter.current_screen()
 		if shell == null:
 			return
 		var overlays: Node = shell.get_node_or_null("OverlayRoot")

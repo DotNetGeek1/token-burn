@@ -110,6 +110,9 @@ func set_viewport(size: Vector2i) -> void:
 func current_scene() -> Node:
 	if not is_inside_tree():
 		return null
+	var screen: Node = SceneRouter.current_screen()
+	if screen != null:
+		return screen
 	return get_tree().current_scene
 
 

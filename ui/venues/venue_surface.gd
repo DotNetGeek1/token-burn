@@ -25,6 +25,10 @@ var _inverse_row_2 := Vector3(0.0, 0.0, 1.0)
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# WebGL Compatibility cannot retarget the index buffers a SubViewport plus
+	# Polygon2D allocate. The venue keeps the flat Control mount instead.
+	if OS.has_feature("web") or OS.get_name() == "Web":
+		return
 
 	_viewport = SubViewport.new()
 	_viewport.name = "PanelViewport"
@@ -50,11 +54,18 @@ func _init() -> void:
 
 
 func mount_panel(panel: Control) -> void:
+	if _viewport == null:
+		if panel.get_parent() != self:
+			panel.reparent(self)
+		return
 	if panel.get_parent() != _viewport:
 		panel.reparent(_viewport)
 
 
 func set_surface(panel: Control, corners: PackedVector2Array, local_size: Vector2) -> void:
+	if _viewport == null or _polygon == null or _material == null or _input == null:
+		visible = false
+		return
 	if corners.size() != 4:
 		visible = false
 		return
@@ -107,6 +118,8 @@ func set_surface(panel: Control, corners: PackedVector2Array, local_size: Vector
 
 
 func _on_surface_input(event: InputEvent) -> void:
+	if _viewport == null:
+		return
 	var point := Vector2.INF
 	if event is InputEventMouse:
 		point = _input.position + event.position

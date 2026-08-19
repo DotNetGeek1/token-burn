@@ -34,7 +34,7 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 0
 
-[node name="Embers" type="GPUParticles2D" parent="."]
+[node name="Embers" type="CPUParticles2D" parent="."]
 position = Vector2(640, 740)
 
 [node name="Stage" type="Control" parent="."]

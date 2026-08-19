@@ -155,8 +155,8 @@ offset_bottom = 140.0
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="Smoke" type="GPUParticles2D" parent="Bay/Stage"]
+[node name="Smoke" type="CPUParticles2D" parent="Bay/Stage"]
 emitting = false
 
-[node name="Fire" type="GPUParticles2D" parent="Bay/Stage"]
+[node name="Fire" type="CPUParticles2D" parent="Bay/Stage"]
 emitting = false

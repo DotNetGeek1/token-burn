@@ -304,7 +304,9 @@ func add_panel(region: String, heading: String = "", options: Dictionary = {}) -
 	# venue without those measurements keeps the ordinary flat mount. In console
 	# mode the panel is reparented out of either mount and into the normal column.
 	var measured: PackedVector2Array = AssetCatalog.venue_plane(venue_key(), region)
-	var surface: Node = VenueSurface.new() if measured.size() == 4 else Node2D.new()
+	# SubViewport plus Polygon2D index buffers crash the web Compatibility
+	# renderer on a scene change. The browser keeps the axis-aligned mount.
+	var surface: Node = VenueSurface.new() if _uses_warped_surface(measured) else Node2D.new()
 	surface.name = "%sSurface" % region.capitalize()
 	_stage.add_child(surface)
 	# What a panel needs changes while the venue is open — opening a contract
@@ -325,6 +327,14 @@ func add_panel(region: String, heading: String = "", options: Dictionary = {}) -
 		"grow": bool(options.get("grow", false)),
 	})
 	return panel
+
+
+func _uses_warped_surface(measured: PackedVector2Array) -> bool:
+	return measured.size() == 4 and not _is_web()
+
+
+func _is_web() -> bool:
+	return OS.has_feature("web") or OS.get_name() == "Web"
 
 
 ## The way out, and whatever else the venue wants to say about its keys. Printed
@@ -774,7 +784,7 @@ func _place_panels(view: Vector2) -> void:
 		# else reports its full height, so the layout can see what it needs.
 		panel.set_scrollable(leaning)
 		var plane: PackedVector2Array = AssetCatalog.venue_plane(venue_key(), region)
-		if plane.size() == 4:
+		if plane.size() == 4 and entry["surface"] is VenueSurface:
 			_place_panel_on_plane(entry, panel, plane, view)
 			continue
 		rect = _camera(rect)

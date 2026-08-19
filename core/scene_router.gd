@@ -4,12 +4,13 @@ extends Node
 ##
 ## Every screen that is not the desk — the market, the job board, the build
 ## sheet, the workflows, the records — is a scene in its own right now rather
-## than a slab sliding over the room, so moving between them is a real scene
-## change. That unloads the shell, and an autoload is the one thing that
-## survives one. So this owns everything that has to outlive the screen it was
-## started from: the fade over the seam, the phone the investor rings on, the
-## award splash, and any round-end report that lands while the player is out of
-## the room.
+## than a slab sliding over the room. They used to swap with `change_scene`,
+## which on web frees the whole current world while WebGL still has buffers
+## bound and kills the canvas. Screens are children of a host this autoload
+## owns, so the tree root never tears down. This also owns everything that has
+## to outlive the screen it was started from: the fade over the seam, the phone
+## the investor rings on, the award splash, and any round-end report that lands
+## while the player is out of the room.
 
 ## Emitted once the new scene is mounted, for anything tracking where the player
 ## is rather than driving where they go.
@@ -62,12 +63,27 @@ var _fade: ColorRect = null
 var _overlay_host: Control = null
 var _investor_call: Control = null
 var _splash: AchievementSplash = null
+## Lives under `/root` so Controls get a full viewport the way `current_scene`
+## used to. Never freed. The visible screen is its only child.
+var _screen_host: Node = null
+var _screen: Node = null
 
 
 func _ready() -> void:
 	_theme = UiThemeBuilder.build()
 	_build_layers()
 	_connect_flow()
+	call_deferred("_adopt_boot_scene")
+
+
+## The screen the player is looking at. Playtests and the screenshot tool ask
+## this rather than `SceneTree.current_scene`, which is no longer swapped.
+func current_screen() -> Node:
+	if _screen != null and is_instance_valid(_screen):
+		return _screen
+	if is_inside_tree():
+		return get_tree().current_scene
+	return null
 
 
 # --- The layers that outlive a scene -----------------------------------------
@@ -185,19 +201,98 @@ func _switch_to(route: String) -> void:
 		_switching = false
 		return
 	await _fade_to(1.0, FADE_OUT_SECONDS)
+	if not is_inside_tree():
+		_switching = false
+		return
+	var outgoing: Node = _screen
+	if outgoing == null or not is_instance_valid(outgoing):
+		outgoing = get_tree().current_scene
+	_quiesce_node(outgoing)
+	await get_tree().process_frame
+	if not is_inside_tree():
+		_switching = false
+		return
+	var incoming: Node = packed.instantiate()
+	_mount_screen(incoming)
 	current = route
-	get_tree().change_scene_to_packed(packed)
-	# The swap itself is deferred to the end of the frame, and the scene it
-	# brings in needs a layout pass before it is worth looking at.
-	await get_tree().process_frame
-	await get_tree().process_frame
+	if outgoing != null and is_instance_valid(outgoing) and outgoing != incoming:
+		outgoing.visible = false
+		_quiesce_node(outgoing)
+		outgoing.queue_free()
+	if is_inside_tree():
+		await get_tree().process_frame
+		await get_tree().process_frame
 	_switching = false
 	route_changed.emit(route)
 	await _fade_to(0.0, FADE_IN_SECONDS)
 
 
+func _ensure_host() -> void:
+	if _screen_host != null and is_instance_valid(_screen_host):
+		return
+	if not is_inside_tree():
+		return
+	_screen_host = Node.new()
+	_screen_host.name = "ScreenHost"
+	get_tree().root.add_child(_screen_host)
+	# Godot only allows current_scene to be a direct child of /root. The host
+	# holds that pointer; the visible Control lives underneath it.
+	get_tree().current_scene = _screen_host
+
+
+## Pulls the project's boot scene into the host so the first goto does not have
+## to `change_scene`. The playtest runner is a different .tscn and is left alone.
+func _adopt_boot_scene() -> void:
+	if not is_inside_tree():
+		return
+	var boot: Node = get_tree().current_scene
+	if boot == null or not is_instance_valid(boot):
+		return
+	if boot == _screen_host:
+		return
+	if boot.scene_file_path != str(ROUTES[DESK]):
+		return
+	_ensure_host()
+	get_tree().current_scene = _screen_host
+	_mount_screen(boot)
+
+
+func _mount_screen(screen: Node) -> void:
+	_ensure_host()
+	if _screen_host == null or screen == null:
+		return
+	if screen.get_parent() != _screen_host:
+		if screen.get_parent() != null:
+			screen.reparent(_screen_host)
+		else:
+			_screen_host.add_child(screen)
+	if screen is Control:
+		(screen as Control).set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_screen = screen
+	if is_inside_tree() and get_tree().current_scene != _screen_host:
+		get_tree().current_scene = _screen_host
+
+
+func _quiesce_node(node: Node) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	_stop_gpu_nodes(node)
+
+
+func _stop_gpu_nodes(node: Node) -> void:
+	if node is GPUParticles2D or node is GPUParticles3D:
+		node.emitting = false
+		node.visible = false
+	elif node is CPUParticles2D or node is CPUParticles3D:
+		node.emitting = false
+	elif node is SubViewport:
+		node.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	for child in node.get_children():
+		_stop_gpu_nodes(child)
+
+
 func _fade_to(target: float, seconds: float) -> void:
-	if _fade == null:
+	if not is_inside_tree() or not is_instance_valid(_fade):
 		return
 	_size_layers()
 	_fade.visible = true
@@ -207,6 +302,8 @@ func _fade_to(target: float, seconds: float) -> void:
 	var tween: Tween = create_tween()
 	tween.tween_property(_fade, "modulate:a", target, seconds)
 	await tween.finished
+	if not is_instance_valid(_fade):
+		return
 	if target <= 0.01:
 		_fade.visible = false
 		_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE

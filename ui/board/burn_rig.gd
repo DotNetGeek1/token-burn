@@ -64,8 +64,8 @@ const HEAVY_SMOKE_RATIO := 0.75
 @onready var horizon: TextureRect = $Bay/Stage/Horizon
 @onready var workstation: TextureRect = $Bay/Stage/Workstation
 @onready var tower_glow: TextureRect = $Bay/Stage/TowerGlow
-@onready var smoke: GPUParticles2D = $Bay/Stage/Smoke
-@onready var fire: GPUParticles2D = $Bay/Stage/Fire
+@onready var smoke: CPUParticles2D = $Bay/Stage/Smoke
+@onready var fire: CPUParticles2D = $Bay/Stage/Fire
 @onready var screen: Control = $Bay/Stage/Screen
 @onready var glass: ColorRect = $Bay/Stage/Screen/Glass
 @onready var internal_console: MarginContainer = $Bay/Stage/Screen/Margin
@@ -192,13 +192,11 @@ func _build_beacon() -> void:
 
 
 func _build_particles() -> void:
-	smoke.texture = _soft_dot()
-	smoke.process_material = _smoke_material(Color(0.58, 0.58, 0.66), 30.0, 0.9, 2.4)
+	_apply_smoke_look(smoke, Color(0.58, 0.58, 0.66), 30.0, 0.9, 2.4)
 	smoke.amount = 40
 	smoke.lifetime = 2.0
 	smoke.emitting = false
-	fire.texture = _soft_dot()
-	fire.process_material = _smoke_material(UiThemeBuilder.color("orange"), 52.0, 0.5, 1.2)
+	_apply_smoke_look(fire, UiThemeBuilder.color("orange"), 52.0, 0.5, 1.2)
 	fire.amount = 30
 	fire.lifetime = 0.8
 	fire.emitting = false
@@ -206,29 +204,26 @@ func _build_particles() -> void:
 	tower_glow.modulate = Color(1, 0.42, 0.14, 0.0)
 
 
-func _smoke_material(
-	tint: Color, speed: float, scale_min: float, scale_max: float
-) -> ParticleProcessMaterial:
-	var material := ParticleProcessMaterial.new()
-	material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	material.emission_box_extents = Vector3(34, 4, 1)
-	material.direction = Vector3(0, -1, 0)
-	material.spread = 18.0
-	material.initial_velocity_min = speed * 0.5
-	material.initial_velocity_max = speed
-	material.gravity = Vector3(10, -26, 0)
-	material.scale_min = scale_min
-	material.scale_max = scale_max
-	material.damping_min = 8.0
-	material.damping_max = 18.0
-	material.color = tint
-	var ramp_texture := GradientTexture1D.new()
-	ramp_texture.gradient = UiFx.ramp(
+func _apply_smoke_look(
+	particles: CPUParticles2D, tint: Color, speed: float, scale_min: float, scale_max: float
+) -> void:
+	particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	particles.emission_rect_extents = Vector2(34, 4)
+	particles.direction = Vector2(0, -1)
+	particles.spread = 18.0
+	particles.initial_velocity_min = speed * 0.5
+	particles.initial_velocity_max = speed
+	particles.gravity = Vector2(10, -26)
+	particles.scale_amount_min = scale_min
+	particles.scale_amount_max = scale_max
+	particles.damping_min = 8.0
+	particles.damping_max = 18.0
+	particles.color = tint
+	particles.color_ramp = UiFx.ramp(
 		[0.0, 0.18, 1.0],
 		[Color(1, 1, 1, 0), Color(1, 1, 1, 0.85), Color(1, 1, 1, 0)]
 	)
-	material.color_ramp = ramp_texture
-	return material
+	particles.texture = _soft_dot()
 
 
 static func _soft_dot() -> Texture2D:
@@ -656,13 +651,12 @@ func _apply_heat_fx() -> void:
 		var weight: float = clampf(
 			(_heat_ratio - SMOKE_RATIO) / maxf(0.01, HEAVY_SMOKE_RATIO - SMOKE_RATIO), 0.0, 1.6
 		)
-		smoke.amount_ratio = clampf(0.25 + weight * 0.75, 0.1, 1.0)
 		smoke.speed_scale = lerpf(0.75, 1.5, clampf(weight, 0.0, 1.0))
 	# Flames mean the throttle has engaged: output is being cut right now.
 	var burning: bool = _heat_ratio >= _throttle_ratio
 	fire.emitting = burning
 	if burning:
-		fire.amount_ratio = clampf((_heat_ratio - _throttle_ratio) / 0.2 + 0.35, 0.2, 1.0)
+		fire.speed_scale = clampf((_heat_ratio - _throttle_ratio) / 0.2 + 0.35, 0.2, 1.0)
 	var glow: float = clampf((_heat_ratio - HEAVY_SMOKE_RATIO) / 0.3, 0.0, 1.0) * 0.55
 	var glow_tween: Tween = create_tween()
 	glow_tween.tween_property(tower_glow, "modulate:a", glow, 0.4)

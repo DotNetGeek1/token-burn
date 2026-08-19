@@ -45,7 +45,7 @@ const EMBER_COUNT := 22
 @onready var backdrop: TextureRect = $Backdrop
 @onready var scrim: TextureRect = $Scrim
 @onready var vignette: TextureRect = $Vignette
-@onready var embers: GPUParticles2D = $Embers
+@onready var embers: CPUParticles2D = $Embers
 @onready var stage: Control = $Stage
 @onready var desk_shadow: TextureRect = $Stage/DeskShadow
 @onready var laptop: TextureRect = $Stage/Laptop
@@ -171,24 +171,20 @@ func _build_scene() -> void:
 
 
 func _build_embers() -> void:
-	var material := ParticleProcessMaterial.new()
-	material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	material.emission_box_extents = Vector3(540, 20, 1)
-	material.direction = Vector3(0, -1, 0)
-	material.spread = 24.0
-	material.initial_velocity_min = 18.0
-	material.initial_velocity_max = 60.0
-	material.gravity = Vector3(6, -12, 0)
-	material.scale_min = 0.6
-	material.scale_max = 2.0
-	material.color = UiThemeBuilder.color("orange")
-	var ramp_texture := GradientTexture1D.new()
-	ramp_texture.gradient = UiFx.ramp(
+	embers.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	embers.emission_rect_extents = Vector2(540, 20)
+	embers.direction = Vector2(0, -1)
+	embers.spread = 24.0
+	embers.initial_velocity_min = 18.0
+	embers.initial_velocity_max = 60.0
+	embers.gravity = Vector2(6, -12)
+	embers.scale_amount_min = 0.6
+	embers.scale_amount_max = 2.0
+	embers.color = UiThemeBuilder.color("orange")
+	embers.color_ramp = UiFx.ramp(
 		[0.0, 0.2, 1.0],
 		[Color(1, 1, 1, 0), Color(1, 1, 1, 0.85), Color(1, 1, 1, 0)]
 	)
-	material.color_ramp = ramp_texture
-	embers.process_material = material
 	embers.texture = UiFx.radial_dot(32)
 	embers.amount = EMBER_COUNT
 	embers.lifetime = 7.0
@@ -234,9 +230,7 @@ func _layout_stage() -> void:
 	screen_glow.size = glass_rect.size * Vector2(1.24, 1.16)
 
 	embers.position = Vector2(size.x * 0.82, size.y + 20.0)
-	var ember_material: ParticleProcessMaterial = embers.process_material
-	if ember_material != null:
-		ember_material.emission_box_extents = Vector3(maxf(80.0, size.x * 0.22), 20, 1)
+	embers.emission_rect_extents = Vector2(maxf(80.0, size.x * 0.22), 20)
 
 	var crt_material: ShaderMaterial = crt_overlay.material
 	if crt_material != null:
