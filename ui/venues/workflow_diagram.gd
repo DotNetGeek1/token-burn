@@ -10,8 +10,9 @@ signal module_dropped(module_id: String, slot_index: int)
 signal slot_dropped(from_index: int, to_index: int)
 
 const GAP := 18.0
-const TOP_PAD := 12.0
+const TOP_PAD := 8.0
 const MIN_CARD_WIDTH := 165.0
+const MAX_CARD_WIDTH := 188.0
 const CARD_HEIGHT := WorkflowCard.MIN_HEIGHT
 
 var _cards: Array[WorkflowCard] = []
@@ -84,7 +85,7 @@ func _layout_cards() -> void:
 	var columns: int = clampi(mini(fit, maxi(1, _entries.size())), 1, column_cap)
 	var rows: int = ceili(float(_entries.size()) / float(columns))
 	var available_card_width: float = (size.x - gap * float(columns - 1)) / float(columns)
-	var card_width: float = available_card_width
+	var card_width: float = minf(available_card_width, MAX_CARD_WIDTH * _scale)
 	var top_pad: float = TOP_PAD * _scale
 	var card_height: float = CARD_HEIGHT * _scale
 	if rows > 0 and size.y > 1.0:
@@ -96,8 +97,6 @@ func _layout_cards() -> void:
 	var block_height: float = (
 		float(rows) * card_height + float(maxi(0, rows - 1)) * gap
 	)
-	# Notes sit under the heading and against the photographed divider, not in a
-	# centred island that leaves the writing surface empty on three sides.
 	var origin := Vector2(0.0, top_pad)
 	_card_rects.clear()
 	_card_rects.resize(_entries.size())

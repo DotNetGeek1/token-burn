@@ -64,6 +64,10 @@ func play(harness: UiHarness) -> void:
 		and writing.end.y < bounds.end.y - 0.02,
 		"The Web-safe board is inside the bounding rectangle, not equal to it"
 	)
+	assert_true(
+		venue._body.position.y >= venue._top_spacer.custom_minimum_size.y - 1.0,
+		"The whiteboard content keeps its measured top inset"
+	)
 	var paper_card: WorkflowCard = _first_visible_card(venue._tray)
 	assert_true(paper_card != null, "The unused tray prints a module card")
 	if paper_card != null:
@@ -133,13 +137,9 @@ func play(harness: UiHarness) -> void:
 			card.position.x + card.size.x <= venue._diagram.size.x + 1.0,
 			"A workflow stage stays within the diagram width"
 		)
-	var row_right: float = 0.0
-	for card in venue._diagram._cards:
-		if card.visible and absf(card.position.y - first_stage.position.y) < 2.0:
-			row_right = maxf(row_right, card.position.x + card.size.x)
 	assert_true(
-		row_right >= venue._diagram.size.x - 2.0,
-		"The snake spans the writing surface instead of leaving a right-hand margin"
+		first_stage.size.x <= venue._diagram.MAX_CARD_WIDTH * venue.console_scale() + 1.0,
+		"Workflow notes keep their measured card width"
 	)
 	if first_stage.module_id != "":
 		var stage_module: ModuleDefinition = ContentDatabase.get_module(first_stage.module_id)

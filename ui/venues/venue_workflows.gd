@@ -9,24 +9,19 @@ enum Selection { NONE, MODULE, SLOT }
 
 const LEFT_SHARE := 0.238
 const RIGHT_SHARE := 0.762
-## Clears the photographed metal rail without opening a second gutter of empty
-## board between the divider and the first stage.
-const SECTION_GAP := 16
+const SECTION_GAP := 48
 const LEFT_INSET := 10
-## The panel now follows the photographed plane on Web, but its local content
-## still needs breathing room inside the metal frame. Keep this inside the panel
-## rather than padding VenuePanel itself: the divider split is authored against
-## the full board and must not move when the margin changes.
-const FRAME_INSET := 12
 ## More of the divider gutter belongs to the diagram side: its heading and first
 ## stage should begin clearly beyond the metal rail, not straddle it.
 const DIVIDER_RIGHT_WEIGHT := 0.65
+const TOP_INSET := 24
 const DOT := " \u00b7 "
 const BOARD_INK := Color(0.025, 0.12, 0.072)
 const BOARD_INK_DIM := Color(0.055, 0.22, 0.13)
 const BOARD_WARNING := Color(0.38, 0.23, 0.035)
 
 var _board_panel: VenuePanel = null
+var _top_spacer: Control = null
 var _body: Control = null
 var _left: VBoxContainer = null
 var _right: VBoxContainer = null
@@ -78,6 +73,9 @@ func _build_venue() -> void:
 	})
 	_board_panel.set_whiteboard(true)
 	var root: VBoxContainer = _board_panel.content()
+	_top_spacer = Control.new()
+	_top_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_top_spacer)
 
 	_body = Control.new()
 	_body.clip_contents = true
@@ -602,6 +600,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _on_venue_layout() -> void:
 	var scale: float = console_scale()
+	_top_spacer.custom_minimum_size.y = (
+		0.0 if console_mode() else float(ConsoleMetrics.px(TOP_INSET, scale))
+	)
 	_left.add_theme_constant_override("separation", ConsoleMetrics.px(6, scale))
 	_right.add_theme_constant_override("separation", ConsoleMetrics.px(6, scale))
 
@@ -616,7 +617,7 @@ func _on_venue_layout() -> void:
 	_status.add_theme_font_size_override("font_size", tiny)
 	_name_edit.add_theme_font_size_override("font_size", small)
 	_workflow_picker.add_theme_font_size_override("font_size", small)
-	for button in [_new_button, _delete_button, _remove_button, _back_button]:
+	for button in [_new_button, _delete_button, _remove_button, _add_stage_button, _back_button]:
 		button.add_theme_font_size_override("font_size", small)
 	# Console mode already has VenueScene's full-width ESC/BACK row. Keeping one
 	# exit in each layout avoids the duplicate controls the venue pass removed.
@@ -658,18 +659,13 @@ func _layout_whiteboard_columns() -> void:
 	var left_gutter: float = gap * (1.0 - DIVIDER_RIGHT_WEIGHT)
 	var right_gutter: float = gap * DIVIDER_RIGHT_WEIGHT
 	var left_inset: float = float(ConsoleMetrics.px(LEFT_INSET, console_scale()))
-	var frame_inset: float = float(ConsoleMetrics.px(FRAME_INSET, console_scale()))
-	var column_height: float = maxf(1.0, _body.size.y - frame_inset * 2.0)
-	_left.position = Vector2(left_inset, frame_inset)
+	_left.position = Vector2(left_inset, 0.0)
 	_left.size = Vector2(
 		maxf(1.0, divider_x - left_gutter - left_inset),
-		column_height
+		_body.size.y
 	)
-	_right.position = Vector2(divider_x + right_gutter, frame_inset)
-	_right.size = Vector2(
-		maxf(1.0, _body.size.x - divider_x - right_gutter - frame_inset),
-		column_height
-	)
+	_right.position = Vector2(divider_x + right_gutter, 0.0)
+	_right.size = Vector2(maxf(1.0, _body.size.x - divider_x - right_gutter), _body.size.y)
 	_body.custom_minimum_size.y = 0.0
 
 

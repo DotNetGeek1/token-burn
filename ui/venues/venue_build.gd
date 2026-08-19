@@ -51,40 +51,6 @@ func _lean_scale() -> float:
 	return clampf(_scale / maxf(_lean_zoom, 1.0), 1.0, _scale)
 
 
-## Commit 3278eaf used the authored rectangular index region on Web. That is the
-## composition the Build artwork was tuned against: the CRT face itself is read
-## straight-on even though its metal housing is strongly foreshortened. The later
-## generic affine fallback treated the housing's four measured corners as the
-## display plane and tilted every menu row down to the right. Keep the newer
-## affine mount for other measured panels, but preserve the original Build index
-## placement exactly on Web/flat surfaces.
-func _place_panel_affine(
-	entry: Dictionary,
-	panel: VenuePanel,
-	plane: PackedVector2Array,
-	view: Vector2
-) -> bool:
-	if str(entry.get("region", "")) != "index":
-		return super._place_panel_affine(entry, panel, plane, view)
-	if not entry.get("surface") is Node2D:
-		return super._place_panel_affine(entry, panel, plane, view)
-	var rect: Rect2 = _region_rect("index", view)
-	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
-		return false
-	rect = _camera(rect)
-	_reset_flat_surface(entry)
-	panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
-	panel.custom_minimum_size = Vector2.ZERO
-	panel.size = rect.size
-	var leaning: bool = str(entry.get("region", "")) == _leaning_on
-	if _cam_zoom <= 1.001 or leaning:
-		rect.size = rect.size.max(panel.get_combined_minimum_size())
-		rect = _clamp_to_window(rect, view)
-	panel.position = rect.position
-	panel.size = rect.size
-	return true
-
-
 func _build_venue() -> void:
 	_build_index()
 	_build_board()
