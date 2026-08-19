@@ -79,12 +79,12 @@ Players may eventually bid on contracts, trading a higher chance of winning work
 
 Hardware increases local throughput but raises power, heat, maintenance, and space requirements.
 
-Major compute models have explicit fleet caps: four custom desktops, then two
-of each rack-scale model. A bigger room can still hold a mixed fleet and run
-more contracts in parallel; its empty floor is not permission to stack eighty
-copies of the strongest machine. When a rig reaches the next compute era, the
-board keeps one familiar local posting and uses the other default slots for
-authored work from the rig's service tier. Existing postings never resize from
+Same-model stacking is allowed; the room, the bill, and the heat are the
+caps. A bigger floor can hold more of the same machine and run more
+contracts in parallel. Custom desktops still stop at four — that is the
+early-game identity cap, not a rack-scale wall. When a rig reaches the
+next compute era, the board keeps one familiar local posting and fills
+the rest from the rig's service tier. Existing postings never resize from
 the live token rate.
 
 ### Dwelling

@@ -140,12 +140,20 @@ func _combo_subscriptions(event_name: String) -> Array:
 				"left": str(direction[1]),
 				"operator": "in",
 				"right": partners.duplicate(),
-			}]))
+			}], {
+				"source_kind": "combo",
+				"combo_name": str(combo.get("name", "")),
+			}))
 	return subscriptions
 
 
-func _subscription(event_name: String, effects: Array, conditions: Array) -> Dictionary:
-	return {
+func _subscription(
+	event_name: String,
+	effects: Array,
+	conditions: Array,
+	extras: Dictionary = {}
+) -> Dictionary:
+	var sub := {
 		"event": event_name,
 		"priority": priority,
 		"conditions": conditions,
@@ -153,3 +161,11 @@ func _subscription(event_name: String, effects: Array, conditions: Array) -> Dic
 		"parameters": parameters.duplicate(true),
 		"source_id": id,
 	}
+	# ChainGuard still keys off the module id. The combo name is presentation:
+	# the resolver copies it into trace metadata so a burn can slam READ THE DOCS
+	# without treating each combo as a different effect identity.
+	if str(extras.get("source_kind", "")) != "":
+		sub["source_kind"] = str(extras["source_kind"])
+	if str(extras.get("combo_name", "")) != "":
+		sub["combo_name"] = str(extras["combo_name"])
+	return sub

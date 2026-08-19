@@ -8,7 +8,8 @@ const MIN_BAND_POOL := 3
 
 
 func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Node, tuning: Dictionary) -> void:
-	var count: int = clampi(int(run_state.business.get("demand", 3.0)), 1, 5)
+	var interest: int = clampi(int(run_state.business.get("demand", 3.0)), 1, DemandSystem.MAX_DEMAND)
+	var count: int = maxi(interest, ComputeSystem.job_slots(run_state))
 	var round_number: int = int(run_state.calendar.get("round", 1))
 	var here: int = location_tier(run_state, content_db)
 	var eligible: Array = _collect_eligible_jobs(content_db, round_number, here)
@@ -23,7 +24,8 @@ func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Nod
 	# three jackpots or three contracts it was built to fail.
 	var windfall_placed: bool = false
 	var attempts: int = 0
-	while offers.size() < count and attempts < eligible.size() * 4:
+	var attempt_limit: int = maxi(eligible.size() * 4, count * 4)
+	while offers.size() < count and attempts < attempt_limit:
 		var job_def: JobDefinition = eligible[index % eligible.size()]
 		index += 1
 		attempts += 1
@@ -56,9 +58,9 @@ func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Nod
 	# the numbers on a posting that already exists.
 	var service_tier: int = rig_work_tier(run_state, content_db)
 	if service_tier > here:
-		var matched_count: int = mini(2, offers.size())
+		var matched_count: int = 0
 		if offers.size() > 1:
-			matched_count = mini(matched_count, offers.size() - 1)
+			matched_count = offers.size() - 1
 		var matched: Array = _rig_matched_offers(
 			run_state, rng.derive("rig_matched"), content_db, tuning,
 			round_number, service_tier, matched_count
@@ -111,7 +113,8 @@ func _rig_matched_offers(
 	var used_windfall: bool = false
 	var cursor: int = 0
 	var attempts: int = 0
-	while result.size() < count and attempts < pool.size() * 3:
+	var attempt_limit: int = maxi(pool.size() * 3, count * 4)
+	while result.size() < count and attempts < attempt_limit:
 		var job_def: JobDefinition = pool[cursor % pool.size()]
 		cursor += 1
 		attempts += 1

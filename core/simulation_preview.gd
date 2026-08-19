@@ -1,6 +1,8 @@
 class_name SimulationPreview
 extends RefCounted
 
+const BurnSpectacle := preload("res://presentation/burn_spectacle.gd")
+
 ## Stateless foresight for the Burn Board and Market. Every method clones
 ## `RunState` or reads it without writing the live phase, RNG counters,
 ## signals, or saves. `sim` is the owning Simulation node, taken as a plain
@@ -39,6 +41,7 @@ static func preview_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 	if burn.get("ok", false):
 		burn = burn.duplicate(true)
 		_decorate_burn_outlook(burn, heat_before, clone)
+		burn["spectacle"] = BurnSpectacle.compile(burn, preview_resolver.get_trace())
 	return burn
 
 
@@ -80,6 +83,7 @@ static func preview_next_burn(sim: Node, stage_limit: int = -1) -> Dictionary:
 	if burn.get("ok", false):
 		burn = burn.duplicate(true)
 		_decorate_burn_outlook(burn, heat_before, clone)
+		burn["spectacle"] = BurnSpectacle.compile(burn, preview_resolver.get_trace())
 	return burn
 
 

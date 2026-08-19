@@ -44,6 +44,7 @@ var _readings: Dictionary = {}
 var _printed_compact: bool = false
 var _screen_name: String = "DESK"
 var _scale: float = 1.0
+var _status_pressed: Callable = Callable()
 
 
 func _ready() -> void:
@@ -83,9 +84,11 @@ func _build() -> void:
 
 	_status = ConsoleStyle.label("", ConsoleStyle.FONT_HEAD, ConsoleStyle.PHOSPHOR)
 	_status.clip_text = true
+	_status.gui_input.connect(_on_status_gui_input)
 	_body.add_child(_status)
 
 	_blurb = ConsoleStyle.paragraph("", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR_DIM)
+	_blurb.gui_input.connect(_on_status_gui_input)
 	_body.add_child(_blurb)
 
 	_body.add_child(_rule(0.2))
@@ -153,6 +156,27 @@ func set_status(headline: String, blurb: String) -> void:
 	_status.text = headline.to_upper()
 	_blurb.text = blurb
 	_fit_to_glass()
+
+
+## Makes the headline and the line under it a tap target. Used mid-burn so
+## tapping the glass skips the rest of the spectacle without killing the batch.
+func set_status_pressed(handler: Callable) -> void:
+	_status_pressed = handler
+	var filter: Control.MouseFilter = (
+		Control.MOUSE_FILTER_STOP if handler.is_valid() else Control.MOUSE_FILTER_IGNORE
+	)
+	if _status != null:
+		_status.mouse_filter = filter
+	if _blurb != null:
+		_blurb.mouse_filter = filter
+
+
+func _on_status_gui_input(event: InputEvent) -> void:
+	if not _status_pressed.is_valid():
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_status_pressed.call()
+		accept_event()
 
 
 ## Whether the glass this console is being drawn on is too small, on the

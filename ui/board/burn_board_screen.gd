@@ -1,5 +1,7 @@
 extends Control
 
+const BurnSpectacle := preload("res://presentation/burn_spectacle.gd")
+
 ## The Burn Board: the work screen, printed on the evolving workstation.
 ##
 ## The workstation is the machine the operation is run from, so a burn is reported and
@@ -12,10 +14,9 @@ extends Control
 ## One shared control owns the artwork, live primary console, supporting screens,
 ## shake, glow, smoke, fire and beacon. There is no second rig hidden behind it.
 
-## How long each pipeline stage holds on the console during a batch. Long
-## enough to read the stage's own line before the next one prints over it —
-## the batch is the show, not a loading bar.
-const STAGE_SECONDS := 0.9
+## Slice used while waiting out a spectacle beat, so KILL / SKIP can land
+## without finishing the rest of the hold.
+const HOLD_SLICE := 0.05
 
 ## The heat a redline build has to be sitting at before a burn starts for its
 ## conditional modules to fire, called out on the meter so entering a burn hot
@@ -31,7 +32,9 @@ const DEADLINE_DANGER_PROMPTS := 1
 var _laptop: WorkstationConsole = null
 var _burning: bool = false
 var _kill_requested: bool = false
+var _skip_requested: bool = false
 var _stages_completed: int = 0
+var _proc_depth: int = 0
 var _detail_sheet: ConsoleSheet = null
 var _danger_vignette: DangerVignette = null
 
@@ -557,62 +560,120 @@ func _on_burn() -> void:
 	UiSound.play("burn")
 	_burning = true
 	_kill_requested = false
+	_skip_requested = false
 	_stages_completed = 0
-	# KILL takes the whole command list for the duration of the batch, so the
-	# only thing the player can do mid-burn is stop it.
-	_laptop.set_actions([{
-		"headline": "KILL", "value": "stop the batch", "destructive": true,
-		"pressed": _on_kill,
-	}])
+	_proc_depth = 0
+	# KILL aborts the remaining stages. SKIP (and tapping the headline) keeps
+	# the full batch and just drops the rest of the show.
+	_laptop.set_actions([
+		{
+			"headline": "KILL", "value": "stop the batch", "destructive": true,
+			"pressed": _on_kill,
+		},
+		{"headline": "SKIP", "value": "see the result", "pressed": _on_skip},
+	])
+	_laptop.set_status_pressed(_on_skip)
 	await _animate_batch(preview)
+	_laptop.set_status_pressed(Callable())
 	var stage_limit: int = _stages_completed if _kill_requested else -1
 	_burning = false
 	Simulation.burn_batch(stage_limit)
 	refresh()
 
 
-## Walks the batch down the pipeline one stage at a time, showing what each
-## stage added. This is also the window in which KILL can land.
+## Walks the batch as a cascade of beats. Ordinary stages fly past; named
+## combos, perks and forks hold. KILL discards the current stage; SKIP lands
+## the whole batch immediately.
 func _animate_batch(preview: Dictionary) -> void:
-	var stages: Array = preview.get("stages", [])
 	var job: Dictionary = Simulation.focused_job()
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
-	var intensity: float = float(preview.get("progress_tokens", 0.0)) / requirement
-	_laptop.set_status(
-		"burning %s BT" % NumberFormat.format(float(preview.get("tokens", 0.0))),
-		"%d stage(s) down the pipeline." % stages.size()
+	var burned_before: float = maxf(
+		0.0, requirement - maxf(0.0, float(job.get("tokens_remaining", 0.0)))
 	)
-	for stage in stages:
+	var beats: Array = preview.get("spectacle", [])
+	if beats.is_empty():
+		beats = BurnSpectacle.compile(preview, [])
+	_laptop.set_status("×1.00", "burning")
+	for beat in beats:
+		if not beat is Dictionary:
+			continue
 		if _kill_requested:
 			return
-		# The batch is reported a stage at a time: a line on the console, and a
-		# thump on the machine behind it.
+		_present_beat(beat, job, requirement, burned_before)
+		if _skip_requested:
+			_fast_forward(beats, beat, job, requirement, burned_before)
+			_stages_completed = int(preview.get("stage_count", preview.get("stages", []).size()))
+			return
+		await _hold_beat(float(beat.get("hold", BurnSpectacle.QUIET_HOLD)))
+		if _kill_requested:
+			return
+		if _skip_requested:
+			_fast_forward(beats, beat, job, requirement, burned_before)
+			_stages_completed = int(preview.get("stage_count", preview.get("stages", []).size()))
+			return
+		if bool(beat.get("closes_stage", false)):
+			_stages_completed += 1
+
+
+func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned_before: float) -> void:
+	var kind: String = str(beat.get("kind", BurnSpectacle.KIND_STAGE))
+	var loud: bool = bool(beat.get("loud", false))
+	var progress_mult: float = float(beat.get("progress_mult", 1.0))
+	var label: String = str(beat.get("label", "")).to_upper()
+	if kind == BurnSpectacle.KIND_FINAL:
 		_laptop.set_status(
-			"burning %s BT" % NumberFormat.format(float(preview.get("tokens", 0.0))),
-			"%s: %s" % [str(stage.get("name", "stage")).to_lower(), _stage_summary(stage)]
+			"%s BT" % NumberFormat.format(float(beat.get("tokens", 0.0))),
+			label
 		)
-		rig.shake(4.0 + intensity * 6.0)
-		_pulse_stage_heat(stage)
-		await get_tree().create_timer(STAGE_SECONDS).timeout
-		# Counted after the wait, so a kill during a stage discards that stage.
-		if _kill_requested:
+	else:
+		_laptop.set_status("×%.2f" % progress_mult, label.to_lower())
+	if not job.is_empty():
+		var burned: float = burned_before + float(beat.get("tokens", 0.0))
+		_laptop.set_meter("tokens", "burn", clampf(burned / requirement, 0.0, 1.0), "%s / %s" % [
+			NumberFormat.format(minf(burned, requirement)), NumberFormat.format(requirement),
+		])
+	var shake: float = 10.0 if loud else 4.0
+	rig.shake(shake)
+	if loud:
+		rig.flash_screen("energy")
+		rig.push_line(label, "energy")
+		UiSound.play("combo" if kind != BurnSpectacle.KIND_FINAL else "complete")
+	else:
+		UiSound.play_proc(_proc_depth)
+	if loud:
+		_proc_depth += 1
+	_pulse_beat_heat(beat)
+
+
+func _fast_forward(
+	beats: Array, current: Dictionary, job: Dictionary, requirement: float, burned_before: float
+) -> void:
+	var last: Dictionary = current
+	for beat in beats:
+		if not beat is Dictionary:
+			continue
+		last = beat
+	if last != current:
+		_present_beat(last, job, requirement, burned_before)
+
+
+func _hold_beat(seconds: float) -> void:
+	var remaining: float = maxf(0.0, seconds)
+	while remaining > 0.0:
+		if _kill_requested or _skip_requested:
 			return
-		_stages_completed += 1
+		var slice: float = minf(remaining, HOLD_SLICE)
+		await get_tree().create_timer(slice).timeout
+		remaining -= slice
 
 
-## Heat moves during a burn, so the rig smokes as each stage lands instead of
-## only reacting once the batch is committed.
-func _pulse_stage_heat(stage: Dictionary) -> void:
-	var before: Dictionary = stage.get("before", {})
-	var after: Dictionary = stage.get("after", {})
-	if absf(float(after.get("heat", 0.0)) - float(before.get("heat", 0.0))) <= 0.5:
+func _pulse_beat_heat(beat: Dictionary) -> void:
+	if absf(float(beat.get("heat", 0.0))) <= 0.5:
 		return
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	# The batch is still being animated, so none of its heat has reached the rig
-	# yet: this shows where the rig will be once the stages so far land.
 	var projected: float = maxf(
 		0.0,
-		float(Simulation.run_state.compute.get("heat", 0.0)) + float(after.get("heat", 0.0))
+		float(Simulation.run_state.compute.get("heat", 0.0)) + float(beat.get("heat", 0.0))
 	)
 	rig.set_heat(
 		projected,
@@ -622,37 +683,17 @@ func _pulse_stage_heat(stage: Dictionary) -> void:
 	)
 
 
-func _stage_summary(stage: Dictionary) -> String:
-	var before: Dictionary = stage.get("before", {})
-	var after: Dictionary = stage.get("after", {})
-	var parts: PackedStringArray = []
-	var progress_delta: float = float(after.get("progress_mult", 1.0)) / maxf(0.01, float(before.get("progress_mult", 1.0)))
-	if absf(progress_delta - 1.0) > 0.01:
-		parts.append("×%.2f progress" % progress_delta)
-	var quality_delta: float = float(after.get("quality", 0.0)) - float(before.get("quality", 0.0))
-	if absf(quality_delta) > 0.5:
-		parts.append("%s%s quality" % [
-			"+" if quality_delta > 0.0 else "-",
-			JobPresentation.quality_mark(absf(quality_delta)),
-		])
-	var bug_delta: float = float(after.get("known_bugs", 0.0)) - float(before.get("known_bugs", 0.0))
-	if absf(bug_delta) > 0.4:
-		parts.append("%+d bug(s)" % int(round(bug_delta)))
-	var heat_delta: float = float(after.get("heat", 0.0)) - float(before.get("heat", 0.0))
-	if absf(heat_delta) > 0.5:
-		parts.append("%+d heat" % int(round(heat_delta)))
-	if float(stage.get("repeated_previous", 0.0)) > 0.0:
-		parts.append("repeated the stage above")
-	if parts.is_empty():
-		return "no change"
-	return ", ".join(parts)
-
-
 func _on_kill() -> void:
 	_kill_requested = true
 	_laptop.set_status(
 		"killed", "^C after %d stage(s). The rest of the batch is discarded." % _stages_completed
 	)
+
+
+func _on_skip() -> void:
+	if not _burning or _kill_requested:
+		return
+	_skip_requested = true
 
 
 func _on_boost() -> void:

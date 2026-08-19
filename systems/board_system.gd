@@ -620,6 +620,14 @@ func resolve_burn(
 			) + repeat_count
 		_apply_stage_rules(rules, module, stage, batch, job, messages)
 
+		var previous_id: String = str(board_slots[int(order[position - 1])]) if position > 0 else ""
+		var next_id: String = (
+			str(board_slots[int(order[position + 1])]) if position < order.size() - 1 else ""
+		)
+		var live_combos: Array = []
+		for combo in module.active_combos(previous_id, next_id):
+			live_combos.append({"name": str(combo.get("name", ""))})
+
 		stages.append({
 			"slot_index": index,
 			"position": position,
@@ -631,6 +639,7 @@ func resolve_burn(
 			"repeated_previous": repeat,
 			"repeat_strength": repeat_strength,
 			"repeat_count": repeat_count,
+			"combos": live_combos,
 			"stage": stage,
 			"before": before,
 			"after": _snapshot(batch),

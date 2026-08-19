@@ -16,6 +16,11 @@ const CUES := {
 	"accept": [520.0, 830.0, 0.16, "sine", 0.3],
 	"buy": [900.0, 1350.0, 0.13, "square", 0.22],
 	"burn": [200.0, 80.0, 0.26, "noise", 0.26],
+	# Quiet multiplier ticks. Three pitches so a cascade climbs instead of
+	# repeating the same blip.
+	"proc": [480.0, 720.0, 0.07, "sine", 0.2],
+	"proc_mid": [620.0, 920.0, 0.07, "sine", 0.22],
+	"proc_high": [780.0, 1180.0, 0.08, "sine", 0.24],
 	"complete": [660.0, 1320.0, 0.34, "sine", 0.32],
 	"error": [240.0, 150.0, 0.2, "square", 0.24],
 	# Two-tone klaxon for the rig's heat beacon: a long fall, loud enough to be
@@ -30,6 +35,13 @@ const CUES := {
 ## to sound like more than a confirmation, and a rising arpeggio is the shortest
 ## thing that reads as one: the notes run up, the last one rings out.
 const SEQUENCES := {
+	"combo": {
+		"notes": [659.0, 880.0],
+		"note_seconds": 0.07,
+		"tail_seconds": 0.18,
+		"waveform": "sine",
+		"volume": 0.28,
+	},
 	"fanfare": {
 		"notes": [523.0, 659.0, 784.0, 1047.0],
 		"note_seconds": 0.09,
@@ -62,6 +74,17 @@ static func play(cue: String) -> void:
 	if _instance == null or not is_instance_valid(_instance):
 		return
 	_instance._play_cue(cue)
+
+
+## A cascade tick. `depth` is how many named procs have already landed, so the
+## pitch climbs as the batch gets more interesting.
+static func play_proc(depth: int = 0) -> void:
+	if depth >= 4:
+		play("proc_high")
+	elif depth >= 2:
+		play("proc_mid")
+	else:
+		play("proc")
 
 
 func _ready() -> void:

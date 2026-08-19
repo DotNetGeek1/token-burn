@@ -4,9 +4,9 @@ extends VenueScene
 ##
 ## Same wire, same offers, same accept call as the printed table, read as a board
 ## in a room instead. The office writes the state of the business up the left —
-## what demand is, what reputation is worth, how loaded the slate already is —
-## the contracts themselves are cards on the big board, including the action
-## that accepts them without opening a separate detail surface.
+## how many contracts are on the wire, what reputation is worth, how loaded the
+## slate already is — the contracts themselves are cards on the big board,
+## including the action that accepts them without opening a separate detail surface.
 ##
 ## What the table could never do is set the fee large. A contract is taken or left
 ## on its fee against what it will cost to deliver, and on a board there is room
@@ -24,6 +24,8 @@ var _kicker: Label = null
 var _index_lines: VBoxContainer = null
 var _warning: Label = null
 var _counters: VBoxContainer = null
+var _take_all_rule: ColorRect = null
+var _take_all_row: ConsoleMenuRow = null
 var _board_panel: VenuePanel = null
 var _board: VenueBoard = null
 var _notice: Label = null
@@ -78,6 +80,15 @@ func _build_index() -> void:
 	_counters.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(_counters)
 
+	_take_all_rule = ConsoleStyle.rule(0.22)
+	content.add_child(_take_all_rule)
+
+	_take_all_row = ConsoleMenuRow.new()
+	_take_all_row.index_label = "A"
+	_take_all_row.headline = "TAKE ALL THAT FIT"
+	_take_all_row.pressed.connect(_on_take_all_pressed)
+	content.add_child(_take_all_row)
+
 
 func _build_board() -> void:
 	_board_panel = add_panel("board", "On the wire", {
@@ -128,6 +139,7 @@ func refresh() -> void:
 		_active = WIRE if not Array(shelves[WIRE]).is_empty() else SLATE
 	_refresh_index(shelves)
 	_refresh_counters(shelves)
+	_refresh_take_all(shelves)
 	_refresh_board(shelves)
 	_refresh_notice()
 
@@ -146,7 +158,7 @@ func _refresh_index(shelves: Dictionary) -> void:
 		child.queue_free()
 	var state := Simulation.run_state
 	var lines: Array = [
-		{"stat": "Demand", "value": "%d" % int(state.business.get("demand", 0.0))},
+		{"stat": "Board", "value": "%d" % Array(shelves.get(WIRE, [])).size()},
 		{
 			"stat": "Advertising",
 			"value": "%s / day" % NumberFormat.format_cash(
@@ -268,6 +280,19 @@ func _on_counter_pressed(key: String) -> void:
 	_board.clear_selection()
 	refresh()
 	lean_on("board")
+
+
+func _refresh_take_all(shelves: Dictionary) -> void:
+	var on_wire: bool = _active == WIRE
+	var open: int = 0
+	if on_wire:
+		for job in Array(shelves.get(WIRE, [])):
+			if _can_accept(str(Dictionary(job).get("id", ""))):
+				open += 1
+	_take_all_rule.visible = on_wire
+	_take_all_row.visible = on_wire
+	_take_all_row.disabled = open <= 0
+	_take_all_row.value_text = ""
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -478,6 +503,26 @@ func _accept_job(job_id: String) -> void:
 		get_tree().call_group("ui_refresh", "refresh")
 
 
+func _on_take_all_pressed() -> void:
+	if _active != WIRE:
+		return
+	var ids: Array[String] = []
+	for job in Array(Simulation.run_state.business.get("job_offers", [])):
+		ids.append(str(Dictionary(job).get("id", "")))
+	var taken: int = 0
+	for job_id in ids:
+		if not _can_accept(job_id):
+			continue
+		if Simulation.accept_job(job_id):
+			taken += 1
+	if taken <= 0:
+		return
+	UiSound.play("accept")
+	_board.clear_selection()
+	refresh()
+	get_tree().call_group("ui_refresh", "refresh")
+
+
 func _on_ascend_pressed() -> void:
 	UiSound.play("tap")
 	SceneRouter.open_terms()
@@ -518,3 +563,5 @@ func _layout_counter_rows() -> void:
 	var pad: int = ConsoleMetrics.pad_h(scale)
 	for key in _counter_rows:
 		(_counter_rows[key] as ConsoleMenuRow).set_metrics(font, height, pad)
+	if _take_all_row != null:
+		_take_all_row.set_metrics(font, height, pad)

@@ -8,6 +8,10 @@ const MAX_TRACE_ENTRIES := 500
 var _evaluator := ExpressionEvaluator.new()
 var _trace: Array[Dictionary] = []
 var _guard: ChainGuard = null
+## Subscription presentation extras (`source_kind`, `combo_name`) stacked for
+## the effect currently being applied, so a nested trigger dispatch can push
+## its own source and pop back to the outer one.
+var _source_stack: Array[Dictionary] = []
 
 
 func clear_trace() -> void:
@@ -140,6 +144,11 @@ func dispatch(
 			var entry_params: Dictionary = entry.get("parameters", {})
 			entry_eval_ctx["parameters"] = entry_params
 			mod_ctx.parameters = entry_params
+			var sub: Dictionary = entry["sub"]
+			_source_stack.append({
+				"source_kind": str(sub.get("source_kind", "")),
+				"combo_name": str(sub.get("combo_name", "")),
+			})
 			var tx := _apply_effect(
 				mod_ctx,
 				effect,
@@ -150,9 +159,10 @@ func dispatch(
 				str(entry.get("source_id", "")),
 				phase
 			)
+			_source_stack.pop_back()
 			if tx != null:
 				transactions.append(tx)
-				var effect_id: String = str(entry["sub"].get("source_id", entry["sub"].get("id", "")))
+				var effect_id: String = str(sub.get("source_id", sub.get("id", "")))
 				_guard.record(event_name, effect_id)
 
 	_finalize_to_run_state(mod_ctx)
@@ -636,6 +646,14 @@ func _record_trace(
 		"source_id": source_id,
 		"phase": phase,
 	}
+	if not _source_stack.is_empty():
+		var extras: Dictionary = _source_stack[_source_stack.size() - 1]
+		var source_kind: String = str(extras.get("source_kind", ""))
+		var combo_name: String = str(extras.get("combo_name", ""))
+		if source_kind != "":
+			metadata["source_kind"] = source_kind
+		if combo_name != "":
+			metadata["combo_name"] = combo_name
 	if not metadata.is_empty():
 		entry["metadata"] = metadata.duplicate(true)
 	_trace.append(entry)

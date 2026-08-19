@@ -69,8 +69,8 @@ func burn_until_session_over(harness: UiHarness) -> void:
 		shell.switch_tab("board")
 		await harness.settle()
 	# One real click proves BURN is on the glass and hittable. The rest of
-	# the session is the batch runner's own loop: each UI burn waits out a
-	# 0.9s stage animation, and a twelve-round campaign cannot afford that.
+	# the session is the batch runner's own loop: each UI burn waits out the
+	# spectacle, and a twelve-round campaign cannot afford that.
 	var burn: Control = harness.driver.command("BURN")
 	if burn != null:
 		await harness.driver.press(burn)
