@@ -299,12 +299,12 @@ func add_panel(region: String, heading: String = "", options: Dictionary = {}) -
 	var panel := VenuePanel.new()
 	panel.name = region.capitalize()
 	panel.set_heading(heading)
-	# A measured photographed surface gets a live four-corner texture mount. A
-	# venue without those measurements keeps the ordinary flat mount. In console
-	# mode the panel is reparented out of either mount and into the normal column.
+	# Native uses the true projective mount. Web cannot safely keep the
+	# SubViewport + Polygon2D pair alive across routed screens, so it keeps a
+	# plain Node2D which `_place_panel_affine` skews onto the photographed plane.
+	# That preserves perspective without the render-resource teardown that caused
+	# blank canvases.
 	var measured: PackedVector2Array = AssetCatalog.venue_plane(venue_key(), region)
-	# SubViewport plus Polygon2D index buffers crash the web Compatibility
-	# renderer on a scene change. The browser keeps the axis-aligned mount.
 	var surface: Node = VenueSurface.new() if _uses_warped_surface(measured) else Node2D.new()
 	surface.name = "%sSurface" % region.capitalize()
 	_stage.add_child(surface)
@@ -745,8 +745,8 @@ func _region_rect(region: String, view: Vector2) -> Rect2:
 
 
 ## Axis-aligned mount of a photographed plane: the largest rectangle that still
-## sits on the writing surface. Lean-in and warped surfaces keep using the
-## bounding region; this is only for the Web/Compatibility fallback.
+## sits on the writing surface. Kept as a conservative last-resort fallback for a
+## degenerate measured plane; normal Web panels use `_place_panel_affine` instead.
 func _axis_aligned_region_rect(region: String, view: Vector2) -> Rect2:
 	var authored: Rect2 = AssetCatalog.venue_axis_aligned_region(venue_key(), region)
 	if authored.size.x <= 0.0 or authored.size.y <= 0.0:
@@ -793,21 +793,25 @@ func _place_panels(view: Vector2) -> void:
 		# else reports its full height, so the layout can see what it needs.
 		panel.set_scrollable(leaning)
 		var plane: PackedVector2Array = AssetCatalog.venue_plane(venue_key(), region)
-		if plane.size() == 4 and entry["surface"] is VenueSurface:
-			_place_panel_on_plane(entry, panel, plane, view)
-			continue
-		# A measured trapezoid that cannot be warped still has an honest inner
-		# rectangle. Growing to the panel's minimum size would walk that inner
-		# rect back out onto the frame, so the live controls stay put.
 		if plane.size() == 4:
+			if entry["surface"] is VenueSurface:
+				_place_panel_on_plane(entry, panel, plane, view)
+				continue
+			if _place_panel_affine(entry, panel, plane, view):
+				continue
+			# A malformed measured plane still gets the conservative inner rectangle
+			# rather than falling back to the full bounding box and painting controls
+			# over a rail.
 			var inner: Rect2 = _axis_aligned_region_rect(region, view)
 			if inner.size.x > 0.0 and inner.size.y > 0.0:
 				rect = _camera(inner)
+				_reset_flat_surface(entry)
 				panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
 				panel.custom_minimum_size = Vector2.ZERO
 				panel.position = rect.position
 				panel.size = rect.size
 				continue
+		_reset_flat_surface(entry)
 		rect = _camera(rect)
 		panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
 		panel.custom_minimum_size = Vector2.ZERO
@@ -828,6 +832,51 @@ func _place_panels(view: Vector2) -> void:
 			rect = _clamp_to_window(rect, view)
 		panel.position = rect.position
 		panel.size = rect.size
+
+
+## Web cannot use the projective SubViewport/Polygon2D mount without risking the
+## Compatibility renderer during route changes. CanvasItem transforms are safe,
+## and although they are affine rather than projective they preserve the panel's
+## photographed angle and skew. The best-fit parallelogram is centred over the
+## four measured corners, so perspective error is shared between opposite rails
+## instead of every control being forced horizontal inside a bounding rectangle.
+func _place_panel_affine(
+	entry: Dictionary,
+	panel: VenuePanel,
+	plane: PackedVector2Array,
+	view: Vector2
+) -> bool:
+	if not entry["surface"] is Node2D or plane.size() != 4:
+		return false
+	var points := PackedVector2Array()
+	for corner in plane:
+		points.append(_camera(Rect2(corner * view, Vector2.ZERO)).position)
+	var across: Vector2 = ((points[1] - points[0]) + (points[2] - points[3])) * 0.5
+	var down: Vector2 = ((points[3] - points[0]) + (points[2] - points[1])) * 0.5
+	if across.length() < 1.0 or down.length() < 1.0:
+		return false
+	var center: Vector2 = (points[0] + points[1] + points[2] + points[3]) * 0.25
+	var origin: Vector2 = center - (across + down) * 0.5
+	var face := Vector2(across.length(), down.length())
+	panel.custom_minimum_size = Vector2.ZERO
+	var local_size: Vector2 = face.max(panel.get_combined_minimum_size())
+	if local_size.x <= 0.0 or local_size.y <= 0.0:
+		return false
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
+	panel.position = Vector2.ZERO
+	panel.size = local_size
+	var surface: Node2D = entry["surface"]
+	surface.transform = Transform2D(
+		across / local_size.x,
+		down / local_size.y,
+		origin
+	)
+	return true
+
+
+func _reset_flat_surface(entry: Dictionary) -> void:
+	if entry["surface"] is Node2D:
+		(entry["surface"] as Node2D).transform = Transform2D.IDENTITY
 
 
 ## Fits a panel into the photographed quadrilateral without allowing its
