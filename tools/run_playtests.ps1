@@ -37,6 +37,10 @@ if ($args.Count -gt 0 -and ($args[0] -eq "-Windowed" -or $args[0] -eq "--windowe
     $forward = @($args)
 }
 
+if ($forward.Count -gt 0 -and $forward[0] -eq "--") {
+    $forward = @($forward | Select-Object -Skip 1)
+}
+
 if (-not (Test-Path $buildDir)) {
     New-Item -ItemType Directory -Path $buildDir | Out-Null
 }
@@ -49,6 +53,7 @@ if ($windowed) {
 }
 $godotArgs += "--path", $repoRoot, "res://tests/run_playtests.tscn"
 if ($forward.Count -gt 0) {
+	$godotArgs += "--"
     $godotArgs += $forward
 }
 

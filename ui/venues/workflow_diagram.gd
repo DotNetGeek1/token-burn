@@ -88,12 +88,6 @@ func _layout_cards() -> void:
 	var card_width: float = minf(available_card_width, MAX_CARD_WIDTH * _scale)
 	var top_pad: float = TOP_PAD * _scale
 	var card_height: float = CARD_HEIGHT * _scale
-	if rows > 0 and size.y > 1.0:
-		var room: float = (
-			size.y - top_pad * 2.0 - gap * float(maxi(0, rows - 1))
-		) / float(rows)
-		if room > 1.0:
-			card_height = minf(card_height, room)
 	var block_height: float = (
 		float(rows) * card_height + float(maxi(0, rows - 1)) * gap
 	)

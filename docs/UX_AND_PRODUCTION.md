@@ -31,10 +31,16 @@ Reusable office props:
 
 ## 2. Platform direction
 
-- Design for mobile from the beginning.
-- Use portrait orientation as the primary layout.
-- Support desktop and web builds for testing.
-- Consider tablet and landscape layouts after the portrait UX is stable.
+- Design mobile gameplay for landscape orientation only.
+- Support desktop and web gameplay from 1920×1080 upward.
+- Keep controls readable and reachable at the landscape handset target used by
+	the UI playtests (`854×480` design pixels).
+- Portrait may retain a graceful console fallback, but it is not a release
+	target and must not drive new venue composition.
+
+Venue screens use photographed rooms with live controls mounted onto authored
+display regions. See [Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md)
+before adding or repositioning a venue panel.
 
 ## 3. Main navigation
 

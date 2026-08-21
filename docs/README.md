@@ -17,8 +17,8 @@ The target experience is closer to **Balatro-style build construction** than a r
 ## Recommended direction
 
 - **Engine:** Godot 4
-- **Primary platform:** Mobile, portrait orientation
-- **Secondary builds:** Desktop and web for development and testing
+- **Primary platform:** Mobile in landscape orientation
+- **Secondary builds:** Desktop and web, with 1920×1080 as the supported desktop floor
 - **Visual style:** 2D interface with a small orthographic 2.5D office diorama
 - **Simulation model:** Data-driven, deterministic, and testable without rendering
 - **Initial scope:** Local-only, no backend, no real AI API usage
@@ -27,6 +27,7 @@ The target experience is closer to **Balatro-style build construction** than a r
 
 - [Game Design Overview](GAME_DESIGN.md)
 - [Technical Architecture](TECHNICAL_ARCHITECTURE.md)
+- [Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md)
 - [UX and Production Plan](UX_AND_PRODUCTION.md)
 - [Late-game escalation plan](plans/late-game-escalation.md)
 

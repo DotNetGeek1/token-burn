@@ -123,6 +123,7 @@ var _scale: float = 1.0
 ## resizing produces.
 var _laying_out: bool = false
 var _relayout_queued: bool = false
+var _panel_minimums: Dictionary = {}
 
 
 # --- Subclass contract -------------------------------------------------------
@@ -169,6 +170,12 @@ func _room_layout_supported() -> bool:
 	return true
 
 
+## Whether a desktop window outside the artwork's authored aspect may still use
+## the painted composition. Handsets remain subject to the console fallback.
+func _painted_desktop_at_any_aspect() -> bool:
+	return false
+
+
 # --- Chassis ----------------------------------------------------------------
 
 func _ready() -> void:
@@ -186,6 +193,12 @@ func _ready() -> void:
 	refresh()
 	# The panels are sized by the layout pass, and anything that lays itself out
 	# against its own width needs a second look once it has one.
+	call_deferred("_layout")
+
+
+func route_activated() -> void:
+	_layout()
+	refresh()
 	call_deferred("_layout")
 
 
@@ -477,7 +490,27 @@ func _on_panel_minimum_changed() -> void:
 
 func _flush_relayout() -> void:
 	_relayout_queued = false
+	if not _panel_minimums_changed():
+		return
 	_layout()
+
+
+func _panel_minimums_changed() -> bool:
+	for entry in _entries:
+		var panel: VenuePanel = entry["panel"]
+		var key: int = panel.get_instance_id()
+		if not _panel_minimums.has(key):
+			return true
+		if not panel.get_combined_minimum_size().is_equal_approx(_panel_minimums[key]):
+			return true
+	return false
+
+
+func _capture_panel_minimums() -> void:
+	_panel_minimums.clear()
+	for entry in _entries:
+		var panel: VenuePanel = entry["panel"]
+		_panel_minimums[panel.get_instance_id()] = panel.get_combined_minimum_size()
 
 
 func _layout() -> void:
@@ -490,8 +523,6 @@ func _layout() -> void:
 
 func _layout_pass() -> void:
 	var view: Vector2 = get_viewport_rect().size
-	if size.x > 1.0 and size.y > 1.0:
-		view = size
 	if view.x <= 1.0 or view.y <= 1.0:
 		return
 	_scale = ConsoleMetrics.compute_scale(view.y, view.x)
@@ -506,7 +537,13 @@ func _layout_pass() -> void:
 	_room_mode = _use_room_mode(handset, shape_fits)
 	_console_mode = (
 		not _painted_ready()
-		or (not _room_mode and (handset or not shape_fits))
+		or (
+			not _room_mode
+			and (
+				handset
+				or (not shape_fits and not _painted_desktop_at_any_aspect())
+			)
+		)
 	)
 	if not _room_mode:
 		_leaning_on = ""
@@ -516,16 +553,24 @@ func _layout_pass() -> void:
 	_layout_backdrop(view)
 	_scrim.color = _scrim_color()
 	_mount_panels()
+	# Panel chrome contributes to its minimum size, so apply the current scale
+	# before the painted placement measures that minimum.
+	for entry in _entries:
+		(entry["panel"] as VenuePanel).set_metrics(console_scale())
+	_layout_hint_rows()
 	if _console_mode:
 		_layout_console(view)
 	else:
 		_layout_painted(view)
-	for entry in _entries:
-		(entry["panel"] as VenuePanel).set_metrics(console_scale())
-	_layout_hint_rows()
 	_layout_step_back()
 	_sync_lean_chrome()
 	_on_venue_layout()
+	# Venue content such as tile boards needs the placed width before it can pick
+	# columns and font metrics. Refit painted panels once after that bounded pass
+	# so their final geometry includes the resulting minimum size.
+	if not _console_mode:
+		_place_panels(view)
+	_capture_panel_minimums()
 
 
 func _use_room_mode(handset: bool, shape_fits: bool) -> bool:
@@ -795,8 +840,9 @@ func _place_panels(view: Vector2) -> void:
 		var plane: PackedVector2Array = AssetCatalog.venue_plane(venue_key(), region)
 		if plane.size() == 4:
 			if entry["surface"] is VenueSurface:
-				_place_panel_on_plane(entry, panel, plane, view)
-				continue
+				if _place_panel_on_plane(entry, panel, plane, view):
+					continue
+				(entry["surface"] as VenueSurface).mount_flat(panel)
 			if _place_panel_affine(entry, panel, plane, view):
 				continue
 			# A malformed measured plane still gets the conservative inner rectangle
@@ -813,9 +859,6 @@ func _place_panels(view: Vector2) -> void:
 				continue
 		_reset_flat_surface(entry)
 		rect = _camera(rect)
-		panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
-		panel.custom_minimum_size = Vector2.ZERO
-		panel.size = rect.size
 		# A panel the player is working is kept whole and kept on screen. It cannot
 		# be smaller than what is mounted in it, so the rect the artwork authored is
 		# a request rather than a guarantee: a contract sheet with a fee, a deadline
@@ -827,11 +870,29 @@ func _place_panels(view: Vector2) -> void:
 		# the artwork hung it: growing the far side of a shop to fit type nobody can
 		# read would walk the place apart, and the panels around the one being read
 		# are supposed to be off the window anyway.
-		if _cam_zoom <= 1.001 or leaning:
+		if leaning:
 			rect.size = rect.size.max(panel.get_combined_minimum_size())
 			rect = _clamp_to_window(rect, view)
-		panel.position = rect.position
-		panel.size = rect.size
+		_place_panel_rect(entry, panel, rect)
+
+
+func _place_panel_rect(entry: Dictionary, panel: VenuePanel, rect: Rect2) -> void:
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT, true)
+	panel.custom_minimum_size = Vector2.ZERO
+	if entry["surface"] is Node2D:
+		var local_size: Vector2 = rect.size.max(panel.get_combined_minimum_size())
+		if local_size.x <= 0.0 or local_size.y <= 0.0:
+			return
+		panel.position = Vector2.ZERO
+		panel.size = local_size
+		(entry["surface"] as Node2D).transform = Transform2D(
+			Vector2(rect.size.x / local_size.x, 0.0),
+			Vector2(0.0, rect.size.y / local_size.y),
+			rect.position
+		)
+		return
+	panel.position = rect.position
+	panel.size = rect.size
 
 
 ## Web cannot use the projective SubViewport/Polygon2D mount without risking the
@@ -889,19 +950,19 @@ func _place_panel_on_plane(
 	panel: VenuePanel,
 	plane: PackedVector2Array,
 	view: Vector2
-) -> void:
+) -> bool:
 	var points := PackedVector2Array()
 	for corner in plane:
 		points.append(_camera(Rect2(corner * view, Vector2.ZERO)).position)
 	var across: Vector2 = ((points[1] - points[0]) + (points[2] - points[3])) * 0.5
 	var down: Vector2 = ((points[3] - points[0]) + (points[2] - points[1])) * 0.5
 	if across.length() < 1.0 or down.length() < 1.0:
-		return
+		return false
 	var face := Vector2(across.length(), down.length())
 	panel.custom_minimum_size = Vector2.ZERO
 	var local_size: Vector2 = face.max(panel.get_combined_minimum_size())
 	var surface: VenueSurface = entry["surface"]
-	surface.set_surface(panel, points, local_size)
+	return surface.set_surface(panel, points, local_size)
 
 
 ## Keeps a panel inside the window: a rect that would hang over an edge is pulled

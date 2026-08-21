@@ -13,10 +13,10 @@ const SCRATCH_PROFILE := "user://playtest_profile.json"
 const SCRATCH_SAVE := "user://playtest_save.json"
 const SHOTS_DIR := "res://build/playtests"
 
-## The two sizes a persona sweeps. Desktop is the authored landscape; the
-## handset-ish size is what `ConsoleMetrics` reflows for, which is the axis
-## most likely to hide a button off the glass.
-const VIEW_DESKTOP := Vector2i(1280, 720)
+## The supported desktop floor and the landscape handset target. Compact desktop
+## remains available for defensive fallback checks, but is not a release target.
+const VIEW_DESKTOP := Vector2i(1920, 1080)
+const VIEW_COMPACT_DESKTOP := Vector2i(1280, 720)
 const VIEW_HANDSET := Vector2i(854, 480)
 
 ## Fade out plus fade in, plus a little for the scene's first layout pass.
@@ -184,6 +184,8 @@ func _wait_for_route(route: String) -> void:
 		await get_tree().process_frame
 	if SceneRouter.route_changed.is_connected(on_changed):
 		SceneRouter.route_changed.disconnect(on_changed)
+	while SceneRouter.is_switching() and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
 	# A few frames after the signal: the swap is deferred to end-of-frame and
 	# the new scene needs a layout pass before anything on it has a real rect.
 	# Frames, not a SceneTreeTimer: a timer can sit forever if the tree is

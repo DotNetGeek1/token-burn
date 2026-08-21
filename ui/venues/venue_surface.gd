@@ -62,13 +62,19 @@ func mount_panel(panel: Control) -> void:
 		panel.reparent(_viewport)
 
 
-func set_surface(panel: Control, corners: PackedVector2Array, local_size: Vector2) -> void:
+func mount_flat(panel: Control) -> void:
+	if panel.get_parent() != self:
+		panel.reparent(self)
+	visible = true
+
+
+func set_surface(panel: Control, corners: PackedVector2Array, local_size: Vector2) -> bool:
 	if _viewport == null or _polygon == null or _material == null or _input == null:
 		visible = false
-		return
+		return false
 	if corners.size() != 4:
 		visible = false
-		return
+		return false
 	visible = true
 	mount_panel(panel)
 	var pixels := Vector2i(
@@ -88,13 +94,13 @@ func set_surface(panel: Control, corners: PackedVector2Array, local_size: Vector
 		_bounds = _bounds.expand(corner)
 	if _bounds.size.x < 1.0 or _bounds.size.y < 1.0:
 		visible = false
-		return
+		return false
 	var normalized := PackedVector2Array()
 	for corner in _quad:
 		normalized.append((corner - _bounds.position) / _bounds.size)
 	if not _set_inverse_homography(normalized):
 		visible = false
-		return
+		return false
 
 	_polygon.polygon = PackedVector2Array([
 		_bounds.position,
@@ -115,6 +121,7 @@ func set_surface(panel: Control, corners: PackedVector2Array, local_size: Vector
 
 	_input.position = _bounds.position
 	_input.size = _bounds.size
+	return true
 
 
 func _on_surface_input(event: InputEvent) -> void:

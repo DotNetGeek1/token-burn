@@ -45,6 +45,12 @@ Or `./tools/run_playtests.ps1`, which tees output to `build/playtests.log`
 and also fails if the log contains `SCRIPT ERROR`. Godot does not fail a
 test when a UI callback throws.
 
+Run one playtest while iterating with `--filter=`:
+
+```powershell
+./tools/run_playtests.ps1 -- --filter=pt_workflow_editor
+```
+
 Must be launched as a scene, same as the fast suite: autoloads are not
 registered under `--script`.
 
@@ -96,6 +102,7 @@ See [docs/README.md](docs/README.md) for the design overview and linked specs:
 
 - [Game Design Overview](docs/GAME_DESIGN.md)
 - [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
+- [Venue Layout Architecture](docs/VENUE_LAYOUT_ARCHITECTURE.md)
 - [UX and Production Plan](docs/UX_AND_PRODUCTION.md)
 - [Late-game escalation plan](docs/plans/late-game-escalation.md)
 

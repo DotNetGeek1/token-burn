@@ -28,6 +28,10 @@ Perks, jobs, upgrades, and events must describe behaviour through reusable data 
 
 The simulation should be authoritative. The UI observes state and submits player actions but does not contain economic logic.
 
+Venue UI has a separate shared layout contract covering painted rooms, handset
+lean-in, console fallback, projective native surfaces, and flat web surfaces.
+See [Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md).
+
 ## 3. Core state model
 
 ```text

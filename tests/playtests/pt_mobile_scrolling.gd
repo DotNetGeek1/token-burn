@@ -178,26 +178,6 @@ func _build_workflow_door_stays_reachable(harness: UiHarness) -> void:
 	)
 	workflow_venue._scale = saved_scale
 	workflow_venue._lean_zoom = saved_zoom
-	# Portrait is too far from the artwork's shape and still uses the stacked
-	# fallback. Keep checking it independently from landscape room mode.
-	var workflow_scroll: ScrollContainer = workflow_venue.find_child("Console", true, false)
-	assert_true(
-		workflow_scroll != null and workflow_scroll.visible,
-		"Mobile Workflows uses its responsive console layout"
-	)
-	assert_true(
-		workflow_venue._right.position.y
-		>= workflow_venue._left.position.y + workflow_venue._left.size.y,
-		"The mobile module menu ends before the workflow diagram begins"
-	)
-	for card in workflow_venue._diagram._cards:
-		if not card.visible:
-			continue
-		assert_true(
-			card.position.x + card.size.x <= workflow_venue._diagram.size.x + 1.0,
-			"A mobile workflow post-it stays within the diagram width"
-		)
-
 	# Recreate the connected 2340x1080 phone's zoomed board in design units. The
 	# regression screenshot had the OptionButton crossing the photographed rail
 	# into the first stage; the compensated scale must make the authored split

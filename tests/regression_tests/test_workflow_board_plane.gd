@@ -7,12 +7,29 @@ extends TestCase
 
 
 func run() -> void:
+	_test_workflow_keeps_compact_desktop_painted()
 	_test_inscribed_rect_matches_the_photographed_rails()
 	_test_workflow_web_safe_rect_is_inside_the_bounding_box()
 	_test_inscribed_corners_stay_on_the_plane()
 	_test_a_square_plane_is_unchanged()
+	_test_projective_surface_rejects_a_degenerate_plane()
 	_test_affine_fallback_follows_workflow_perspective()
-	_test_affine_fallback_follows_build_index_perspective()
+	_test_build_index_uses_its_rectangular_flat_policy()
+
+
+func _test_workflow_keeps_compact_desktop_painted() -> void:
+	var generic_venue := VenueScene.new()
+	var workflow_venue: Node = load("res://ui/venues/venue_workflows.gd").new()
+	assert_false(
+		generic_venue._painted_desktop_at_any_aspect(),
+		"Other venues retain the shared desktop aspect fallback"
+	)
+	assert_true(
+		workflow_venue._painted_desktop_at_any_aspect(),
+		"The continuous workflow whiteboard stays painted in a compact desktop window"
+	)
+	workflow_venue.free()
+	generic_venue.free()
 
 
 func _test_inscribed_rect_matches_the_photographed_rails() -> void:
@@ -77,6 +94,24 @@ func _test_a_square_plane_is_unchanged() -> void:
 	assert_almost_eq(inner.size.y, 0.6, 0.0001, "A square plane keeps its height")
 
 
+func _test_projective_surface_rejects_a_degenerate_plane() -> void:
+	var surface := VenueSurface.new()
+	var panel := VenuePanel.new()
+	surface.add_child(panel)
+	var accepted: bool = surface.set_surface(
+		panel,
+		PackedVector2Array([
+			Vector2(100.0, 100.0),
+			Vector2(200.0, 100.0),
+			Vector2(300.0, 100.0),
+			Vector2(400.0, 100.0),
+		]),
+		Vector2(200.0, 100.0)
+	)
+	assert_false(accepted, "A degenerate projective plane reports placement failure")
+	surface.free()
+
+
 func _test_affine_fallback_follows_workflow_perspective() -> void:
 	var plane: PackedVector2Array = AssetCatalog.venue_plane("workflows", "board")
 	var placed: Dictionary = _place_affine(plane)
@@ -91,21 +126,34 @@ func _test_affine_fallback_follows_workflow_perspective() -> void:
 	_assert_affine_center_matches_plane(plane, placed, "Workflow")
 
 
-func _test_affine_fallback_follows_build_index_perspective() -> void:
-	var plane: PackedVector2Array = AssetCatalog.venue_plane("build", "index")
-	assert_eq(plane.size(), 4, "Build index has a measured photographed plane")
-	if plane.size() != 4:
-		return
-	var placed: Dictionary = _place_affine(plane)
-	assert_true(bool(placed.get("ok", false)), "Build index accepts the Web affine mount")
-	if not bool(placed.get("ok", false)):
-		return
-	var transform: Transform2D = placed["transform"]
-	assert_true(
-		absf(transform.x.y) > 0.001 or absf(transform.y.x) > 0.001,
-		"Build Web fallback follows the photographed index angle instead of floating upright"
+func _test_build_index_uses_its_rectangular_flat_policy() -> void:
+	var venue: Node = load("res://ui/venues/venue_build.gd").new()
+	var surface := Node2D.new()
+	var panel := VenuePanel.new()
+	surface.add_child(panel)
+	var placed: bool = venue._place_panel_affine(
+		{"region": "index", "surface": surface},
+		panel,
+		AssetCatalog.venue_plane("build", "index"),
+		Vector2(1000.0, 1000.0)
 	)
-	_assert_affine_center_matches_plane(plane, placed, "Build")
+	var expected: Rect2 = venue._region_rect("index", Vector2(1000.0, 1000.0))
+	var transform: Transform2D = surface.transform
+	var mounted_origin: Vector2 = transform * panel.position
+	var mounted_size := Vector2(
+		transform.x.length() * panel.size.x,
+		transform.y.length() * panel.size.y
+	)
+	assert_true(placed, "Build index accepts its rectangular flat mount")
+	assert_almost_eq(transform.x.y, 0.0, 0.0001, "Build index has no horizontal skew")
+	assert_almost_eq(transform.y.x, 0.0, 0.0001, "Build index has no vertical skew")
+	assert_almost_eq(mounted_origin.x, expected.position.x, 0.1, "Build index keeps its authored X")
+	assert_almost_eq(mounted_origin.y, expected.position.y, 0.1, "Build index keeps its authored Y")
+	assert_almost_eq(mounted_size.x, expected.size.x, 0.1, "Build index keeps its authored width")
+	assert_almost_eq(mounted_size.y, expected.size.y, 0.1, "Build index keeps its authored height")
+	panel.free()
+	surface.free()
+	venue.free()
 
 
 func _place_affine(plane: PackedVector2Array) -> Dictionary:

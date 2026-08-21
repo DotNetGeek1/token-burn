@@ -1,6 +1,7 @@
 # Godot 4
 .godot/
 .import/
+addons/*
 build/
 build_android/
 build_ios/

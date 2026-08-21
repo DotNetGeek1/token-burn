@@ -10,7 +10,11 @@ enum Selection { NONE, MODULE, SLOT }
 const LEFT_SHARE := 0.238
 const RIGHT_SHARE := 0.762
 const SECTION_GAP := 48
-const LEFT_INSET := 10
+## The panel plane follows the outside of the photographed whiteboard. Live
+## controls use the inner writing face so they do not print over its bevel.
+const LEFT_INSET := 32
+const RIGHT_INSET := 24
+const BOTTOM_INSET := 28
 ## More of the divider gutter belongs to the diagram side: its heading and first
 ## stage should begin clearly beyond the metal rail, not straddle it.
 const DIVIDER_RIGHT_WEIGHT := 0.65
@@ -23,6 +27,7 @@ const BOARD_WARNING := Color(0.38, 0.23, 0.035)
 var _board_panel: VenuePanel = null
 var _top_spacer: Control = null
 var _body: Control = null
+var _writing_face: Control = null
 var _left: VBoxContainer = null
 var _right: VBoxContainer = null
 
@@ -37,6 +42,7 @@ var _back_button: Button = null
 
 var _pipeline_title: Label = null
 var _prompt: Label = null
+var _diagram_scroll: ScrollContainer = null
 var _diagram: WorkflowDiagram = null
 var _status: Label = null
 var _remove_button: Button = null
@@ -54,6 +60,12 @@ func venue_key() -> String:
 
 func _painted_hints() -> bool:
 	return false
+
+
+## This room is one continuous whiteboard, so even a compact desktop window is
+## clearer with the board fitted to the room than with its two halves stacked.
+func _painted_desktop_at_any_aspect() -> bool:
+	return true
 
 
 ## The whiteboard is already enlarged by the room camera. Applying the complete
@@ -83,6 +95,10 @@ func _build_venue() -> void:
 	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_body.resized.connect(_layout_whiteboard_columns)
 	root.add_child(_body)
+	_writing_face = Control.new()
+	_writing_face.name = "WritingFace"
+	_writing_face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_body.add_child(_writing_face)
 
 	_build_module_side()
 	_build_diagram_side()
@@ -99,16 +115,20 @@ func _build_module_side() -> void:
 	_left.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_left.size_flags_stretch_ratio = LEFT_SHARE
 	_left.add_theme_constant_override("separation", 6)
-	_body.add_child(_left)
+	_writing_face.add_child(_left)
 
 	_workflow_caption = ConsoleStyle.label(
 		"WORKFLOWS", ConsoleStyle.FONT_BODY, BOARD_INK
 	)
+	_workflow_caption.clip_text = true
+	_workflow_caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_left.add_child(_workflow_caption)
 
 	_workflow_picker = OptionButton.new()
 	_workflow_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_workflow_picker.fit_to_longest_item = false
+	_workflow_picker.clip_text = true
+	_workflow_picker.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_style_board_control(_workflow_picker)
 	_workflow_picker.item_selected.connect(_on_workflow_selected)
 	_left.add_child(_workflow_picker)
@@ -139,6 +159,9 @@ func _build_module_side() -> void:
 	_tray_caption = ConsoleStyle.label(
 		"UNUSED MODULES", ConsoleStyle.FONT_SMALL, BOARD_INK
 	)
+	_tray_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tray_caption.max_lines_visible = 2
+	_tray_caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_left.add_child(_tray_caption)
 
 	_tray = WorkflowModuleTray.new()
@@ -157,7 +180,7 @@ func _build_diagram_side() -> void:
 	_right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_right.size_flags_stretch_ratio = RIGHT_SHARE
 	_right.add_theme_constant_override("separation", 6)
-	_body.add_child(_right)
+	_writing_face.add_child(_right)
 
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 10)
@@ -185,13 +208,20 @@ func _build_diagram_side() -> void:
 	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_right.add_child(_prompt)
 
+	_diagram_scroll = ScrollContainer.new()
+	_diagram_scroll.name = "DiagramScroll"
+	_diagram_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_diagram_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_diagram_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_diagram_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_right.add_child(_diagram_scroll)
+
 	_diagram = WorkflowDiagram.new()
 	_diagram.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_diagram.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_diagram.slot_tapped.connect(_on_slot_tapped)
 	_diagram.module_dropped.connect(_on_module_dropped)
 	_diagram.slot_dropped.connect(_on_slot_dropped)
-	_right.add_child(_diagram)
+	_diagram_scroll.add_child(_diagram)
 
 	_status = ConsoleStyle.paragraph(
 		"", ConsoleStyle.FONT_TINY, BOARD_INK_DIM
@@ -637,18 +667,28 @@ func _on_venue_layout() -> void:
 ## pushed the tray over the metal rail. Manual placement fixes the split to the
 ## board, and the narrow controls wrap or clip inside their side of it.
 func _layout_whiteboard_columns() -> void:
-	if _body == null or _left == null or _right == null or _body.size.x <= 1.0:
+	if (
+		_body == null
+		or _writing_face == null
+		or _left == null
+		or _right == null
+		or _body.size.x <= 1.0
+	):
 		return
-	var gap: float = float(ConsoleMetrics.px(SECTION_GAP, console_scale()))
+	var scale: float = console_scale()
+	var gap: float = float(ConsoleMetrics.px(SECTION_GAP, scale))
 	if console_mode():
 		var left_height: float = maxf(
 			_left.get_combined_minimum_size().y,
-			float(ConsoleMetrics.px(390, console_scale()))
+			float(ConsoleMetrics.px(390, scale))
 		)
 		var right_height: float = maxf(
 			_right.get_combined_minimum_size().y,
-			float(ConsoleMetrics.px(420, console_scale()))
+			float(ConsoleMetrics.px(420, scale))
 		)
+		_writing_face.position = Vector2.ZERO
+		_writing_face.size = Vector2(_body.size.x, left_height + gap + right_height)
+		_writing_face.clip_contents = false
 		_left.position = Vector2.ZERO
 		_left.size = Vector2(_body.size.x, left_height)
 		_right.position = Vector2(0.0, left_height + gap)
@@ -658,14 +698,23 @@ func _layout_whiteboard_columns() -> void:
 	var divider_x: float = _body.size.x * LEFT_SHARE
 	var left_gutter: float = gap * (1.0 - DIVIDER_RIGHT_WEIGHT)
 	var right_gutter: float = gap * DIVIDER_RIGHT_WEIGHT
-	var left_inset: float = float(ConsoleMetrics.px(LEFT_INSET, console_scale()))
+	var left_inset: float = float(ConsoleMetrics.px(LEFT_INSET, scale))
+	var right_inset: float = float(ConsoleMetrics.px(RIGHT_INSET, scale))
+	var bottom_inset: float = float(ConsoleMetrics.px(BOTTOM_INSET, scale))
+	var writing_height: float = maxf(1.0, _body.size.y - bottom_inset)
+	_writing_face.position = Vector2.ZERO
+	_writing_face.size = Vector2(maxf(1.0, _body.size.x - right_inset), writing_height)
+	_writing_face.clip_contents = true
 	_left.position = Vector2(left_inset, 0.0)
 	_left.size = Vector2(
 		maxf(1.0, divider_x - left_gutter - left_inset),
-		_body.size.y
+		writing_height
 	)
 	_right.position = Vector2(divider_x + right_gutter, 0.0)
-	_right.size = Vector2(maxf(1.0, _body.size.x - divider_x - right_gutter), _body.size.y)
+	_right.size = Vector2(
+		maxf(1.0, _writing_face.size.x - divider_x - right_gutter),
+		writing_height
+	)
 	_body.custom_minimum_size.y = 0.0
 
 

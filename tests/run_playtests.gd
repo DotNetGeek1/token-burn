@@ -28,18 +28,21 @@ func _ready() -> void:
 		ContentDatabase.reload()
 	var shots: bool = false
 	var scale: float = 12.0
+	var filter: String = ""
 	for arg in OS.get_cmdline_user_args():
 		var text: String = str(arg)
 		if text == "--shots":
 			shots = true
 		elif text.begins_with("--scale="):
 			scale = float(text.trim_prefix("--scale="))
+		elif text.begins_with("--filter="):
+			filter = text.trim_prefix("--filter=")
 	var harness := UiHarness.new()
 	add_child(harness)
 	harness.time_scale = scale
 	harness.shots_enabled = shots
 	harness.isolate()
-	var scripts: Array[String] = _discover_playtests()
+	var scripts: Array[String] = _discover_playtests(filter)
 	for path in scripts:
 		print("  Running %s..." % path)
 		var script: GDScript = load(path)
@@ -62,7 +65,7 @@ func _ready() -> void:
 	get_tree().quit(_failed)
 
 
-func _discover_playtests() -> Array[String]:
+func _discover_playtests(filter: String = "") -> Array[String]:
 	var scripts: Array[String] = []
 	var dir := DirAccess.open("res://tests/playtests")
 	if dir == null:
@@ -70,7 +73,11 @@ func _discover_playtests() -> Array[String]:
 	dir.list_dir_begin()
 	var file_name: String = dir.get_next()
 	while file_name != "":
-		if not dir.current_is_dir() and file_name.ends_with(".gd"):
+		if (
+			not dir.current_is_dir()
+			and file_name.ends_with(".gd")
+			and (filter == "" or filter in file_name)
+		):
 			scripts.append("res://tests/playtests/%s" % file_name)
 		file_name = dir.get_next()
 	dir.list_dir_end()

@@ -92,6 +92,10 @@ func current_screen() -> Node:
 	return null
 
 
+func is_switching() -> bool:
+	return _switching
+
+
 # --- The layers that outlive a scene -----------------------------------------
 
 func _build_layers() -> void:
