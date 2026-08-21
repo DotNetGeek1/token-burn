@@ -725,7 +725,9 @@ func _roll_job_risks(
 		return
 	if rng.next_float() < float(job.get("revision_risk", 0.1)):
 		var creep_pct: float = float(job.get("scope_creep_pct", 0.05))
-		job["tokens_remaining"] = float(job.get("tokens_remaining", 0.0)) + float(job.get("token_requirement", 0.0)) * creep_pct
+		var scope_tokens: float = float(job.get("token_requirement", 0.0)) * creep_pct
+		job["token_requirement"] = float(job.get("token_requirement", 0.0)) + scope_tokens
+		job["tokens_remaining"] = float(job.get("tokens_remaining", 0.0)) + scope_tokens
 		job["deadline_prompts"] = int(job.get("deadline_prompts", 4)) + 1
 		job["prompts_remaining"] = int(job.get("prompts_remaining", 0)) + 1
 		messages.append("%s: scope creep added tokens." % job.get("name", "Job"))
@@ -1340,6 +1342,8 @@ func _scale_job(
 	if offer_rng != null:
 		token_requirement *= 1.0 + (offer_rng.next_float() - 0.5) * 0.3
 		reward_variance = 1.0 + (offer_rng.next_float() - 0.5) * 0.2
+	var depth_mult: float = maxf(1.0, float(run_state.depth.get("requirement_mult", 1.0)))
+	token_requirement *= depth_mult
 	# A batch is worth more than its raw token count once it has been through a
 	# pipeline, so deadlines are measured in burns rather than in bare prompts.
 	# The clock is set against the band's expected rig, not the player's: that is
@@ -1376,9 +1380,6 @@ func _scale_job(
 	) + round_rent
 	# Snapped so varied offers still advertise tidy figures.
 	reward = snappedf(maxf(reward, min_reward), 5.0)
-	var depth_mult: float = maxf(1.0, float(run_state.depth.get("requirement_mult", 1.0)))
-	if depth_mult > 1.0:
-		token_requirement *= depth_mult
 
 	var revision_caps: Array = scaling.get("revision_risk_cap_by_tier", [0.04, 0.08, 0.12, 0.16, 0.2, 0.25])
 	var revision_risk: float = minf(job_def.revision_risk, float(revision_caps[mini(tier, revision_caps.size() - 1)]))

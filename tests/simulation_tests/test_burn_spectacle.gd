@@ -22,6 +22,7 @@ func run() -> void:
 	_test_ordinary_stages_are_faster_than_the_old_crawl()
 	_test_duration_follows_capped_holds()
 	_test_a_repeat_is_its_own_beat()
+	_test_scope_consequence_explains_backward_progress()
 	_test_spectacle_flag_disables_preview_beats()
 	_test_clearing_the_bar_is_a_loud_beat()
 	_test_rising_bug_risk_is_a_loud_beat()
@@ -102,7 +103,7 @@ func _test_echo_chamber_is_a_fork_beat() -> void:
 	var beats: Array = BurnSpectacle.compile(burn, harness.resolver.get_trace())
 	var forks: Array = _beats_of(BurnSpectacle.KIND_FORK, beats)
 	assert_true(forks.size() > 0, "Echoing the stage above is a fork beat")
-	assert_eq(str(forks[0].get("label", "")), "RECURSIVE FORK", "Named as a recursive fork")
+	assert_true(str(forks[0].get("label", "")).begins_with("AGAIN! ×"), "Named as another pass")
 	assert_true(bool(forks[0].get("loud", false)), "And it is loud")
 
 
@@ -251,9 +252,59 @@ func _test_spectacle_flag_disables_preview_beats() -> void:
 func _test_a_repeat_is_its_own_beat() -> void:
 	var preview: Dictionary = _burn(["op.prompt", "op.fractal_split"], 9103)
 	var beats: Array = BurnSpectacle.compile(preview, [])
+	var forks: Array = _beats_of(BurnSpectacle.KIND_FORK, beats)
 	assert_true(
-		_beats_of(BurnSpectacle.KIND_FORK, beats).size() > 0,
+		forks.size() > 0,
 		"A recursive fork is printed as its own beat, not folded into the stage line"
+	)
+	var repeat: Dictionary = forks[0]
+	assert_true(int(repeat.get("repeat_count", 0)) > 0, "The beat carries its repeat count")
+	assert_eq(
+		str(repeat.get("label", "")),
+		"AGAIN! ×%d" % int(repeat.get("repeat_count", 0)),
+		"The player sees exactly how many times it ran again"
+	)
+	assert_true(repeat.has("multiplier_before"), "The beat carries the incoming multiplier")
+	assert_true(repeat.has("multiplier_after"), "The beat carries the outgoing multiplier")
+	assert_true(repeat.has("tokens_before"), "The beat carries the incoming token total")
+	assert_true(float(repeat.get("tokens_added", -1.0)) >= 0.0, "The beat carries a nonnegative token gain")
+	assert_almost_eq(
+		float(repeat.get("multiplier_after", 0.0)),
+		float(repeat.get("progress_mult", 0.0)),
+		0.0001,
+		"The compatibility multiplier still names the outgoing value"
+	)
+
+
+func _test_scope_consequence_explains_backward_progress() -> void:
+	var before := {
+		"requirement": 100.0,
+		"remaining": 60.0,
+		"known_bugs": 0,
+		"hidden_bugs": 0,
+		"prompts": 6,
+	}
+	var after := {
+		"requirement": 110.0,
+		"remaining": 70.0,
+		"known_bugs": 0,
+		"hidden_bugs": 0,
+		"prompts": 6,
+	}
+	var consequences: Array = BurnSpectacle.compile_consequences(before, after)
+	assert_eq(consequences.size(), 1, "Scope growth produces one focused explanation")
+	var scope: Dictionary = consequences[0]
+	assert_eq(str(scope.get("kind", "")), BurnSpectacle.CONSEQUENCE_SCOPE, "It is a scope event")
+	assert_almost_eq(float(scope.get("amount", 0.0)), 10.0, 0.001, "The added work is named")
+	assert_almost_eq(
+		float(scope.get("completed_before", 0.0)),
+		float(scope.get("completed_after", 0.0)),
+		0.001,
+		"Completed tokens are preserved"
+	)
+	assert_true(
+		float(scope.get("progress_after", 1.0)) < float(scope.get("progress_before", 0.0)),
+		"The lower percentage is explicitly attributable to the larger contract"
 	)
 
 

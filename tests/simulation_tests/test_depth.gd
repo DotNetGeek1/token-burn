@@ -87,6 +87,10 @@ func _test_jobs_grow_by_the_depth_multiplier() -> void:
 		1.0,
 		"Depth multiplies the authored requirement rather than live-scaling the rig"
 	)
+	assert_true(
+		int(after.get("deadline_prompts", 0)) > int(before.get("deadline_prompts", 0)),
+		"The deadline is sized from the depth-adjusted workload"
+	)
 
 
 func _test_scoreboard_names_depth() -> void:

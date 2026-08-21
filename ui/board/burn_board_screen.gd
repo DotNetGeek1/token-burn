@@ -105,6 +105,7 @@ func _board_dwelling() -> String:
 func refresh() -> void:
 	if _burning or _laptop == null:
 		return
+	_laptop.clear_spectacle()
 	var job: Dictionary = Simulation.focused_job()
 	var working: bool = Simulation.phase == Simulation.Phase.IN_ROUND
 	# Before the first BURN opens the session an accepted contract is only
@@ -138,7 +139,7 @@ func _refresh_rig(job: Dictionary) -> void:
 		bool(Simulation.run_state.flags.get("fire_risk", false))
 	)
 	rig.set_job(job)
-	rig.set_lanes(_supporting_lanes(job))
+	rig.set_supporting_content(_supporting_lanes(job), _supporting_telemetry(job))
 	rig.hide_meters()
 	_danger_vignette.set_alarming(rig.alarm_active())
 
@@ -158,6 +159,39 @@ func _supporting_lanes(focused: Dictionary) -> Array:
 				continue
 			lanes.append(lane)
 	return lanes
+
+
+func _supporting_telemetry(job: Dictionary) -> Array:
+	if job.is_empty():
+		return []
+	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
+	var remaining: float = maxf(0.0, float(job.get("tokens_remaining", 0.0)))
+	var progress: float = clampf((requirement - remaining) / requirement, 0.0, 1.0)
+	var capacity: float = maxf(1.0, float(Simulation.run_state.compute.get("heat_capacity", 100.0)))
+	var heat_ratio: float = float(Simulation.run_state.compute.get("heat", 0.0)) / capacity
+	return [
+		{
+			"headline": "CONTRACT",
+			"value": "%d%%  Q %d/%d" % [
+				int(round(progress * 100.0)),
+				int(round(JobSystem.delivered_quality(job))),
+				int(round(float(job.get("quality_threshold", 0.0)))),
+			],
+			"detail": "%d PR  BUGS %d" % [
+				maxi(0, int(job.get("prompts_remaining", 0))),
+				int(job.get("known_bugs", 0)),
+			],
+		},
+		{
+			"headline": "SYSTEMS",
+			"value": "HEAT %d%%" % int(round(heat_ratio * 100.0)),
+			"detail": "%s  ×%.2f" % [
+				"THROTTLED" if _heat_throttled() else "NOMINAL",
+				float(Simulation.run_state.compute.get("efficiency", 1.0)),
+			],
+			"role": "danger" if _heat_throttled() else "success",
+		},
+	]
 
 
 func _refresh_status(job: Dictionary, working: bool) -> void:
@@ -657,15 +691,20 @@ func _on_burn() -> void:
 	_laptop.set_status_pressed(_on_skip)
 	await _animate_batch(preview)
 	_laptop.set_status_pressed(Callable())
+	var committed_job: Dictionary = Simulation.focused_job()
+	var before: Dictionary = _consequence_snapshot(committed_job)
 	var stage_limit: int = (
 		-1 if Simulation.work_policy() == WorkSession.POLICY_YOLO
 		else (_stages_completed if _kill_requested else -1)
 	)
+	var result: Dictionary = Simulation.burn_batch(stage_limit)
+	var after: Dictionary = _consequence_snapshot(committed_job)
+	if result.get("ok", false):
+		await _animate_consequences(BurnSpectacle.compile_consequences(before, after))
 	_burning = false
-	Simulation.burn_batch(stage_limit)
 	refresh()
 	if Simulation.work_policy() == WorkSession.POLICY_YOLO and Simulation.can_burn():
-		_on_burn()
+		call_deferred("_on_burn")
 
 
 ## Walks the batch as a cascade of beats. Ordinary stages fly past; named
@@ -713,7 +752,18 @@ func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned
 			label
 		)
 	else:
-		_laptop.set_status("×%.2f" % progress_mult, label.to_lower())
+		_laptop.set_status(
+			"×%.2f > ×%.2f" % [
+				float(beat.get("multiplier_before", progress_mult)),
+				float(beat.get("multiplier_after", progress_mult)),
+			],
+			"%s  +%s" % [
+				label,
+				NumberFormat.format(float(beat.get("tokens_added", 0.0))),
+			]
+		)
+	_laptop.show_spectacle(beat)
+	rig.show_spectacle(beat)
 	if not job.is_empty():
 		var burned: float = burned_before + float(beat.get("tokens", 0.0))
 		_laptop.set_meter("tokens", "burn", clampf(burned / requirement, 0.0, 1.0), "%s / %s" % [
@@ -730,6 +780,43 @@ func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned
 	if loud:
 		_proc_depth += 1
 	_pulse_beat_heat(beat)
+
+
+func _consequence_snapshot(job: Dictionary) -> Dictionary:
+	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
+	var capacity: float = maxf(1.0, float(Simulation.run_state.compute.get("heat_capacity", 100.0)))
+	return {
+		"requirement": float(job.get("token_requirement", 0.0)),
+		"remaining": float(job.get("tokens_remaining", 0.0)),
+		"known_bugs": int(job.get("known_bugs", 0)),
+		"hidden_bugs": int(job.get("hidden_bugs", 0)),
+		"risk": JobSystem.production_risk_class(job),
+		"prompts": int(job.get("prompts_remaining", 0)),
+		"heat_ratio": float(Simulation.run_state.compute.get("heat", 0.0)) / capacity,
+		"throttled": _heat_throttled(),
+		"throttle_multiplier": float(heat_cfg.get("throttle_multiplier", 0.75)),
+	}
+
+
+func _heat_throttled() -> bool:
+	for entry in Simulation.run_state.compute.get("rate_modifiers", []):
+		if entry is Dictionary and str(entry.get("source", "")) == "heat_throttle":
+			return true
+	return false
+
+
+func _animate_consequences(beats: Array) -> void:
+	for raw in beats:
+		if not raw is Dictionary:
+			continue
+		var beat: Dictionary = raw
+		_laptop.set_status(str(beat.get("headline", "RESULT")), str(beat.get("detail", "")))
+		rig.show_consequence(beat)
+		var role: String = str(beat.get("role", "warning"))
+		rig.flash_screen(role)
+		if role == "danger":
+			rig.shake(6.0)
+		await get_tree().create_timer(float(beat.get("hold", 0.35))).timeout
 
 
 func _fast_forward(

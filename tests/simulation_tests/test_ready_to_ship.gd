@@ -103,4 +103,14 @@ func _test_scope_creep_can_reopen_ready_work() -> void:
 		float(job.get("tokens_remaining", 0.0)) > 0.0,
 		"Scope creep can reopen a ready contract"
 	)
+	assert_almost_eq(float(job.get("token_requirement", 0.0)), 110.0, 0.001, "Scope becomes part of the total requirement")
+	assert_almost_eq(float(job.get("tokens_remaining", 0.0)), 10.0, 0.001, "Only the added scope remains unfinished")
+	assert_almost_eq(
+		float(job.get("token_requirement", 0.0)) - float(job.get("tokens_remaining", 0.0)),
+		100.0,
+		0.001,
+		"Previously completed work stays credited"
+	)
+	assert_eq(int(job.get("deadline_prompts", 0)), 5, "Scope creep extends the deadline")
+	assert_eq(int(job.get("prompts_remaining", 0)), 4, "The player receives the added prompt")
 	assert_false(JobSystem.is_ready(job), "And it is no longer ready")

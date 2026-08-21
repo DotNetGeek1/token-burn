@@ -1,7 +1,7 @@
 extends TestCase
 
-## YOLO is a work policy, not a second loop: always burn, never cool, never
-## cash out at READY. AUTO still ships when the token bar hits 100%.
+## YOLO always burns and never cools. It cashes out once both delivery and
+## quality are complete; AUTO still ships as soon as the token bar hits 100%.
 
 
 func run() -> void:
@@ -9,7 +9,7 @@ func run() -> void:
 		ContentDatabase.reload()
 	FeatureFlags.reload()
 	_test_auto_ships_when_ready()
-	_test_yolo_does_not_ship_at_ready()
+	_test_yolo_ships_when_ready_and_quality_met()
 	_test_yolo_never_cools()
 	_test_yolo_deadline_still_ships()
 	_test_yolo_fire_still_ends_the_run()
@@ -39,7 +39,7 @@ func _test_auto_ships_when_ready() -> void:
 	sim.free()
 
 
-func _test_yolo_does_not_ship_at_ready() -> void:
+func _test_yolo_ships_when_ready_and_quality_met() -> void:
 	var sim: Node = _sim()
 	sim.start_run(9802)
 	sim.set_work_policy(WorkSession.POLICY_YOLO)
@@ -50,10 +50,16 @@ func _test_yolo_does_not_ship_at_ready() -> void:
 	job["token_requirement"] = 10.0
 	job["tokens_remaining"] = 10.0
 	job["prompts_remaining"] = 8
+	job["quality_threshold"] = 100.0
+	job["bug_chance"] = 0.0
+	job["revision_risk"] = 0.0
 	sim.burn_batch()
 	assert_true(JobSystem.is_ready(sim.focused_job()), "YOLO still hits READY")
-	assert_false(sim._work._should_auto_ship(sim), "But it will not cash out")
-	assert_true(sim.can_burn(), "And it will burn again")
+	assert_false(sim._work._should_auto_ship(sim), "YOLO keeps burning while quality is short")
+	job["quality_threshold"] = JobSystem.delivered_quality(job)
+	sim.burn_batch()
+	assert_true(JobSystem.is_shipped(job), "YOLO cashes out when progress and quality are met")
+	assert_eq(sim.work_policy(), WorkSession.POLICY_MANUAL, "YOLO resets after the contract")
 	sim.free()
 
 
@@ -90,11 +96,13 @@ func _test_yolo_deadline_still_ships() -> void:
 	job["tokens_remaining"] = 10.0
 	job["prompts_remaining"] = 2
 	job["deadline_prompts"] = 2
+	job["quality_threshold"] = 100.0
 	sim.burn_batch()
 	assert_true(JobSystem.is_ready(sim.focused_job()), "The first burn left it ready")
 	assert_false(JobSystem.is_shipped(sim.focused_job()), "YOLO does not cash out there")
 	sim.burn_batch()
 	assert_true(JobSystem.is_shipped(job), "The deadline still ships whatever is there")
+	assert_eq(sim.work_policy(), WorkSession.POLICY_MANUAL, "A deadline also resets YOLO")
 	sim.free()
 
 

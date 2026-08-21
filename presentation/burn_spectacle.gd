@@ -29,6 +29,11 @@ const KIND_QUALITY_GATE := "quality_gate"
 const KIND_BUG_RISK := "bug_risk"
 const KIND_FINAL := "final"
 
+const CONSEQUENCE_SCOPE := "scope"
+const CONSEQUENCE_BUG := "bug"
+const CONSEQUENCE_HEAT := "heat"
+const CONSEQUENCE_DEADLINE := "deadline"
+
 const FORK_LABEL := "RECURSIVE FORK"
 const CONVERT_LABEL := "QUALITY BURN"
 const FINAL_LABEL := "SHIPPED"
@@ -72,12 +77,92 @@ static func total_duration_ms(beats: Array) -> int:
 	return total
 
 
+## Names what changed after the previewed batch committed. These are structured
+## presentation records so the Burn Board never has to reverse-engineer prose
+## from the round log to explain scope, bugs, heat or time pressure.
+static func compile_consequences(before: Dictionary, after: Dictionary) -> Array:
+	var beats: Array = []
+	var requirement_before: float = maxf(1.0, float(before.get("requirement", 1.0)))
+	var requirement_after: float = maxf(1.0, float(after.get("requirement", requirement_before)))
+	var remaining_before: float = maxf(0.0, float(before.get("remaining", requirement_before)))
+	var remaining_after: float = maxf(0.0, float(after.get("remaining", requirement_after)))
+	var completed_before: float = maxf(0.0, requirement_before - remaining_before)
+	var completed_after: float = maxf(0.0, requirement_after - remaining_after)
+	var progress_before: float = completed_before / requirement_before
+	var progress_after: float = completed_after / requirement_after
+	var scope_added: float = maxf(0.0, requirement_after - requirement_before)
+	if scope_added > 0.0:
+		beats.append({
+			"kind": CONSEQUENCE_SCOPE,
+			"headline": "SCOPE +%s" % NumberFormat.format(scope_added),
+			"detail": "%s > %s  WORK KEPT %s" % [
+				_format_percent(progress_before),
+				_format_percent(progress_after),
+				NumberFormat.format(minf(completed_before, completed_after)),
+			],
+			"role": "warning",
+			"hold": LOUD_HOLD,
+			"amount": scope_added,
+			"progress_before": progress_before,
+			"progress_after": progress_after,
+			"completed_before": completed_before,
+			"completed_after": completed_after,
+		})
+
+	var known_added: int = maxi(0, int(after.get("known_bugs", 0)) - int(before.get("known_bugs", 0)))
+	var hidden_added: int = maxi(0, int(after.get("hidden_bugs", 0)) - int(before.get("hidden_bugs", 0)))
+	if known_added > 0 or hidden_added > 0:
+		var bug_parts := PackedStringArray()
+		if known_added > 0:
+			bug_parts.append("BUG +%d" % known_added)
+		if hidden_added > 0:
+			bug_parts.append("HIDDEN +%d" % hidden_added)
+		beats.append({
+			"kind": CONSEQUENCE_BUG,
+			"headline": "  ".join(bug_parts),
+			"detail": "SHIP RISK %s" % str(after.get("risk", "ELEVATED")),
+			"role": "danger",
+			"hold": LOUD_HOLD,
+			"known_added": known_added,
+			"hidden_added": hidden_added,
+		})
+
+	var throttled_before: bool = bool(before.get("throttled", false))
+	var throttled_after: bool = bool(after.get("throttled", false))
+	if throttled_before != throttled_after:
+		beats.append({
+			"kind": CONSEQUENCE_HEAT,
+			"headline": "THROTTLE ×%.2f" % float(after.get("throttle_multiplier", 0.75)) if throttled_after else "THROTTLE CLEAR",
+			"detail": "HEAT %d%%" % int(round(float(after.get("heat_ratio", 0.0)) * 100.0)),
+			"role": "danger" if throttled_after else "success",
+			"hold": LOUD_HOLD,
+		})
+
+	var prompts_before: int = int(before.get("prompts", 0))
+	var prompts_after: int = int(after.get("prompts", prompts_before))
+	if prompts_after < prompts_before and prompts_after <= 3:
+		beats.append({
+			"kind": CONSEQUENCE_DEADLINE,
+			"headline": "DEADLINE %d" % prompts_after,
+			"detail": "PROMPT%s LEFT" % ("" if prompts_after == 1 else "S"),
+			"role": "danger" if prompts_after <= 1 else "warning",
+			"hold": QUIET_HOLD,
+		})
+	return beats
+
+
+static func _format_percent(ratio: float) -> String:
+	return "%.1f%%" % (ratio * 100.0)
+
+
 static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> Array:
 	var beats: Array = []
 	var after: Dictionary = stage.get("after", {})
 	var before: Dictionary = stage.get("before", {})
 	var progress_mult: float = float(after.get("progress_mult", 1.0))
 	var tokens: float = _running_tokens(burn, after)
+	var multiplier_before: float = float(before.get("progress_mult", 1.0))
+	var tokens_before: float = _running_tokens(burn, before)
 	var combos: Array = stage.get("combos", [])
 	var forked: bool = (
 		float(stage.get("repeated_previous", 0.0)) > 0.0
@@ -91,19 +176,29 @@ static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> 
 		str(stage.get("module_id", ""))
 	)
 	if bool(stage.get("dropped", false)):
-		beats.append(_beat(KIND_FAULT, "DROPPED", true, progress_mult, tokens, stage))
+		beats.append(_beat(
+			KIND_FAULT, "DROPPED", true, progress_mult, tokens, stage,
+			multiplier_before, tokens_before
+		))
 	if not combos.is_empty():
 		for combo in combos:
 			var combo_name: String = str(combo.get("name", "")).strip_edges()
 			if combo_name == "":
 				continue
 			beats.append(_beat(
-				KIND_COMBO, combo_name.to_upper(), true, progress_mult, tokens, stage
+				KIND_COMBO, combo_name.to_upper(), true, progress_mult, tokens, stage,
+				multiplier_before, tokens_before
 			))
 	if forked:
-		beats.append(_beat(KIND_FORK, FORK_LABEL, true, progress_mult, tokens, stage))
+		beats.append(_beat(
+			KIND_FORK, "AGAIN! ×%d" % int(stage.get("repeat_count", 1)),
+			true, progress_mult, tokens, stage, multiplier_before, tokens_before
+		))
 	if bool(stage.get("cascaded", false)):
-		beats.append(_beat(KIND_CASCADE, "CASCADE", true, progress_mult, tokens, stage))
+		beats.append(_beat(
+			KIND_CASCADE, "CASCADE", true, progress_mult, tokens, stage,
+			multiplier_before, tokens_before
+		))
 	for proc in procs:
 		beats.append(_beat(
 			str(proc.get("kind", KIND_PERK)),
@@ -111,10 +206,12 @@ static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> 
 			true,
 			progress_mult,
 			tokens,
-			stage
+			stage,
+			multiplier_before,
+			tokens_before
 		))
 	if beats.is_empty():
-		var before_mult: float = maxf(0.01, float(before.get("progress_mult", 1.0)))
+		var before_mult: float = maxf(0.01, multiplier_before)
 		var jump: float = absf(progress_mult / before_mult - 1.0)
 		var loud: bool = jump >= LOUD_MULT_JUMP
 		beats.append(_beat(
@@ -123,7 +220,9 @@ static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> 
 			loud,
 			progress_mult,
 			tokens,
-			stage
+			stage,
+			multiplier_before,
+			tokens_before
 		))
 	if not beats.is_empty():
 		beats[beats.size() - 1]["closes_stage"] = true
@@ -161,14 +260,26 @@ static func _beat(
 	loud: bool,
 	progress_mult: float,
 	tokens: float,
-	stage: Dictionary
+	stage: Dictionary,
+	multiplier_before: float = -1.0,
+	tokens_before: float = -1.0
 ) -> Dictionary:
+	if multiplier_before < 0.0:
+		multiplier_before = progress_mult
+	if tokens_before < 0.0:
+		tokens_before = tokens
 	return {
 		"kind": kind,
 		"label": label,
 		"loud": loud,
+		"multiplier_before": multiplier_before,
+		"multiplier_after": progress_mult,
+		"tokens_before": tokens_before,
+		"tokens_added": maxf(0.0, tokens - tokens_before),
 		"progress_mult": progress_mult,
 		"tokens": tokens,
+		"repeat_count": int(stage.get("repeat_count", 0)),
+		"cascade_depth": int(stage.get("cascade_depth", 0)),
 		"slot_index": int(stage.get("slot_index", -1)),
 		"module_id": str(stage.get("module_id", "")),
 		"stage_position": int(stage.get("position", -1)),

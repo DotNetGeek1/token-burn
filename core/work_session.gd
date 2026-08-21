@@ -154,6 +154,7 @@ func start_work_sync(sim: Node) -> Dictionary:
 func burn_batch(sim: Node, stage_limit: int = -1) -> Dictionary:
 	if not can_burn(sim):
 		return {"ok": false, "reason": "Not working."}
+	var job: Dictionary = sim.job_system().focused_job(sim.run_state)
 	var result: Dictionary = sim.job_system().run_burn(
 		sim.run_state,
 		burn_rng(sim),
@@ -175,6 +176,21 @@ func burn_batch(sim: Node, stage_limit: int = -1) -> Dictionary:
 	var burn: Dictionary = result.get("burn", {})
 	sim.burn_resolved.emit(burn)
 	finish_prompt(sim, result)
+	if work_policy == POLICY_YOLO and (
+		JobSystem.is_shipped(job) or bool(job.get("abandoned", false))
+	):
+		set_work_policy(sim, POLICY_MANUAL)
+	if (
+		work_policy == POLICY_YOLO
+		and sim.phase == sim.Phase.IN_ROUND
+		and work_running
+		and _should_auto_ship(sim)
+	):
+		ship_focused_job(sim)
+	if work_policy == POLICY_YOLO and (
+		JobSystem.is_shipped(job) or bool(job.get("abandoned", false))
+	):
+		set_work_policy(sim, POLICY_MANUAL)
 	return result
 
 
@@ -407,9 +423,12 @@ func _session_stop_reason(result: Dictionary) -> String:
 
 
 func _should_auto_ship(sim: Node) -> bool:
-	if work_policy == POLICY_YOLO:
+	var job: Dictionary = sim.job_system().focused_job(sim.run_state)
+	if not JobSystem.is_ready(job):
 		return false
-	return JobSystem.is_ready(sim.job_system().focused_job(sim.run_state))
+	if work_policy == POLICY_YOLO:
+		return JobSystem.delivered_quality(job) >= float(job.get("quality_threshold", 0.0))
+	return true
 
 
 func set_work_policy(sim: Node, policy: String) -> void:
@@ -503,6 +522,7 @@ func end_session(sim: Node, reason: String) -> void:
 	sim.run_state.business["active_jobs"] = []
 	sim.run_state.business["active_job"] = {}
 	sim.run_state.business["focused_job_id"] = ""
+	set_work_policy(sim, POLICY_MANUAL)
 	# New board next round, without rerolling on every prompt.
 	sim.run_state.business["job_board_seq"] = int(sim.run_state.business.get("job_board_seq", 0)) + 1
 	work_running = false

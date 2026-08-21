@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 19
+const SAVE_VERSION := 20
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -451,6 +451,19 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_derived_recurring_costs()
 	if from_version < 19:
 		_migrate_to_v19()
+	if from_version < 20:
+		_migrate_to_v20()
+
+
+## Revision scope creep could add outstanding work without increasing the total
+## requirement, leaving saved contracts with negative displayed progress.
+func _migrate_to_v20() -> void:
+	for job in business.get("active_jobs", []):
+		if not job is Dictionary:
+			continue
+		var remaining: float = maxf(0.0, float(job.get("tokens_remaining", 0.0)))
+		var requirement: float = maxf(0.0, float(job.get("token_requirement", 0.0)))
+		job["token_requirement"] = maxf(requirement, remaining)
 
 
 ## The pipeline pieces were called operations in code and modules everywhere the

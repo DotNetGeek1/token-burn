@@ -50,6 +50,7 @@ func run() -> void:
 	_test_a_pre_workflow_save_keeps_its_pipelines()
 	_test_v19_repairs_recurring_costs_and_sale_provenance()
 	_test_v19_gives_legacy_jobs_unique_instance_ids()
+	_test_v20_repairs_negative_contract_progress()
 	_test_corrupt_primary_save_recovers_from_backup()
 
 
@@ -216,6 +217,44 @@ func _test_v19_repairs_recurring_costs_and_sale_provenance() -> void:
 		int(UpgradeSystem.purchased_upgrade_counts(migrated).get("upgrade.custom_desktop", 0)),
 		1,
 		"And only that new copy becomes refundable"
+	)
+
+
+func _test_v20_repairs_negative_contract_progress() -> void:
+	var legacy: Dictionary = {
+		"save_version": 19,
+		"business": {
+			"active_jobs": [{
+				"id": "job.deep_burn",
+				"token_requirement": 61.0e15,
+				"tokens_remaining": 62.6e15,
+			}],
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	var job: Dictionary = Array(migrated.business.get("active_jobs", []))[0]
+	assert_almost_eq(
+		float(job.get("tokens_remaining", 0.0)),
+		62.6e15,
+		1.0,
+		"v20 preserves every outstanding token"
+	)
+	assert_almost_eq(
+		float(job.get("token_requirement", 0.0)),
+		62.6e15,
+		1.0,
+		"v20 raises the requirement enough to prevent negative progress"
+	)
+
+	var round_tripped := RunState.new()
+	round_tripped.from_dict(migrated.to_dict())
+	var loaded_job: Dictionary = Array(round_tripped.business.get("active_jobs", []))[0]
+	assert_almost_eq(
+		float(loaded_job.get("token_requirement", 0.0)),
+		float(job.get("token_requirement", 0.0)),
+		1.0,
+		"A v20 round trip leaves the repaired contract stable"
 	)
 
 

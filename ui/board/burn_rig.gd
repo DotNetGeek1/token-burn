@@ -611,6 +611,64 @@ func set_lanes(lanes: Array) -> void:
 			panel.show_idle(index + 2)
 
 
+## Parallel contracts own spare monitors first. Any glass left over becomes
+## useful live telemetry instead of another idle prompt.
+func set_supporting_content(lanes: Array, statuses: Array) -> void:
+	for index in range(_lane_screens.size()):
+		var panel: LaneScreen = _lane_screens[index]
+		if index < lanes.size():
+			panel.show_lane(index + 2, lanes[index])
+			continue
+		var status_index: int = index - lanes.size()
+		if status_index < statuses.size() and statuses[status_index] is Dictionary:
+			panel.show_status(Dictionary(statuses[status_index]))
+		else:
+			panel.show_idle(index + 2)
+
+
+## Preview telemetry temporarily takes over spare glass. The next ordinary
+## refresh restores lane ownership and persistent contract/system readouts.
+func show_spectacle(beat: Dictionary) -> void:
+	if _lane_screens.is_empty():
+		return
+	_lane_screens[0].show_status({
+		"headline": "MULTIPLIER",
+		"value": "×%.2f > ×%.2f" % [
+			float(beat.get("multiplier_before", 1.0)),
+			float(beat.get("multiplier_after", 1.0)),
+		],
+		"detail": "+%s TOKENS" % NumberFormat.format(float(beat.get("tokens_added", 0.0))),
+		"role": "energy",
+	})
+	if _lane_screens.size() > 1:
+		var count: int = maxi(
+			int(beat.get("repeat_count", 0)), int(beat.get("cascade_depth", 0))
+		)
+		_lane_screens[1].show_status({
+			"headline": str(beat.get("label", "STAGE")),
+			"value": str(beat.get("module_id", "PIPELINE")).trim_prefix("op."),
+			"detail": "DEPTH ×%d" % count if count > 0 else "PROCESSING",
+			"role": "warning" if bool(beat.get("loud", false)) else "success",
+		})
+
+
+func show_consequence(beat: Dictionary) -> void:
+	if _lane_screens.is_empty():
+		return
+	_lane_screens[0].show_status({
+		"headline": str(beat.get("headline", "RESULT")),
+		"value": str(beat.get("detail", "")),
+		"role": str(beat.get("role", "warning")),
+	})
+	if _lane_screens.size() > 1:
+		_lane_screens[1].show_status({
+			"headline": "INCIDENT",
+			"value": str(beat.get("kind", "result")).to_upper(),
+			"detail": "LOGGED",
+			"role": str(beat.get("role", "warning")),
+		})
+
+
 ## Supplies idle/overview readouts to spare glass when no parallel contract is
 ## occupying it. Entries accept `headline`, `value`, and optional `detail`.
 func set_supporting_status(statuses: Array) -> void:
@@ -779,6 +837,9 @@ class LaneScreen:
 		if detail != "":
 			lines.append(detail.left(COLUMNS))
 		_label.text = "\n".join(lines)
+		_label.add_theme_color_override(
+			"font_color", UiThemeBuilder.semantic(str(status.get("role", "success")))
+		)
 
 	func show_lane(lane_number: int, job: Dictionary) -> void:
 		var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))

@@ -28,6 +28,7 @@ var _body: VBoxContainer = null
 var _header: Label = null
 var _status: Label = null
 var _blurb: Label = null
+var _pipeline: Label = null
 var _scroll: ScrollContainer = null
 var _stats: VBoxContainer = null
 var _actions: GridContainer = null
@@ -90,6 +91,11 @@ func _build() -> void:
 	_blurb = ConsoleStyle.paragraph("", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR_DIM)
 	_blurb.gui_input.connect(_on_status_gui_input)
 	_body.add_child(_blurb)
+
+	_pipeline = ConsoleStyle.label("", ConsoleStyle.FONT_BODY, ConsoleStyle.PHOSPHOR)
+	_pipeline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pipeline.visible = false
+	_body.add_child(_pipeline)
 
 	_body.add_child(_rule(0.2))
 
@@ -155,6 +161,38 @@ func set_status(headline: String, blurb: String) -> void:
 		_build()
 	_status.text = headline.to_upper()
 	_blurb.text = blurb
+	_fit_to_glass()
+
+
+## During a burn the operating console yields to a compact animated pipeline.
+## The ordinary readings and commands return on the next board refresh.
+func show_spectacle(beat: Dictionary) -> void:
+	if _body == null:
+		_build()
+	var repeat_count: int = maxi(
+		int(beat.get("repeat_count", 0)), int(beat.get("cascade_depth", 0))
+	)
+	var pulse: String = "=".repeat(clampi(repeat_count + 1, 1, 5))
+	var stage: String = str(beat.get("module_id", "MODEL")).trim_prefix("op.").to_upper().left(12)
+	_pipeline.text = "[PROMPT]-%s>[%s]-%s>[TOKENS]\n   ×%.2f       +%s" % [
+		pulse,
+		stage,
+		pulse,
+		float(beat.get("multiplier_after", 1.0)),
+		NumberFormat.format(float(beat.get("tokens_added", 0.0))),
+	]
+	_pipeline.visible = true
+	_scroll.visible = false
+	_actions.visible = false
+	_fit_to_glass()
+
+
+func clear_spectacle() -> void:
+	if _pipeline == null:
+		return
+	_pipeline.visible = false
+	_scroll.visible = true
+	_actions.visible = true
 	_fit_to_glass()
 
 
@@ -447,6 +485,7 @@ func _apply_glass_chrome(height: float, show_blurb: bool) -> float:
 	_actions.add_theme_constant_override("h_separation", maxi(4, int(10.0 * _scale)))
 
 	_apply_font(_header, ConsoleStyle.FONT_TINY)
+	_apply_font(_pipeline, ConsoleStyle.FONT_BODY)
 	_blurb.visible = show_blurb
 	_blurb.max_lines_visible = 3 if height >= 220.0 else 2
 	_fit_headline()
