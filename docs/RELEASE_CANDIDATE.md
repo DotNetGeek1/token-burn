@@ -35,4 +35,4 @@ That runs, in order:
 - Headless: `godot --headless res://tests/run_balance.tscn -- --runs=50`
 - Device: three full twelve-round campaigns on one typical phone
 
-See also [ANDROID_DEVICE_MATRIX.md](ANDROID_DEVICE_MATRIX.md) and [ANDROID_RELEASE.md](ANDROID_RELEASE.md).
+See also [ANDROID_DEVICE_MATRIX.md](ANDROID_DEVICE_MATRIX.md) (including the #25 lifecycle smoke table) and [ANDROID_RELEASE.md](ANDROID_RELEASE.md). Install a local AAB with `./tools/android_install.ps1`.

@@ -31,3 +31,32 @@ Run against a Play-delivered or locally installed release AAB. Record pass/fail,
 - Heat/burn spectacle stays playable (no hard lock)
 
 Record results in the RC report produced by `tools/run_release_candidate.ps1`.
+
+## Lifecycle smoke (#25 / #37)
+
+Install with `./tools/android_install.ps1 -Launch` from the same debug AAB on each device. Upgrade tests must reuse that debug signing key (`GODOT_ANDROID_KEYSTORE_DEBUG_*`); Android refuses an upgrade signed with a different key.
+
+| Case | Phone | Tablet |
+|------|-------|--------|
+| Pause / resume during ROUND_PREP | | |
+| Pause / resume mid-burn | | |
+| Pause / resume on debrief | | |
+| Pause / resume on bills | | |
+| Pause / resume on angels | | |
+| Pause / resume on investor call | | |
+| Pause / resume on help | | |
+| Pause / resume on run end | | |
+| Pause / resume mid venue fade | | |
+| System back: desk / jobs / build / workflows / market / menu / legacy / achievements / terms | | |
+| System back closes overlay (help, debrief, bills, angels, investor) | | |
+| System back steps out of desk lean-in, then venue lean-in | | |
+| `adb shell am force-stop com.tokenburn.game` mid-burn, relaunch, Continue | | |
+| Upgrade install over previous debug build with a live save | | |
+
+### Results (2026-09-02)
+
+Automated coverage: `tests/playtests/pt_android_lifecycle.gd` (35 passed) and `tests/simulation_tests/test_lifecycle_hooks.gd` (12 passed).
+
+Phone install (2026-09-02): Galaxy S24 Ultra `SM_S9280` / `R5CX420KATZ` received debug AAB `versionCode=13` `versionName=0.7.1` (`targetSdk=36`, `arm64-v8a` split). App launched via `GodotAppLauncher`. Full lifecycle smoke table above is still unfilled. Tablet not connected.
+
+See [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md).

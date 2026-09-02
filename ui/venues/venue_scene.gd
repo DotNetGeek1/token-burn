@@ -416,6 +416,17 @@ func _on_back() -> void:
 	SceneRouter.back()
 
 
+## Android system back matches Escape: investor first (owned by the router),
+## then lean-in, then leave the venue.
+func handle_system_back() -> void:
+	if SceneRouter.investor_busy():
+		return
+	if _leaning_on != "":
+		step_back_to_room()
+		return
+	SceneRouter.back()
+
+
 func _on_wall_input(event: InputEvent) -> void:
 	var released: bool = (
 		(event is InputEventMouseButton and not event.pressed

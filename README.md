@@ -2,7 +2,7 @@
 
 Roguelike economic engine-builder about taking software jobs, burning absurd quantities of AI tokens, and constructing increasingly unstable compute infrastructure.
 
-Built with **Godot 4.7** and **GDScript**. Landscape desk-and-venue UI; playable in the editor, on the web, and as an Android playtest APK.
+Built with **Godot 4.7** and **GDScript**. Landscape desk-and-venue UI; playable in the editor, on the web, and as an Android AAB.
 
 Play in the browser at [tokenburn.dotnetgeek.co.uk](https://tokenburn.dotnetgeek.co.uk).
 
@@ -144,4 +144,4 @@ down the tree (required for the web export).
 **0.7.1** — playable twelve-month campaign from the bedroom through later
 compute ages. Jobs, workflows, perks, hardware, heat and fire, angel rounds,
 meta unlocks, save/load, title screen, and Burn Lab. Headless tests, UI
-playtests, and a public web build plus Android playtest APK.
+playtests, and a public web build plus Android AAB.

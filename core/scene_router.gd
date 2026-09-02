@@ -93,7 +93,9 @@ func _notification(what: int) -> void:
 				Simulation.autosave_now()
 		NOTIFICATION_APPLICATION_FOCUS_IN, MainLoop.NOTIFICATION_APPLICATION_RESUMED:
 			UiSound.resume()
-			_assert_visible_route("resume")
+			if not visible_route_ok():
+				_recover_visible_route()
+			_ask_shell("refresh_all")
 		NOTIFICATION_WM_GO_BACK_REQUEST:
 			handle_system_back()
 
@@ -401,7 +403,7 @@ func _drain_queued_route() -> void:
 
 
 ## Android system back matches the visible back contract: overlays first, then
-## the venue stack, then a confirm-to-title if the player is mid-run on the desk.
+## a venue lean-in, then the venue stack, then the desk's own back policy.
 func handle_system_back() -> void:
 	if _switching:
 		return
@@ -409,9 +411,39 @@ func handle_system_back() -> void:
 		hide_investor()
 		return
 	if current != DESK:
-		back()
+		if _screen != null and is_instance_valid(_screen) and _screen.has_method("handle_system_back"):
+			_screen.call("handle_system_back")
+		else:
+			back()
 		return
 	_ask_shell("handle_system_back")
+
+
+## Resume after a fade stuck up, a hidden screen, or a missing cache: drop the
+## curtain, remount whatever is still cached (desk if the current route is gone),
+## and let the shell re-sync overlays to Simulation.phase.
+func _recover_visible_route() -> void:
+	_reset_fade()
+	_switching = false
+	_queued_route = ""
+	var route: String = current if has_route(current) else DESK
+	var incoming: Node = _cached_screen(route)
+	if incoming == null and route != DESK:
+		route = DESK
+		incoming = _cached_screen(DESK)
+	if incoming == null:
+		var packed: Variant = load(str(ROUTES[DESK]))
+		if packed is PackedScene:
+			incoming = packed.instantiate()
+			_screen_cache[DESK] = incoming
+			route = DESK
+	if incoming == null:
+		push_error("SceneRouter: could not recover a visible route")
+		return
+	current = route
+	_mount_screen(incoming)
+	_activate_screen(route, incoming)
+	_assert_visible_route("resume-recover")
 
 
 func visible_route_ok() -> bool:
