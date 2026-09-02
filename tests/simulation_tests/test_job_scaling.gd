@@ -29,7 +29,8 @@ func run() -> void:
 	_test_hard_pays_less_for_more_work(job_system)
 	_test_strong_rigs_open_authored_work_without_rescaling_local_jobs(job_system)
 	_test_late_bands_have_distinct_ordinary_work(job_system)
-	_test_offer_count_is_the_larger_of_demand_and_slots(job_system)
+	_test_offer_count_follows_job_slots(job_system)
+	_test_stretch_thresholds_follow_reputation(job_system)
 	_test_a_large_board_keeps_one_local_posting(job_system)
 
 
@@ -86,11 +87,10 @@ func _test_strong_rigs_open_authored_work_without_rescaling_local_jobs(job_syste
 	var state := RunState.new()
 	state.build["dwelling"] = "garage"
 	state.build["hardware"] = ["custom_desktop", "gpu_rack"]
-	state.business["demand"] = 3.0
 	state.business["reputation"] = 0.0
 	job_system.generate_offers(state, DeterministicRng.new(4040), ContentDatabase, {})
 	var offers: Array = state.business.get("job_offers", [])
-	assert_eq(offers.size(), 3, "The stronger rig still receives a full board")
+	assert_eq(offers.size(), 2, "The board holds one posting per machine")
 	var matched: int = 0
 	var local: int = 0
 	for offer in offers:
@@ -98,57 +98,67 @@ func _test_strong_rigs_open_authored_work_without_rescaling_local_jobs(job_syste
 			matched += 1
 		if int(offer.get("tier", -1)) <= 1:
 			local += 1
-	assert_eq(matched, 2, "Two offers come from the GPU rack's authored work tier")
-	assert_eq(local, 1, "One familiar local posting remains on the board")
+	assert_eq(matched + local, offers.size(), "Every posting is either local or rack-matched")
 
 
-func _test_offer_count_is_the_larger_of_demand_and_slots(job_system: JobSystem) -> void:
+func _test_offer_count_follows_job_slots(job_system: JobSystem) -> void:
 	var modest := RunState.new()
 	modest.build["hardware"] = ["used_laptop"]
-	modest.business["demand"] = 3.0
 	job_system.generate_offers(modest, DeterministicRng.new(11), ContentDatabase, {})
 	assert_eq(
-		Array(modest.business.get("job_offers", [])).size(), 3,
-		"A one-machine rig still sees a demand-sized board"
+		Array(modest.business.get("job_offers", [])).size(), 1,
+		"A one-machine rig sees one posting"
 	)
 
 	var pair := RunState.new()
 	pair.build["hardware"] = ["custom_desktop", "gpu_rack"]
-	pair.business["demand"] = 3.0
 	job_system.generate_offers(pair, DeterministicRng.new(12), ContentDatabase, {})
 	assert_eq(
-		Array(pair.business.get("job_offers", [])).size(), 3,
-		"Two machines and demand 3 still open three postings"
+		Array(pair.business.get("job_offers", [])).size(), 2,
+		"Two machines open two postings"
 	)
 
 	var fleet := RunState.new()
 	fleet.build["hardware"] = ["gpu_rack", "gpu_rack", "gpu_rack", "gpu_rack", "gpu_rack"]
-	fleet.business["demand"] = 3.0
 	job_system.generate_offers(fleet, DeterministicRng.new(13), ContentDatabase, {})
 	assert_eq(
 		Array(fleet.business.get("job_offers", [])).size(), 5,
-		"Five machines open five postings even when demand is three"
+		"Five machines open five postings"
 	)
 
-	var advertised := RunState.new()
-	advertised.build["hardware"] = ["used_laptop"]
-	advertised.business["demand"] = 8.0
-	job_system.generate_offers(advertised, DeterministicRng.new(14), ContentDatabase, {})
-	assert_eq(
-		Array(advertised.business.get("job_offers", [])).size(), 8,
-		"Demand at the cap is no longer discarded by a five-offer clamp"
-	)
+
+func _test_stretch_thresholds_follow_reputation(job_system: JobSystem) -> void:
+	var thresholds: Array = ContentDatabase.balance.get("job_scaling", {}).get("tier_unlock_by_reputation", [])
+	assert_true(thresholds.size() > 1, "Stretch rungs are authored on reputation")
+	var needed: float = float(thresholds[1])
+	var closed := RunState.new()
+	closed.build["hardware"] = ["used_laptop", "used_laptop"]
+	closed.business["reputation"] = needed - 0.01
+	job_system.generate_offers(closed, DeterministicRng.new(21), ContentDatabase, {})
+	for offer in Array(closed.business.get("job_offers", [])):
+		assert_false(bool(offer.get("stretch", false)), "Below the authored threshold the stretch stays closed")
+
+	var opened := RunState.new()
+	opened.build["hardware"] = ["used_laptop", "used_laptop"]
+	opened.business["reputation"] = needed
+	job_system.generate_offers(opened, DeterministicRng.new(22), ContentDatabase, {})
+	var stretch_count: int = 0
+	for offer in Array(opened.business.get("job_offers", [])):
+		if bool(offer.get("stretch", false)):
+			stretch_count += 1
+	assert_eq(stretch_count, 1, "The authored reputation value opens exactly one stretch posting")
+	var next_tier: Dictionary = JobSystem.next_reputation_tier(opened, ContentDatabase)
+	assert_eq(int(next_tier.get("tier", -1)), 2, "The next stretch still waits on the authored ladder")
 
 
 func _test_a_large_board_keeps_one_local_posting(job_system: JobSystem) -> void:
 	var state := RunState.new()
 	state.build["dwelling"] = "garage"
 	state.build["hardware"] = ["gpu_rack", "gpu_rack", "gpu_rack", "gpu_rack"]
-	state.business["demand"] = 3.0
 	state.business["reputation"] = 0.0
 	job_system.generate_offers(state, DeterministicRng.new(4041), ContentDatabase, {})
 	var offers: Array = state.business.get("job_offers", [])
-	assert_eq(offers.size(), 4, "Four machines beat demand-3 and open a four-card board")
+	assert_eq(offers.size(), 4, "Four machines open a four-card board")
 	assert_true(offers.size() > 3, "The board is larger than the old default")
 	var matched: int = 0
 	var local: int = 0

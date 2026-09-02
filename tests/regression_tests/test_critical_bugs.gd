@@ -17,8 +17,6 @@ func run() -> void:
 	_test_a_granted_module_does_not_replace_the_starters()
 	_test_previews_emit_no_domain_events()
 	_test_preview_cascade_does_not_hit_the_bus()
-	_test_a_cloud_discount_does_not_eat_its_own_answer()
-	_test_a_demand_perk_is_a_bonus_not_a_ratchet()
 	_test_a_build_cannot_hold_more_than_its_cap()
 	_test_rival_keystones_cannot_share_a_build()
 	_test_investor_halfway_call_survives_leaving_the_desk()
@@ -360,42 +358,6 @@ func _test_preview_cascade_does_not_hit_the_bus() -> void:
 	)
 
 
-## Cloud Baron's discount used to be written back over the number it had just
-## halved, so £5,000 became £2,500, then £1,250, and after a dozen prompts the
-## cloud was effectively free. The cost is re-seeded from the base every time.
-func _test_a_cloud_discount_does_not_eat_its_own_answer() -> void:
-	var sim := _make_sim()
-	sim.start_run(150)
-	sim.run_state.economy["cloud_base_cost_per_prompt"] = 400.0
-	sim.run_state.build["perks"] = ["perk.cloud_baron"]
-	sim._invalidate_subscriptions()
-	for _i in range(20):
-		sim._compute_system.recalculate(
-			sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
-		)
-	assert_eq(
-		sim.run_state.economy.get("cloud_cost_per_prompt", 0.0),
-		200.0,
-		"Twenty recalculations later the discount is still half of the base"
-	)
-	sim.free()
-
-
-## Founder Mode is +1 demand, not +1 demand per round for the rest of the run.
-func _test_a_demand_perk_is_a_bonus_not_a_ratchet() -> void:
-	var sim := _make_sim()
-	sim.start_run(151)
-	sim.run_state.build["perks"] = ["perk.founder_mode"]
-	sim._invalidate_subscriptions()
-	var seen: Array[float] = []
-	for _i in range(10):
-		sim._begin_round()
-		seen.append(float(sim.run_state.business.get("demand_modifier", 0.0)))
-	for value in seen:
-		assert_eq(value, 1.0, "Founder Mode contributes +1 every round, not +1 more: %s" % str(seen))
-	sim.free()
-
-
 func _test_a_build_cannot_hold_more_than_its_cap() -> void:
 	var sim := _make_sim()
 	sim.start_run(152)
@@ -421,28 +383,28 @@ func _test_rival_keystones_cannot_share_a_build() -> void:
 	sim.start_run(153)
 	var ps = sim._perk_system
 	assert_true(
-		ps.collect_perk(sim.run_state, "perk.works_on_my_machine", ContentDatabase),
-		"The local common enters the collection"
+		ps.collect_perk(sim.run_state, "perk.stack_overflow_tab", ContentDatabase),
+		"A quality/bugs common enters the collection"
 	)
 	assert_true(
-		ps.equip_perk(sim.run_state, "perk.works_on_my_machine", ContentDatabase),
-		"The local common opens the local doctrine"
+		ps.equip_perk(sim.run_state, "perk.stack_overflow_tab", ContentDatabase),
+		"The common opens both remaining keystone doctrines"
 	)
 	assert_true(
-		ps.collect_perk(sim.run_state, "perk.bare_metal", ContentDatabase),
-		"Bare Metal can be collected after local perks"
+		ps.collect_perk(sim.run_state, "perk.move_fast_and_break_everything", ContentDatabase),
+		"Move Fast can be collected after a bugs perk"
 	)
 	assert_true(
-		ps.equip_perk(sim.run_state, "perk.bare_metal", ContentDatabase),
-		"Bare Metal follows from owning local hardware perks"
+		ps.equip_perk(sim.run_state, "perk.move_fast_and_break_everything", ContentDatabase),
+		"Move Fast follows from owning bugs perks"
 	)
 	assert_true(
-		ps.collect_perk(sim.run_state, "perk.cloud_native", ContentDatabase),
-		"Cloud Native may be collected even when Bare Metal is active"
+		ps.collect_perk(sim.run_state, "perk.enterprise_grade", ContentDatabase),
+		"Enterprise Grade may be collected even when Move Fast is active"
 	)
 	assert_false(
-		ps.can_equip(sim.run_state, "perk.cloud_native", ContentDatabase),
-		"Cloud Native cannot be equipped once the build has gone bare metal"
+		ps.can_equip(sim.run_state, "perk.enterprise_grade", ContentDatabase),
+		"Enterprise Grade cannot be equipped once the build has gone Move Fast"
 	)
 	sim.free()
 

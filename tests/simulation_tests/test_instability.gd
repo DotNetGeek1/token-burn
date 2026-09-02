@@ -9,7 +9,6 @@ func run() -> void:
 		ContentDatabase.reload()
 	_test_bedroom_has_no_instability()
 	_test_office_overclock_band()
-	_test_overclock_does_not_accelerate_cloud()
 	_test_redline_rerun_reaches_the_repeat_fold()
 	_test_cluster_can_fault_without_ending_the_run()
 	_test_fire_thresholds()
@@ -45,34 +44,6 @@ func _test_office_overclock_band() -> void:
 	assert_true(
 		float(hot.run_state.compute.get("token_rate", 0.0)) >= cold_rate,
 		"75% heat on a GPU rack is at least as fast as a cold rack"
-	)
-	cold.free()
-	hot.free()
-
-
-func _test_overclock_does_not_accelerate_cloud() -> void:
-	var cold := _sim_office(9203)
-	cold.run_state.compute["cloud_capacity"] = 50000.0
-	cold.run_state.compute["heat"] = 0.0
-	cold.compute_system().recalculate(
-		cold.run_state, cold.effect_resolver, cold.debug_collect_subscriptions(), cold.rng
-	)
-	var cold_local: float = float(cold.run_state.compute.get("local_rate", 0.0))
-	var cold_cloud: float = float(cold.run_state.compute.get("cloud_rate", 0.0))
-	assert_true(cold_cloud > 0.0, "The office has rented compute to compare")
-	var hot := _sim_office(9203)
-	hot.run_state.compute["cloud_capacity"] = 50000.0
-	hot.run_state.compute["heat"] = float(hot.run_state.compute.get("heat_capacity", 100.0)) * 0.75
-	hot.compute_system().recalculate(
-		hot.run_state, hot.effect_resolver, hot.debug_collect_subscriptions(), hot.rng
-	)
-	assert_almost_eq(
-		float(hot.run_state.compute.get("cloud_rate", 0.0)), cold_cloud, 0.01,
-		"A hot rack does not overclock rented compute"
-	)
-	assert_true(
-		float(hot.run_state.compute.get("local_rate", 0.0)) > cold_local,
-		"The overclock bonus lands on the local machines"
 	)
 	cold.free()
 	hot.free()

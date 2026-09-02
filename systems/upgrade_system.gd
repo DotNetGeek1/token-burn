@@ -118,8 +118,7 @@ static func installed_key(upgrade: UpgradeDefinition) -> String:
 
 
 ## Whether the run has the thing this upgrade sits on top of: premises at least
-## as serious as it needs, the machine it bolts onto, or the cloud account the
-## rest of that shelf is billed against. A rack names the smallest room that can
+## as serious as it needs, or the machine it bolts onto. A rack names the smallest room that can
 ## hold it, and since a run never moves, that is really a statement about which
 ## chapter of the campaign the rack belongs to.
 static func prerequisites_met(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
@@ -243,10 +242,6 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 			var key: String = installed_key(upgrade)
 			if key != "":
 				run_state.build["hardware"].append(key)
-		"cloud":
-			run_state.build["cloud_tier"] = upgrade_id
-		"advertising":
-			run_state.build["advertising_tier"] = upgrade_id
 	if not upgrade.repeatable:
 		run_state.build["upgrades"].append(upgrade_id)
 	_increment_upgrade_count(run_state, upgrade_id)
@@ -285,10 +280,6 @@ func install_carried(
 			var key: String = installed_key(upgrade)
 			if key != "":
 				run_state.build["hardware"].append(key)
-		"cloud":
-			run_state.build["cloud_tier"] = upgrade_id
-		"advertising":
-			run_state.build["advertising_tier"] = upgrade_id
 	if not upgrade.repeatable and not (upgrade_id in run_state.build["upgrades"]):
 		run_state.build["upgrades"].append(upgrade_id)
 	_increment_upgrade_count(run_state, upgrade_id)
@@ -302,7 +293,7 @@ func install_carried(
 ##
 ## Only hardware and the components that bolt onto it are rig: cash, modules
 ## and perks reset every chapter by design, and so must anything else the
-## Market sells — cloud tiers, advertising tiers, workspace upgrades — or it
+## Market sells — workspace upgrades — or it
 ## arrives in the next location already installed and already billing.
 static func carriable_rig_levels(run_state: RunState, content_db: Node) -> Dictionary:
 	var levels: Dictionary = upgrade_counts(run_state).duplicate(true)

@@ -53,13 +53,13 @@ const steps = [
   {
     step: "05",
     title: "Survive the bills",
-    body: "Rent, power and cloud are taken at the end of every round regardless of how the work went. Miss the rent once and Corrigan phones. Miss it twice and the run is over.",
+    body: "Rent and power are taken at the end of every round regardless of how the work went. Miss the rent once and Corrigan phones. Miss it twice and the run is over.",
     note: "The landlord phoned me. Do you understand how little I want the landlord to phone me?",
   },
   {
     step: "06",
     title: "Take the free pick",
-    body: "Corrigan puts perks and modules on his table each round and one of them is free. Perks change rules rather than nudge numbers, so read them and pick the one your build actually wants — then spend cash in the market on hardware, cooling or a better cloud tier.",
+    body: "Corrigan puts perks and modules on his table each round and one of them is free. Perks change rules rather than nudge numbers, so read them and pick the one your build actually wants — then spend cash in the market on hardware and cooling.",
     note: null,
   },
   {
@@ -73,7 +73,7 @@ const steps = [
 const mistakes = [
   "Buying cooling only after the rig is already throttling — it is cheaper as insurance than as a rescue.",
   "Taking a tier above your throughput because the fee looked good. The fee is zero if you do not deliver.",
-  "Bursting into the cloud every round. The invoice arrives with the rent and it does not care that you were busy.",
+  "Buying the next machine before you can cool the current one. Heat does not wait for the invoice.",
   "Ignoring reputation. It is the only thing in this business that compounds without a bill attached.",
 ];
 

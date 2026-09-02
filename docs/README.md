@@ -6,8 +6,8 @@ The player balances:
 
 - Job income and deadlines
 - Token throughput and efficiency
-- Hardware, cloud, power, heat, and space
-- Advertising and job demand
+- Hardware, power, heat, and space
+- Job slots and reputation-gated stretch contracts
 - Rent and recurring costs
 - Reputation, quality, and risk
 - Perks that deliberately enable broken combinations

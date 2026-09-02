@@ -1,16 +1,5 @@
 [
   {
-    "name": "Reckless Scaling",
-    "perks": ["perk.hot_streak", "perk.free_trial"],
-    "description": "Cloud burns hotter and faster: +20% throughput while the trial holds.",
-    "subscriptions": [{
-      "event": "compute.recalculate",
-      "priority": 25,
-      "conditions": [],
-      "effects": [{"operation": "multiply", "target": "compute.cloud_rate", "value": 1.2}]
-    }]
-  },
-  {
     "name": "Debt Spiral",
     "perks": ["perk.technical_debt", "perk.ship_it"],
     "description": "Rushed deliveries pay another 25% on top.",
@@ -55,17 +44,6 @@
       "priority": 25,
       "conditions": [],
       "effects": [{"operation": "multiply", "target": "compute.local_rate", "value": 1.25}]
-    }]
-  },
-  {
-    "name": "Somebody Else's Computer",
-    "perks": ["perk.cloud_baron", "perk.cloud_native"],
-    "description": "Renting at scale: cloud bills another 20% less.",
-    "subscriptions": [{
-      "event": "compute.recalculate",
-      "priority": 25,
-      "conditions": [],
-      "effects": [{"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 0.2}]
     }]
   }
 ]

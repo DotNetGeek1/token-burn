@@ -68,7 +68,6 @@ func _ensure_job_offers(sim: Node) -> void:
 	var offers: Array = sim.run_state.business.get("job_offers", [])
 	if not offers.is_empty() and str(sim.run_state.business.get("job_board_stamp", "")) == stamp:
 		return
-	sim.demand_system().refresh_demand(sim.run_state)
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)
@@ -249,18 +248,10 @@ func _begin_round(sim: Node) -> void:
 	sim.run_state.calendar["prompt"] = 1
 	sim.run_state.business["job_board_seq"] = 0
 	sim.run_state.economy["costs_this_round"] = 0.0
-	# Perks contribute their demand during round.started, so the modifier is put
-	# back to its permanent base first. Without this a perk worth "+1 demand"
-	# added another +1 every round until the board was permanently full.
-	sim.run_state.business["demand_modifier"] = float(
-		sim.run_state.business.get("demand_modifier_base", 0.0)
-	)
 	sim.effect_resolver.begin_action("round.started")
 	var mod_ctx := ModifierContext.new("round.started", sim.run_state)
 	mod_ctx.rng = sim.rng.derive("round.started")
 	sim.effect_resolver.dispatch("round.started", mod_ctx, sim.debug_collect_subscriptions())
-	# Read after the dispatch, so this round's board reflects this round's perks.
-	sim.demand_system().refresh_demand(sim.run_state)
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)
@@ -929,7 +920,7 @@ func _bank_run_legacy(sim: Node, victory: bool) -> void:
 
 ## The permanent unlocks on offer after beating the campaign. Picks are rare —
 ## one batch per completion — so the debrief lays out every area still open
-## (rig, cooling, cloud, cash, workflows, board width) and the player chooses
+## (rig, cooling, cash, workflows, board width) and the player chooses
 ## which to boost permanently, rather than being dealt three at random.
 func debrief_choices() -> Array:
 	if MetaProgress.pending_picks() <= 0:

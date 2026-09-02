@@ -19,7 +19,6 @@ const KNOB_STEP := 0.1
 const KNOBS := [
 	{"key": "economy_multiplier", "label": "ECONOMY MULTIPLIER", "min": 0.5, "max": 3.0},
 	{"key": "token_multiplier", "label": "TOKEN MULTIPLIER", "min": 0.5, "max": 3.0},
-	{"key": "cloud_cost_multiplier", "label": "CLOUD COST MULTIPLIER", "min": 0.0, "max": 3.0},
 	{
 		"key": "event_probability_multiplier",
 		"label": "EVENT PROBABILITY MULTIPLIER",

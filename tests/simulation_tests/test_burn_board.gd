@@ -31,7 +31,6 @@ func run() -> void:
 	_test_shipping_early_pays_less()
 	_test_boost_reaches_the_batch_it_was_armed_for()
 	_test_a_queued_boost_reaches_the_rounds_first_prompt()
-	_test_cloud_burst_is_only_rented()
 	_test_heat_throttle_reaches_the_next_prompt()
 	_test_a_run_opens_with_a_full_working_pipeline()
 	_test_a_drafted_module_lands_on_the_bench()
@@ -553,43 +552,6 @@ func _test_a_queued_boost_reaches_the_rounds_first_prompt() -> void:
 	)
 	sim.burn_batch()
 	assert_false(sim.boost_engaged(), "And it is spent with that first batch")
-	sim.free()
-
-
-## Rented capacity has to go back, or the button is a permanent free upgrade.
-func _test_cloud_burst_is_only_rented() -> void:
-	var sim: Node = load("res://core/simulation.gd").new()
-	sim.autosave_enabled = false
-	sim.start_run(2302)
-	# Bursting is a capability the run buys before it can be used at all.
-	sim.run_state.build["upgrades"].append(Simulation.CLOUD_ACCOUNT_UPGRADE)
-	var offers: Array = sim.run_state.business.get("job_offers", [])
-	sim.accept_job(str(offers[0].get("id", "")))
-	sim.start_work()
-	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
-	var owned_before: float = float(sim.run_state.compute.get("cloud_capacity", 0.0))
-
-	assert_true(sim.cloud_burst(), "Capacity can be rented during a session")
-	assert_true(float(sim.run_state.compute.get("cloud_burst", 0.0)) > 0.0, "The lease is recorded")
-	assert_almost_eq(
-		float(sim.run_state.compute.get("cloud_capacity", 0.0)),
-		owned_before,
-		0.01,
-		"Renting does not add to the capacity the player owns"
-	)
-	assert_true(
-		float(sim.run_state.economy.get("cash", 0.0)) < cash_before,
-		"Cash is deducted immediately"
-	)
-
-	sim.burn_batch()
-	assert_almost_eq(
-		float(sim.run_state.compute.get("cloud_burst", 0.0)),
-		0.0,
-		0.01,
-		"The lease ends with the prompt it was rented for"
-	)
-	assert_false(sim.cloud_engaged(), "So the next prompt starts on the player's own rig")
 	sim.free()
 
 

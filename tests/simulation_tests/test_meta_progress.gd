@@ -33,8 +33,8 @@ func run() -> void:
 	_test_old_silicon_speeds_the_rig_up()
 	_test_recurring_revenue_pays_the_retainer_not_the_contract()
 	_test_a_hard_gated_rank_waits_for_a_hard_win()
-	_test_starting_cloud_scales_with_rank()
 	_test_sound_settings_default_on_and_persist()
+	_test_retired_cloud_unlocks_return_their_picks()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -406,39 +406,6 @@ func _test_a_hard_gated_rank_waits_for_a_hard_win() -> void:
 	assert_true(MetaProgress.spend_pick("unlock.starting_cash"), "And it can then be bought")
 
 
-## Ranks 2 and 3 used to grant the same 3M and write a cost the next recalc
-## overwrote. Capacity and the base invoice both have to scale with rank.
-func _test_starting_cloud_scales_with_rank() -> void:
-	var expected_capacity: Array = [3_000_000.0, 6_000_000.0, 9_000_000.0]
-	var expected_cost: Array = [15.0, 30.0, 45.0]
-	for rank in range(1, 4):
-		_fresh_profile()
-		MetaProgress.bank_victory(rank)
-		for _i in range(rank):
-			assert_true(
-				MetaProgress.spend_pick("unlock.starting_cloud"),
-				"Starting cloud rank %d can be kept" % rank
-			)
-		var sim: Node = _sim()
-		sim.start_run(9500 + rank)
-		sim.compute_system().recalculate(
-			sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
-		)
-		assert_almost_eq(
-			float(sim.run_state.compute.get("cloud_capacity", 0.0)),
-			float(expected_capacity[rank - 1]),
-			0.01,
-			"Rank %d starts with %s cloud capacity" % [rank, str(expected_capacity[rank - 1])]
-		)
-		assert_almost_eq(
-			float(sim.run_state.economy.get("cloud_base_cost_per_prompt", 0.0)),
-			float(expected_cost[rank - 1]),
-			0.01,
-			"Rank %d bills £%s base cloud cost after recalculate" % [rank, str(expected_cost[rank - 1])]
-		)
-		sim.free()
-
-
 ## The token requirement and fee on the run's first contract offer, for the
 ## unlocks that must not move them. The board is seeded and sized off the tier's
 ## expected rig rather than the player's, so the same seed posts the same work
@@ -467,3 +434,26 @@ func _test_sound_settings_default_on_and_persist() -> void:
 	MetaProgress._ensure_loaded()
 	assert_true(MetaProgress.sound_muted(), "Mute survives a profile reload")
 	MetaProgress.set_sound_muted(false)
+
+
+func _test_retired_cloud_unlocks_return_their_picks() -> void:
+	_fresh_profile()
+	var scratch := SCRATCH_PROFILE
+	var legacy := {
+		"version": 6,
+		"unlocks": {"unlock.cloud_account": 1, "unlock.starting_cloud": 2},
+		"pending_picks": 1,
+	}
+	var file := FileAccess.open(scratch, FileAccess.WRITE)
+	file.store_string(JSON.stringify(legacy))
+	file.close()
+	MetaProgress._loaded = false
+	MetaProgress._ensure_loaded()
+	assert_eq(MetaProgress.unlock_count("unlock.cloud_account"), 0, "Cloud account ranks are retired")
+	assert_eq(MetaProgress.unlock_count("unlock.starting_cloud"), 0, "Starting cloud ranks are retired")
+	assert_eq(MetaProgress.pending_picks(), 4, "Each retired rank returns a pick")
+	assert_true(MetaProgress.retired_cloud_unlocks(), "The grant is remembered for old run saves")
+	MetaProgress._loaded = false
+	MetaProgress._ensure_loaded()
+	assert_eq(MetaProgress.pending_picks(), 4, "Returned picks survive a reload")
+	assert_true(MetaProgress.retired_cloud_unlocks(), "The grant marker survives a reload")

@@ -256,6 +256,20 @@ func _test_bills_outlook_guides_spending() -> void:
 	sim.free()
 
 
+## A fresh bedroom has one machine and therefore one posting. Tests that need
+## two contracts install a second laptop so the board widens with the slots.
+func _open_two_slots(sim: Node) -> void:
+	var hardware: Array = Array(sim.run_state.build.get("hardware", []))
+	hardware.append("used_laptop")
+	sim.run_state.build["hardware"] = hardware
+	var counts: Dictionary = Dictionary(sim.run_state.build.get("upgrade_counts", {}))
+	counts["upgrade.used_laptop"] = int(counts.get("upgrade.used_laptop", 0)) + 1
+	sim.run_state.build["upgrade_counts"] = counts
+	sim.run_state.business["job_offers"] = []
+	sim.run_state.business["job_board_stamp"] = ""
+	sim.ensure_job_offers()
+
+
 func _test_queue_capacity_limits() -> void:
 	var sim_script: GDScript = load("res://core/simulation.gd")
 	var sim: Node = sim_script.new()
@@ -267,7 +281,7 @@ func _test_queue_capacity_limits() -> void:
 	assert_eq(float(empty_info.get("ratio", -1.0)), 0.0, "Empty queue has no load")
 
 	var offers: Array = sim.run_state.business.get("job_offers", [])
-	assert_true(offers.size() >= 2, "Need offers for capacity test")
+	assert_true(offers.size() >= 1, "Need an offer for capacity test")
 	var first_id: String = str(offers[0].get("id", ""))
 	assert_true(sim.can_accept_offer(first_id), "First offer always acceptable")
 	assert_true(sim.accept_job(first_id), "First offer accepted")
@@ -310,8 +324,9 @@ func _test_offer_variety() -> void:
 	var sim: Node = sim_script.new()
 	sim.autosave_enabled = false
 	sim.start_run(2024)
+	_open_two_slots(sim)
 	var offers: Array = sim.run_state.business.get("job_offers", [])
-	assert_true(offers.size() >= 2, "Round 1 board has multiple offers")
+	assert_true(offers.size() >= 2, "Two machines open two postings")
 	var unique_ids: Dictionary = {}
 	for offer in offers:
 		unique_ids[str(offer.get("id", ""))] = true
@@ -338,12 +353,10 @@ func _test_queued_options_and_summary() -> void:
 	assert_true(offers.size() > 0, "Offers available for queued-option test")
 	sim.accept_job(str(offers[0].get("id", "")))
 	sim.set_queued_boost(true)
-	sim.set_queued_cloud(true)
 	assert_true(sim.queued_boost, "Boost can be queued before starting work")
 	var result: Dictionary = sim.start_work_sync()
 	assert_true(result.get("ok", false), "A round with armed options runs")
 	assert_false(sim.queued_boost, "Armed boost consumed on the round's first prompt")
-	assert_false(sim.queued_cloud, "Armed cloud consumed on the round's first prompt")
 	var summary: Dictionary = sim.last_session_summary
 	assert_false(summary.is_empty(), "Round debrief built after work")
 	assert_true(summary.has("reward"), "Debrief reports reward")
@@ -361,6 +374,7 @@ func _test_multi_job_session_resolves() -> void:
 	var sim: Node = sim_script.new()
 	sim.autosave_enabled = false
 	sim.start_run(99)
+	_open_two_slots(sim)
 	var offers: Array = sim.run_state.business.get("job_offers", [])
 	assert_true(offers.size() >= 2, "Need at least 2 offers for multi-job test")
 	var job_count: int = mini(3, offers.size())

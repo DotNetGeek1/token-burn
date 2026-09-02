@@ -17,7 +17,7 @@ func run() -> void:
 	var migrated := RunState.new()
 	migrated.from_dict(partial)
 	assert_true(migrated.compute.has("token_rate"), "Migration fills missing compute keys")
-	assert_true(migrated.business.has("demand_modifier"), "Migration adds demand_modifier")
+	assert_false(migrated.business.has("demand_modifier"), "Demand is no longer part of a run")
 	assert_eq(migrated.economy.get("cash", 0.0), 123.0, "Migration preserves saved values")
 
 	var sim_script: GDScript = load("res://core/simulation.gd")
@@ -51,6 +51,11 @@ func run() -> void:
 	_test_v19_repairs_recurring_costs_and_sale_provenance()
 	_test_v19_gives_legacy_jobs_unique_instance_ids()
 	_test_v20_repairs_negative_contract_progress()
+	_test_v21_refunds_removed_purchases_and_clears_state()
+	_test_v21_skips_a_granted_cloud_account()
+	_test_v21_refunds_legacy_repeatable_levels()
+	_test_v21_skips_a_legacy_granted_cloud_account()
+	_test_v21_is_idempotent()
 	_test_corrupt_primary_save_recovers_from_backup()
 
 
@@ -119,7 +124,7 @@ func _test_a_pre_round_save_keeps_its_progress() -> void:
 	assert_eq(float(migrated.economy.get("power_cost_per_prompt", 0.0)), 22.0, "Power is now metered per prompt")
 	assert_eq(float(migrated.economy.get("costs_this_round", 0.0)), 60.0, "Costs already accrued stay accrued")
 	assert_eq(float(migrated.compute.get("prompt_rate", 0.0)), 750.0, "The burst rate becomes the prompt rate")
-	assert_eq(int(migrated.compute.get("cloud_burst_prompts", 0)), 1, "A live cloud burst keeps its remaining prompt")
+	assert_false(migrated.compute.has("cloud_burst_prompts"), "A leftover cloud lease is dropped")
 	assert_eq(
 		int(Array(migrated.compute.get("rate_modifiers", []))[0].get("prompts_remaining", 0)),
 		2,
@@ -306,6 +311,166 @@ func _test_v19_gives_legacy_jobs_unique_instance_ids() -> void:
 		JobSystem.new().burn_lane_jobs(migrated).size(),
 		2,
 		"Both formerly duplicate active jobs can now occupy parallel lanes"
+	)
+
+
+func _test_v21_refunds_removed_purchases_and_clears_state() -> void:
+	var sales_refund: float = 400.0 + 400.0 * 1.35
+	var legacy: Dictionary = {
+		"save_version": 20,
+		"economy": {
+			"cash": 1000.0,
+			"recurring_costs_base": 45.0,
+			"cloud_surcharge_liability": 80.0,
+			"cloud_cost_per_prompt": 40.0,
+		},
+		"compute": {"cloud_capacity": 2000000.0, "cloud_share": 0.4},
+		"business": {"demand": 8.0, "advertising": 100.0, "demand_modifier": 2.0},
+		"build": {
+			"upgrades": ["upgrade.cloud_account", "upgrade.ads_basic"],
+			"upgrade_levels": {"upgrade.sales_investment": 2},
+			"upgrade_counts": {
+				"upgrade.cloud_account": 1,
+				"upgrade.ads_basic": 1,
+				"upgrade.sales_investment": 2,
+				"upgrade.custom_desktop": 1,
+			},
+			"purchased_upgrade_counts": {
+				"upgrade.cloud_account": 1,
+				"upgrade.ads_basic": 1,
+				"upgrade.sales_investment": 2,
+				"upgrade.custom_desktop": 1,
+			},
+			"perks": ["perk.cloud_baron", "perk.ship_it"],
+			"perk_inventory": ["perk.cloud_baron", "perk.ship_it"],
+			"modules": ["op.spot_fleet", "op.prompt"],
+			"cloud_tier": "upgrade.cloud_account",
+			"advertising_tier": "upgrade.ads_basic",
+		},
+		"statistics": {"max_cloud_share": 0.9},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	assert_almost_eq(
+		float(migrated.economy.get("cash", 0.0)),
+		1000.0 + 600.0 + 300.0 + sales_refund,
+		0.01,
+		"Paid cloud, ads and both sales levels come back as cash"
+	)
+	assert_false(migrated.economy.has("cloud_surcharge_liability"), "Cloud bills are wiped")
+	assert_false(migrated.compute.has("cloud_capacity"), "Cloud capacity is wiped")
+	assert_false(migrated.business.has("advertising"), "Advertising is wiped")
+	assert_false("upgrade.cloud_account" in Array(migrated.build.get("upgrades", [])), "Removed upgrades leave the ledger")
+	assert_false(Dictionary(migrated.build.get("upgrade_counts", {})).has("upgrade.sales_investment"), "Sales levels are gone")
+	assert_true("upgrade.custom_desktop" in Dictionary(migrated.build.get("upgrade_counts", {})), "Hardware stays")
+	assert_eq(Array(migrated.build.get("perks", [])), ["perk.ship_it"], "Removed perks leave the loadout")
+	assert_eq(Array(migrated.build.get("modules", [])), ["op.prompt"], "Removed modules leave the board")
+	assert_false(migrated.build.has("cloud_tier"), "Cloud shelf markers are gone")
+	assert_false(migrated.statistics.has("max_cloud_share"), "Cloud stats are gone")
+
+
+func _test_v21_skips_a_granted_cloud_account() -> void:
+	var legacy: Dictionary = {
+		"save_version": 20,
+		"economy": {"cash": 200.0},
+		"build": {
+			"upgrades": ["upgrade.cloud_account"],
+			"upgrade_counts": {"upgrade.cloud_account": 1},
+			"purchased_upgrade_counts": {},
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	assert_eq(
+		float(migrated.economy.get("cash", 0.0)),
+		200.0,
+		"A granted cloud account with no purchase provenance is not refunded"
+	)
+
+
+func _test_v21_refunds_legacy_repeatable_levels() -> void:
+	var sales_refund: float = 400.0 + 400.0 * 1.35
+	var compute_refund: float = 350.0 + 350.0 * 1.4
+	var legacy: Dictionary = {
+		"save_version": 18,
+		"economy": {"cash": 100.0},
+		"build": {
+			"upgrades": ["upgrade.sales_investment", "upgrade.cloud_compute"],
+			"upgrade_levels": {"upgrade.sales_investment": 2, "upgrade.cloud_compute": 2},
+			"upgrade_counts": {"upgrade.sales_investment": 2, "upgrade.cloud_compute": 2},
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	assert_almost_eq(
+		float(migrated.economy.get("cash", 0.0)),
+		100.0 + sales_refund + compute_refund,
+		0.01,
+		"Pre-v19 saves refund geometric Sales Outreach and Cloud Compute totals"
+	)
+
+
+func _test_v21_skips_a_legacy_granted_cloud_account() -> void:
+	var restore_path: String = MetaProgress.profile_path
+	var restore_enabled: bool = MetaProgress.enabled
+	var scratch := "user://profile_v21_grant_test.json"
+	MetaProgress.enabled = true
+	MetaProgress.use_scratch_profile(scratch)
+	var legacy_profile := {
+		"version": 6,
+		"unlocks": {"unlock.cloud_account": 1},
+		"pending_picks": 0,
+	}
+	var file := FileAccess.open(scratch, FileAccess.WRITE)
+	file.store_string(JSON.stringify(legacy_profile))
+	file.close()
+	MetaProgress._loaded = false
+	MetaProgress._ensure_loaded()
+	assert_true(MetaProgress.retired_cloud_unlocks(), "Retired cloud ranks are remembered")
+	assert_eq(MetaProgress.pending_picks(), 1, "The spent cloud rank comes back as a pick")
+
+	var legacy: Dictionary = {
+		"save_version": 18,
+		"economy": {"cash": 200.0},
+		"build": {
+			"upgrades": ["upgrade.cloud_account"],
+			"upgrade_counts": {"upgrade.cloud_account": 1},
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	assert_eq(
+		float(migrated.economy.get("cash", 0.0)),
+		200.0,
+		"A pre-v19 granted cloud account is not treated as a purchase"
+	)
+
+	if FileAccess.file_exists(scratch):
+		DirAccess.remove_absolute(scratch)
+	MetaProgress.profile_path = restore_path
+	MetaProgress.enabled = restore_enabled
+	MetaProgress._loaded = false
+
+
+func _test_v21_is_idempotent() -> void:
+	var legacy: Dictionary = {
+		"save_version": 20,
+		"economy": {"cash": 50.0},
+		"build": {
+			"purchased_upgrade_counts": {"upgrade.ads_basic": 1},
+			"upgrade_counts": {"upgrade.ads_basic": 1},
+			"upgrades": ["upgrade.ads_basic"],
+		},
+	}
+	var first := RunState.new()
+	first.from_dict(legacy)
+	var second := RunState.new()
+	second.from_dict(first.to_dict())
+	assert_almost_eq(
+		float(second.economy.get("cash", 0.0)),
+		float(first.economy.get("cash", 0.0)),
+		0.01,
+		"Reloading a migrated save does not refund again"
 	)
 
 

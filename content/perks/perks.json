@@ -35,43 +35,11 @@
     }]
   },
   {
-    "id": "perk.free_trial",
-    "name": "Free Trial",
-    "rarity": "rare",
-    "tags": ["cloud", "risk"],
-    "description_template": "Cloud compute is free for the first {trial_prompts} prompts of a round and runs {trial_rate_pct}% faster; after that it bills {late_multiplier}× the going rate.",
-    "parameters": {
-      "trial_prompts": 3,
-      "trial_rate_bonus": 1.15,
-      "trial_rate_pct": 15,
-      "late_multiplier": 4.0
-    },
-    "subscriptions": [
-      {
-        "event": "compute.recalculate",
-        "priority": 15,
-        "conditions": [{"left": "calendar.prompt", "operator": "<=", "right": "$trial_prompts"}],
-        "effects": [
-          {"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 1.0},
-          {"operation": "multiply", "target": "compute.cloud_rate", "value": "$trial_rate_bonus"}
-        ]
-      },
-      {
-        "event": "compute.recalculate",
-        "priority": 16,
-        "conditions": [{"left": "calendar.prompt", "operator": ">", "right": "$trial_prompts"}],
-        "effects": [
-          {"operation": "multiply", "target": "economy.cloud_cost_per_prompt", "value": "$late_multiplier"}
-        ]
-      }
-    ]
-  },
-  {
     "id": "perk.works_on_my_machine",
     "name": "Works on My Machine",
     "rarity": "common",
     "tags": ["local", "risk"],
-    "description_template": "Hardware you own runs +{bonus_pct}% faster. Rented cloud gains nothing.",
+    "description_template": "Hardware you own runs +{bonus_pct}% faster.",
     "parameters": {"local_multiplier": 1.4, "bonus_pct": 40},
     "subscriptions": [{
       "event": "compute.recalculate",
@@ -117,28 +85,6 @@
         }
       ]
     }]
-  },
-  {
-    "id": "perk.founder_mode",
-    "name": "Founder Mode",
-    "rarity": "uncommon",
-    "tags": ["demand", "risk"],
-    "description_template": "Advertising produces +{demand_bonus} demand; scope creep risk rises by {scope_creep_bonus} each quality tick.",
-    "parameters": {"demand_bonus": 1, "scope_creep_bonus": 0.03},
-    "subscriptions": [
-      {
-        "event": "round.started",
-        "priority": 5,
-        "conditions": [],
-        "effects": [{"operation": "add", "target": "business.demand_modifier", "value": "$demand_bonus"}]
-      },
-      {
-        "event": "board.batch_finished",
-        "priority": 5,
-        "conditions": [],
-        "effects": [{"operation": "add", "target": "job.scope_creep_pct", "value": "$scope_creep_bonus"}]
-      }
-    ]
   },
   {
     "id": "perk.infinite_context",
@@ -250,35 +196,6 @@
         "priority": 10,
         "conditions": [],
         "effects": [{"operation": "add", "target": "stage.quality", "value": "$stage_quality_bonus"}]
-      }
-    ]
-  },
-  {
-    "id": "perk.cloud_baron",
-    "name": "Cloud Baron",
-    "rarity": "rare",
-    "tags": ["cloud", "economy"],
-    "requires_tags": ["cloud"],
-    "description_template": "Cloud costs discounted by {cloud_discount_pct}%, against a {surcharge_pct}% surcharge on every cloud prompt at the end of the round.",
-    "parameters": {"cloud_discount_pct": 50, "surcharge_ratio": 0.2, "surcharge_pct": 20},
-    "subscriptions": [
-      {
-        "event": "compute.recalculate",
-        "priority": 15,
-        "conditions": [],
-        "effects": [{"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 0.5}]
-      },
-      {
-        "event": "prompt.started",
-        "priority": 15,
-        "conditions": [],
-        "effects": [{
-          "operation": "convert",
-          "from": "economy.cloud_cost_per_prompt",
-          "target": "economy.cloud_surcharge_liability",
-          "value": "$surcharge_ratio",
-          "consume": false
-        }]
       }
     ]
   },
@@ -474,28 +391,6 @@
     }]
   },
   {
-    "id": "perk.ad_tech_goblin",
-    "name": "Ad-Tech Goblin",
-    "rarity": "rare",
-    "tags": ["advertising", "demand"],
-    "description_template": "Floods the board with +{demand_bonus} demand but erodes {quality_discount_pct}% of quality each tick.",
-    "parameters": {"demand_bonus": 2, "quality_discount_pct": 10},
-    "subscriptions": [
-      {
-        "event": "round.started",
-        "priority": 8,
-        "conditions": [],
-        "effects": [{"operation": "add", "target": "business.demand_modifier", "value": "$demand_bonus"}]
-      },
-      {
-        "event": "board.batch_finished",
-        "priority": 8,
-        "conditions": [],
-        "effects": [{"operation": "discount", "target": "batch.quality", "value": 0.1}]
-      }
-    ]
-  },
-  {
     "id": "perk.org_chart",
     "name": "Org Chart",
     "rarity": "rare",
@@ -531,9 +426,7 @@
     "rarity": "legendary",
     "tags": ["local", "hardware", "keystone"],
     "requires_tags": ["local"],
-    "excludes_tags": ["cloud"],
-    "incompatible_ids": ["perk.cloud_native"],
-    "description_template": "Owned hardware runs {local_multiplier}× as fast and the power bill rises {power_pct}%. You will never rent compute again.",
+    "description_template": "Owned hardware runs {local_multiplier}× as fast and the power bill rises {power_pct}%.",
     "parameters": {"local_multiplier": 2.0, "power_multiplier": 1.6, "power_pct": 60},
     "subscriptions": [{
       "event": "compute.recalculate",
@@ -542,26 +435,6 @@
       "effects": [
         {"operation": "multiply", "target": "compute.local_rate", "value": "$local_multiplier"},
         {"operation": "multiply", "target": "economy.power_cost_per_prompt", "value": "$power_multiplier"}
-      ]
-    }]
-  },
-  {
-    "id": "perk.cloud_native",
-    "name": "Cloud Native",
-    "rarity": "legendary",
-    "tags": ["cloud", "economy", "keystone"],
-    "requires_tags": ["cloud"],
-    "excludes_tags": ["local"],
-    "incompatible_ids": ["perk.bare_metal"],
-    "description_template": "Rented compute runs {cloud_multiplier}× as fast, but your own hardware idles at {local_pct}% of its rate.",
-    "parameters": {"cloud_multiplier": 2.25, "local_penalty": 0.5, "local_pct": 50},
-    "subscriptions": [{
-      "event": "compute.recalculate",
-      "priority": 20,
-      "conditions": [],
-      "effects": [
-        {"operation": "multiply", "target": "compute.cloud_rate", "value": "$cloud_multiplier"},
-        {"operation": "multiply", "target": "compute.local_rate", "value": "$local_penalty"}
       ]
     }]
   },
@@ -644,51 +517,15 @@
     "tags": ["local", "hardware"],
     "unlock_achievement": "ach.bare_metal_purist",
     "requires_tags": ["local"],
-    "excludes_tags": ["cloud"],
     "min_location_tier": 2,
-    "description_template": "Local throughput +{bonus_pct}%. Cloud rate −{cloud_penalty_pct}%.",
-    "parameters": {"bonus": 1.25, "bonus_pct": 25, "cloud_penalty": 0.5, "cloud_penalty_pct": 50},
+    "description_template": "Local throughput +{bonus_pct}%.",
+    "parameters": {"bonus": 1.25, "bonus_pct": 25},
     "subscriptions": [{
       "event": "compute.recalculate",
       "priority": 11,
       "conditions": [],
       "effects": [
-        {"operation": "multiply", "target": "compute.local_rate", "value": "$bonus"},
-        {"operation": "multiply", "target": "compute.cloud_rate", "value": "$cloud_penalty"}
-      ]
-    }]
-  },
-  {
-    "id": "perk.spot_survivor",
-    "name": "Spot Survivor",
-    "rarity": "common",
-    "tags": ["cloud", "economy"],
-    "min_location_tier": 1,
-    "description_template": "First {trial_prompts} cloud prompts each round are free.",
-    "parameters": {"trial_prompts": 4},
-    "subscriptions": [{
-      "event": "compute.recalculate",
-      "priority": 14,
-      "conditions": [{"left": "calendar.prompt", "operator": "<=", "right": "$trial_prompts"}],
-      "effects": [{"operation": "discount", "target": "economy.cloud_cost_per_prompt", "value": 1.0}]
-    }]
-  },
-  {
-    "id": "perk.egress_panic",
-    "name": "Egress Panic",
-    "rarity": "rare",
-    "tags": ["cloud", "economy"],
-    "requires_tags": ["cloud"],
-    "min_location_tier": 2,
-    "description_template": "Cloud runs {rate_pct}% faster but bills {cost_pct}% more.",
-    "parameters": {"rate_bonus": 1.3, "rate_pct": 30, "cost_multiplier": 1.15, "cost_pct": 15},
-    "subscriptions": [{
-      "event": "compute.recalculate",
-      "priority": 13,
-      "conditions": [],
-      "effects": [
-        {"operation": "multiply", "target": "compute.cloud_rate", "value": "$rate_bonus"},
-        {"operation": "multiply", "target": "economy.cloud_cost_per_prompt", "value": "$cost_multiplier"}
+        {"operation": "multiply", "target": "compute.local_rate", "value": "$bonus"}
       ]
     }]
   },

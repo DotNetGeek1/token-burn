@@ -10,7 +10,7 @@ extends Node
 
 const DEFAULT_PROFILE_PATH := "user://profile.json"
 const CATALOG_PATH := "res://content/meta/unlocks.json"
-const PROFILE_VERSION := 6
+const PROFILE_VERSION := 7
 
 ## Where a run that has unlocked nothing takes place. The campaign always has at
 ## least this rung, so no profile can ever end up with nowhere to play.
@@ -140,6 +140,14 @@ func pending_picks() -> int:
 func unlock_count(unlock_id: String) -> int:
 	_ensure_loaded()
 	return int(Dictionary(_profile.get("unlocks", {})).get(unlock_id, 0))
+
+
+## Cloud unlocks used to grant a free account. After those unlocks were retired
+## the ranks come back as picks, but a pre-v19 run save still has to know the
+## account was never paid for.
+func retired_cloud_unlocks() -> bool:
+	_ensure_loaded()
+	return bool(_profile.get("retired_cloud_unlocks", false))
 
 
 func catalog() -> Array:
@@ -730,7 +738,7 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 	var value: float = _rank_value(unlock, rank)
 	if ranks.is_empty() and rank > 1:
 		match kind:
-			"extra_slot", "workflow_slot", "cooling", "efficiency_base", "passive_income", "starting_module", "starting_cloud":
+			"extra_slot", "workflow_slot", "cooling", "efficiency_base", "passive_income", "starting_module":
 				value = float(unlock.get("amount", 1.0)) * float(rank)
 	match kind:
 		"extra_slot":
@@ -751,19 +759,6 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 			run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + value
 		"efficiency_base":
 			run_state.compute["efficiency_base"] = float(run_state.compute.get("efficiency_base", 1.0)) + value
-		"starting_cloud_account":
-			_grant_cloud_account(run_state)
-		"starting_cloud":
-			# Capacity without the account would be tokens nobody is billing for,
-			# and would leave the CLOUD key dead on a run that clearly has cloud.
-			_grant_cloud_account(run_state)
-			run_state.compute["cloud_capacity"] = float(run_state.compute.get("cloud_capacity", 0.0)) + value
-			# Written to the base so the next recalculation keeps the invoice
-			# instead of overwriting it from whatever the cloud shelf bills.
-			run_state.economy["cloud_base_cost_per_prompt"] = (
-				float(run_state.economy.get("cloud_base_cost_per_prompt", 0.0))
-				+ float(unlock.get("recurring_cost", 0.0)) * float(rank)
-			)
 		"passive_income":
 			run_state.economy["passive_income_per_round"] = (
 				float(run_state.economy.get("passive_income_per_round", 0.0)) + value
@@ -812,18 +807,6 @@ func _apply_age(run_state: RunState) -> void:
 	run_state.business["age_name"] = str(age_data.get("name", "Bedroom Age"))
 
 
-## Marks the cloud account as owned without charging for it. The upgrade is the
-## run's record of the capability, so the Market hides it and the board's CLOUD
-## key lights up exactly as if it had been bought.
-func _grant_cloud_account(run_state: RunState) -> void:
-	var owned: Array = run_state.build.get("upgrades", [])
-	if not (Simulation.CLOUD_ACCOUNT_UPGRADE in owned):
-		owned.append(Simulation.CLOUD_ACCOUNT_UPGRADE)
-		run_state.build["upgrades"] = owned
-		UpgradeSystem.record_free_grant(run_state, Simulation.CLOUD_ACCOUNT_UPGRADE, ContentDatabase)
-	run_state.build["cloud_tier"] = Simulation.CLOUD_ACCOUNT_UPGRADE
-
-
 ## Wipes the profile. Exposed for tests and for a player who wants the first run
 ## back the way it was.
 func reset_profile() -> void:
@@ -851,6 +834,7 @@ func _default_profile() -> Dictionary:
 		"victories_by_difficulty": {"normal": 0, "hard": 0},
 		"unlocks": {},
 		"pending_picks": 0,
+		"retired_cloud_unlocks": false,
 		"retirements": 0,
 		"age": 0,
 		"ascensions": {},
@@ -941,6 +925,7 @@ func _load_profile() -> void:
 		"victories_by_difficulty": Dictionary(loaded.get("victories_by_difficulty", {"normal": 0, "hard": 0})),
 		"unlocks": unlocks,
 		"pending_picks": int(loaded.get("pending_picks", 0)),
+		"retired_cloud_unlocks": bool(loaded.get("retired_cloud_unlocks", false)),
 		"retirements": int(loaded.get("retirements", 0)),
 		"age": int(loaded.get("age", 0)),
 		"ascensions": ascensions,
@@ -1006,6 +991,18 @@ func _migrate_profile(from_version: int) -> void:
 			_profile["pending_picks"] = int(_profile.get("pending_picks", 0)) + refunded
 	if from_version < 6:
 		_profile["settings"] = _merge_settings(_profile.get("settings", {}))
+	if from_version < 7:
+		var cloud_unlocks: Dictionary = Dictionary(_profile.get("unlocks", {}))
+		var returned: int = 0
+		for unlock_id in ["unlock.cloud_account", "unlock.starting_cloud"]:
+			var owned: int = int(cloud_unlocks.get(unlock_id, 0))
+			if owned > 0:
+				returned += owned
+				cloud_unlocks.erase(unlock_id)
+		if returned > 0:
+			_profile["unlocks"] = cloud_unlocks
+			_profile["pending_picks"] = int(_profile.get("pending_picks", 0)) + returned
+			_profile["retired_cloud_unlocks"] = true
 	_save()
 
 

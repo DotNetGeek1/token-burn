@@ -147,7 +147,7 @@ Existing `requires_dwelling` semantics can probably still be reused for this.
 
 ## Important
 
-Do not remove hardware upgrades, cooling upgrades, components, cloud, advertising or workflow upgrades.
+Do not remove hardware upgrades, cooling upgrades, components or workflow upgrades.
 
 Those remain the primary economic progression **inside** a run.
 
@@ -851,7 +851,7 @@ Do not simultaneously:
 * redesign every UI screen;
 * rebalance every job;
 * rewrite the effect system;
-* remove cloud mechanics;
+* reintroduce cloud or advertising economies;
 * replace the workflow system;
 * introduce a giant skill tree;
 * add dozens of permanent stat upgrades;
@@ -873,8 +873,6 @@ Examples:
 
 * hardware
 * cooling
-* cloud
-* advertising
 * workflows
 * temporary perks
 

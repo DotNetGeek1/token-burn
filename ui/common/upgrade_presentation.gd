@@ -11,19 +11,15 @@ const GROUPS := {
 	"hardware": {"label": "Hardware", "color": "orange"},
 	"component": {"label": "Components", "color": "yellow"},
 	"dwelling": {"label": "Property", "color": "green"},
-	"cloud": {"label": "Cloud", "color": "blue"},
-	"advertising": {"label": "Advertising", "color": "yellow"},
-	"sales": {"label": "Sales", "color": "yellow"},
 }
 
-const GROUP_ORDER := ["hardware", "component", "cooling", "workspace", "cloud", "sales", "advertising"]
+const GROUP_ORDER := ["hardware", "component", "cooling", "workspace"]
 
-## The Market's two counters. Where the run happens is a chapter rather than a
-## purchase, so there is no property shelf: everything here fills the space the
-## run already has, or is rented rather than owned.
+## The Market's hardware counters. Where the run happens is a chapter rather
+## than a purchase, so there is no property shelf: everything here fills the
+## space the run already has.
 const TABS := [
 	{"key": "hardware", "label": "HARDWARE", "groups": ["hardware", "component", "cooling", "workspace"]},
-	{"key": "services", "label": "CLOUD", "groups": ["cloud", "sales", "advertising"]},
 ]
 
 
@@ -38,8 +34,6 @@ static func tab_for_group(key: String) -> String:
 ## are separate purchases in the player's head, so they get their own shelves.
 static func group_key(upgrade: UpgradeDefinition) -> String:
 	var tags: Array = Array(upgrade.tags)
-	if "sales" in tags:
-		return "sales"
 	if "cooling" in tags:
 		return "cooling"
 	if "board" in tags:
@@ -59,18 +53,6 @@ static func group_color(key: String) -> Color:
 
 ## One line of consequence, built from the effects the upgrade actually applies.
 static func effect_line(upgrade: UpgradeDefinition) -> String:
-	if upgrade.id == "upgrade.sales_investment":
-		var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-		var reduction: int = int(ContentDatabase.balance.get("job_scaling", {}).get("sales_level_rep_reduction", 2))
-		return "Lv %d · each level lowers rep needed for bigger contracts by %d" % [level, reduction]
-	if upgrade.id == Simulation.CLOUD_BURST_UPGRADE:
-		var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-		var base: float = Simulation.CLOUD_BURST_BASE_MULTIPLIER
-		var step: float = Simulation.CLOUD_BURST_PER_LEVEL
-		return "Burst ×%.1f now · next purchase ×%.1f" % [
-			base + float(level) * step,
-			base + float(level + 1) * step,
-		]
 	var parts: PackedStringArray = []
 	var hardware: Dictionary = _curve(upgrade)
 	var token_line: String = token_rate_text(float(hardware.get("token_rate", 0.0)))
@@ -133,12 +115,6 @@ static func _effect_text(effect: EffectDefinition) -> String:
 			return "+%d cooling" % int(amount)
 		"build.board.slot_count":
 			return "+%d pipeline slot" % int(amount)
-		"compute.cloud_capacity":
-			return "+%s cloud tokens" % NumberFormat.format(amount)
-		"economy.cloud_cost_per_prompt":
-			return "%s per prompt" % NumberFormat.format_cash(amount)
-		"business.advertising":
-			return "+%s/day demand" % NumberFormat.format_cash(amount)
 		_:
 			return ""
 

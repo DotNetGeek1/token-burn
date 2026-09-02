@@ -156,15 +156,8 @@ func _refresh_index(shelves: Dictionary) -> void:
 	for child in _index_lines.get_children():
 		_index_lines.remove_child(child)
 		child.queue_free()
-	var state := Simulation.run_state
 	var lines: Array = [
 		{"stat": "Board", "value": "%d" % Array(shelves.get(WIRE, [])).size()},
-		{
-			"stat": "Advertising",
-			"value": "%s / day" % NumberFormat.format_cash(
-				float(state.business.get("advertising", 0.0))
-			),
-		},
 		{
 			"stat": "Reputation",
 			"value": _reputation_value(),
@@ -342,7 +335,7 @@ func _empty_line() -> String:
 		return "AWAITING UPGRADE — CONTRACTS RESUME AFTER"
 	if Simulation.is_work_running():
 		return "ROUND UNDER WAY — THE WORK IS BACK AT THE DESK"
-	return "NO CONTRACTS ON THE WIRE — FINISH THE ROUND OR RAISE DEMAND"
+	return "NO CONTRACTS ON THE WIRE — FINISH THE ROUND"
 
 
 # --- Tiles -------------------------------------------------------------------

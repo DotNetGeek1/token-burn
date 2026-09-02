@@ -108,11 +108,11 @@ systems/heat_system.gd
 
 ### Feature flag
 
-Gate cloud-specific UI/actions with `FeatureFlags.is_enabled("cloud_compute_enabled")` when adding new entry points (existing behaviour stays enabled by default).
+Gate unfinished UI/actions with `FeatureFlags.is_enabled(...)` when adding new entry points (existing behaviour stays enabled by default).
 
 ### Wave 1 deliverables
 
-- Token throughput from hardware + cloud capacity
+- Token throughput from local hardware
 - Heat accumulation, throttling, and cooling interactions
 - Rate modifiers from effect engine applied in `recalculate()`
 
@@ -169,7 +169,7 @@ content/balance/
 
 ### Wave 1 deliverables
 
-- Ten jobs, ten perks, five hardware/cloud upgrades, three dwellings, five random events
+- Ten jobs, ten perks, five hardware upgrades, three dwellings, five random events
 - All effects conform to ADR-001 operations
 - Balance values in JSON only — no magic numbers in code
 

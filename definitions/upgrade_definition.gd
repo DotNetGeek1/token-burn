@@ -1,7 +1,7 @@
 class_name UpgradeDefinition
 extends Resource
 
-## Static definition for hardware, dwelling, cloud, or advertising upgrades.
+## Static definition for hardware, component, or dwelling upgrades.
 
 @export var id: String = ""
 @export var name: String = ""

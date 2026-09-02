@@ -15,55 +15,51 @@ func run() -> void:
 	_test_trace_query(resolver, state)
 	_test_token_rate_rate_modifier(resolver, state)
 	_test_spawn_limit(resolver, state)
-	_test_founder_mode_perk(resolver, state)
+	_test_works_on_my_machine_perk(resolver, state)
 	_test_perk_parameters_isolated(resolver, state)
 
 
-func _test_founder_mode_perk(resolver: EffectResolver, state: RunState) -> void:
-	var perk := ContentDatabase.get_perk("perk.founder_mode")
-	assert_true(perk != null, "Founder Mode perk loads")
+func _test_works_on_my_machine_perk(resolver: EffectResolver, state: RunState) -> void:
+	var perk := ContentDatabase.get_perk("perk.works_on_my_machine")
+	assert_true(perk != null, "Works on My Machine perk loads")
 	var subs: Array = []
 	for sub in perk.subscriptions:
 		var copy: Dictionary = sub.duplicate(true)
 		copy["source_id"] = perk.id
 		copy["parameters"] = perk.parameters.duplicate(true)
 		subs.append(copy)
-	var mod_ctx := ModifierContext.new("round.started", state)
-	resolver.begin_action("founder.test")
-	resolver.dispatch("round.started", mod_ctx, subs)
+	var mod_ctx := ModifierContext.new("compute.recalculate", state)
+	mod_ctx.set_value("compute.local_rate", 100.0)
+	resolver.begin_action("local.test")
+	resolver.dispatch("compute.recalculate", mod_ctx, subs)
 	assert_eq(
-		float(state.business.get("demand_modifier", 0.0)),
-		1.0,
-		"Founder Mode adds demand bonus on round.started"
+		float(mod_ctx.get_value("compute.local_rate", 0.0)),
+		140.0,
+		"Works on My Machine multiplies local rate on recalculate"
 	)
 
 
 func _test_perk_parameters_isolated(resolver: EffectResolver, state: RunState) -> void:
-	state.business["demand_modifier"] = 0.0
-	var founder := ContentDatabase.get_perk("perk.founder_mode")
-	var ad_goblin := ContentDatabase.get_perk("perk.ad_tech_goblin")
-	assert_true(founder != null and ad_goblin != null, "Perks load for parameter isolation test")
+	var local := ContentDatabase.get_perk("perk.works_on_my_machine")
+	var homelab := ContentDatabase.get_perk("perk.homelab_hero")
+	assert_true(local != null and homelab != null, "Perks load for parameter isolation test")
 	var subs: Array = []
-	for sub in founder.subscriptions:
-		if str(sub.get("event", "")) != "round.started":
-			continue
-		var copy: Dictionary = sub.duplicate(true)
-		copy["source_id"] = founder.id
-		copy["parameters"] = founder.parameters.duplicate(true)
-		subs.append(copy)
-	for sub in ad_goblin.subscriptions:
-		if str(sub.get("event", "")) != "round.started":
-			continue
-		var copy: Dictionary = sub.duplicate(true)
-		copy["source_id"] = ad_goblin.id
-		copy["parameters"] = ad_goblin.parameters.duplicate(true)
-		subs.append(copy)
-	var mod_ctx := ModifierContext.new("round.started", state)
+	for perk in [local, homelab]:
+		for sub in perk.subscriptions:
+			if str(sub.get("event", "")) != "compute.recalculate":
+				continue
+			var copy: Dictionary = sub.duplicate(true)
+			copy["source_id"] = perk.id
+			copy["parameters"] = perk.parameters.duplicate(true)
+			subs.append(copy)
+	var mod_ctx := ModifierContext.new("compute.recalculate", state)
+	mod_ctx.set_value("compute.local_rate", 100.0)
 	resolver.begin_action("params.test")
-	resolver.dispatch("round.started", mod_ctx, subs)
-	assert_eq(
-		float(state.business.get("demand_modifier", 0.0)),
-		3.0,
+	resolver.dispatch("compute.recalculate", mod_ctx, subs)
+	assert_almost_eq(
+		float(mod_ctx.get_value("compute.local_rate", 0.0)),
+		100.0 * 1.4 * 1.15,
+		0.01,
 		"Each perk uses its own parameters when multiple match the same event"
 	)
 

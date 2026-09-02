@@ -76,7 +76,7 @@ None of that is a burn spectacle log.
 
 - Late compute `max_level` is 2 (`content/upgrades/upgrades.json`). `test_upgrade_counts.gd` `_test_major_machine_caps_and_grandfathered_fleets` encodes that as law. `docs/GAME_DESIGN.md` still documents fleet caps.
 - Floor space already exists (`dwelling_costs.json` 2 / 4 / 8 / 16 / 40 / 80 / 160) and is the right soft cap. Power cost and recurring cost already scale. They never get to matter because `max_level` stops the shop first.
-- Job demand already goes to 8 (`DemandSystem.refresh_demand`). `JobSystem.generate_offers` then clamps to 5.
+- Offer count now equals `ComputeSystem.job_slots()`. There is no advertising/demand layer.
 - Parallel lanes already exist: `ComputeSystem.job_slots()` = floor machines used.
 - Contract risk flattens in `content/balance/job_scaling.json`: bug chance 12% and scope creep 5% from warehouse onward.
 - Moon / alternate finales are fixed 25T–60T (`content/ascension/contracts.json`). No depth loop.
@@ -315,21 +315,12 @@ tests/simulation_tests/test_parallel_and_bonus.gd
 Today:
 
 ```gdscript
-var count: int = clampi(int(run_state.business.get("demand", 3.0)), 1, 5)
+var count: int = ComputeSystem.job_slots(run_state)
 ```
-
-Change to:
-
-```gdscript
-var offer_cap: int = maxi(5, ComputeSystem.job_slots(run_state))
-var count: int = clampi(int(run_state.business.get("demand", 3.0)), 1, offer_cap)
-```
-
-If `DemandSystem` still caps demand at 8, raise that ceiling to `maxi(8, job_slots)` so advertising and a 16-machine warehouse can actually fill the board.
 
 Keep: one windfall, one stretch, “one familiar local + authored service-tier posts” when the rig outruns the room. Do not start live-scaling old contracts.
 
-Acceptance: a warehouse with 8 machines can see more than 5 offers when demand is high; a bedroom still sees 1–5.
+Acceptance: a warehouse with 8 machines sees 8 offers; a bedroom laptop sees 1.
 
 ### 1.C Un-flatten late contract risk
 

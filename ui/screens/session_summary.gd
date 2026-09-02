@@ -118,7 +118,7 @@ func _print_statement(summary: Dictionary) -> void:
 	_statement.add_item(
 		"Money spent",
 		NumberFormat.format_cash(float(summary.get("spent", 0.0))),
-		"Running costs during the round: energy, cloud rental and other burn. Rent is not in here — that lands on the next screen.",
+		"Running costs during the round: energy and other burn. Rent is not in here — that lands on the next screen.",
 		{"value_color": ConsoleStyle.WARNING}
 	)
 	_statement.add_item(

@@ -1,16 +1,5 @@
 [
   {
-    "id": "event.cloud_price_spike",
-    "name": "Cloud Price Spike",
-    "description": "Your provider raises prices overnight.",
-    "trigger_event": "round.ended",
-    "weight": 1.2,
-    "conditions": [],
-    "effects": [
-      {"operation": "multiply", "target": "economy.cloud_surcharge_liability", "value": 1.5}
-    ]
-  },
-  {
     "id": "event.power_cut",
     "name": "Power Cut",
     "description": "Local compute is offline for a day.",
@@ -30,17 +19,6 @@
     "conditions": [],
     "effects": [
       {"operation": "add", "target": "business.reputation", "value": 5}
-    ]
-  },
-  {
-    "id": "event.client_referral",
-    "name": "Client Referral",
-    "description": "A happy client sends more work.",
-    "trigger_event": "round.ended",
-    "weight": 1.1,
-    "conditions": [],
-    "effects": [
-      {"operation": "add", "target": "business.demand_modifier", "value": 1}
     ]
   },
   {
@@ -76,25 +54,12 @@
               "priority": 0,
               "conditions": [],
               "effects": [
-                {"operation": "add", "target": "business.demand_modifier", "value": 0.35}
+                {"operation": "multiply", "target": "compute.efficiency", "value": 0.97}
               ]
             }
           ]
         }
       }
-    ]
-  },
-  {
-    "id": "event.cloud_bill_shock",
-    "name": "Cloud Bill Shock",
-    "description": "Finance forwards the invoice with a single sweating emoji.",
-    "trigger_event": "round.ended",
-    "weight": 1.1,
-    "conditions": [
-      {"left": "economy.cloud_surcharge_liability", "operator": ">", "right": 0}
-    ],
-    "effects": [
-      {"operation": "defer_cost", "target": "economy.cash", "value": 220}
     ]
   },
   {
@@ -193,21 +158,6 @@
           ]
         }
       }
-    ]
-  },
-  {
-    "id": "event.conference_sponsorship",
-    "name": "Conference Sponsorship",
-    "description": "You bought the bronze booth package. They gave you a lanyard and a invoice.",
-    "trigger_event": "round.ended",
-    "weight": 0.8,
-    "conditions": [
-      {"left": "economy.cash", "operator": ">=", "right": 250}
-    ],
-    "effects": [
-      {"operation": "add", "target": "economy.cash", "value": -280},
-      {"operation": "add", "target": "business.reputation", "value": 9},
-      {"operation": "add", "target": "business.demand_modifier", "value": 0.5}
     ]
   },
   {

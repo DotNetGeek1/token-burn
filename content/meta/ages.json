@@ -23,7 +23,7 @@
   {
     "id": "age.hyperscale",
     "name": "Hyperscale Age",
-    "flavour": "Somewhere, a cloud provider is naming a discount tier after your account.",
+    "flavour": "Somewhere, a hardware vendor is naming a SKU after your floorplan.",
     "token_scaling_multiplier": 1.35,
     "reward_scaling_multiplier": 1.3,
     "starting_cash_bonus": 4000

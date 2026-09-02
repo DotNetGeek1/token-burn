@@ -215,12 +215,6 @@ func _apply_effect_dict(
 ) -> Transaction:
 	var operation: String = str(effect.get("operation", "add")).to_lower()
 	var target: String = str(effect.get("target", ""))
-	# `business.demand` is derived from reputation and advertising every round,
-	# so an effect adding to it directly would be wiped. Events and upgrades
-	# mean it permanently; perks that mean it for one round target
-	# `business.demand_modifier`, which is re-seeded from this base each round.
-	if target == "business.demand" and operation == "add":
-		target = "business.demand_modifier_base"
 	var raw_value: Variant = effect.get("value", 0)
 	var value: Variant = _resolve_effect_value(raw_value, eval_ctx)
 	# "A share of another stat" rather than a literal figure. A perk worth a flat
@@ -673,13 +667,6 @@ const DERIVED_PATHS := [
 	## The two halves of the rate and the ratio between them, rebuilt from what
 	## is racked and what is rented on every recalculation.
 	"compute.local_rate",
-	"compute.cloud_rate",
-	"compute.cloud_share",
-	## What the cloud shelf bills per prompt, re-seeded from
-	## economy.cloud_base_cost_per_prompt. Persisting a discount here meant a
-	## "50% off" perk halved its own last answer every recalculation, so £5,000
-	## became £2,500, then £1,250, and eventually nothing.
-	"economy.cloud_cost_per_prompt",
 	## Seeded from economy.recurring_costs_base. Executive Committee multiplies
 	## the bill; persisting that product here compounded it every recalculation.
 	"economy.recurring_costs",

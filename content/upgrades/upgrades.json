@@ -184,98 +184,6 @@
     "effects": []
   },
   {
-    "id": "upgrade.cloud_account",
-    "name": "Open a Cloud Account",
-    "category": "cloud",
-    "description": "Sign up, hand over a card, and agree to terms nobody has read. Nothing else on this shelf exists until you do, and neither does the CLOUD key on the board.",
-    "cost": 600,
-    "tags": ["cloud"],
-    "recurring_cost_delta": 20,
-    "effects": []
-  },
-  {
-    "id": "upgrade.cloud_reserved",
-    "name": "Reserved Capacity",
-    "category": "cloud",
-    "description": "A long-term reservation at a steep discount over pay-as-you-go, in exchange for a much larger standing bill.",
-    "cost": 400000,
-    "tags": ["cloud"],
-    "requires_upgrade": "upgrade.cloud_account",
-    "recurring_cost_delta": 6000,
-    "effects": [
-      {"operation": "add", "target": "compute.cloud_capacity", "value": 300000000},
-      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 1200}
-    ]
-  },
-  {
-    "id": "upgrade.cloud_multicloud",
-    "name": "Multi-Cloud Failover",
-    "category": "cloud",
-    "description": "Redundant capacity across providers, so an outage on one is somebody else's problem.",
-    "cost": 3000000,
-    "tags": ["cloud"],
-    "requires_upgrade": "upgrade.cloud_account",
-    "recurring_cost_delta": 30000,
-    "effects": [
-      {"operation": "add", "target": "compute.cloud_capacity", "value": 2000000000},
-      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 5000}
-    ]
-  },
-  {
-    "id": "upgrade.cloud_unlimited",
-    "name": "\"Unlimited\" Enterprise Contract",
-    "category": "cloud",
-    "description": "Effectively unlimited cloud capacity. The word \"effectively\" is doing a great deal of work in that sentence.",
-    "cost": 40000000,
-    "tags": ["cloud"],
-    "requires_upgrade": "upgrade.cloud_account",
-    "recurring_cost_delta": 200000,
-    "effects": [
-      {"operation": "add", "target": "compute.cloud_capacity", "value": 20000000000},
-      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 40000}
-    ]
-  },
-  {
-    "id": "upgrade.cloud_payg",
-    "name": "Pay-As-You-Go Cloud",
-    "category": "cloud",
-    "description": "Immediate cloud capacity, metered by the second and billed by the round. Twice the laptop, at a price that notices you are still renting a bedroom.",
-    "cost": 500,
-    "tags": ["cloud"],
-    "requires_upgrade": "upgrade.cloud_account",
-    "recurring_cost_delta": 80,
-    "effects": [
-      {"operation": "add", "target": "compute.cloud_capacity", "value": 2000000},
-      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 40}
-    ]
-  },
-  {
-    "id": "upgrade.cloud_spot",
-    "name": "Spot Instance Arbitrage",
-    "category": "cloud",
-    "description": "Cheap capacity bought on the spot market, with the outage risk that makes it cheap.",
-    "cost": 900,
-    "tags": ["cloud", "risk"],
-    "requires_upgrade": "upgrade.cloud_account",
-    "recurring_cost_delta": 40,
-    "effects": [
-      {"operation": "add", "target": "compute.cloud_capacity", "value": 5000000},
-      {"operation": "add", "target": "economy.cloud_base_cost_per_prompt", "value": 60}
-    ]
-  },
-  {
-    "id": "upgrade.ads_basic",
-    "name": "Basic Ad Campaign",
-    "category": "advertising",
-    "description": "Increase demand with daily ad spend.",
-    "cost": 300,
-    "tags": ["advertising"],
-    "recurring_cost_delta": 20,
-    "effects": [
-      {"operation": "add", "target": "business.advertising", "value": 100}
-    ]
-  },
-  {
     "id": "upgrade.portable_ac",
     "name": "Portable Air Conditioner",
     "category": "hardware",
@@ -449,30 +357,5 @@
     "effects": [
       {"operation": "add", "target": "build.board.slot_count", "value": 1}
     ]
-  },
-  {
-    "id": "upgrade.sales_investment",
-    "name": "Sales Outreach",
-    "category": "advertising",
-    "description": "Invest in sales to unlock bigger contracts. Each level lowers the reputation needed for higher tiers.",
-    "cost": 400,
-    "repeatable": true,
-    "cost_growth": 1.35,
-    "tags": ["advertising", "sales"],
-    "recurring_cost_delta": 5,
-    "effects": []
-  },
-  {
-    "id": "upgrade.cloud_compute",
-    "name": "Cloud Compute",
-    "category": "cloud",
-    "description": "Raise the ceiling on a cloud burst. Each level adds +0.5× to the burst multiplier.",
-    "cost": 350,
-    "repeatable": true,
-    "cost_growth": 1.4,
-    "tags": ["cloud"],
-    "requires_upgrade": "upgrade.cloud_account",
-    "recurring_cost_delta": 0,
-    "effects": []
   }
 ]

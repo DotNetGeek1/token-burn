@@ -357,8 +357,6 @@ func _forecast_line(job: Dictionary, working: bool) -> String:
 		parts.append("×%d repeats" % repeats)
 	if Simulation.boost_engaged():
 		parts.append("boost")
-	if Simulation.cloud_engaged():
-		parts.append("cloud")
 	parts.append(_projected_heat_text(preview))
 	return " ".join(parts)
 
@@ -412,16 +410,6 @@ func _refresh_actions(job: Dictionary, working: bool) -> void:
 			"headline": "BOOST",
 			"value": "engaged" if boosted else "one batch",
 			"pressed": _on_boost,
-		})
-	if FeatureFlags.is_enabled("cloud_compute_enabled") and armable:
-		var owned: bool = Simulation.cloud_enabled()
-		rows.append({
-			"headline": "CLOUD BURST",
-			"value": (
-				"engaged" if Simulation.cloud_engaged() or Simulation.queued_cloud
-				else (NumberFormat.format_cash(Simulation.cloud_burst_cost()) if owned else "no account")
-			),
-			"pressed": _on_cloud,
 		})
 	if not job.is_empty():
 		var complete: bool = float(job.get("tokens_remaining", 0.0)) <= 0.0
@@ -886,17 +874,6 @@ func _on_boost() -> void:
 	# surge the moment BURN starts the round.
 	if Simulation.can_start_work() and not Simulation.queued_boost:
 		Simulation.set_queued_boost(true)
-		refresh()
-
-
-func _on_cloud() -> void:
-	if _burning:
-		return
-	if Simulation.cloud_burst():
-		refresh()
-		return
-	if Simulation.can_start_work() and Simulation.cloud_enabled() and not Simulation.queued_cloud:
-		Simulation.set_queued_cloud(true)
 		refresh()
 
 

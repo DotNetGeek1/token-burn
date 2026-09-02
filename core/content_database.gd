@@ -514,7 +514,7 @@ const KNOWN_EFFECT_OPERATIONS := [
 ]
 ## Category enums recognised by `Simulation`/`UpgradeSystem` when installing
 ## an upgrade. Anything else is a typo that would silently fail to install.
-const KNOWN_UPGRADE_CATEGORIES := ["hardware", "component", "dwelling", "cloud", "advertising"]
+const KNOWN_UPGRADE_CATEGORIES := ["hardware", "component", "dwelling"]
 ## Prefixes an effect target may use without resolving against `RunState`:
 ## `job.`/`batch.`/`stage.` are per-resolution scratch values (see
 ## `ModifierContext` and `BoardSystem`'s per-stage batch dictionary),

@@ -8,10 +8,7 @@ const MIN_BAND_POOL := 3
 
 
 func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Node, tuning: Dictionary) -> void:
-	var slots: int = ComputeSystem.job_slots(run_state)
-	var offer_cap: int = maxi(DemandSystem.MAX_DEMAND, slots)
-	var interest: int = clampi(int(run_state.business.get("demand", 3.0)), 1, offer_cap)
-	var count: int = maxi(interest, slots)
+	var count: int = ComputeSystem.job_slots(run_state)
 	var round_number: int = int(run_state.calendar.get("round", 1))
 	var here: int = location_tier(run_state, content_db)
 	var eligible: Array = _collect_eligible_jobs(content_db, round_number, here)
@@ -821,7 +818,6 @@ func end_prompt(
 	# throttle raised by the heat this same batch generated cannot reach back
 	# and slow it down — it only applies to the prompt that follows.
 	run_state.tick_rate_modifiers()
-	run_state.tick_cloud_burst()
 	messages.append_array(heat_system.process_prompt(run_state, subscriptions, effect_resolver, rng, mode))
 	# Heat may have added a throttle modifier; recalculate so the HUD's sustained
 	# rate matches what the next prompt will actually use.
@@ -1370,12 +1366,7 @@ func _scale_job(
 	var round_rent: float = float(run_state.economy.get("round_rent", 400.0)) * float(
 		scaling.get("min_reward_rent_share", 0.5)
 	)
-	# Metered cloud cost is real per-prompt spend too, so a cloud-heavy build's
-	# contracts must be able to cover it — not just the power they draw.
-	var cloud_per_prompt: float = float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) * float(
-		tuning.get("cloud_cost_multiplier", 1.0)
-	)
-	var min_reward: float = (power_per_prompt + cloud_per_prompt) * ceil(effective_work_prompts) * float(
+	var min_reward: float = power_per_prompt * ceil(effective_work_prompts) * float(
 		scaling.get("min_reward_cost_multiplier", 3.0)
 	) + round_rent
 	# Snapped so varied offers still advertise tidy figures.
@@ -1438,11 +1429,9 @@ static func reputation_reward_multiplier(run_state: RunState, content_db: Node) 
 static func next_reputation_tier(run_state: RunState, content_db: Node) -> Dictionary:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
 	var thresholds: Array = scaling.get("tier_unlock_by_reputation", [])
-	var sales_level: int = int(run_state.build.get("upgrade_levels", {}).get("upgrade.sales_investment", 0))
-	var reduction: float = float(scaling.get("sales_level_rep_reduction", 2))
 	var reputation: float = float(run_state.business.get("reputation", 0.0))
 	for index in range(thresholds.size()):
-		var needed: float = float(thresholds[index]) - float(sales_level) * reduction
+		var needed: float = float(thresholds[index])
 		if reputation < needed:
 			return {"tier": index, "reputation": needed}
 	return {}
@@ -1504,9 +1493,7 @@ func _stretch_tier_available(run_state: RunState, content_db: Node) -> int:
 	var thresholds: Array = scaling.get("tier_unlock_by_reputation", [])
 	if stretch >= thresholds.size():
 		return -1
-	var sales_level: int = int(run_state.build.get("upgrade_levels", {}).get("upgrade.sales_investment", 0))
-	var reduction: float = float(scaling.get("sales_level_rep_reduction", 2))
-	var needed: float = float(thresholds[stretch]) - float(sales_level) * reduction
+	var needed: float = float(thresholds[stretch])
 	if float(run_state.business.get("reputation", 0.0)) < needed:
 		return -1
 	return stretch

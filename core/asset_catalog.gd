@@ -439,13 +439,8 @@ static func category_icon(category: String) -> Texture2D:
 	match category.to_lower():
 		"dwelling":
 			return nav_icon("office")
-		"advertising":
-			# No dedicated advertising icon in the kit yet; cash reads closest.
-			return stat_icon("cash")
 		"hardware", "component":
 			return get_texture("category_icons", "hardware")
-		"cloud":
-			return get_texture("category_icons", "cloud")
 		"local":
 			return get_texture("category_icons", "local")
 		"hybrid":
@@ -467,7 +462,7 @@ static func module_icon(category: String) -> Texture2D:
 		"test":
 			return stat_icon("quality")
 		"cache":
-			return get_texture("category_icons", "cloud")
+			return get_texture("category_icons", "local")
 		"hardware":
 			return get_texture("category_icons", "hardware")
 		"deploy":
@@ -538,7 +533,7 @@ static func palette_color(color_name: String, fallback: Color = Color.WHITE) -> 
 
 
 static func _is_category_tag(tag: String) -> bool:
-	return tag == "cloud" or tag == "local" or tag == "hybrid" or tag == "hardware" or tag == "perks"
+	return tag == "local" or tag == "hybrid" or tag == "hardware" or tag == "perks"
 
 
 static func _status_key_for_tag(tag: String) -> String:
@@ -563,8 +558,6 @@ static func _stat_key_for_tag(tag: String) -> String:
 			return "cash"
 		"cash":
 			return "cash"
-		"advertising":
-			return "cash"
 		"tokens":
 			return "tokens"
 		"passive":
@@ -574,8 +567,6 @@ static func _stat_key_for_tag(tag: String) -> String:
 		"efficiency":
 			return "power"
 		"reputation":
-			return "reputation"
-		"demand":
 			return "reputation"
 		"speed":
 			return "deadline"

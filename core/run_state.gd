@@ -3,7 +3,36 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 20
+const SAVE_VERSION := 21
+
+## Upgrades that no longer exist in content. Migration refunds the original
+## purchase total from this table rather than looking the defs up.
+const REMOVED_UPGRADE_COSTS := {
+	"upgrade.cloud_account": {"cost": 600.0, "repeatable": false, "cost_growth": 1.0},
+	"upgrade.cloud_reserved": {"cost": 400000.0, "repeatable": false, "cost_growth": 1.0},
+	"upgrade.cloud_multicloud": {"cost": 3000000.0, "repeatable": false, "cost_growth": 1.0},
+	"upgrade.cloud_unlimited": {"cost": 40000000.0, "repeatable": false, "cost_growth": 1.0},
+	"upgrade.cloud_payg": {"cost": 500.0, "repeatable": false, "cost_growth": 1.0},
+	"upgrade.cloud_spot": {"cost": 900.0, "repeatable": false, "cost_growth": 1.0},
+	"upgrade.cloud_compute": {"cost": 350.0, "repeatable": true, "cost_growth": 1.4},
+	"upgrade.ads_basic": {"cost": 300.0, "repeatable": false, "cost_growth": 1.0},
+	"upgrade.sales_investment": {"cost": 400.0, "repeatable": true, "cost_growth": 1.35},
+}
+
+const REMOVED_PERKS := [
+	"perk.free_trial",
+	"perk.founder_mode",
+	"perk.cloud_baron",
+	"perk.ad_tech_goblin",
+	"perk.cloud_native",
+	"perk.spot_survivor",
+	"perk.egress_panic",
+]
+
+const REMOVED_MODULES := [
+	"op.spot_fleet",
+	"op.egress_shield",
+]
 
 ## What a run on Normal starts the first chapter with, and the figure every
 ## location's stake and every difficulty profile is expressed relative to.
@@ -27,34 +56,20 @@ var economy: Dictionary = {
 	"recurring_costs_base": 0.0,
 	"recurring_costs": 0.0,
 	"income": 0.0,
-	"cloud_surcharge_liability": 0.0,
 	"pending_bills": [],
 	"rent_unpaid_streak": 0,
 	"rent_multiplier": 1.0,
 	"round_rent": 400.0,
 	"power_base_cost_per_prompt": 10.0,
 	"power_cost_per_prompt": 10.0,
-	## What the run's cloud tier bills per prompt before anything discounts it.
-	## Upgrades write here; perks discount the derived figure below.
-	"cloud_base_cost_per_prompt": 0.0,
-	## Re-derived from the base on every recalculation, so a perk that halves it
-	## halves it once rather than once per recalculation for the rest of the run.
-	"cloud_cost_per_prompt": 0.0,
 	"costs_this_round": 0.0,
 	"last_round_costs": 0.0,
 }
 
 var compute: Dictionary = {
 	"local_capacity": 1_000_000.0,
-	"cloud_capacity": 0.0,
-	"cloud_burst": 0.0,
-	"cloud_burst_prompts": 0,
 	"token_rate": 1_000_000.0,
-	## The two halves of `token_rate`, split so a perk can favour owned iron over
-	## rented capacity or the other way round. Both derived every recalculation.
 	"local_rate": 1_000_000.0,
-	"cloud_rate": 0.0,
-	"cloud_share": 0.0,
 	"prompt_rate": 1_000_000.0,
 	"power_draw": 65.0,
 	## Derived by ComputeSystem from the run's location, what is installed in it
@@ -73,14 +88,6 @@ var compute: Dictionary = {
 
 var business: Dictionary = {
 	"reputation": 10.0,
-	"demand": 3.0,
-	## Re-seeded from the base at the top of every round, so a perk advertising
-	## "+1 demand" is worth +1 in round twelve as well as in round one.
-	"demand_modifier": 0.0,
-	## Permanent changes to demand — events, upgrades — as opposed to the
-	## per-round contributions perks make.
-	"demand_modifier_base": 0.0,
-	"advertising": 0.0,
 	"active_jobs": [],
 	"active_job": {},
 	"job_offers": [],
@@ -103,8 +110,6 @@ var build: Dictionary = {
 	"workflows": [],
 	"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
 	"dwelling": "bedroom",
-	"cloud_tier": "none",
-	"advertising_tier": "none",
 	"upgrade_levels": {},
 	## The one ledger of "how many of upgrade X does this run own", repeatable
 	## and one-off alike (a one-off sits in here at 1). `hardware`/`upgrades`/
@@ -129,7 +134,6 @@ var statistics: Dictionary = {
 	"peak_debt": 0.0,
 	"peak_prompt_tokens": 0.0,
 	"hidden_bugs_shipped": 0,
-	"max_cloud_share": 0.0,
 	"stage_repeats": 0,
 	"max_heat_ratio": 0.0,
 	"jobs_accepted": 0,
@@ -243,17 +247,6 @@ func tick_rate_modifiers() -> void:
 			copy["prompts_remaining"] = prompts_left
 			remaining.append(copy)
 	compute["rate_modifiers"] = remaining
-
-
-## Rented cloud capacity is returned when its lease runs out. Kept separate from
-## `cloud_capacity`, which upgrades own permanently.
-func tick_cloud_burst() -> void:
-	var prompts_left: int = int(compute.get("cloud_burst_prompts", 0)) - 1
-	if prompts_left > 0:
-		compute["cloud_burst_prompts"] = prompts_left
-		return
-	compute["cloud_burst_prompts"] = 0
-	compute["cloud_burst"] = 0.0
 
 
 func get_value_at_path(path: String) -> Variant:
@@ -453,6 +446,94 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_v19()
 	if from_version < 20:
 		_migrate_to_v20()
+	if from_version < 21:
+		_migrate_to_v21(from_version)
+
+
+## Cloud, sales and advertising are gone. Refund paid purchases, drop the
+## leftover state, and rebuild the standing bill from what the run still owns.
+func _migrate_to_v21(from_version: int) -> void:
+	var refund: float = _refund_removed_upgrades(from_version)
+	if refund > 0.0:
+		economy["cash"] = float(economy.get("cash", 0.0)) + refund
+	build["upgrades"] = _without_removed_ids(Array(build.get("upgrades", [])), REMOVED_UPGRADE_COSTS.keys())
+	_strip_removed_dict_keys(build.get("upgrade_levels", {}), REMOVED_UPGRADE_COSTS.keys())
+	_strip_removed_dict_keys(build.get("upgrade_counts", {}), REMOVED_UPGRADE_COSTS.keys())
+	_strip_removed_dict_keys(build.get("purchased_upgrade_counts", {}), REMOVED_UPGRADE_COSTS.keys())
+	build["perks"] = _without_removed_ids(Array(build.get("perks", [])), REMOVED_PERKS)
+	build["perk_inventory"] = _without_removed_ids(Array(build.get("perk_inventory", [])), REMOVED_PERKS)
+	build["modules"] = _without_removed_ids(Array(build.get("modules", [])), REMOVED_MODULES)
+	for stale in [
+		"cloud_surcharge_liability", "cloud_base_cost_per_prompt", "cloud_cost_per_prompt",
+		"cloud_liability", "cloud_cost_per_round",
+	]:
+		economy.erase(stale)
+	for stale in [
+		"cloud_capacity", "cloud_burst", "cloud_burst_prompts", "cloud_rate", "cloud_share",
+		"cloud_burst_rounds",
+	]:
+		compute.erase(stale)
+	for stale in ["demand", "demand_modifier", "demand_modifier_base", "advertising"]:
+		business.erase(stale)
+	build.erase("cloud_tier")
+	build.erase("advertising_tier")
+	statistics.erase("max_cloud_share")
+	_migrate_to_derived_recurring_costs()
+
+
+func _refund_removed_upgrades(from_version: int) -> float:
+	var purchased: Dictionary = Dictionary(build.get("purchased_upgrade_counts", {}))
+	var counts: Dictionary = UpgradeSystem.upgrade_counts(self)
+	var refund: float = 0.0
+	for upgrade_id in REMOVED_UPGRADE_COSTS.keys():
+		var spec: Dictionary = REMOVED_UPGRADE_COSTS[upgrade_id]
+		var paid: int = 0
+		if from_version >= 19:
+			paid = int(purchased.get(upgrade_id, 0))
+		else:
+			paid = int(counts.get(upgrade_id, 0))
+			if upgrade_id == "upgrade.cloud_account" and _cloud_account_was_granted():
+				paid = maxi(0, paid - 1)
+		refund += _removed_purchase_total(spec, paid)
+	return refund
+
+
+func _removed_purchase_total(spec: Dictionary, count: int) -> float:
+	var total: float = 0.0
+	var cost: float = float(spec.get("cost", 0.0))
+	var growth: float = float(spec.get("cost_growth", 1.0))
+	var repeatable: bool = bool(spec.get("repeatable", false))
+	for level in range(maxi(0, count)):
+		if repeatable:
+			total += cost * pow(growth, float(level))
+		else:
+			total += cost
+	return total
+
+
+func _cloud_account_was_granted() -> bool:
+	if not MetaProgress.enabled:
+		return false
+	return (
+		MetaProgress.retired_cloud_unlocks()
+		or MetaProgress.unlock_count("unlock.cloud_account") > 0
+		or MetaProgress.unlock_count("unlock.starting_cloud") > 0
+	)
+
+
+func _without_removed_ids(owned: Array, removed: Array) -> Array:
+	var kept: Array = []
+	for entry in owned:
+		if not (str(entry) in removed):
+			kept.append(entry)
+	return kept
+
+
+func _strip_removed_dict_keys(table: Variant, removed: Array) -> void:
+	if not table is Dictionary:
+		return
+	for key in removed:
+		table.erase(key)
 
 
 ## Revision scope creep could add outstanding work without increasing the total
@@ -763,15 +844,12 @@ func _default_economy(profile: Dictionary = {}) -> Dictionary:
 		"recurring_costs_base": 0.0,
 		"recurring_costs": 0.0,
 		"income": 0.0,
-		"cloud_surcharge_liability": 0.0,
 		"pending_bills": [],
 		"rent_unpaid_streak": 0,
 		"rent_multiplier": float(profile.get("rent_multiplier", 1.0)),
 		"round_rent": float(economy_balance.get("starting_rent", 400.0)) * float(profile.get("rent_multiplier", 1.0)),
 		"power_base_cost_per_prompt": base_power,
 		"power_cost_per_prompt": base_power,
-		"cloud_base_cost_per_prompt": 0.0,
-		"cloud_cost_per_prompt": 0.0,
 		"costs_this_round": 0.0,
 		"last_round_costs": 0.0,
 	}
@@ -780,13 +858,8 @@ func _default_economy(profile: Dictionary = {}) -> Dictionary:
 func _default_compute() -> Dictionary:
 	return {
 		"local_capacity": 1_000_000.0,
-		"cloud_capacity": 0.0,
-		"cloud_burst": 0.0,
-		"cloud_burst_prompts": 0,
 		"token_rate": 1_000_000.0,
 		"local_rate": 1_000_000.0,
-		"cloud_rate": 0.0,
-		"cloud_share": 0.0,
 		"prompt_rate": 1_000_000.0,
 		"power_draw": 65.0,
 		"cooling": 0.0,
@@ -803,10 +876,6 @@ func _default_compute() -> Dictionary:
 func _default_business() -> Dictionary:
 	return {
 		"reputation": 10.0,
-		"demand": 3.0,
-		"demand_modifier": 0.0,
-		"demand_modifier_base": 0.0,
-		"advertising": 0.0,
 		"active_jobs": [],
 		"active_job": {},
 		"job_offers": [],
@@ -831,8 +900,6 @@ func _default_build() -> Dictionary:
 		"workflows": [],
 		"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
 		"dwelling": "bedroom",
-		"cloud_tier": "none",
-		"advertising_tier": "none",
 		"upgrade_levels": {},
 		"upgrade_counts": {},
 		"purchased_upgrade_counts": {},
@@ -853,8 +920,7 @@ func _default_statistics() -> Dictionary:
 		"peak_debt": 0.0,
 		"peak_prompt_tokens": 0.0,
 		"hidden_bugs_shipped": 0,
-	"max_cloud_share": 0.0,
-	"stage_repeats": 0,
+		"stage_repeats": 0,
 		"max_heat_ratio": 0.0,
 		"jobs_accepted": 0,
 		"angel_offers_taken": 0,

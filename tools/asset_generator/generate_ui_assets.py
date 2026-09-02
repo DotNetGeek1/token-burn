@@ -215,14 +215,6 @@ def generate_stat_icons() -> None:
 def generate_category_icons() -> None:
     print("Category icons...")
     make_icon(
-        "cloud",
-        COLORS["blue"],
-        '<g stroke="#4dc3ff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">'
-        '<path d="M36 72 C28 72 24 64 28 56 C30 48 38 44 46 46 C50 36 62 32 72 38 C82 44 86 56 80 66 C84 70 84 76 78 80 L42 80 C36 80 32 76 36 72 Z"/>'
-        "</g>",
-        "category",
-    )
-    make_icon(
         "local",
         COLORS["green"],
         '<g stroke="#39ff88" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">'
@@ -305,18 +297,14 @@ PERK_ICONS: dict[str, tuple[str, str]] = {
     "ship_it": (COLORS["green"], '<polygon points="64,36 72,56 92,56 76,68 82,88 64,76 46,88 52,68 36,56 56,56" fill="#39ff88" opacity="0.2"/>'),
     "recursive_intern": (COLORS["blue"], '<circle cx="64" cy="50" r="12"/><path d="M44 88 C44 72 52 64 64 64 C76 64 84 72 84 88" fill="#4dc3ff" opacity="0.15"/><path d="M64 64 L64 48 M64 48 L58 54 M64 48 L70 54" stroke-width="2.5"/>'),
     "stack_overflow_tab": (COLORS["orange"], '<rect x="40" y="40" width="48" height="36" rx="4"/><line x1="48" y1="52" x2="80" y2="52"/><line x1="48" y1="62" x2="72" y2="62"/><text x="64" y="82" font-size="14" fill="#ff6b35" text-anchor="middle">SO</text>'),
-    "free_trial": (COLORS["blue"], '<path d="M36 72 C28 72 24 64 28 56 C30 48 38 44 46 46 C50 36 62 32 72 38 C82 44 86 56 80 66 C84 70 84 76 78 80 L42 80 C36 80 32 76 36 72 Z"/><text x="64" y="68" font-size="16" fill="#4dc3ff" text-anchor="middle">FREE</text>'),
     "quantised_everything": (COLORS["purple"], '<rect x="40" y="40" width="48" height="48" rx="6"/><line x1="48" y1="56" x2="80" y2="56"/><line x1="48" y1="72" x2="80" y2="72"/><line x1="56" y1="48" x2="56" y2="80"/><line x1="72" y1="48" x2="72" y2="80"/>'),
     "works_on_my_machine": (COLORS["green"], '<rect x="44" y="48" width="40" height="28" rx="3"/><line x1="52" y1="84" x2="76" y2="84"/><polyline points="52,72 58,66 64,70 76,58" stroke-width="2.5"/>'),
     "technical_debt": (COLORS["red"], '<path d="M40 80 L48 48 L80 48 L88 80 Z" fill="#e94560" opacity="0.15"/><line x1="48" y1="60" x2="80" y2="60"/><line x1="52" y1="72" x2="76" y2="72"/>'),
-    "founder_mode": (COLORS["yellow"], '<circle cx="64" cy="50" r="14"/><path d="M40 88 C40 72 50 62 64 62 C78 62 88 72 88 88" fill="#ffd54a" opacity="0.15"/><line x1="64" y1="36" x2="64" y2="28"/>'),
     "infinite_context": (COLORS["purple"], '<rect x="36" y="44" width="56" height="40" rx="4"/><path d="M36 52 L92 52" stroke-dasharray="6 4"/><text x="64" y="72" font-size="14" fill="#b066ff" text-anchor="middle">∞</text>'),
     "the_wrapper": (COLORS["blue"], '<rect x="44" y="44" width="40" height="40" rx="4" stroke-dasharray="6 3"/><rect x="52" y="52" width="24" height="24" rx="2" fill="#4dc3ff" opacity="0.2"/>'),
     "vibe_check": (COLORS["purple"], '<circle cx="64" cy="64" r="24"/><path d="M52 58 Q64 72 76 58" fill="none"/><circle cx="54" cy="56" r="3" fill="#b066ff"/><circle cx="74" cy="56" r="3" fill="#b066ff"/>'),
     "prompt_engineer": (COLORS["green"], '<rect x="40" y="36" width="48" height="56" rx="4"/><line x1="48" y1="50" x2="80" y2="50"/><line x1="48" y1="62" x2="72" y2="62"/><line x1="48" y1="74" x2="68" y2="74"/><path d="M76 78 L88 84 L76 84 Z" fill="#39ff88" opacity="0.3"/>'),
-    "cloud_baron": (COLORS["blue"], '<path d="M32 68 C24 68 20 58 26 50 C28 44 36 40 44 42 C48 32 62 28 74 36 C84 42 88 54 82 64 C86 68 86 74 80 78 L36 78 C30 78 26 74 32 68 Z" fill="#4dc3ff" opacity="0.15"/><text x="64" y="68" font-size="18" fill="#4dc3ff" text-anchor="middle">$</text>'),
     "consultancy_mode": (COLORS["yellow"], '<rect x="36" y="48" width="56" height="36" rx="4"/><line x1="44" y1="60" x2="84" y2="60"/><line x1="44" y1="72" x2="68" y2="72"/><circle cx="76" cy="72" r="6" fill="#ffd54a" opacity="0.3"/>'),
-    "ad_tech_goblin": (COLORS["green"], '<circle cx="54" cy="56" r="10"/><circle cx="74" cy="56" r="10"/><path d="M44 76 Q64 92 84 76" fill="none"/><path d="M48 44 L52 36 M80 44 L76 36" stroke-width="2"/>'),
 }
 
 
@@ -434,7 +422,7 @@ def generate_catalog() -> None:
         "palette": COLORS,
         "nav_icons": {k: f"res://presentation/ui/icons/nav/{k}.svg" for k in ["office", "jobs", "build", "market", "menu"]},
         "stat_icons": {k: f"res://presentation/ui/icons/stat/{k}.svg" for k in ["cash", "tokens", "heat", "power", "reputation", "quality", "deadline", "agents"]},
-        "category_icons": {k: f"res://presentation/ui/icons/category/{k}.svg" for k in ["cloud", "local", "hybrid", "hardware", "perks"]},
+        "category_icons": {k: f"res://presentation/ui/icons/category/{k}.svg" for k in ["local", "hybrid", "hardware", "perks"]},
         "status_icons": {k: f"res://presentation/ui/icons/status/{k}.svg" for k in ["warning", "event", "bug"]},
         "perk_icons": {k: f"res://presentation/ui/icons/perks/{k}.svg" for k in PERK_ICONS},
         "panels": {
@@ -455,7 +443,6 @@ def generate_catalog() -> None:
         },
         "event_art": {
             "event.power_cut": "res://presentation/events/event_power_surge.png",
-            "event.cloud_bill_shock": "res://presentation/events/event_cloud_bill.png",
             "event.viral_bug": "res://presentation/events/event_viral_bug.png",
             "event.landlord_inspection": "res://presentation/events/event_landlord_inspection.png",
             "default": "res://presentation/events/event_power_surge.png",

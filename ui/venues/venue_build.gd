@@ -198,9 +198,6 @@ func _refresh_index() -> void:
 		_index_lines.remove_child(child)
 		child.queue_free()
 	var capacity: Dictionary = Simulation.perk_capacity()
-	var liability: float = float(
-		Simulation.run_state.economy.get("cloud_surcharge_liability", 0.0)
-	)
 	var lines: Array = [
 		{
 			"stat": "Slots",
@@ -214,12 +211,6 @@ func _refresh_index() -> void:
 		},
 		{"stat": "Token rate", "value": "×%.1f" % _token_rate_multiplier()},
 	]
-	if liability > 0.0:
-		lines.append({
-			"stat": "Cloud owed",
-			"value": NumberFormat.format_cash(liability),
-			"color": ConsoleStyle.WARNING,
-		})
 	for entry in lines:
 		var line: Control = ConsoleStyle.detail_line(
 			entry, ConsoleMetrics.font_small(console_scale())
@@ -450,9 +441,7 @@ func _active_synergy_entries() -> Array[Dictionary]:
 ## do with an empty loadout.
 func _token_rate_multiplier() -> float:
 	var compute: Dictionary = Simulation.run_state.compute
-	var base_rate: float = (
-		_hardware_token_rate() + float(compute.get("cloud_capacity", 0.0))
-	) * float(compute.get("efficiency", 1.0))
+	var base_rate: float = _hardware_token_rate() * float(compute.get("efficiency", 1.0))
 	if base_rate <= 0.0:
 		return 1.0
 	return float(compute.get("token_rate", 0.0)) / base_rate

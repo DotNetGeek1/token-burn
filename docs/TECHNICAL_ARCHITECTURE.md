@@ -47,15 +47,12 @@ RunState
 │   └── income
 ├── compute
 │   ├── local_capacity
-│   ├── cloud_capacity
 │   ├── token_rate
 │   ├── power_draw
 │   ├── cooling
 │   └── heat
 ├── business
 │   ├── reputation
-│   ├── demand
-│   ├── advertising
 │   └── active_jobs
 ├── build
 │   ├── perks
@@ -99,9 +96,7 @@ job.reward
 job.quality
 job.tokens_remaining
 economy.cash
-economy.cloud_cost
 business.reputation
-business.job_offer_count
 ```
 
 Example effect:
@@ -231,7 +226,7 @@ Perks should expose tags and stacking rules:
 ```json
 {
   "requires_tags": [],
-  "excludes_tags": ["no_cloud"],
+  "excludes_tags": ["no_cooling"],
   "incompatible_ids": [],
   "stacking": {
     "mode": "multiplicative",

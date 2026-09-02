@@ -73,24 +73,6 @@
     "amount": 0.05
   },
   {
-    "id": "unlock.cloud_account",
-    "name": "The Account Was Never Closed",
-    "kind": "starting_cloud_account",
-    "description": "Every future run begins with a cloud account already open, so the CLOUD key works from the first session instead of waiting on the Market.",
-    "flavour": "Nobody at the provider has noticed. Nobody at the provider ever notices.",
-    "repeatable": false
-  },
-  {
-    "id": "unlock.starting_cloud",
-    "name": "Capacity Already Provisioned",
-    "kind": "starting_cloud",
-    "description": "Every future run starts with cloud capacity running, and the account to go with it.",
-    "flavour": "The invoice from the old account is still, technically, disputed.",
-    "repeatable": true,
-    "amount": 3000000,
-    "recurring_cost": 15
-  },
-  {
     "id": "unlock.client_retainer",
     "name": "A Client on Retainer",
     "kind": "passive_income",

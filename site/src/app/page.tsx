@@ -18,7 +18,7 @@ const teasers = [
     accent: "money" as const,
     kicker: "Bills",
     title: "Pay the rent",
-    body: "Rent, power and cloud arrive every round whether the contract landed or not. Miss rent twice and Corrigan takes the hardware back.",
+    body: "Rent and power arrive every round whether the contract landed or not. Miss rent twice and Corrigan takes the hardware back.",
   },
   {
     accent: "perk" as const,
@@ -112,7 +112,7 @@ export default function HomePage() {
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <Shot src="/img/shot-board.webp" alt="The burn board terminal on a bedroom laptop" caption="The burn board — where contracts actually get burned." />
-          <Shot src="/img/shot-market.webp" alt="The upgrade market" caption="The market — hardware, cooling and cloud contracts." />
+          <Shot src="/img/shot-market.webp" alt="The upgrade market" caption="The market — hardware, cooling and the next machine." />
         </div>
       </Section>
 

@@ -137,8 +137,8 @@ func _refresh_index(_shelves_data: Dictionary) -> void:
 
 
 ## One line per counter that has something on it, with its stock count beside it.
-## An empty shelf is absent rather than greyed: the cloud is a rumour until the
-## account exists, and a counter with nothing behind it is not a place to stand.
+## An empty shelf is absent rather than greyed: a counter with nothing behind
+## it is not a place to stand.
 func _refresh_counters(shelves: Dictionary) -> void:
 	var wanted: Array[String] = []
 	for key in UpgradePresentation.GROUP_ORDER:
@@ -319,21 +319,8 @@ func _headline_figure(upgrade: UpgradeDefinition) -> Dictionary:
 		match effect.target:
 			"compute.cooling":
 				return {"figure": "+%d" % int(amount), "unit": "cooling"}
-			"compute.cloud_capacity":
-				return {"figure": NumberFormat.format(amount), "unit": "cloud tokens"}
 			"build.board.slot_count":
 				return {"figure": "+%d" % int(amount), "unit": "pipeline slots"}
-			"business.advertising":
-				return {
-					"figure": NumberFormat.format_cash(amount), "unit": "/ day demand",
-				}
-	if upgrade.id == Simulation.CLOUD_BURST_UPGRADE:
-		var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-		var multiplier: float = (
-			Simulation.CLOUD_BURST_BASE_MULTIPLIER
-			+ float(level) * Simulation.CLOUD_BURST_PER_LEVEL
-		)
-		return {"figure": "×%.1f" % multiplier, "unit": "burst"}
 	return {"figure": "", "unit": ""}
 
 

@@ -192,9 +192,6 @@ func _ready() -> void:
 		var board: Control = main._screen_cache["board"]
 		if tab == "surged":
 			Simulation.boost()
-			# Bursting needs an account, which a fresh run does not have.
-			Simulation.run_state.build["upgrades"].append(Simulation.CLOUD_ACCOUNT_UPGRADE)
-			Simulation.cloud_burst()
 			main.refresh_all()
 		elif tab == "deliver":
 			board._on_deliver()

@@ -27,12 +27,6 @@ const ROUNDS_PER_RUN := 12
 ## Stands in for "this layout never delivers" when scoring pipelines.
 const MAX_ESTIMATED_BURNS := 99.0
 
-## Cloud burst is bought, not given: the account below unlocks the key, and the
-## multiplier starts low enough that the repeatable upgrade is the way to power.
-const CLOUD_ACCOUNT_UPGRADE := "upgrade.cloud_account"
-const CLOUD_BURST_UPGRADE := "upgrade.cloud_compute"
-const CLOUD_BURST_BASE_MULTIPLIER := 1.5
-const CLOUD_BURST_PER_LEVEL := 0.5
 const DRAFT_ANGEL := "angel"
 const ENDLESS_COST_ESCALATION := 1.08
 
@@ -52,7 +46,6 @@ var autosave_enabled: bool = true
 var tuning: Dictionary = {
 	"economy_multiplier": 1.0,
 	"token_multiplier": 1.0,
-	"cloud_cost_multiplier": 1.0,
 	"event_probability_multiplier": 1.0,
 }
 
@@ -60,7 +53,6 @@ var _job_system := JobSystem.new()
 var _economy_system := EconomySystem.new()
 var _compute_system := ComputeSystem.new()
 var _heat_system := HeatSystem.new()
-var _demand_system := DemandSystem.new()
 var _progression_system := ProgressionSystem.new()
 var _event_system := EventSystem.new()
 var _perk_system := PerkSystem.new()
@@ -78,12 +70,6 @@ var queued_boost: bool:
 		return _work.queued_boost
 	set(value):
 		_work.queued_boost = value
-
-var queued_cloud: bool:
-	get:
-		return _work.queued_cloud
-	set(value):
-		_work.queued_cloud = value
 
 var last_session_summary: Dictionary:
 	get:
@@ -219,10 +205,6 @@ func achievement_system() -> AchievementSystem:
 	return _achievement_system
 
 
-func demand_system() -> DemandSystem:
-	return _demand_system
-
-
 func event_system() -> EventSystem:
 	return _event_system
 
@@ -261,10 +243,6 @@ func debug_end_run(victory: bool, outcome: String = "") -> void:
 
 func debug_settle_reputation(completed: Array, failed: Array) -> float:
 	return _settle_reputation(completed, failed)
-
-
-func debug_apply_cloud_burst() -> bool:
-	return _apply_cloud_burst()
 
 
 func debug_present_angel_offers() -> void:
@@ -451,12 +429,6 @@ func prompts_used_this_round() -> int:
 ## Queues BOOST to fire as soon as work starts. Only allowed pre-session.
 func set_queued_boost(enabled: bool) -> void:
 	_work.set_queued_boost(self, enabled)
-
-
-## Queues a cloud burst to fire as soon as work starts. Only allowed pre-session,
-## and only once the run has an account to bill it to.
-func set_queued_cloud(enabled: bool) -> void:
-	_work.set_queued_cloud(self, enabled)
 
 
 ## Opens the Burn Board. Nothing is produced until the player burns a batch:
@@ -738,14 +710,13 @@ func _layout_score(job: Dictionary) -> float:
 	fee *= maxf(0.3, 1.0 - 0.08 * known)
 	fee *= maxf(0.25, 1.0 - 0.06 * hidden)
 
-	# Metered running costs, not just power: a cloud-heavy layout's per-prompt
-	# bill is what `cost_forecast` already tracks for the bills screen, so the
-	# same figure — power and cloud metering both — is what should be scored.
+	# Metered running costs: `cost_forecast` tracks power for the bills screen,
+	# so the same figure is what should be scored.
 	var operating_per_prompt: float = float(cost_forecast().get("operating_per_prompt", 0.0))
-	# Pipeline stage costs are only paid on a burn, but the metered power and
-	# cloud bills land on every prompt the run spends — cooling prompts
-	# included. Charging them per burn alone made hot layouts look cheaper
-	# than the cooling they force.
+	# Pipeline stage costs are only paid on a burn, but the metered power bill
+	# lands on every prompt the run spends — cooling prompts included.
+	# Charging it per burn alone made hot layouts look cheaper than the
+	# cooling they force.
 	var outgoings: float = burns * float(preview.get("cost", 0.0)) + prompts * operating_per_prompt
 	return (fee - outgoings) / prompts
 
@@ -1012,56 +983,13 @@ func boost() -> bool:
 	return _work.boost(self)
 
 
-func cloud_burst() -> bool:
-	return _work.cloud_burst(self)
-
-
-## Cloud is a capability the run buys, not one it starts with. Without the
-## account there is nobody to rent capacity from and nobody to bill.
-func cloud_enabled() -> bool:
-	return _work.cloud_enabled(self)
-
-
-func cloud_burst_multiplier() -> float:
-	return _work.cloud_burst_multiplier(self)
-
-
-func _cloud_burst_multiplier_for(state: RunState) -> float:
-	return _work.cloud_burst_multiplier_for(self, state)
-
-
-## Rented tokens are metered, and the provider charges for the privilege of
-## turning the tap on at all. The flat fee is what makes an early burst a real
-## decision instead of loose change.
-func cloud_burst_cost() -> float:
-	return _work.cloud_burst_cost(self)
-
-
-func _cloud_burst_cost_for(state: RunState) -> float:
-	return _work.cloud_burst_cost_for(self, state)
-
-
-func can_afford_cloud_burst() -> bool:
-	return _work.can_afford_cloud_burst(self)
-
-
 ## Whether this prompt's batch is already running hot off a boost.
 func boost_engaged() -> bool:
 	return _work.boost_engaged(self)
 
 
-func cloud_engaged() -> bool:
-	return _work.cloud_engaged(self)
-
-
 func _apply_boost() -> void:
 	_work.apply_boost(self)
-
-
-## Rents capacity for one prompt. Cash is deducted immediately so the player
-## sees the cost land on the balance sheet, not as a hidden end-of-round liability.
-func _apply_cloud_burst() -> bool:
-	return _work.apply_cloud_burst(self)
 
 
 ## Snapshot of the round just finished, for the debrief screen. Every contract
@@ -1237,14 +1165,6 @@ func set_tuning(key: String, value: float) -> void:
 		tuning[key] = value
 
 
-func set_advertising(amount: float) -> void:
-	run_state.business["advertising"] = maxf(0.0, amount)
-	_demand_system.refresh_demand(run_state)
-	_autosave()
-
-
-
-
 func get_perk_description(perk_id: String) -> String:
 	var perk := ContentDatabase.get_perk(perk_id)
 	if perk == null:
@@ -1383,7 +1303,7 @@ func _bank_run_legacy(victory: bool) -> void:
 
 ## The permanent unlocks on offer after beating the campaign. Picks are rare —
 ## one batch per completion — so the debrief lays out every area still open
-## (rig, cooling, cloud, cash, workflows, board width) and the player chooses
+## (rig, cooling, cash, workflows, board width) and the player chooses
 ## which to boost permanently, rather than being dealt three at random.
 func debrief_choices() -> Array:
 	return _life.debrief_choices()

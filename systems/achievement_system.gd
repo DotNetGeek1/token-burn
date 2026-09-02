@@ -136,7 +136,6 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.endless_rounds": int(stats.get("endless_rounds", 0)),
 		"run.heat_ratio": float(run_state.compute.get("heat", 0.0)) / heat_capacity,
 		"run.max_heat_ratio": float(stats.get("max_heat_ratio", 0.0)),
-		"run.max_cloud_share": float(stats.get("max_cloud_share", 0.0)),
 		"run.stage_repeats": int(stats.get("stage_repeats", 0)),
 		"run.location_tier": JobSystem.location_tier(run_state, ContentDatabase),
 		"run.jobs_accepted": int(stats.get("jobs_accepted", 0)),

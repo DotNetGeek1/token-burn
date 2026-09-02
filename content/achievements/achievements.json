@@ -427,34 +427,16 @@
     "category": "milestone",
     "icon": "wrench",
     "hidden": false,
-    "description": "You cleared a proper office without ever touching the cloud. The invoices agree.",
-    "hint": "Ascend from Office or later with zero cloud usage.",
+    "description": "You cleared a proper office on machines you own.",
+    "hint": "Ascend from Office or later.",
     "condition": {
       "trigger": "run_end",
       "checks": [
         {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.location_tier", "op": ">=", "value": 2},
-        {"stat": "run.max_cloud_share", "op": "<=", "value": 0.01}
+        {"stat": "run.location_tier", "op": ">=", "value": 2}
       ]
     },
     "reward": {"type": "unlock_perk", "perk_id": "perk.rack_mount_religion"}
-  },
-  {
-    "id": "ach.cloud_renter",
-    "name": "Somebody Else's Computer",
-    "category": "milestone",
-    "icon": "cloud",
-    "hidden": false,
-    "description": "Eighty percent of your throughput lived in someone else's datacentre. Your bedroom stayed cold.",
-    "hint": "Ascend with at least 80% of compute in the cloud.",
-    "condition": {
-      "trigger": "run_end",
-      "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.max_cloud_share", "op": ">=", "value": 0.8}
-      ]
-    },
-    "reward": {"type": "unlock_module", "module_id": "op.egress_shield"}
   },
   {
     "id": "ach.ship_it_pray_ii",

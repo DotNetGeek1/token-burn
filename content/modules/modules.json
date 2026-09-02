@@ -764,39 +764,6 @@
     ]
   },
   {
-    "id": "op.spot_fleet",
-    "name": "Spot Fleet",
-    "category": "model",
-    "rarity": "common",
-    "starter": false,
-    "tags": ["model", "cloud"],
-    "min_location_tier": 1,
-    "badge": "×{progress}",
-    "description_template": "Pre-empted every thirty seconds. ×{progress} progress, ${cost} a batch.",
-    "parameters": {"progress": 1.5, "cost": 12},
-    "slot_effects": [
-      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"}
-    ]
-  },
-  {
-    "id": "op.egress_shield",
-    "name": "Egress Shield",
-    "category": "context",
-    "rarity": "rare",
-    "starter": false,
-    "unlock_achievement": "ach.cloud_renter",
-    "tags": ["context", "cloud"],
-    "min_location_tier": 2,
-    "badge": "+{quality} Q",
-    "description_template": "Compress before upload. +{quality} quality, ${cost} a batch.",
-    "parameters": {"quality": 10, "cost": 3},
-    "slot_effects": [
-      {"operation": "add", "target": "stage.quality", "value": "$quality"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"}
-    ]
-  },
-  {
     "id": "op.liquid_loop",
     "name": "Liquid Loop",
     "category": "hardware",

@@ -69,23 +69,16 @@ static func record_debt(run_state: RunState, amount: float, reason: String) -> v
 
 ## Metered costs land per prompt, so a long round genuinely costs more to run
 ## than a short one even though the rent on it is the same.
-func accrue_prompt_costs(run_state: RunState, tuning: Dictionary) -> void:
+func accrue_prompt_costs(run_state: RunState, _tuning: Dictionary) -> void:
 	var power_cost: float = float(run_state.economy.get("power_cost_per_prompt", 0.0))
-	var cloud_cost: float = float(run_state.economy.get("cloud_cost_per_prompt", 0.0)) * float(tuning.get("cloud_cost_multiplier", 1.0))
-	var total: float = power_cost + cloud_cost
+	var total: float = power_cost
 	if total > 0.0:
 		debit(run_state, total, "prompt_costs", {
 			"power_cost": power_cost,
-			"cloud_cost": cloud_cost,
 		})
 	# Running total for the round, so the player can watch the burn build up
 	# before the bills land.
 	run_state.economy["costs_this_round"] = float(run_state.economy.get("costs_this_round", 0.0)) + total
-	# The multiplier is already folded into `cloud_cost` above — applying it
-	# again at round-end billing double-charged every cloud-heavy build.
-	run_state.economy["cloud_surcharge_liability"] = (
-		float(run_state.economy.get("cloud_surcharge_liability", 0.0)) + cloud_cost * 0.25
-	)
 
 
 ## Charges rent and the other end-of-round bills, and returns the statement so
@@ -100,17 +93,13 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 		add_income(run_state, passive, tuning)
 	var rent: float = float(run_state.economy.get("round_rent", 400.0))
 	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
-	# `cloud_surcharge_liability` already carries the multiplier from accrual
-	# — billed at face value here, exactly once.
-	var cloud_bill: float = float(run_state.economy.get("cloud_surcharge_liability", 0.0))
 	var operating: float = float(run_state.economy.get("costs_this_round", 0.0))
-	var total: float = rent + recurring + cloud_bill
+	var total: float = rent + recurring
 	var bill_metadata: Dictionary = {
 		"round": int(run_state.calendar.get("round", 1)),
 		"prompts_used": maxi(0, int(run_state.calendar.get("prompt", 1)) - 1),
 		"rent": rent,
 		"recurring": recurring,
-		"cloud_bill": cloud_bill,
 		"operating": operating,
 		"bill_total": total,
 		"round_total": total + operating,
@@ -132,11 +121,6 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 		run_state.economy["debt"] = float(run_state.economy.get("debt", 0.0)) + debt_added
 		run_state.economy["cash"] = 0.0
 		run_state.economy["rent_unpaid_streak"] = int(run_state.economy.get("rent_unpaid_streak", 0)) + 1
-	# The surcharge has been billed in full above — either paid out of cash or
-	# rolled into debt with the rest of the bill — so nothing of it survives
-	# into the next round. Carrying a fraction forward re-charged a settled
-	# debt every round until it rounded away, roughly doubling its true cost.
-	run_state.economy["cloud_surcharge_liability"] = 0.0
 	run_state.economy["last_round_costs"] = total + operating
 	bill_metadata["cash_after"] = float(run_state.economy.get("cash", 0.0))
 	bill_metadata["debt"] = float(run_state.economy.get("debt", 0.0))
@@ -152,15 +136,13 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 func waive_round_bills(run_state: RunState) -> Dictionary:
 	var rent: float = float(run_state.economy.get("round_rent", 400.0))
 	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
-	var cloud_bill: float = float(run_state.economy.get("cloud_surcharge_liability", 0.0))
 	var operating: float = float(run_state.economy.get("costs_this_round", 0.0))
-	var total: float = rent + recurring + cloud_bill
+	var total: float = rent + recurring
 	var bill_metadata: Dictionary = {
 		"round": int(run_state.calendar.get("round", 1)),
 		"prompts_used": maxi(0, int(run_state.calendar.get("prompt", 1)) - 1),
 		"rent": 0.0,
 		"recurring": 0.0,
-		"cloud_bill": 0.0,
 		"operating": operating,
 		"bill_total": 0.0,
 		"round_total": operating,
@@ -169,7 +151,6 @@ func waive_round_bills(run_state: RunState) -> Dictionary:
 		"waived_total": total,
 	}
 	_append_ledger_entry(run_state, LEDGER_TYPE_DEBIT, 0.0, "round_bills_waived", float(run_state.economy.get("cash", 0.0)), bill_metadata)
-	run_state.economy["cloud_surcharge_liability"] = 0.0
 	run_state.economy["rent_unpaid_streak"] = 0
 	run_state.economy["last_round_costs"] = operating
 	bill_metadata["cash_after"] = float(run_state.economy.get("cash", 0.0))

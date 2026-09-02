@@ -184,17 +184,15 @@ func _test_queued_surges_are_included_in_the_first_burn_forecast() -> void:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(1504)
-	sim.run_state.build["upgrades"].append(Simulation.CLOUD_ACCOUNT_UPGRADE)
 	sim.run_state.economy["cash"] = 1000000.0
 	var offers: Array = sim.run_state.business.get("job_offers", [])
 	sim.accept_job(str(offers[0].get("id", "")))
 	var baseline: Dictionary = sim.preview_next_burn()
 	sim.set_queued_boost(true)
-	sim.set_queued_cloud(true)
 	var surged: Dictionary = sim.preview_next_burn()
 	assert_true(
 		float(surged.get("tokens", 0.0)) > float(baseline.get("tokens", 0.0)),
-		"Queued BOOST and CLOUD increase the pre-session token forecast"
+		"Queued BOOST increases the pre-session token forecast"
 	)
 	var boost_heat: float = HeatSystem.boost_heat_for(
 		maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))

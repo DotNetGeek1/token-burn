@@ -97,15 +97,8 @@ func _print_statement(statement: Dictionary) -> void:
 			NumberFormat.format_cash(recurring),
 			"Standing fees from the upgrades you own, charged every round. Every purchase adds to this forever."
 		)
-	var cloud_bill: float = float(statement.get("cloud_bill", 0.0))
-	if cloud_bill > 0.0:
-		_statement.add_item(
-			"Cloud bill",
-			NumberFormat.format_cash(cloud_bill),
-			"Metered charges for rented capacity you burned this round."
-		)
 	# Only worth a subtotal once rent is not the whole bill.
-	if recurring > 0.0 or cloud_bill > 0.0:
+	if recurring > 0.0:
 		_statement.add_item(
 			"Bills total",
 			NumberFormat.format_cash(float(statement.get("bill_total", 0.0))),
@@ -113,7 +106,7 @@ func _print_statement(statement: Dictionary) -> void:
 			{"rule_above": true}
 		)
 	_statement.add_item(
-		"Power and cloud",
+		"Power",
 		NumberFormat.format_cash(float(statement.get("operating", 0.0))),
 		"Already paid prompt by prompt while you worked — %d prompt(s) this round. A longer round costs more here; the rent above does not move." % prompts_used
 	)

@@ -32,7 +32,7 @@ func _test_collect_allowed_at_full_active_loadout() -> void:
 		"perk.stack_overflow_tab",
 		"perk.thermal_paste",
 		"perk.prompt_engineer",
-		"perk.founder_mode",
+		"perk.homelab_hero",
 		"perk.consultancy_mode",
 	]
 	for perk_id in filler:
@@ -105,18 +105,15 @@ func _test_bench_removes_active_effect() -> void:
 func _test_inventory_compatibility_vs_active() -> void:
 	var system := _perk_system()
 	var state := _fresh_run()
-	system.collect_perk(state, "perk.works_on_my_machine", ContentDatabase)
-	system.collect_perk(state, "perk.bare_metal", ContentDatabase)
-	system.collect_perk(state, "perk.cloud_native", ContentDatabase)
-	assert_true("perk.cloud_native" in state.build["perk_inventory"], "Rival keystones may coexist in inventory")
-	system.equip_perk(state, "perk.works_on_my_machine", ContentDatabase)
-	system.equip_perk(state, "perk.bare_metal", ContentDatabase)
-	assert_false(system.can_equip(state, "perk.cloud_native", ContentDatabase), "Cannot equip rival keystone while Bare Metal is active")
-	system.bench_perk(state, "perk.bare_metal", ContentDatabase)
-	system.bench_perk(state, "perk.works_on_my_machine", ContentDatabase)
-	system.collect_perk(state, "perk.free_trial", ContentDatabase)
-	system.equip_perk(state, "perk.free_trial", ContentDatabase)
-	assert_true(system.can_equip(state, "perk.cloud_native", ContentDatabase), "Can equip rival after benching the other and opening cloud")
+	system.collect_perk(state, "perk.stack_overflow_tab", ContentDatabase)
+	system.collect_perk(state, "perk.move_fast_and_break_everything", ContentDatabase)
+	system.collect_perk(state, "perk.enterprise_grade", ContentDatabase)
+	assert_true("perk.enterprise_grade" in state.build["perk_inventory"], "Rival keystones may coexist in inventory")
+	system.equip_perk(state, "perk.stack_overflow_tab", ContentDatabase)
+	system.equip_perk(state, "perk.move_fast_and_break_everything", ContentDatabase)
+	assert_false(system.can_equip(state, "perk.enterprise_grade", ContentDatabase), "Cannot equip rival keystone while Move Fast is active")
+	system.bench_perk(state, "perk.move_fast_and_break_everything", ContentDatabase)
+	assert_true(system.can_equip(state, "perk.enterprise_grade", ContentDatabase), "Can equip rival after benching the other")
 
 
 func _test_save_migration_seeds_inventory() -> void:

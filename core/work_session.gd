@@ -18,7 +18,6 @@ var work_tick: int = 0
 var action_counter: int = 0
 var session_cash_start: float = 0.0
 var queued_boost: bool = false
-var queued_cloud: bool = false
 var last_session_summary: Dictionary = {}
 var work_policy: String = POLICY_MANUAL
 
@@ -29,7 +28,6 @@ func reset() -> void:
 	action_counter = 0
 	session_cash_start = 0.0
 	queued_boost = false
-	queued_cloud = false
 	last_session_summary = {}
 	work_policy = POLICY_MANUAL
 
@@ -53,11 +51,6 @@ func can_burn(sim: Node) -> bool:
 func set_queued_boost(sim: Node, enabled: bool) -> void:
 	if can_start_work(sim):
 		queued_boost = enabled
-
-
-func set_queued_cloud(sim: Node, enabled: bool) -> void:
-	if can_start_work(sim) and cloud_enabled(sim):
-		queued_cloud = enabled
 
 
 ## Opens the Burn Board. Nothing is produced until the player burns a batch:
@@ -93,10 +86,7 @@ func start_work(sim: Node) -> void:
 func _fire_queued_options(sim: Node) -> void:
 	if queued_boost:
 		_apply_boost(sim)
-	if queued_cloud:
-		_apply_cloud_burst(sim)
 	queued_boost = false
-	queued_cloud = false
 
 
 func start_work_sync(sim: Node) -> Dictionary:
@@ -592,58 +582,12 @@ func boost(sim: Node) -> bool:
 	return true
 
 
-func cloud_burst(sim: Node) -> bool:
-	if sim.phase != sim.Phase.IN_ROUND or not work_running or cloud_engaged(sim):
-		return false
-	if not cloud_enabled(sim):
-		return false
-	return _apply_cloud_burst(sim)
-
-
-## Cloud is a capability the run buys, not one it starts with. Without the
-## account there is nobody to rent capacity from and nobody to bill.
-func cloud_enabled(sim: Node) -> bool:
-	return sim.CLOUD_ACCOUNT_UPGRADE in sim.run_state.build.get("upgrades", [])
-
-
-func cloud_burst_multiplier(sim: Node) -> float:
-	return cloud_burst_multiplier_for(sim, sim.run_state)
-
-
-func cloud_burst_multiplier_for(sim: Node, state: RunState) -> float:
-	var level: int = int(state.build.get("upgrade_levels", {}).get(sim.CLOUD_BURST_UPGRADE, 0))
-	return sim.CLOUD_BURST_BASE_MULTIPLIER + float(level) * sim.CLOUD_BURST_PER_LEVEL
-
-
-## Rented tokens are metered, and the provider charges for the privilege of
-## turning the tap on at all. The flat fee is what makes an early burst a real
-## decision instead of loose change.
-func cloud_burst_cost(sim: Node) -> float:
-	return cloud_burst_cost_for(sim, sim.run_state)
-
-
-func cloud_burst_cost_for(sim: Node, state: RunState) -> float:
-	var economy: Dictionary = ContentDatabase.balance.get("economy", {})
-	var burst: float = float(state.compute.get("local_capacity", 0.0)) * cloud_burst_multiplier_for(sim, state)
-	var rate: float = float(economy.get("cloud_burst_cost_per_token", 0.00008))
-	var fee: float = float(economy.get("cloud_burst_activation_fee", 0.0))
-	return burst * rate + fee
-
-
-func can_afford_cloud_burst(sim: Node) -> bool:
-	return sim.economy_system().can_afford(sim.run_state, cloud_burst_cost(sim))
-
-
 ## Whether this prompt's batch is already running hot off a boost.
 func boost_engaged(sim: Node) -> bool:
 	for entry in sim.run_state.compute.get("rate_modifiers", []):
 		if entry is Dictionary and str(entry.get("source", "")) == "boost":
 			return true
 	return false
-
-
-func cloud_engaged(sim: Node) -> bool:
-	return int(sim.run_state.compute.get("cloud_burst_prompts", 0)) > 0
 
 
 func _apply_boost(sim: Node) -> void:
@@ -654,29 +598,6 @@ func _apply_boost(sim: Node) -> void:
 	var boost_heat: float = HeatSystem.boost_heat_for(capacity)
 	sim.heat_system().add_heat(sim.run_state, boost_heat)
 	sim.round_log.append("BOOST engaged: +35%% token rate, +%d heat." % int(round(boost_heat)))
-
-
-## Rents capacity for one prompt. Cash is deducted immediately so the player
-## sees the cost land on the balance sheet, not as a hidden end-of-round liability.
-func _apply_cloud_burst(sim: Node) -> bool:
-	if cloud_engaged(sim) or not cloud_enabled(sim):
-		return false
-	var burst: float = float(sim.run_state.compute["local_capacity"]) * cloud_burst_multiplier(sim)
-	var price: float = cloud_burst_cost(sim)
-	if not sim.economy_system().purchase(sim.run_state, price, "cloud_burst"):
-		sim.round_log.append(
-			"CLOUD BURST: not enough cash (%s needed)." % NumberFormat.format_cash(price)
-		)
-		return false
-	sim.run_state.compute["cloud_burst"] = burst
-	sim.run_state.compute["cloud_burst_prompts"] = 1
-	sim.round_log.append(
-		"CLOUD BURST: rented %s for %s." % [
-			NumberFormat.format_token_rate(burst),
-			NumberFormat.format_cash(price),
-		]
-	)
-	return true
 
 
 ## Snapshot of the round just finished, for the debrief screen. Every contract
@@ -792,10 +713,6 @@ func execute_tick(sim: Node) -> Dictionary:
 
 func apply_boost(sim: Node) -> void:
 	_apply_boost(sim)
-
-
-func apply_cloud_burst(sim: Node) -> bool:
-	return _apply_cloud_burst(sim)
 
 
 func build_session_summary(

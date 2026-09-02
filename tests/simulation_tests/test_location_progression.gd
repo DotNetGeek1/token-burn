@@ -193,7 +193,7 @@ func _test_an_old_profile_migrates_without_losing_anything() -> void:
 	var legacy: Dictionary = {
 		"version": 2,
 		"victories": 3,
-		"unlocks": {"unlock.cloud_account": 1},
+		"unlocks": {"unlock.client_retainer": 1},
 		"pending_picks": 2,
 		"achievements": {"ach.first_burn": 1700000000},
 		"lifetime_stats": {"runs": 9.0},
@@ -207,7 +207,7 @@ func _test_an_old_profile_migrates_without_losing_anything() -> void:
 
 	assert_eq(MetaProgress.unlocked_locations(), ["bedroom"], "A pre-campaign profile starts at the bottom")
 	assert_eq(MetaProgress.selected_location(), "bedroom", "And has somewhere valid to play")
-	assert_eq(MetaProgress.unlock_count("unlock.cloud_account"), 1, "Its unlocks survive the migration")
+	assert_eq(MetaProgress.unlock_count("unlock.client_retainer"), 1, "Its unlocks survive the migration")
 	assert_eq(MetaProgress.pending_picks(), 2, "So do its banked picks")
 	assert_true(MetaProgress.has_achievement("ach.first_burn"), "And its achievements")
 	assert_eq(MetaProgress.difficulty(), "hard", "And the difficulty it was set to")

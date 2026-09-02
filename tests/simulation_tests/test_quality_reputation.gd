@@ -148,18 +148,6 @@ func _test_reputation_names_its_next_tier() -> void:
 		"Named at the reputation it actually wants"
 	)
 
-	var reduction: float = float(
-		ContentDatabase.balance.get("job_scaling", {}).get("sales_level_rep_reduction", 2)
-	)
-	state.build["upgrade_levels"] = {"upgrade.sales_investment": 1}
-	assert_almost_eq(
-		float(JobSystem.next_reputation_tier(state, ContentDatabase).get("reputation", 0.0)),
-		float(thresholds[1]) - reduction,
-		0.001,
-		"Sales outreach brings the next rung closer"
-	)
-
-	state.build["upgrade_levels"] = {}
 	state.business["reputation"] = 100000.0
 	assert_true(
 		JobSystem.next_reputation_tier(state, ContentDatabase).is_empty(),

@@ -12,13 +12,13 @@ const loop = [
     accent: "action" as const,
     step: "01",
     name: "Prep",
-    body: "Read the job board. Demand, reputation and whatever advertising you bought decide what turns up. Take the work you can actually finish.",
+    body: "Read the job board. Job slots and reputation decide what turns up. Take the work you can actually finish.",
   },
   {
     accent: "heat" as const,
     step: "02",
     name: "Work",
-    body: "Burn tokens through your pipeline. Boost for speed, cool when the rig complains, burst into the cloud if you can stomach the invoice.",
+    body: "Burn tokens through your pipeline. Boost for speed, cool when the rig complains, and keep the local hardware on the right side of a fire.",
   },
   {
     accent: "money" as const,
@@ -30,13 +30,13 @@ const loop = [
     accent: "danger" as const,
     step: "04",
     name: "Bills",
-    body: "Rent, power and cloud land whether you delivered or not. Miss rent twice and the run ends there.",
+    body: "Rent and power land whether you delivered or not. Miss rent twice and the run ends there.",
   },
   {
     accent: "perk" as const,
     step: "05",
     name: "Angel draft",
-    body: "Corrigan puts one free pick on his table. Then the market opens and you spend what is left on hardware, cooling and cloud tiers.",
+    body: "Corrigan puts one free pick on his table. Then the market opens and you spend what is left on hardware and cooling.",
   },
 ];
 
@@ -63,8 +63,8 @@ const perks = [
   { name: "Technical Debt", note: "borrow throughput from future you" },
   { name: "Infinite Context", note: "the prompt never ends" },
   { name: "The Wrapper", note: "somebody else's model, your margin" },
-  { name: "Cloud Baron", note: "burst first, read the bill later" },
   { name: "Bare Metal", note: "own the iron, own the heat" },
+  { name: "Rack Mount Religion", note: "more machines, more slots" },
   { name: "Deploy On Friday", note: "exactly what it sounds like" },
   { name: "Vibe Check", note: "reputation as a resource" },
 ];

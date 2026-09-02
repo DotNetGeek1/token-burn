@@ -104,14 +104,6 @@ static func _apply_queued_preview_options(sim: Node, state: RunState) -> void:
 		state.add_rate_modifier(1.35, 1, "boost")
 		var capacity: float = maxf(1.0, float(state.compute.get("heat_capacity", 100.0)))
 		sim.heat_system().add_heat(state, HeatSystem.boost_heat_for(capacity))
-	if not sim.queued_cloud or not (sim.CLOUD_ACCOUNT_UPGRADE in state.build.get("upgrades", [])):
-		return
-	var burst: float = float(state.compute.get("local_capacity", 0.0)) * sim._cloud_burst_multiplier_for(state)
-	var price: float = sim._cloud_burst_cost_for(state)
-	if not sim.economy_system().purchase(state, price, "cloud_burst_preview"):
-		return
-	state.compute["cloud_burst"] = burst
-	state.compute["cloud_burst_prompts"] = 1
 
 
 ## What COOL would actually do to the heat bar right now: the vent, plus the
@@ -181,22 +173,16 @@ static func queue_load_info(sim: Node, extra_offer: Dictionary = {}) -> Dictiona
 ## round ends, and the metered ones that have already been paid prompt by prompt.
 ## Rent does not grow with a long round; the power bill does.
 static func cost_forecast(sim: Node) -> Dictionary:
-	var cloud_multiplier: float = float(sim.tuning.get("cloud_cost_multiplier", 1.0))
 	var rent: float = float(sim.run_state.economy.get("round_rent", 0.0))
 	var recurring: float = float(sim.run_state.economy.get("recurring_costs", 0.0))
-	# Already carries the multiplier from accrual; billed at face value.
-	var cloud_bill: float = float(sim.run_state.economy.get("cloud_surcharge_liability", 0.0))
 	var power_per_prompt: float = float(sim.run_state.economy.get("power_cost_per_prompt", 0.0))
-	var cloud_per_prompt: float = float(sim.run_state.economy.get("cloud_cost_per_prompt", 0.0)) * cloud_multiplier
-	var operating_per_prompt: float = power_per_prompt + cloud_per_prompt
+	var operating_per_prompt: float = power_per_prompt
 	var operating_so_far: float = float(sim.run_state.economy.get("costs_this_round", 0.0))
-	var fixed_due: float = rent + recurring + cloud_bill
+	var fixed_due: float = rent + recurring
 	return {
 		"rent": rent,
 		"recurring": recurring,
-		"cloud_bill": cloud_bill,
 		"power_per_prompt": power_per_prompt,
-		"cloud_per_prompt": cloud_per_prompt,
 		"operating_per_prompt": operating_per_prompt,
 		"operating_so_far": operating_so_far,
 		"fixed_due": fixed_due,
@@ -210,9 +196,9 @@ static func cost_forecast(sim: Node) -> Dictionary:
 ## the player is never surprised by a bill they had already spent.
 static func bills_outlook(sim: Node) -> Dictionary:
 	var costs: Dictionary = cost_forecast(sim)
-	# Only the end-of-round lump is held back. Power and cloud are metered prompt
-	# by prompt out of the income the same prompts bring in, so counting a whole
-	# round of them here would say "safe to spend nothing" every round.
+	# Only the end-of-round lump is held back. Power is metered prompt by
+	# prompt out of the income the same prompts bring in, so counting a whole
+	# round of it here would say "safe to spend nothing" every round.
 	var still_due: float = float(costs.get("fixed_due", 0.0))
 	var cash: float = float(sim.run_state.economy.get("cash", 0.0))
 	return {

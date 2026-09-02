@@ -5,9 +5,6 @@ extends RefCounted
 ## this sits alongside the dictionary rather than replacing it yet.
 
 var local_capacity: float = 1_000_000.0
-var cloud_capacity: float = 0.0
-var cloud_burst: float = 0.0
-var cloud_burst_prompts: int = 0
 var token_rate: float = 1_000_000.0
 var prompt_rate: float = 1_000_000.0
 var power_draw: float = 65.0
@@ -24,9 +21,6 @@ var rate_modifiers: Array = []
 static func from_dict(data: Dictionary) -> ComputeState:
 	var state := ComputeState.new()
 	state.local_capacity = float(data.get("local_capacity", state.local_capacity))
-	state.cloud_capacity = float(data.get("cloud_capacity", state.cloud_capacity))
-	state.cloud_burst = float(data.get("cloud_burst", state.cloud_burst))
-	state.cloud_burst_prompts = int(data.get("cloud_burst_prompts", state.cloud_burst_prompts))
 	state.token_rate = float(data.get("token_rate", state.token_rate))
 	state.prompt_rate = float(data.get("prompt_rate", state.prompt_rate))
 	state.power_draw = float(data.get("power_draw", state.power_draw))
@@ -44,9 +38,6 @@ static func from_dict(data: Dictionary) -> ComputeState:
 func to_dict() -> Dictionary:
 	return {
 		"local_capacity": local_capacity,
-		"cloud_capacity": cloud_capacity,
-		"cloud_burst": cloud_burst,
-		"cloud_burst_prompts": cloud_burst_prompts,
 		"token_rate": token_rate,
 		"prompt_rate": prompt_rate,
 		"power_draw": power_draw,

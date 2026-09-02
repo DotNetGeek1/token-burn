@@ -13,8 +13,6 @@
     "per_round_multiple": 1.0
   },
   "power_cost_per_watt_prompt": 0.05,
-  "cloud_burst_cost_per_token": 0.00008,
-  "cloud_burst_activation_fee": 25,
   "heat": {
     "gain_per_power": 0.06,
     "cooling_factor": 0.25,

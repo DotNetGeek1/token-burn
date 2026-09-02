@@ -6,7 +6,7 @@ Accepted — 2026-07-28
 
 ## Context
 
-Multiple agents will land partial features in parallel (cloud compute, office diorama, random events, meta progression, analytics). Incomplete work must merge without breaking the playable build. Plan section 13 requires configuration-driven flags, not scattered conditional literals.
+Multiple agents will land partial features in parallel (office diorama, random events, meta progression, analytics). Incomplete work must merge without breaking the playable build. Plan section 13 requires configuration-driven flags, not scattered conditional literals.
 
 ## Chosen approach
 
@@ -16,7 +16,6 @@ Flags live in `config/feature_flags.json`:
 
 ```json
 {
-  "cloud_compute_enabled": true,
   "office_diorama_enabled": false,
   "random_events_enabled": true,
   "meta_progression_enabled": false,
@@ -31,7 +30,7 @@ Defaults preserve **current behaviour**: features that exist today stay enabled;
 `core/feature_flags.gd` exposes a static query API:
 
 ```gdscript
-FeatureFlags.is_enabled("cloud_compute_enabled")  # -> true
+FeatureFlags.is_enabled("office_diorama_enabled")  # -> false
 ```
 
 - Loads JSON lazily on first call

@@ -2,8 +2,8 @@ extends Control
 
 ## The desk between burns, printed on the evolving workstation in the room.
 ##
-## Accepting a contract lands on the burn board and the deck owns BOOST / CLOUD
-## / START, so this is only what the operation looks like between sessions (or
+## Accepting a contract lands on the burn board and the deck owns BOOST /
+## START, so this is only what the operation looks like between sessions (or)
 ## when the player peeks back at the room while one is running). It is drawn
 ## into the workstation's primary glass rather than in a card floated over the
 ## picture, so the status of the business is something in the room.
@@ -159,7 +159,7 @@ func _queued_names(queued: Array) -> String:
 func _refresh_readouts() -> void:
 	var costs: Dictionary = Simulation.cost_forecast()
 	# First line on the desk, because every decision made from this screen —
-	# taking a contract, buying a rig, letting the cloud meter run — is a
+	# taking a contract, buying a rig, letting the power meter run — is a
 	# question about what is in the account, and the answer used to only be
 	# legible on the wall behind the laptop.
 	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
@@ -222,16 +222,12 @@ func _show_cost_breakdown() -> void:
 	lines.append("  Rent: %s" % NumberFormat.format_cash(float(costs.get("rent", 0.0))))
 	if float(costs.get("recurring", 0.0)) > 0.0:
 		lines.append("  Subscriptions: %s" % NumberFormat.format_cash(float(costs.get("recurring", 0.0))))
-	if float(costs.get("cloud_bill", 0.0)) > 0.0:
-		lines.append("  Cloud bill so far: %s" % NumberFormat.format_cash(float(costs.get("cloud_bill", 0.0))))
 	lines.append("")
 	lines.append("Paid as you work")
 	lines.append("  Power: %s per prompt (%dW draw)" % [
 		NumberFormat.format_cash(float(costs.get("power_per_prompt", 0.0))),
 		int(costs.get("power_draw", 0.0)),
 	])
-	if float(costs.get("cloud_per_prompt", 0.0)) > 0.0:
-		lines.append("  Cloud: %s per prompt" % NumberFormat.format_cash(float(costs.get("cloud_per_prompt", 0.0))))
 	lines.append("  Burned so far this round: %s" % NumberFormat.format_cash(float(costs.get("operating_so_far", 0.0))))
 	_breakdown_sheet.show_content("Running Costs", "\n".join(lines))
 

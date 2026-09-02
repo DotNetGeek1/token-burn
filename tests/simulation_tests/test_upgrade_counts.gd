@@ -74,15 +74,17 @@ func _test_selling_decrements_and_zero_erases() -> void:
 	)
 
 
-## Issue #2 from the review: cloud and advertising tiers must not ride along
-## with the rig carried into the next location.
+## Issue #2 from the review: workspace upgrades must not ride along with the
+## rig carried into the next location.
 func _test_carriable_rig_reads_the_unified_ledger() -> void:
 	var shop: Dictionary = _shop()
 	_buy(shop, "upgrade.custom_desktop")
-	_buy(shop, "upgrade.cloud_account")
+	var counts: Dictionary = UpgradeSystem.upgrade_counts(shop["state"])
+	counts["upgrade.garage"] = 1
+	shop["state"].build["upgrade_counts"] = counts
 	var levels: Dictionary = UpgradeSystem.carriable_rig_levels(shop["state"], ContentDatabase)
 	assert_true(levels.has("upgrade.custom_desktop"), "Hardware carries forward")
-	assert_false(levels.has("upgrade.cloud_account"), "A cloud tier is Market stock, not rig")
+	assert_false(levels.has("upgrade.garage"), "A dwelling is a chapter, not part of the rig")
 
 
 ## Pre-inventory-unification saves have the same facts spread across

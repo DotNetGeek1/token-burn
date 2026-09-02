@@ -6,15 +6,13 @@ func run() -> void:
 	var state := RunState.new()
 	state.economy["cash"] = 1000.0
 	state.economy["power_cost_per_prompt"] = 10.0
-	state.economy["cloud_cost_per_prompt"] = 5.0
 	economy.accrue_prompt_costs(state, {})
-	assert_eq(state.economy.get("cash", 0.0), 985.0, "Prompt costs accrue")
+	assert_eq(state.economy.get("cash", 0.0), 990.0, "Prompt costs accrue")
 
 	state.economy["cash"] = 100.0
 	state.economy["round_rent"] = 400.0
 	state.economy["recurring_costs"] = 50.0
-	state.economy["cloud_surcharge_liability"] = 200.0
-	economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
+	economy.apply_round_bills(state, {})
 	assert_eq(state.economy.get("cash", 0.0), 0.0, "Unpaid bills drain cash")
 	assert_true(float(state.economy.get("debt", 0.0)) > 0.0, "Unpaid bills add debt")
 	assert_eq(state.economy.get("rent_unpaid_streak", 0), 1, "Rent unpaid streak increments")
@@ -33,9 +31,6 @@ func run() -> void:
 	_test_round_cost_accrual(economy)
 	_test_round_statement(economy)
 	_test_rent_is_flat_however_long_the_round_runs(economy)
-	_test_cloud_surcharge_is_zero_after_paid_round(economy)
-	_test_cloud_surcharge_is_not_rebilled_without_new_usage(economy)
-	_test_cloud_multiplier_applies_exactly_once(economy)
 	_test_power_scales_with_hardware()
 	_test_rent_scales_with_dwelling()
 
@@ -81,7 +76,6 @@ func _test_ledger_entries(economy: EconomySystem) -> void:
 
 	state.economy["cash"] = 500.0
 	state.economy["power_cost_per_prompt"] = 10.0
-	state.economy["cloud_cost_per_prompt"] = 0.0
 	economy.accrue_prompt_costs(state, {})
 	ledger = state.economy.get("ledger", [])
 	var prompt_entry: Dictionary = ledger[ledger.size() - 1]
@@ -100,12 +94,11 @@ func _test_round_cost_accrual(economy: EconomySystem) -> void:
 	var state := RunState.new()
 	state.economy["cash"] = 1000.0
 	state.economy["power_cost_per_prompt"] = 12.0
-	state.economy["cloud_cost_per_prompt"] = 8.0
 	assert_eq(state.economy.get("costs_this_round", 0.0), 0.0, "A round starts with no accrued costs")
 	economy.accrue_prompt_costs(state, {})
 	economy.accrue_prompt_costs(state, {})
-	assert_eq(state.economy.get("costs_this_round", 0.0), 40.0, "Operating costs accrue prompt by prompt")
-	assert_eq(state.economy.get("cash", 0.0), 960.0, "Accrued costs come out of cash as they happen")
+	assert_eq(state.economy.get("costs_this_round", 0.0), 24.0, "Operating costs accrue prompt by prompt")
+	assert_eq(state.economy.get("cash", 0.0), 976.0, "Accrued costs come out of cash as they happen")
 
 
 func _test_round_statement(economy: EconomySystem) -> void:
@@ -115,9 +108,8 @@ func _test_round_statement(economy: EconomySystem) -> void:
 	state.economy["cash"] = 5000.0
 	state.economy["round_rent"] = 400.0
 	state.economy["recurring_costs"] = 70.0
-	state.economy["cloud_surcharge_liability"] = 0.0
 	state.economy["costs_this_round"] = 150.0
-	var statement: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
+	var statement: Dictionary = economy.apply_round_bills(state, {})
 	assert_eq(statement.get("round", 0), 4, "Statement reports the round that closed")
 	assert_eq(statement.get("prompts_used", -1), 5, "Statement reports how many prompts the round took")
 	assert_eq(statement.get("rent", 0.0), 400.0, "Statement itemises rent")
@@ -130,7 +122,7 @@ func _test_round_statement(economy: EconomySystem) -> void:
 	assert_eq(statement.get("cash_after", 0.0), 4530.0, "Statement reports the balance after paying")
 
 	state.economy["cash"] = 100.0
-	var short: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
+	var short: Dictionary = economy.apply_round_bills(state, {})
 	assert_false(bool(short.get("paid_in_full", true)), "Unaffordable bills are flagged as unpaid")
 	assert_true(float(short.get("debt_added", 0.0)) > 0.0, "Statement reports the shortfall as debt")
 	assert_eq(short.get("unpaid_streak", 0), 1, "Statement reports the eviction streak")
@@ -146,16 +138,14 @@ func _test_rent_is_flat_however_long_the_round_runs(economy: EconomySystem) -> v
 		state.economy["cash"] = 100000.0
 		state.economy["round_rent"] = 400.0
 		state.economy["recurring_costs"] = 0.0
-		state.economy["cloud_surcharge_liability"] = 0.0
 		state.economy["power_cost_per_prompt"] = 10.0
-		state.economy["cloud_cost_per_prompt"] = 0.0
 	for _i in range(3):
 		economy.accrue_prompt_costs(short_round, {})
 	for _i in range(12):
 		economy.accrue_prompt_costs(long_round, {})
 
-	var short_statement: Dictionary = economy.apply_round_bills(short_round, {"cloud_cost_multiplier": 1.0})
-	var long_statement: Dictionary = economy.apply_round_bills(long_round, {"cloud_cost_multiplier": 1.0})
+	var short_statement: Dictionary = economy.apply_round_bills(short_round, {})
+	var long_statement: Dictionary = economy.apply_round_bills(long_round, {})
 	assert_eq(
 		float(short_statement.get("rent", 0.0)),
 		float(long_statement.get("rent", 0.0)),
@@ -168,68 +158,6 @@ func _test_rent_is_flat_however_long_the_round_runs(economy: EconomySystem) -> v
 	assert_true(
 		float(long_statement.get("round_total", 0.0)) > float(short_statement.get("round_total", 0.0)),
 		"So a long round still costs more overall"
-	)
-
-
-## A surcharge that has been billed is settled. Carrying a fraction of it into
-## the next round re-charged the same metered spend over and over, so a cloud
-## build paid roughly twice what its invoice said.
-func _test_cloud_surcharge_is_zero_after_paid_round(economy: EconomySystem) -> void:
-	var state := RunState.new()
-	state.economy["cash"] = 10000.0
-	state.economy["round_rent"] = 400.0
-	state.economy["recurring_costs"] = 0.0
-	state.economy["cloud_surcharge_liability"] = 100.0
-	var statement: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
-	assert_eq(statement.get("cloud_bill", 0.0), 100.0, "The whole surcharge is billed once")
-	assert_eq(
-		state.economy.get("cloud_surcharge_liability", -1.0), 0.0,
-		"Nothing of a paid surcharge survives the round it was billed in"
-	)
-
-
-## The follow-up round: no cloud was metered, so no cloud is owed.
-func _test_cloud_surcharge_is_not_rebilled_without_new_usage(economy: EconomySystem) -> void:
-	var state := RunState.new()
-	state.economy["cash"] = 10000.0
-	state.economy["round_rent"] = 400.0
-	state.economy["recurring_costs"] = 0.0
-	state.economy["cloud_cost_per_prompt"] = 40.0
-	state.economy["power_cost_per_prompt"] = 0.0
-	economy.accrue_prompt_costs(state, {"cloud_cost_multiplier": 1.0})
-	var first: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
-	assert_eq(first.get("cloud_bill", 0.0), 10.0, "A metered cloud round owes 25% of what it burned")
-
-	state.economy["cloud_cost_per_prompt"] = 0.0
-	economy.accrue_prompt_costs(state, {"cloud_cost_multiplier": 1.0})
-	var second: Dictionary = economy.apply_round_bills(state, {"cloud_cost_multiplier": 1.0})
-	assert_eq(second.get("cloud_bill", 0.0), 0.0, "A cloud-free round owes no surcharge at all")
-
-
-## The multiplier belongs to accrual. Billing at face value afterwards is what
-## keeps a doubled cloud price from being charged squared.
-func _test_cloud_multiplier_applies_exactly_once(economy: EconomySystem) -> void:
-	var plain := RunState.new()
-	var doubled := RunState.new()
-	for state in [plain, doubled]:
-		state.economy["cash"] = 10000.0
-		state.economy["round_rent"] = 0.0
-		state.economy["recurring_costs"] = 0.0
-		state.economy["power_cost_per_prompt"] = 0.0
-		state.economy["cloud_cost_per_prompt"] = 40.0
-	economy.accrue_prompt_costs(plain, {"cloud_cost_multiplier": 1.0})
-	economy.accrue_prompt_costs(doubled, {"cloud_cost_multiplier": 2.0})
-	assert_eq(
-		doubled.economy.get("costs_this_round", 0.0),
-		float(plain.economy.get("costs_this_round", 0.0)) * 2.0,
-		"Doubling the cloud price doubles the metered spend"
-	)
-	var plain_bill: Dictionary = economy.apply_round_bills(plain, {"cloud_cost_multiplier": 1.0})
-	var doubled_bill: Dictionary = economy.apply_round_bills(doubled, {"cloud_cost_multiplier": 2.0})
-	assert_eq(
-		float(doubled_bill.get("cloud_bill", 0.0)),
-		float(plain_bill.get("cloud_bill", 0.0)) * 2.0,
-		"And doubles the surcharge exactly once, rather than squaring it"
 	)
 
 

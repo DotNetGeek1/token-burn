@@ -16,13 +16,13 @@ func _test_economy_state_round_trips() -> void:
 	var state := RunState.new()
 	state.economy["cash"] = 4321.0
 	state.economy["debt"] = 88.0
-	state.economy["cloud_surcharge_liability"] = 12.5
+	state.economy["recurring_costs"] = 12.5
 	state.economy["pending_bills"] = [{"amount": 10.0, "prompts_until_due": 2}]
 
 	var economy := state.economy_state()
 	assert_eq(economy.cash, 4321.0, "EconomyState reads cash off the dictionary")
 	assert_eq(economy.debt, 88.0, "EconomyState reads debt off the dictionary")
-	assert_eq(economy.cloud_surcharge_liability, 12.5, "EconomyState reads the renamed cloud field")
+	assert_eq(economy.recurring_costs, 12.5, "EconomyState reads recurring costs")
 	assert_eq(economy.pending_bills.size(), 1, "EconomyState carries pending bills")
 
 	var round_tripped: Dictionary = EconomyState.from_dict(economy.to_dict()).to_dict()

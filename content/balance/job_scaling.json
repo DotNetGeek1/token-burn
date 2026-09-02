@@ -178,6 +178,5 @@
       }
     }
   ],
-  "tier_unlock_by_reputation": [0, 12, 22, 32, 42, 52, 62],
-  "sales_level_rep_reduction": 2
+  "tier_unlock_by_reputation": [0, 12, 22, 32, 42, 52, 62]
 }
