@@ -95,6 +95,14 @@ var business: Dictionary = {
 	"focused_job_id": "",
 	"job_board_stamp": "",
 	"job_board_seq": 0,
+	## Transient Market shelf for purchasable modules. Lazily created on old saves.
+	"module_market": {
+		"stock": [],
+		"location": "",
+		"round": 0,
+		"sequence": 0,
+		"rerolls": 0,
+	},
 }
 
 var build: Dictionary = {
@@ -920,6 +928,13 @@ func _default_business() -> Dictionary:
 		"focused_job_id": "",
 		"job_board_stamp": "",
 		"job_board_seq": 0,
+		"module_market": {
+			"stock": [],
+			"location": "",
+			"round": 0,
+			"sequence": 0,
+			"rerolls": 0,
+		},
 	}
 
 

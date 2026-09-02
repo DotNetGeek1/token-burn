@@ -77,6 +77,11 @@ func _test_capacity_perks_apply_when_taken_from_the_angel() -> void:
 	slot_sim.start_run(105)
 	var slots_before: int = slot_sim.board_slots().size()
 	slot_sim.phase = slot_sim.Phase.ANGEL_ROUND
+	slot_sim.pending_choices = [{
+		"type": "perk",
+		"id": "perk.wide_bus",
+		"label": "Wide Bus",
+	}]
 	assert_true(
 		slot_sim.accept_offer("perk", "perk.wide_bus"),
 		"The angel can grant Wide Bus"
@@ -92,6 +97,11 @@ func _test_capacity_perks_apply_when_taken_from_the_angel() -> void:
 	workflow_sim.start_run(106)
 	var capacity_before: int = workflow_sim.workflow_capacity()
 	workflow_sim.phase = workflow_sim.Phase.ANGEL_ROUND
+	workflow_sim.pending_choices = [{
+		"type": "perk",
+		"id": "perk.two_ways_of_working",
+		"label": "Two Ways of Working",
+	}]
 	assert_true(
 		workflow_sim.accept_offer("perk", "perk.two_ways_of_working"),
 		"The angel can grant Two Ways of Working"
@@ -651,8 +661,9 @@ func _test_failed_jobs_do_not_fire_completion_perks() -> void:
 	sim.free()
 
 
-## Saves written when pipeline pieces were still called operations restore a
-## card accept_offer would otherwise refuse.
+## Saves written when pipeline pieces were still called operations, or when
+## modules were free angel rewards, must load without granting free modules or
+## wedging the angel phase.
 func _test_legacy_angel_operation_choice_is_selectable() -> void:
 	var sim := _make_sim()
 	sim.start_run(7705)
@@ -665,12 +676,14 @@ func _test_legacy_angel_operation_choice_is_selectable() -> void:
 		"cost": 0.0,
 	}]
 	sim._migrate_pending_choices()
-	assert_eq(
-		str(sim.pending_choices[0].get("type", "")), "module",
-		"A legacy operation choice becomes a module"
+	for choice in sim.pending_choices:
+		assert_eq(str(choice.get("type", "")), "perk", "Legacy module/operation choices are dropped")
+	assert_false(
+		"op.whiteboard" in Array(sim.run_state.build.get("modules", [])),
+		"Discarded module choices are not granted free"
 	)
 	assert_true(
-		sim.accept_offer("module", "op.whiteboard"),
-		"And it is selectable as a module"
+		sim.phase == sim.Phase.ANGEL_ROUND or sim.phase == sim.Phase.ROUND_PREP,
+		"Migration leaves a playable phase"
 	)
 	sim.free()

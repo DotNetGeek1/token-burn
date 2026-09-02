@@ -36,6 +36,9 @@ func repair_after_load(sim: Node) -> void:
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)
+	# Lazily create module-market state so old saves get a shelf without a
+	# save-version bump. An already-current empty shelf is left alone.
+	MarketService.ensure_module_stock(sim)
 
 	match sim.phase:
 		sim.Phase.IN_ROUND:
@@ -257,6 +260,9 @@ func _begin_round(sim: Node) -> void:
 	)
 	sim.job_system().generate_offers(sim.run_state, sim.rng.derive("job_offers"), ContentDatabase, sim.tuning)
 	sim.run_state.business["job_board_stamp"] = _board_stamp(sim)
+	# Module shelf restocks once per round/location, after the calendar and
+	# dwelling are settled. Opening the Market never regenerates it.
+	MarketService.ensure_module_stock(sim)
 	sim.phase = sim.Phase.ROUND_PREP
 
 
@@ -536,16 +542,23 @@ func advance_to_next_chapter(sim: Node) -> bool:
 	return true
 
 
-## Takes one of the angel's offers. Everything on the table is free, so the only
-## question is which one, and the draft closes either way.
+## Takes one of the angel's perk offers. Everything on the table is free, so the
+## only question is which one, and the draft closes either way.
 func accept_offer(sim: Node, offer_type: String, offer_id: String) -> bool:
-	match offer_type:
-		"perk":
-			return _accept_perk(sim, offer_id)
-		"module":
-			return _accept_module(sim, offer_id)
-		_:
-			return false
+	if offer_type != "perk":
+		return false
+	if not _pending_contains(sim, "perk", offer_id):
+		return false
+	return _accept_perk(sim, offer_id)
+
+
+func _pending_contains(sim: Node, offer_type: String, offer_id: String) -> bool:
+	for choice in sim.pending_choices:
+		if not choice is Dictionary:
+			continue
+		if str(choice.get("type", "")) == offer_type and str(choice.get("id", "")) == offer_id:
+			return true
+	return false
 
 
 ## Walks away with nothing. Always allowed: a full board and a bad offer is a
@@ -585,24 +598,10 @@ func _accept_perk(sim: Node, perk_id: String) -> bool:
 	return true
 
 
-## Drafts a pipeline module. Unlike a perk it changes nothing on its own: it has
-## to be placed on the board to do anything, and on a full board that means
-## taking something else out.
-func _accept_module(sim: Node, module_id: String) -> bool:
-	if sim.phase != sim.Phase.ANGEL_ROUND:
-		return false
-	if not sim.board_system().grant_module(sim.run_state, module_id):
-		return false
-	sim.run_state.statistics["angel_offers_taken"] = int(
-		sim.run_state.statistics.get("angel_offers_taken", 0)
-	) + 1
-	sim.run_state.statistics["modules_drafted"] = int(
-		sim.run_state.statistics.get("modules_drafted", 0)
-	) + 1
-	EventBus.emit_event(EventBus.EVENT_MODULE_ACQUIRED, {"module_id": module_id})
-	sim.achievement_system().evaluate_tick(sim.run_state, ContentDatabase)
-	_spend_draft_pick(sim, "module", module_id)
-	return true
+## Modules are no longer free angel rewards. Kept as a hard reject so old callers
+## and saves cannot grant a free module through this path.
+func _accept_module(_sim: Node, _module_id: String) -> bool:
+	return false
 
 
 func _draft_state(sim: Node) -> Dictionary:
@@ -616,77 +615,31 @@ func _draft_state(sim: Node) -> Dictionary:
 func _angel_draw_rng(sim: Node) -> DeterministicRng:
 	var draft: Dictionary = _draft_state(sim)
 	var sequence: int = int(draft.get("sequence", 0))
-	var rerolls: int = int(draft.get("rerolls", 0))
-	return sim.rng.derive("angel.%d.reroll.%d" % [sequence, rerolls])
-
-
-func angel_reroll_cost(sim: Node) -> float:
-	var draft: Dictionary = _draft_state(sim)
-	var rerolls: int = int(draft.get("rerolls", 0))
-	var base_cost: float = maxf(
-		float(sim.run_state.economy.get("round_rent", 0.0)) * 0.5,
-		_location_base_job_reward(sim) * 0.10
-	)
-	return base_cost * pow(2.0, float(rerolls))
-
-
-func can_reroll_angel(sim: Node) -> bool:
-	if sim.phase != sim.Phase.ANGEL_ROUND:
-		return false
-	return sim.economy_system().can_afford(sim.run_state, angel_reroll_cost(sim))
-
-
-func reroll_angel_offers(sim: Node) -> bool:
-	if sim.phase != sim.Phase.ANGEL_ROUND:
-		return false
-	var cost: float = angel_reroll_cost(sim)
-	if not sim.economy_system().purchase(sim.run_state, cost, "angel_reroll"):
-		return false
-	var draft: Dictionary = _draft_state(sim)
-	draft["rerolls"] = int(draft.get("rerolls", 0)) + 1
-	sim.run_state.build["draft_state"] = draft
-	_redraw_angel_offers(sim)
-	sim._autosave()
-	return true
-
-
-func _location_base_job_reward(sim: Node) -> float:
-	var dwelling: String = str(sim.run_state.build.get("dwelling", "bedroom"))
-	for job in ContentDatabase.jobs:
-		if str(job.id).contains(dwelling) or job.tier == 0:
-			return float(job.reward_units) * float(sim.run_state.economy.get("cash_multiplier", 1.0)) * 100.0
-	return float(sim.run_state.economy.get("round_rent", 400.0))
+	# Angel rerolls are removed; the key stays sequence-only for determinism.
+	return sim.rng.derive("angel.%d.reroll.0" % sequence)
 
 
 func _redraw_angel_offers(sim: Node) -> void:
 	sim.pending_choices = []
-	for offer in ContentDatabase.draw_angel_offers(
+	for offer in ContentDatabase.draw_angel_perks(
 		_angel_draw_rng(sim),
 		sim.run_state,
 		3,
 		sim.perk_system().owned_tags(sim.run_state, ContentDatabase),
-		0.0,
 		sim.perk_system().undraftable_ids(sim.run_state, ContentDatabase)
 	):
-		var offer_type: String = str(offer.get("type", ""))
 		var offer_id: String = str(offer.get("id", ""))
-		var description: String = ""
-		if offer_type == "perk":
-			description = sim.get_perk_description(offer_id)
-		elif offer_type == "module":
-			description = sim.get_module_description(offer_id)
 		sim.pending_choices.append({
-			"type": offer_type,
+			"type": "perk",
 			"id": offer_id,
 			"label": str(offer.get("label", "")),
-			"description": description,
+			"description": sim.get_perk_description(offer_id),
 			"cost": 0.0,
 		})
 
 
 ## The round's angel draft. Everything here is free: somebody with more money
-## than sense is handing out modules and perks. Anything with a price tag is sold
-## on the Market tab instead, where the player goes looking for it.
+## than sense is handing out perks. Modules are sold on the Market instead.
 func present_angel_offers(sim: Node) -> void:
 	var draft: Dictionary = _draft_state(sim)
 	draft["sequence"] = int(draft.get("sequence", 0)) + 1
@@ -940,11 +893,11 @@ func load_saved_run(sim: Node) -> bool:
 	sim.run_seed = int(data.get("seed", 0))
 	sim.rng.set_seed(sim.run_seed)
 	sim.run_state.from_dict(data.get("run_state", {}))
+	var phase_name: String = str(data.get("phase", "IDLE"))
+	sim.phase = sim._phase_from_name(phase_name)
 	var saved_choices = data.get("pending_choices", [])
 	sim.pending_choices = saved_choices if saved_choices is Array else []
 	_migrate_pending_choices(sim)
-	var phase_name: String = str(data.get("phase", "IDLE"))
-	sim.phase = sim._phase_from_name(phase_name)
 	sim._work_running = false
 	# Saves written before the redesign called the round a month.
 	round_end_pending = bool(data.get("round_end_pending", data.get("month_end_pending", false)))
@@ -964,13 +917,37 @@ func load_saved_run(sim: Node) -> bool:
 	return true
 
 
-## Angel drafts used to offer `type: operation`. accept_offer only understands
-## perk / module, so a save taken on that wording would present a card nothing
-## could take.
+## Angel drafts used to offer modules (and even older saves used `operation`).
+## Keep valid perks, drop free module choices, and redraw if the table emptied.
 func _migrate_pending_choices(sim: Node) -> void:
+	var kept: Array = []
+	var blocked_perks: Array = sim.perk_system().undraftable_ids(
+		sim.run_state, ContentDatabase
+	)
 	for choice in sim.pending_choices:
-		if choice is Dictionary and str(choice.get("type", "")) == "operation":
-			choice["type"] = "module"
+		if not choice is Dictionary:
+			continue
+		var offer_type: String = str(choice.get("type", ""))
+		if offer_type == "operation":
+			# Legacy operation cards were modules; those are no longer free.
+			continue
+		if offer_type == "module":
+			continue
+		if offer_type == "perk":
+			var perk_id: String = str(choice.get("id", ""))
+			if ContentDatabase.get_perk(perk_id) != null and perk_id not in blocked_perks:
+				kept.append(choice)
+	sim.pending_choices = kept
+	if sim.phase != sim.Phase.ANGEL_ROUND:
+		return
+	if not sim.pending_choices.is_empty():
+		return
+	# Mixed saves that lost every module card need a fresh perk-only table.
+	_redraw_angel_offers(sim)
+	if sim.pending_choices.is_empty():
+		sim.phase = sim.Phase.ROUND_PREP
+		sim.run_state.flags["draft_kind"] = ""
+		MarketService.ensure_module_stock(sim)
 
 
 func board_stamp(sim: Node) -> String:
@@ -1019,10 +996,6 @@ func draft_state(sim: Node) -> Dictionary:
 
 func angel_draw_rng(sim: Node) -> DeterministicRng:
 	return _angel_draw_rng(sim)
-
-
-func location_base_job_reward(sim: Node) -> float:
-	return _location_base_job_reward(sim)
 
 
 func redraw_angel_offers(sim: Node) -> void:

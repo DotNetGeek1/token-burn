@@ -2,7 +2,7 @@ extends PlaytestCase
 
 ## Unlock visibility for the module expansion: Legacy explains why a card is
 ## still gated, and a banked victory that crosses 1/2/3/5 (or Hard 1/3) prints
-## the new angel-pool names on the run report.
+## the newly Market-eligible names on the run report.
 
 
 func play(harness: UiHarness) -> void:
@@ -89,8 +89,8 @@ func _run_end_victory_notice(harness: UiHarness) -> void:
 
 	var note: String = str(overlay._statement._note.text)
 	assert_true(
-		note.contains("NEW MODULES ADDED TO ANGEL POOL"),
-		"Victory note announces modules added to the angel pool"
+		note.contains("NEW MODULES CAN APPEAR IN THE MARKET"),
+		"Victory note announces modules unlocked for the Market"
 	)
 	assert_true(
 		note.contains(unlocked[0].name),

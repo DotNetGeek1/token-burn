@@ -2,7 +2,7 @@ extends TestCase
 
 
 func run() -> void:
-	_test_first_reroll_cost_band()
+	_test_first_module_reroll_cost_band()
 	_test_local_tag_affinity_band()
 	_test_pacing_contract_and_profile_fixtures()
 	_test_fixed_seed_campaign_matrix_has_safe_nontrivial_first_burns()
@@ -15,20 +15,22 @@ func _sim() -> Node:
 	return sim
 
 
-func _test_first_reroll_cost_band() -> void:
+func _test_first_module_reroll_cost_band() -> void:
 	var sim: Node = _sim()
-	sim.run_state.build["draft_state"] = {"sequence": 1, "rerolls": 0}
-	var ratio: float = BatchRunner.angel_reroll_cost_ratio(sim)
-	assert_true(ratio >= 0.05, "First reroll is not trivially cheap")
-	assert_true(ratio <= 0.35, "First reroll is not punishingly expensive")
+	MarketService.ensure_module_stock(sim)
+	var ratio: float = BatchRunner.module_reroll_cost_ratio(sim)
+	assert_true(ratio >= 0.02, "First module reroll is not trivially cheap")
+	assert_true(ratio <= 0.35, "First module reroll is not punishingly expensive")
 	sim.free()
 
 
 func _test_local_tag_affinity_band() -> void:
-	var neutral: float = BatchRunner.draft_tag_hit_rate(9000, "local", 40, [])
-	var committed: float = BatchRunner.draft_tag_hit_rate(9000, "local", 40, ["local"])
-	assert_true(committed >= neutral, "Tag affinity never reduces matching offers")
-	assert_true(committed >= 0.12, "A committed archetype still sees local cards often enough")
+	var neutral: float = BatchRunner.module_market_tag_hit_rate(9000, "local", 40, [])
+	var committed: float = BatchRunner.module_market_tag_hit_rate(
+		9000, "local", 40, ["local"]
+	)
+	assert_true(committed >= neutral, "Tag affinity never reduces matching Market stock")
+	assert_true(committed >= 0.12, "A committed archetype still sees local modules often enough")
 
 
 func _test_pacing_contract_and_profile_fixtures() -> void:

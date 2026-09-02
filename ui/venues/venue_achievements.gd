@@ -246,8 +246,8 @@ func _refresh_notice() -> void:
 
 ## An earned award prints at full brightness and a locked one is dimmed, so the
 ## gaps in the set are visible at a glance across the board. What it hands over is
-## the figure, because a module in the draft pool is the only part of an award that
-## changes a future run.
+## the figure, because a module that can appear in the Market is the only part of
+## an award that changes a future run.
 func _award_entry(achievement: Dictionary) -> Dictionary:
 	var id: String = str(achievement.get("id", ""))
 	var earned: bool = MetaProgress.has_achievement(id)
@@ -338,7 +338,7 @@ func _reward_lines(achievement: Dictionary) -> Array:
 			return [
 				{"stat": "Hands over", "value": module.name},
 				{
-					"text": "%s Joins the angel draft pool in every run once this award is earned." % evaluator.render_template(
+					"text": "%s Can appear in the Market in every run once this award is earned." % evaluator.render_template(
 						module.description_template, module.parameters
 					),
 				},

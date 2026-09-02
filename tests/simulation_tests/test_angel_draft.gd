@@ -2,8 +2,8 @@ extends TestCase
 
 
 func run() -> void:
-	_test_draw_returns_three_mixed_offers()
-	_test_reroll_is_deterministic_for_sequence()
+	_test_draw_returns_three_perk_offers()
+	_test_redraw_is_deterministic_for_sequence()
 	_test_angel_filters_perks_with_no_legal_swap()
 
 
@@ -13,25 +13,23 @@ func _sim() -> Node:
 	return sim
 
 
-func _test_draw_returns_three_mixed_offers() -> void:
+func _test_draw_returns_three_perk_offers() -> void:
 	var rng := DeterministicRng.new(4242)
 	var state := RunState.new()
 	state.reset()
-	var offers: Array = ContentDatabase.draw_angel_offers(rng, state, 3, [], 0.0)
+	var offers: Array = ContentDatabase.draw_angel_perks(rng, state, 3, [], [])
 	assert_eq(offers.size(), 3, "His Table draws three cards")
-	var types: Dictionary = {}
 	for offer in offers:
-		types[str(offer.get("type", ""))] = true
-	assert_true(types.size() >= 1, "Offers include at least one card type")
+		assert_eq(str(offer.get("type", "")), "perk", "Every offer is a perk")
 
 
-func _test_reroll_is_deterministic_for_sequence() -> void:
+func _test_redraw_is_deterministic_for_sequence() -> void:
 	var sim_a: Node = _sim()
 	var sim_b: Node = _sim()
 	sim_a.start_run(777)
 	sim_b.start_run(777)
-	sim_a.run_state.build["draft_state"] = {"sequence": 2, "rerolls": 1}
-	sim_b.run_state.build["draft_state"] = {"sequence": 2, "rerolls": 1}
+	sim_a.run_state.build["draft_state"] = {"sequence": 2, "rerolls": 0}
+	sim_b.run_state.build["draft_state"] = {"sequence": 2, "rerolls": 0}
 	sim_a._redraw_angel_offers()
 	sim_b._redraw_angel_offers()
 	assert_eq(sim_a.pending_choices.size(), 3, "Redraw fills three offers")
@@ -65,15 +63,15 @@ func _test_angel_filters_perks_with_no_legal_swap() -> void:
 		"perk.move_fast_and_break_everything" in blocked,
 		"A perk excluded by several active cards has no legal one-card swap"
 	)
-	var offers: Array = ContentDatabase.draw_angel_offers(
+	var offers: Array = ContentDatabase.draw_angel_perks(
 		DeterministicRng.new(991),
 		state,
 		200,
 		system.owned_tags(state, ContentDatabase),
-		0.0,
 		blocked
 	)
 	for offer in offers:
+		assert_eq(str(offer.get("type", "")), "perk", "Angel offers are perk-only")
 		assert_false(
 			str(offer.get("id", "")) == "perk.move_fast_and_break_everything",
 			"Angel offers omit perks that cannot legally join the loadout"

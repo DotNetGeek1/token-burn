@@ -1,21 +1,18 @@
 extends ConsoleOverlay
 
-## The round's free draft. Usually that is the angel phase, once the bills have
-## cleared: the investor puts a few things on the table and expects to be thanked
-## for them. The same screen also presents a contract reward — the payout for
-## finishing a location — which is worth as many picks as the contract promised
-## rather than closing on the first one. Everything here is free either way; the
-## Market tab is where things have prices.
+## The round's free perk draft. Once the bills have cleared, the investor puts
+## three perks on the table and expects to be thanked for one of them — or for
+## the honesty of walking away. Modules are sold on the Market; nothing here
+## has a price, and the table cannot be rerolled.
 ##
 ## There is only one man doing the offering, so the table is his: the cards carry
 ## his patter rather than a different fictional fund on each one. On a landscape
 ## panel the offers sit side by side as columns rather than stacked.
 ##
 ## The shell around them is the console, because the standing — what is in the
-## pipeline, what is in the bank, what is due — is the machine's reckoning and
+## bank, what is due, how many perks are active — is the machine's reckoning and
 ## reads like it. The offers themselves are not: something handed to you across
-## a table is a physical object, so those stay as cards, the same way the run's
-## parting gift does on the debrief.
+## a table is a physical object, so those stay as cards.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
 ## Three cards side by side plus the gaps between them. Wider than an overlay
@@ -98,24 +95,11 @@ func refresh() -> void:
 		return
 	_refresh_header_line()
 	_deal_cards()
-	var actions: Array = [{
+	set_actions([{
 		"index": "",
 		"headline": "TAKE NOTHING",
 		"pressed": _on_decline,
-	}]
-	if Simulation.can_reroll_angel():
-		actions.append({
-			"index": "",
-			"headline": "REROLL — %s" % NumberFormat.format_cash(Simulation.angel_reroll_cost()),
-			"pressed": _on_reroll,
-		})
-	elif Simulation.phase == Simulation.Phase.ANGEL_ROUND:
-		actions.append({
-			"index": "",
-			"headline": "REROLL — %s" % NumberFormat.format_cash(Simulation.angel_reroll_cost()),
-			"enabled": false,
-		})
-	set_actions(actions, true)
+	}], true)
 	_apply_body_metrics()
 
 
@@ -174,25 +158,21 @@ func _deal_cards() -> void:
 		var card: GameCard = CARD_SCENE.instantiate()
 		var patter: String = InvestorVoice.offer_patter(index)
 		index += 1
-		var offer_type: String = str(offer.get("type", ""))
 		var offer_id: String = str(offer.get("id", ""))
 		card.setup(
 			str(offer.get("label", "Offer")),
 			str(offer.get("description", "")),
 			"",
 			"TAKE IT",
-			_offer_icon(offer_type, offer_id)
+			AssetCatalog.perk_icon(offer_id)
 		)
 		card.set_headline("FREE", "success")
 		card.set_chips([{
-			"text": _kind_chip_text(offer_type),
+			"text": "Perk",
 			"role": "perk",
 			"filled": true,
 		}])
-		if offer_type == "module":
-			card.set_warnings(_bench_warning())
-		elif offer_type == "perk":
-			card.set_warnings(_perk_bench_warning())
+		card.set_warnings(_perk_bench_warning())
 		card.set_action_style("perks", "perk", "BoostButton")
 		card.set_body_max_lines(2)
 		card.set_action_pinned()
@@ -200,20 +180,15 @@ func _deal_cards() -> void:
 		card.size_flags_vertical = (
 			Control.SIZE_EXPAND_FILL if _cards_list.columns > 1 else Control.SIZE_FILL
 		)
-		card.pressed.connect(_accept.bind(offer_type, offer_id))
-		# Taking a module or perk is a decision, so only TAKE IT commits to it.
+		card.pressed.connect(_accept.bind(offer_id))
+		# Taking a perk is a decision, so only TAKE IT commits to it.
 		# A tap on the card face reads the pitch in full instead.
 		card.body_pressed.connect(_show_offer_detail.bind(offer, patter))
 		_cards_list.add_child(card)
 	UiTransition.stagger(_cards_list)
 
 
-func _kind_chip_text(offer_type: String) -> String:
-	return "Module" if offer_type == "module" else "Perk"
-
-
 func _show_offer_detail(offer: Dictionary, patter: String) -> void:
-	var offer_type: String = str(offer.get("type", ""))
 	var offer_id: String = str(offer.get("id", ""))
 	var rows: Array = [
 		{"stat": "Cost", "value": "Free", "role": "success"},
@@ -225,11 +200,11 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 			"text": "\"%s\"" % patter,
 			"role": "perk",
 		})
-	for warning in _bench_warning():
+	for warning in _perk_bench_warning():
 		rows.append({"rule": str(warning.get("text", "")), "text": "", "role": "warning"})
 	_sheet.show_detail(
 		str(offer.get("label", "Offer")),
-		"Free module" if offer_type == "module" else "Free perk",
+		"Free perk",
 		rows,
 		[],
 		"TAKE IT",
@@ -237,26 +212,14 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 	)
 	for connection in _sheet.action_confirmed.get_connections():
 		_sheet.action_confirmed.disconnect(connection["callable"])
-	_sheet.action_confirmed.connect(_accept.bind(offer_type, offer_id))
-
-
-## A module arriving on a full board is a decision, not a gift, and the screen
-## says so before the player takes it.
-func _bench_warning() -> Array:
-	var placed: int = Simulation.filled_slot_count()
-	var slots: int = Simulation.board_slots().size()
-	if placed < slots:
-		return []
-	return [{"text": "Pipeline full · waits on the bench", "role": "warning"}]
+	_sheet.action_confirmed.connect(_accept.bind(offer_id))
 
 
 func _refresh_header_line() -> void:
 	var perks: Dictionary = Simulation.perk_capacity()
 	var outlook: Dictionary = Simulation.bills_outlook()
-	_pitch.text = "%s: PICK ONE FREE  ·  PIPELINE %d/%d  ·  PERKS %d/%d  ·  BANK %s  ·  BILLS %s" % [
+	_pitch.text = "%s: PICK ONE PERK FREE  ·  PERKS %d/%d  ·  BANK %s  ·  BILLS %s" % [
 		InvestorVoice.investor_name().to_upper(),
-		Simulation.filled_slot_count(),
-		Simulation.board_slots().size(),
 		int(perks.get("owned", 0)),
 		int(perks.get("cap", 0)),
 		NumberFormat.format_cash(float(outlook.get("cash", 0.0))),
@@ -272,11 +235,9 @@ func _refresh_header_line() -> void:
 	set_context("NOTHING HERE HAS A PRICE")
 
 
-func _accept(offer_type: String, offer_id: String) -> void:
-	if not Simulation.accept_offer(offer_type, offer_id):
+func _accept(offer_id: String) -> void:
+	if not Simulation.accept_offer("perk", offer_id):
 		return
-	# A contract reward can still owe the run picks, in which case the table
-	# stays up minus what was just taken off it.
 	if Simulation.phase == Simulation.Phase.ANGEL_ROUND and not Simulation.pending_choices.is_empty():
 		refresh()
 	else:
@@ -292,23 +253,8 @@ func _perk_bench_warning() -> Array:
 	return [{"text": "Active full · goes to the bench", "role": "warning"}]
 
 
-func _on_reroll() -> void:
-	if not Simulation.reroll_angel_offers():
-		return
-	refresh()
-	get_tree().call_group("ui_refresh", "refresh")
-	get_tree().call_group("main_ui", "refresh_all")
-
-
 func _on_decline() -> void:
 	Simulation.decline_offers()
 	hide_overlay()
 	get_tree().call_group("ui_refresh", "refresh")
 	get_tree().call_group("main_ui", "refresh_all")
-
-
-func _offer_icon(offer_type: String, offer_id: String) -> Texture2D:
-	if offer_type == "perk":
-		return AssetCatalog.perk_icon(offer_id)
-	var module: ModuleDefinition = ContentDatabase.get_module(offer_id)
-	return AssetCatalog.module_icon(module.category) if module != null else null

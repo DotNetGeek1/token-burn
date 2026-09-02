@@ -4,7 +4,7 @@ import { Button, Panel, Section, Shot, Terminal } from "@/components/ui";
 export const metadata: Metadata = {
   title: "Tutorial",
   description:
-    "How to play Token Burn: take a contract, burn tokens, manage heat, pay the rent, take the free angel pick, and hit the burn target before the year ends.",
+    "How to play Token Burn: take a contract, burn tokens, manage heat, pay the rent, take the free angel perk, buy modules in the Market, and hit the burn target before the year ends.",
 };
 
 const checklist = [
@@ -58,8 +58,8 @@ const steps = [
   },
   {
     step: "06",
-    title: "Take the free pick",
-    body: "Corrigan puts perks and modules on his table each round and one of them is free. Perks change rules rather than nudge numbers, so read them and pick the one your build actually wants — then spend cash in the market on hardware and cooling.",
+    title: "Take the free perk, then shop",
+    body: "Corrigan puts perks on his table each round and one of them is free. Perks change rules rather than nudge numbers, so read them and pick the one your build actually wants — then spend cash in the Market on modules, hardware and cooling.",
     note: null,
   },
   {

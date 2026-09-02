@@ -112,7 +112,7 @@ export default function HomePage() {
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <Shot src="/img/shot-board.webp" alt="The burn board terminal on a bedroom laptop" caption="The burn board — where contracts actually get burned." />
-          <Shot src="/img/shot-market.webp" alt="The upgrade market" caption="The market — hardware, cooling and the next machine." />
+          <Shot src="/img/shot-market.webp" alt="The upgrade market" caption="The market — modules, hardware, cooling and the next machine." />
         </div>
       </Section>
 

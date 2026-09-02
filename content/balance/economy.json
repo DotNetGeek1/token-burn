@@ -37,6 +37,19 @@
     "draft_tag_affinity": 1.5,
     "draft_tag_affinity_cap": 4.0
   },
+  "module_market": {
+    "slots_by_location_tier": [3, 4, 4, 5, 5, 6, 6],
+    "rarity_price_rent_mult": {
+      "common": 0.25,
+      "uncommon": 0.50,
+      "rare": 1.25,
+      "legendary": 3.50
+    },
+    "reroll_rent_mult": 0.15,
+    "reroll_job_reward_mult": 0.05,
+    "reroll_growth": 2.0,
+    "price_floor": 25.0
+  },
   "location_order": [
     "bedroom",
     "garage",

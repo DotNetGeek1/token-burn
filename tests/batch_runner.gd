@@ -493,17 +493,26 @@ func _play_policy_step(sim: Node, policy: String) -> void:
 			sim.accept_job(str(pick.get("id", "")))
 			_work_round(sim, policy)
 		sim.Phase.ANGEL_ROUND:
-			if sim.pending_choices.size() > 0:
-				var choice: Dictionary = sim.pending_choices[0]
-				# A rejected offer must not wedge the policy on the angel screen.
-				if not sim.accept_offer(str(choice.get("type", "")), str(choice.get("id", ""))):
-					sim.decline_offers()
-			else:
-				sim.decline_offers()
+			_angel_pick_perk(sim)
 		sim.Phase.ROUND_END:
 			sim._end_round()
 		_:
 			pass
+
+
+## Angel tables are perk-only. Prefer the first collectible perk; otherwise decline.
+func _angel_pick_perk(sim: Node) -> void:
+	if sim.pending_choices.is_empty():
+		sim.decline_offers()
+		return
+	for choice in sim.pending_choices:
+		if not choice is Dictionary:
+			continue
+		if str(choice.get("type", "")) != "perk":
+			continue
+		if sim.accept_offer("perk", str(choice.get("id", ""))):
+			return
+	sim.decline_offers()
 
 
 ## `start_work_sync` auto-burns to the end of the session, which never presses
@@ -648,10 +657,12 @@ func _builder_take_contracts(sim: Node, offers: Array) -> void:
 
 
 ## Buys the way a player does: cooling before the machine that needs it, space
-## before the machine that will not fit, and never everything at once.
+## before the machine that will not fit, and never everything at once. Also
+## picks up at most one affordable, tag-relevant Market module per round.
 func _builder_shop(sim: Node) -> void:
 	if not sim.market_open():
 		return
+	_builder_buy_module(sim)
 	# Two rounds of bills stay in the bank; the rest is for growth. Holding a
 	# fixed share back instead never accumulates enough for the next rung, and
 	# spending down to one round's bills bankrupts the run on the standing costs
@@ -668,6 +679,38 @@ func _builder_shop(sim: Node) -> void:
 		if not sim.buy_upgrade(pick):
 			return
 		budget -= cost
+
+
+## Deterministic Market shopper: one module per round, tag-overlap scored,
+## staying inside bills_outlook().spendable. Never auto-rerolls.
+func _builder_buy_module(sim: Node) -> void:
+	var spendable: float = float(sim.bills_outlook().get("spendable", 0.0))
+	if spendable <= 0.0:
+		return
+	var owned_tags: Array = sim.perk_system().owned_tags(sim.run_state, ContentDatabase)
+	var best_id: String = ""
+	var best_score: int = -1
+	var best_price: float = INF
+	for module_id in sim.module_market_stock():
+		var text_id: String = str(module_id)
+		if not sim.can_buy_module(text_id):
+			continue
+		var price: float = sim.module_market_price(text_id)
+		if price > spendable:
+			continue
+		var module: ModuleDefinition = ContentDatabase.get_module(text_id)
+		if module == null:
+			continue
+		var score: int = 0
+		for tag in module.tags:
+			if tag in owned_tags:
+				score += 1
+		if score > best_score or (score == best_score and price < best_price):
+			best_id = text_id
+			best_score = score
+			best_price = price
+	if best_id != "":
+		sim.buy_module(best_id)
 
 
 ## The next thing worth buying, in the order the game expects: close a live
@@ -763,15 +806,15 @@ func _median(values: Array) -> float:
 	return (float(ordered[middle - 1]) + float(ordered[middle])) * 0.5
 
 
-## Headless balance guidance: first reroll should land around 10–25% of a normal
-## contract reward at the bedroom tier.
-static func angel_reroll_cost_ratio(sim: Node) -> float:
+## Headless balance guidance: first module-market reroll should land around a
+## modest share of a normal contract reward at the bedroom tier.
+static func module_reroll_cost_ratio(sim: Node) -> float:
 	var contract_reward: float = maxf(1.0, float(sim.run_state.economy.get("round_rent", 400.0)) * 4.0)
-	return sim.angel_reroll_cost() / contract_reward
+	return sim.module_market_reroll_cost() / contract_reward
 
 
-## Draw `tables` angel tables and report how many cards matched `tag`.
-static func draft_tag_hit_rate(
+## Draw `tables` module shelves and report how many cards matched `tag`.
+static func module_market_tag_hit_rate(
 	seed_value: int,
 	tag: String,
 	tables: int = 40,
@@ -783,10 +826,10 @@ static func draft_tag_hit_rate(
 		var rng := DeterministicRng.new(seed_value + i)
 		var state := RunState.new()
 		state.reset()
-		for offer in ContentDatabase.draw_angel_offers(rng, state, 3, owned_tags, 0.0):
+		for module in ContentDatabase.draw_market_modules(rng, state, 3, owned_tags, []):
 			total += 1
-			for offer_tag in Array(offer.get("tags", [])):
-				if str(offer_tag) == tag:
+			for module_tag in module.tags:
+				if str(module_tag) == tag:
 					hits += 1
 					break
 	return float(hits) / maxf(1.0, float(total))

@@ -283,7 +283,7 @@ func _test_angel_offers_skip_undraftable_perks() -> void:
 	var state := RunState.new()
 	state.reset()
 	var blocked: Array = ["perk.first_try"]
-	var offers: Array = ContentDatabase.draw_angel_offers(rng, state, 8, [], 0.0, blocked)
+	var offers: Array = ContentDatabase.draw_angel_perks(rng, state, 8, [], blocked)
 	for offer in offers:
 		assert_false(
 			str(offer.get("id", "")) == "perk.first_try",

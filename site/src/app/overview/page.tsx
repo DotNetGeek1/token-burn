@@ -35,8 +35,8 @@ const loop = [
   {
     accent: "perk" as const,
     step: "05",
-    name: "Angel draft",
-    body: "Corrigan puts one free pick on his table. Then the market opens and you spend what is left on hardware and cooling.",
+    name: "Angel & Market",
+    body: "Corrigan puts one free perk on his table. Then the Market opens and you spend what is left on modules, hardware and cooling.",
   },
 ];
 
@@ -145,7 +145,7 @@ export default function OverviewPage() {
       <Section
         kicker="Perks and synergies"
         title="Rule-changers, not stat boosts"
-        lead="Perks arrive free from the angel draft and rewrite how your engine behaves. Stack the right ones and you trigger named synergies — Reckless Scaling, Debt Spiral, Vibe Coding, Bare Metal Doctrine, Somebody Else's Computer."
+        lead="Perks arrive free from the angel table and rewrite how your engine behaves. Modules compete with hardware for Market cash. Stack the right perks and you trigger named synergies — Reckless Scaling, Debt Spiral, Vibe Coding, Bare Metal Doctrine, Somebody Else's Computer."
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {perks.map((perk) => (
@@ -164,7 +164,7 @@ export default function OverviewPage() {
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <Shot src="/img/shot-call.webp" alt="A phone call from Vince Corrigan" caption="Every round ends with a call you cannot decline." />
-          <Shot src="/img/shot-angel.webp" alt="The angel draft table" caption="His table — one free pick, no negotiation." />
+          <Shot src="/img/shot-angel.webp" alt="The angel perk table" caption="His table — one free perk, no negotiation." />
         </div>
       </Section>
 

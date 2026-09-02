@@ -726,7 +726,7 @@ func run() -> void:
 		assert_false(perk_text.contains("{"), "Perk %s description resolves every parameter" % perk.id)
 
 	assert_true(ContentDatabase.achievements.size() > 0, "Content loads the achievement catalogue")
-	# The draft pool has to reward a long game as well as a first run, so every
+	# The Market shelf has to reward a long game as well as a first run, so every
 	# rarity band needs somebody in it.
 	var rarities: Dictionary = {}
 	for module in ContentDatabase.modules:

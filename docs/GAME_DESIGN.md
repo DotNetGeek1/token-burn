@@ -4,7 +4,7 @@
 
 You are a reckless vibe coder taking increasingly absurd contracts. Jobs pay cash and reputation, but consume tokens, time, electricity, and compute capacity.
 
-After each job, you reinvest in hardware, housing, cooling, and strange rule-changing perks. The goal is to assemble a local build capable of processing ridiculous quantities of tokens without going bankrupt, overheating, missing deadlines, or being evicted.
+After each job, you reinvest in hardware, housing, cooling, Market modules, and strange rule-changing perks. The goal is to assemble a local build capable of processing ridiculous quantities of tokens without going bankrupt, overheating, missing deadlines, or being evicted.
 
 ## 2. Core loop
 
@@ -13,8 +13,8 @@ After each job, you reinvest in hardware, housing, cooling, and strange rule-cha
 3. Process the job while managing tokens, time, heat, cost, and quality.
 4. Resolve complications such as bugs, scope creep, outages, and revisions.
 5. Get paid and gain reputation.
-6. Draft modules and perks, then route contracts through trained workflows.
-7. Pay rent, electricity, debt, and other overhead.
+6. Pay rent, electricity, debt, and other overhead.
+7. Take one free perk from the angel table (or decline), then buy modules and hardware in the Market and route contracts through trained workflows.
 8. Repeat until the run is won or collapses.
 
 ## 3. Primary resources

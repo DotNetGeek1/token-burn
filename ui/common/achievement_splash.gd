@@ -385,4 +385,4 @@ func _reward_text(achievement: Dictionary) -> String:
 	)
 	if module == null:
 		return ""
-	return "New module in the draft pool · %s" % module.name
+	return "New module in the Market · %s" % module.name

@@ -1166,6 +1166,38 @@ func sell_hardware(hardware_key: String) -> bool:
 	return MarketService.sell_hardware(self, hardware_key)
 
 
+func module_market_stock() -> Array:
+	return MarketService.module_stock(self)
+
+
+func module_market_price(module_id: String) -> float:
+	return MarketService.module_price(self, module_id)
+
+
+func can_buy_module(module_id: String) -> bool:
+	return MarketService.can_buy_module(self, module_id)
+
+
+func buy_module(module_id: String) -> bool:
+	return MarketService.buy_module(self, module_id)
+
+
+func module_market_reroll_cost() -> float:
+	return MarketService.module_reroll_cost(self)
+
+
+func can_reroll_module_market() -> bool:
+	return MarketService.can_reroll_modules(self)
+
+
+func reroll_module_market() -> bool:
+	return MarketService.reroll_modules(self)
+
+
+func module_market_next_restock_round() -> int:
+	return MarketService.next_module_restock_round(self)
+
+
 func set_tuning(key: String, value: float) -> void:
 	if tuning.has(key):
 		tuning[key] = value
@@ -1210,29 +1242,13 @@ func _angel_draw_rng() -> DeterministicRng:
 	return _life.angel_draw_rng(self)
 
 
-func angel_reroll_cost() -> float:
-	return _life.angel_reroll_cost(self)
-
-
-func can_reroll_angel() -> bool:
-	return _life.can_reroll_angel(self)
-
-
-func reroll_angel_offers() -> bool:
-	return _life.reroll_angel_offers(self)
-
-
-func _location_base_job_reward() -> float:
-	return _life.location_base_job_reward(self)
-
-
 func _redraw_angel_offers() -> void:
 	_life.redraw_angel_offers(self)
 
 
 ## The round's angel draft. Everything here is free: somebody with more money
-## than sense is handing out modules and perks. Anything with a price tag is sold
-## on the Market tab instead, where the player goes looking for it.
+## than sense is handing out perks. Modules and anything else with a price tag
+## are sold on the Market tab instead.
 func _present_angel_offers() -> void:
 	_life.present_angel_offers(self)
 

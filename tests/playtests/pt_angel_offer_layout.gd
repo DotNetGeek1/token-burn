@@ -3,6 +3,7 @@ extends PlaytestCase
 ## The investor table has to remain a choice screen, not three full detail
 ## sheets laid side by side. Card faces stay compact, actions share a baseline,
 ## and phones get a single scrollable column with the footer outside it.
+## Perk-only: TAKE NOTHING remains; REROLL is gone.
 
 
 func play(harness: UiHarness) -> void:
@@ -28,18 +29,12 @@ func _desktop_table(harness: UiHarness, table: Control) -> void:
 		"BILLS" in table._pitch.text,
 		"The compact status line keeps the important bill warning"
 	)
+	assert_true("PERK" in table._pitch.text.to_upper(), "Header says the free pick is a perk")
 	assert_true(table._inline_actions.visible, "Secondary actions share one footer line")
-	assert_eq(table._action_rows.size(), 2, "Both secondary actions remain available")
-	for row in table._action_rows:
-		assert_eq(row.index_label, "", "Inline actions omit numbered prefixes")
-		assert_eq(row.value_text, "", "Inline actions omit explanatory descriptions")
-	assert_true(
-		is_equal_approx(
-			table._action_rows[0].get_global_rect().position.y,
-			table._action_rows[1].get_global_rect().position.y
-		),
-		"TAKE NOTHING and REROLL sit on the same line"
-	)
+	assert_eq(table._action_rows.size(), 1, "Only TAKE NOTHING remains as a secondary action")
+	assert_eq(table._action_rows[0].index_label, "", "Inline actions omit numbered prefixes")
+	assert_eq(table._action_rows[0].value_text, "", "Inline actions omit explanatory descriptions")
+	assert_eq(table._action_rows[0].headline, "TAKE NOTHING", "Decline remains available")
 
 	var cards: Array[Node] = table._cards_list.get_children()
 	assert_eq(cards.size(), 3, "The investor still deals three choices")

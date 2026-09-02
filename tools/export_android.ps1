@@ -61,7 +61,7 @@ if ($godotExit -ne 0) {
     Write-Host "Godot exited $godotExit after writing the AAB; continuing (editor addon teardown noise)."
 }
 
-$inspect = @(Join-Path $repoRoot "tools\inspect_aab.py", $aab)
+$inspect = @((Join-Path $repoRoot "tools\inspect_aab.py"), $aab)
 if ($env:BUNDLETOOL_JAR) {
     $inspect += @("--bundletool", $env:BUNDLETOOL_JAR)
 }

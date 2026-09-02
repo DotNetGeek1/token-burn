@@ -60,6 +60,9 @@ func run() -> void:
 	_test_v22_normalizes_workflow_mastery_and_job_evidence()
 	_test_v22_clears_removed_modules_from_workflow_slots()
 	_test_corrupt_primary_save_recovers_from_backup()
+	_test_module_market_round_trips_and_missing_state_initializes()
+	_test_mixed_pending_choices_migrate_to_perks()
+	_test_module_only_angel_save_redraws_on_load()
 
 
 func _test_round_end_pending_survives_load(sim_script: GDScript) -> void:
@@ -583,3 +586,101 @@ func _test_corrupt_primary_save_recovers_from_backup() -> void:
 		"The recovered save is the last good write, not the corrupt one"
 	)
 	SaveManager.delete_save()
+
+
+func _test_module_market_round_trips_and_missing_state_initializes() -> void:
+	var sim_script: GDScript = load("res://core/simulation.gd")
+	var sim: Node = sim_script.new()
+	sim.autosave_enabled = false
+	sim.start_run(9401)
+	sim.phase = sim.Phase.ROUND_PREP
+	sim.run_state.economy["cash"] = 1_000_000.0
+	assert_true(sim.reroll_module_market(), "Seed a paid reroll before saving")
+	var stock: Array = sim.module_market_stock().duplicate()
+	var market: Dictionary = Dictionary(sim.run_state.business.get("module_market", {})).duplicate(true)
+	SaveManager.save_run(sim.run_state, "ROUND_PREP", sim.run_seed, [], false)
+
+	var sim2: Node = sim_script.new()
+	sim2.autosave_enabled = false
+	assert_true(sim2.load_saved_run(), "Market-bearing save loads")
+	assert_eq(sim2.module_market_stock(), stock, "Stock IDs round-trip through SaveManager")
+	var loaded: Dictionary = Dictionary(sim2.run_state.business.get("module_market", {}))
+	assert_eq(int(loaded.get("rerolls", -1)), int(market.get("rerolls", 0)), "Reroll count round-trips")
+	sim.free()
+	sim2.free()
+	SaveManager.delete_save()
+
+	var sim3: Node = sim_script.new()
+	sim3.autosave_enabled = false
+	sim3.start_run(9402)
+	sim3.phase = sim3.Phase.ROUND_PREP
+	sim3.run_state.business.erase("module_market")
+	var filled: Array = sim3.module_market_stock()
+	assert_eq(filled.size(), 3, "Missing market state initializes bedroom stock on query")
+	assert_true(sim3.run_state.business.has("module_market"), "Market block is written back")
+
+	# Empty current shelf must not refill until the stamp changes.
+	sim3.run_state.business["module_market"]["stock"] = []
+	assert_eq(sim3.module_market_stock().size(), 0, "Empty current shelf stays empty")
+	sim3.free()
+
+
+func _test_mixed_pending_choices_migrate_to_perks() -> void:
+	var sim_script: GDScript = load("res://core/simulation.gd")
+	var sim: Node = sim_script.new()
+	sim.autosave_enabled = false
+	sim.start_run(9403)
+	var round_prep: int = sim.Phase.ROUND_PREP
+	sim.phase = sim.Phase.ANGEL_ROUND
+	sim.pending_choices = [
+		{"type": "module", "id": "op.stack_overflow", "label": "legacy"},
+		{"type": "operation", "id": "op.stack_overflow", "label": "legacy"},
+		{"type": "perk", "id": "perk.not_real", "label": "bogus"},
+		{"type": "perk", "id": "perk.ship_it", "label": "Ship It"},
+	]
+	sim._migrate_pending_choices()
+	for choice in sim.pending_choices:
+		assert_eq(str(choice.get("type", "")), "perk", "Migration keeps only perks")
+		assert_true(
+			ContentDatabase.get_perk(str(choice.get("id", ""))) != null,
+			"Migration discards unknown pending perks"
+		)
+	assert_true(
+		not sim.pending_choices.is_empty() or sim.phase == round_prep,
+		"Angel phase either keeps a perk or exits to round prep"
+	)
+	sim.free()
+
+
+func _test_module_only_angel_save_redraws_on_load() -> void:
+	var sim_script: GDScript = load("res://core/simulation.gd")
+	var sim: Node = sim_script.new()
+	sim.autosave_enabled = false
+	sim.start_run(9404)
+	var module_id: String = str(sim.module_market_stock()[0])
+	assert_true(
+		SaveManager.save_run(
+			sim.run_state,
+			"ANGEL_ROUND",
+			sim.run_seed,
+			[{"type": "module", "id": module_id, "label": "Legacy module"}],
+			false
+		),
+		"Legacy module-only angel save is written"
+	)
+	var sim2: Node = sim_script.new()
+	sim2.autosave_enabled = false
+	assert_true(sim2.load_saved_run(), "Legacy module-only angel save loads")
+	assert_false(
+		module_id in Array(sim2.run_state.build.get("modules", [])),
+		"Removed pending module is not granted for free"
+	)
+	assert_true(
+		not sim2.pending_choices.is_empty() or sim2.phase == sim2.Phase.ROUND_PREP,
+		"Load redraws a perk-only table or safely exits to round prep"
+	)
+	for choice in sim2.pending_choices:
+		assert_eq(str(choice.get("type", "")), "perk", "Loaded replacement table is perk-only")
+	SaveManager.delete_save()
+	sim.free()
+	sim2.free()

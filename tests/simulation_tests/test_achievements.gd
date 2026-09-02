@@ -1,10 +1,10 @@
 extends TestCase
 
 ## Achievements are the second thing that outlives a run, and the first thing
-## that changes what a *later* run is allowed to draft. These cover the promise
+## that changes what a *later* run is allowed to buy. These cover the promise
 ## end to end: a run that does something notable earns the award, the award
 ## survives a restart, and the module it unlocks goes from unreachable to
-## reachable in the angel draft.
+## reachable in the Market.
 ##
 ## Every test here runs against a scratch profile. The suite must never touch
 ## the profile the developer is playing.
@@ -152,7 +152,7 @@ func _test_a_gated_module_is_unreachable_until_its_award_is_earned() -> void:
 	assert_false(MetaProgress.has_achievement(WIPEOUT), "Starting from nothing earned")
 	assert_false(
 		_can_draw(WIPEOUT_MODULE),
-		"A gated module is not in the draft pool before its award"
+		"A gated module is not Market-eligible before its award"
 	)
 	assert_false(
 		_in_list(ContentDatabase.unlocked_modules(), WIPEOUT_MODULE),
@@ -162,7 +162,7 @@ func _test_a_gated_module_is_unreachable_until_its_award_is_earned() -> void:
 	MetaProgress.grant_achievement(WIPEOUT)
 	assert_true(
 		_can_draw(WIPEOUT_MODULE),
-		"Earning the award puts it in the pool for every run from then on"
+		"Earning the award makes it Market-eligible in every run from then on"
 	)
 	assert_true(
 		_in_list(ContentDatabase.unlocked_modules(), WIPEOUT_MODULE),
@@ -310,17 +310,15 @@ func _test_draw_pool_respects_victory_gates() -> void:
 	_fresh_profile()
 	var state := RunState.new()
 	state.reset()
-	var offers: Array = ContentDatabase.draw_angel_offers(DeterministicRng.new(88), state, 24)
-	for offer in offers:
-		if str(offer.get("type", "")) != "module":
-			continue
-		var module: ModuleDefinition = ContentDatabase.get_module(str(offer.get("id", "")))
+	var offers: Array = ContentDatabase.draw_market_modules(DeterministicRng.new(88), state, 24)
+	for module in offers:
+		assert_true(module is ModuleDefinition, "Market draw returns module definitions")
 		assert_true(
-			module != null and ContentDatabase.module_is_unlocked(module),
-			"Angel offers never include locked modules"
+			ContentDatabase.module_is_unlocked(module),
+			"Market stock never includes locked modules"
 		)
-		assert_eq(int(module.min_victories), 0, "Fresh draw pool stays at OPEN victory gates")
-		assert_eq(int(module.min_hard_victories), 0, "Fresh draw pool stays at OPEN Hard gates")
+		assert_eq(int(module.min_victories), 0, "Fresh Market pool stays at OPEN victory gates")
+		assert_eq(int(module.min_hard_victories), 0, "Fresh Market pool stays at OPEN Hard gates")
 
 
 func _test_repurposed_awards_hand_over_new_modules() -> void:
@@ -359,12 +357,12 @@ func _test_telemetry_achievements_unlock_their_modules() -> void:
 			MetaProgress.has_achievement(achievement_id),
 			"%s unlocks from its telemetry" % achievement_id
 		)
-		assert_true(_can_draw(module_id), "%s becomes draftable after its award" % module_id)
+		assert_true(_can_draw(module_id), "%s becomes Market-eligible after its award" % module_id)
 
 
-## Whether the module can turn up in an angel draft at all. Drawing two at a
-## time from a pool of dozens will not reliably surface one module, so this asks
-## the pool rather than gambling on the roll.
+## Whether the module can turn up in the Market at all. Drawing a short shelf
+## from a pool of dozens will not reliably surface one module, so this asks
+## the unlock gate rather than gambling on the roll.
 func _can_draw(module_id: String) -> bool:
 	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
 	return module != null and ContentDatabase.module_is_unlocked(module)

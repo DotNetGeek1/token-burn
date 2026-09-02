@@ -8,7 +8,7 @@ extends VenueScene
 ## instead of stacked in a 442-pixel column.
 ##
 ## The records go up the left because they are figures rather than things. The
-## board is the gallery: permanent unlocks, every module in the angel pool with
+## board is the gallery: permanent unlocks, every Market-eligible module with
 ## its lock reason when gated, and which ascension contracts have been beaten.
 
 const UNLOCKS := "unlocks"

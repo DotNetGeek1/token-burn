@@ -551,15 +551,16 @@ func owned_modules(run_state: RunState) -> Array:
 	return Array(run_state.build.get("modules", []))
 
 
-func grant_module(run_state: RunState, module_id: String) -> bool:
+func grant_module(run_state: RunState, module_id: String, auto_place: bool = true) -> bool:
 	var owned: Array = owned_modules(run_state)
 	if module_id in owned:
 		return false
 	owned.append(module_id)
 	run_state.build["modules"] = owned
-	# A newly drafted module goes straight into the first free slot so it is
-	# in play without a detour through the board screen. Overflow is a player
-	# decision — drafting never grows the pipe past supported capacity.
+	# Starter fills and legacy callers may auto-place into the first free slot.
+	# Market purchases stay on the bench so the player chooses where they go.
+	if not auto_place:
+		return true
 	var board_slots: Array = slots(run_state)
 	for i in range(board_slots.size()):
 		if str(board_slots[i]) == "":

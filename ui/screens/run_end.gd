@@ -204,7 +204,7 @@ func _victory_module_unlock_text() -> String:
 	var listed: String = ", ".join(names)
 	if unlocked.size() > names.size():
 		listed = "%s, +%d more" % [listed, unlocked.size() - names.size()]
-	return " NEW MODULES ADDED TO ANGEL POOL: %s." % listed
+	return " NEW MODULES CAN APPEAR IN THE MARKET: %s." % listed
 
 
 ## How close the run came, which is the only useful thing to say to somebody who

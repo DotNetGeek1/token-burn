@@ -9,9 +9,9 @@ extends RefCounted
 ## a board full of modules); and `run_end`, for the things only a finished run
 ## can prove (how it ended, how long it lasted, what it never shipped).
 ##
-## Earning one is the point: a reward of `unlock_module` puts a module into the
-## angel draft pool for every run from then on, so the pool a veteran drafts
-## from is deeper than the one a first run sees.
+## Earning one is the point: a reward of `unlock_module` lets a module appear in
+## the Market for every run from then on, so the shelf a veteran shops from is
+## deeper than the one a first run sees.
 
 const TRIGGER_TICK := "tick"
 const TRIGGER_RUN_END := "run_end"

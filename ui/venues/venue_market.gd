@@ -17,6 +17,11 @@ extends VenueScene
 ## The counter that lists what is already installed, so selling is reachable from
 ## the same place buying is. Not a shelf — nothing here is for sale to you.
 const INSTALLED := "installed"
+## Purchasable workflow modules. Listed first because the shelf changes every
+## round and is checked as often as hardware.
+const MODULES := "modules"
+## Synthetic board entry for paying to redraw the module shelf.
+const RESTOCK_META := "restock_modules"
 
 var _kicker: Label = null
 var _index_lines: VBoxContainer = null
@@ -25,7 +30,7 @@ var _board_panel: VenuePanel = null
 var _board: VenueBoard = null
 var _notice: Label = null
 var _counter_rows: Dictionary = {}
-var _active: String = "hardware"
+var _active: String = MODULES
 
 
 func venue_key() -> String:
@@ -41,6 +46,7 @@ func _build_venue() -> void:
 	_build_board()
 	_build_notice()
 	EventBus.upgrade_purchased.connect(func(_id: String) -> void: refresh())
+	EventBus.module_acquired.connect(func(_id: String) -> void: refresh())
 	EventBus.run_started.connect(refresh)
 
 
@@ -53,7 +59,7 @@ func _build_index() -> void:
 	var content: VBoxContainer = panel.content()
 
 	_kicker = ConsoleStyle.label(
-		"HARDWARE AND SERVICES", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+		"MODULES, HARDWARE AND SERVICES", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
 	)
 	content.add_child(_kicker)
 
@@ -137,10 +143,10 @@ func _refresh_index(_shelves_data: Dictionary) -> void:
 
 
 ## One line per counter that has something on it, with its stock count beside it.
-## An empty shelf is absent rather than greyed: a counter with nothing behind
-## it is not a place to stand.
+## Modules always appear even when the shelf is emptied by purchases, because the
+## restock action still lives there. Hardware counters stay absent when empty.
 func _refresh_counters(shelves: Dictionary) -> void:
-	var wanted: Array[String] = []
+	var wanted: Array[String] = [MODULES]
 	for key in UpgradePresentation.GROUP_ORDER:
 		if shelves.has(key) and not Array(shelves[key]).is_empty():
 			wanted.append(str(key))
@@ -181,22 +187,30 @@ func _counter_order() -> Array[String]:
 func _counter_label(key: String) -> String:
 	if key == INSTALLED:
 		return "INSTALLED"
+	if key == MODULES:
+		return "MODULES"
 	return UpgradePresentation.group_label(key).to_upper()
 
 
 func _counter_count(key: String, shelves: Dictionary) -> int:
 	if key == INSTALLED:
 		return UpgradePresentation.installed_inventory().size()
+	if key == MODULES:
+		return Simulation.module_market_stock().size()
 	return Array(shelves.get(key, [])).size()
 
 
 func _counter_exists(key: String, shelves: Dictionary) -> bool:
 	if key == INSTALLED:
 		return not UpgradePresentation.installed_inventory().is_empty()
+	if key == MODULES:
+		return true
 	return shelves.has(key) and not Array(shelves[key]).is_empty()
 
 
 func _first_counter(shelves: Dictionary) -> String:
+	if _counter_exists(MODULES, shelves):
+		return MODULES
 	for key in UpgradePresentation.GROUP_ORDER:
 		if shelves.has(key) and not Array(shelves[key]).is_empty():
 			return str(key)
@@ -205,6 +219,10 @@ func _first_counter(shelves: Dictionary) -> String:
 
 func _on_counter_pressed(key: String) -> void:
 	if _active == key:
+		# On compact layouts the selected counter is also the route back to its
+		# board. Without this, MODULES starts selected but its BUY controls remain
+		# behind the index panel on first entry.
+		lean_on("board")
 		return
 	_active = key
 	_board.clear_selection()
@@ -229,15 +247,112 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _refresh_board(shelves: Dictionary) -> void:
 	_board_panel.set_heading(_counter_label(_active))
 	var entries: Array = []
+	var note: String = ""
 	if _active == INSTALLED:
 		entries = _installed_entries()
+	elif _active == MODULES:
+		entries = _module_entries()
+		note = "NEXT FREE RESTOCK: ROUND %d" % Simulation.module_market_next_restock_round()
+		if entries.is_empty():
+			note = "SHELF CLEARED · %s" % note
 	else:
 		for upgrade in Array(shelves.get(_active, [])):
 			entries.append(_upgrade_entry(upgrade))
-	var note: String = ""
-	if entries.is_empty():
-		note = "SHELF CLEARED — NEW STOCK ARRIVES AS YOU PROGRESS"
+		if entries.is_empty():
+			note = "SHELF CLEARED — NEW STOCK ARRIVES AS YOU PROGRESS"
 	_board.set_entries(entries, note)
+
+
+func _module_entries() -> Array:
+	var entries: Array = []
+	for module_id in Simulation.module_market_stock():
+		var module: ModuleDefinition = ContentDatabase.get_module(str(module_id))
+		if module == null:
+			continue
+		entries.append(_module_entry(module))
+	entries.append(_restock_entry())
+	return entries
+
+
+func _module_entry(module: ModuleDefinition) -> Dictionary:
+	var cost: float = Simulation.module_market_price(module.id)
+	var can_buy: bool = Simulation.can_buy_module(module.id)
+	var affordable: bool = float(Simulation.run_state.economy.get("cash", 0.0)) >= cost
+	var tags: PackedStringArray = PackedStringArray()
+	for tag in module.tags:
+		if tags.size() >= 3:
+			break
+		tags.append(str(tag).to_upper())
+	var spec_parts: PackedStringArray = PackedStringArray([
+		module.rarity.to_upper(),
+		module.category.to_upper(),
+	])
+	if not tags.is_empty():
+		spec_parts.append(" / ".join(tags))
+	var description: String = Simulation.get_module_description(module.id)
+	return {
+		"meta": "buy_module:%s" % module.id,
+		"name": module.name,
+		"figure": module.badge,
+		"unit": "",
+		"spec": "%s\n%s" % [" · ".join(spec_parts), description],
+		"price": NumberFormat.format_cash(cost),
+		"price_color": ConsoleStyle.PHOSPHOR if affordable else ConsoleStyle.DANGER,
+		"status": "IN STOCK" if can_buy else ("TOO DEAR" if not affordable else "BLOCKED"),
+		"status_color": ConsoleStyle.PHOSPHOR if can_buy else ConsoleStyle.PHOSPHOR_DIM,
+		"icon": AssetCatalog.module_icon(module.category),
+		"tooltip": description,
+		"action_text": "BUY",
+		"action_enabled": can_buy,
+		"action_tooltip": _module_buy_tooltip(module, cost, can_buy),
+	}
+
+
+func _restock_entry() -> Dictionary:
+	var cost: float = Simulation.module_market_reroll_cost()
+	var can_reroll: bool = Simulation.can_reroll_module_market()
+	var market: Dictionary = Dictionary(Simulation.run_state.business.get("module_market", {}))
+	var rerolls: int = int(market.get("rerolls", 0))
+	return {
+		"meta": RESTOCK_META,
+		"name": "RESTOCK MODULE SHELF",
+		"figure": NumberFormat.format_cash(cost),
+		"unit": "REROLL #%d" % (rerolls + 1),
+		"spec": "Redraws the shelf. Escalates until the next free restock.",
+		"price": NumberFormat.format_cash(cost),
+		"price_color": ConsoleStyle.PHOSPHOR if can_reroll else ConsoleStyle.DANGER,
+		"status": "OPEN" if can_reroll else "TOO DEAR",
+		"status_color": ConsoleStyle.PHOSPHOR if can_reroll else ConsoleStyle.PHOSPHOR_DIM,
+		"action_text": "REROLL",
+		"action_enabled": can_reroll,
+		"action_tooltip": (
+			"Restock for %s" % NumberFormat.format_cash(cost)
+			if can_reroll
+			else "Need %s more." % NumberFormat.format_cash(
+				maxf(0.0, cost - float(Simulation.run_state.economy.get("cash", 0.0)))
+			)
+		),
+	}
+
+
+func _module_buy_tooltip(module: ModuleDefinition, cost: float, can_buy: bool) -> String:
+	if can_buy:
+		var outlook: Dictionary = Simulation.bills_outlook()
+		var left: float = float(outlook.get("cash", 0.0)) - cost
+		var rent_shortfall: float = maxf(0.0, float(outlook.get("due", 0.0)) - left)
+		if rent_shortfall > 0.0:
+			return "%s short of rent after this purchase." % NumberFormat.format_cash(
+				rent_shortfall
+			)
+		return "Buy for %s" % NumberFormat.format_cash(cost)
+	if not MarketService.market_open(Simulation):
+		return "The Market is closed once a round is under way. Shop between rounds."
+	if module.id in Array(Simulation.run_state.build.get("modules", [])):
+		return "Already owned."
+	var shortfall: float = cost - float(Simulation.run_state.economy.get("cash", 0.0))
+	if shortfall > 0.0:
+		return "Need %s more." % NumberFormat.format_cash(shortfall)
+	return "Unavailable"
 
 
 func _refresh_notice() -> void:
@@ -467,10 +582,30 @@ func _buy_action_tooltip(
 
 func _on_market_action(meta: Variant) -> void:
 	var action: String = str(meta)
-	if action.begins_with("buy:"):
+	if action == RESTOCK_META:
+		_restock_modules()
+	elif action.begins_with("buy_module:"):
+		_buy_module(action.trim_prefix("buy_module:"))
+	elif action.begins_with("buy:"):
 		_buy_upgrade(action.trim_prefix("buy:"))
 	elif action.begins_with("sell:"):
 		_sell_hardware(action.trim_prefix("sell:"))
+
+
+func _buy_module(module_id: String) -> void:
+	UiSound.play("buy")
+	if Simulation.buy_module(module_id):
+		_board.clear_selection()
+		refresh()
+		get_tree().call_group("ui_refresh", "refresh")
+
+
+func _restock_modules() -> void:
+	UiSound.play("buy")
+	if Simulation.reroll_module_market():
+		_board.clear_selection()
+		refresh()
+		get_tree().call_group("ui_refresh", "refresh")
 
 
 func _buy_upgrade(upgrade_id: String) -> void:

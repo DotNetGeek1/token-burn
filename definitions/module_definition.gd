@@ -22,12 +22,12 @@ extends Resource
 @export var starter: bool = false
 ## Placed on the board at the start of a run, rather than waiting on the bench.
 @export var opens_pipeline: bool = false
-## Achievement that has to be earned before this module joins the draft pool.
+## Achievement that has to be earned before this module can appear in the Market.
 ## Blank means it is available from the first run.
 @export var unlock_achievement: String = ""
-## Total campaign victories required before this module joins the draft pool.
+## Total campaign victories required before this module can appear in the Market.
 @export var min_victories: int = 0
-## Hard-difficulty victories required before this module joins the draft pool.
+## Hard-difficulty victories required before this module can appear in the Market.
 @export var min_hard_victories: int = 0
 @export var min_location_tier: int = 0
 @export var max_location_tier: int = -1

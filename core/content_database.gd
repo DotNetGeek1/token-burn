@@ -85,7 +85,7 @@ func get_achievement(id: String) -> Dictionary:
 	return Dictionary(_achievements_by_id.get(id, {})).duplicate(true)
 
 
-## The achievement that has to be earned before a module can appear in a draft,
+## The achievement that has to be earned before a module can appear in the Market,
 ## or "" for the modules everybody starts with access to.
 func module_unlock_achievement(module_id: String) -> String:
 	var module: ModuleDefinition = get_module(module_id)
@@ -110,7 +110,7 @@ func opening_pipeline_modules() -> Array[String]:
 	return ids
 
 
-## A gated module stays out of the draft until every authored gate is met:
+## A gated module stays out of the Market until every authored gate is met:
 ## achievement, total victories, and Hard victories are ANDed together so a
 ## veteran card cannot leak into a fresh profile through any single path.
 func module_is_unlocked(module: ModuleDefinition) -> bool:
@@ -156,7 +156,7 @@ func modules_unlocked_at_victory_counts(total_victories: int, hard_victories: in
 	return result
 
 
-## Human-readable reasons a module is still out of the angel pool.
+## Human-readable reasons a module is still out of the Market.
 func module_lock_reasons(module: ModuleDefinition) -> PackedStringArray:
 	var reasons: PackedStringArray = []
 	if module.unlock_achievement != "":
@@ -191,6 +191,74 @@ func perk_is_unlocked(perk: PerkDefinition) -> bool:
 	return MetaProgress.has_achievement(perk.unlock_achievement)
 
 
+## Whether a perk is eligible for His Table this round: unlocked, allowed on
+## the current difficulty and location, not already collected, and not blocked.
+func perk_is_eligible(
+	perk: PerkDefinition,
+	run_state: RunState,
+	blocked_ids: Array = []
+) -> bool:
+	if perk == null:
+		return false
+	var collected: Array = run_state.build.get("perk_inventory", [])
+	if perk.id in collected or perk.id in blocked_ids:
+		return false
+	if not perk_is_unlocked(perk):
+		return false
+	if not _difficulty_allows_run(run_state, perk.difficulty):
+		return false
+	var tier: int = _location_tier_for_run(run_state)
+	if not _location_tier_allows(tier, perk.min_location_tier, perk.max_location_tier):
+		return false
+	return true
+
+
+## Whether a module can appear on the Market shelf this round.
+func module_is_eligible(
+	module: ModuleDefinition,
+	run_state: RunState,
+	blocked_ids: Array = []
+) -> bool:
+	if module == null:
+		return false
+	var owned_modules: Array = run_state.build.get("modules", [])
+	if module.id in owned_modules or module.id in blocked_ids:
+		return false
+	if not module_is_unlocked(module):
+		return false
+	if not _difficulty_allows_run(run_state, module.difficulty):
+		return false
+	var tier: int = _location_tier_for_run(run_state)
+	if not _location_tier_allows(tier, module.min_location_tier, module.max_location_tier):
+		return false
+	return true
+
+
+## Perk-only angel table. Modules never appear here.
+func draw_angel_perks(
+	rng: DeterministicRng,
+	run_state: RunState,
+	count: int = 3,
+	owned_tags: Array = [],
+	blocked_ids: Array = [],
+	rarity_bias: float = 0.0
+) -> Array:
+	var pool: Array = []
+	for perk in perks:
+		if not perk_is_eligible(perk, run_state, blocked_ids):
+			continue
+		pool.append({
+			"type": "perk",
+			"id": perk.id,
+			"label": perk.name,
+			"rarity": perk.rarity,
+			"tags": Array(perk.tags),
+			"weight": _weighted_tag_affinity(perk.rarity, perk.draft_weight, perk.tags, owned_tags, rarity_bias),
+		})
+	return _weighted_picks(rng, pool, count)
+
+
+## Backwards-compatible alias: the angel table is perk-only now.
 func draw_angel_offers(
 	rng: DeterministicRng,
 	run_state: RunState,
@@ -199,72 +267,32 @@ func draw_angel_offers(
 	rarity_bias: float = 0.0,
 	blocked_ids: Array = []
 ) -> Array:
+	return draw_angel_perks(rng, run_state, count, owned_tags, blocked_ids, rarity_bias)
+
+
+## Market shelf draw. Same unlock/location/difficulty gates as profile eligibility,
+## minus owned modules and any IDs blocked for this draw (e.g. previous shelf).
+func draw_market_modules(
+	rng: DeterministicRng,
+	run_state: RunState,
+	count: int,
+	owned_tags: Array = [],
+	blocked_ids: Array = [],
+	rarity_bias: float = 0.0
+) -> Array[ModuleDefinition]:
 	var pool: Array = []
-	var collected: Array = run_state.build.get("perk_inventory", [])
-	var owned_modules: Array = run_state.build.get("modules", [])
-	var tier: int = _location_tier_for_run(run_state)
-	var affinity: float = float(_build_tuning().get("draft_tag_affinity", 1.5))
-	var affinity_cap: float = float(_build_tuning().get("draft_tag_affinity_cap", 4.0))
-	for perk in perks:
-		if perk.id in collected or perk.id in blocked_ids:
-			continue
-		if not perk_is_unlocked(perk):
-			continue
-		if not _difficulty_allows_run(run_state, perk.difficulty):
-			continue
-		if not _location_tier_allows(tier, perk.min_location_tier, perk.max_location_tier):
-			continue
-		var weight: float = _rarity_weight(perk.rarity, rarity_bias) * maxf(perk.draft_weight, 0.01)
-		var matches: int = 0
-		for tag in perk.tags:
-			if tag in owned_tags:
-				matches += 1
-		if matches > 0:
-			weight *= minf(pow(affinity, float(matches)), affinity_cap)
-		pool.append({
-			"type": "perk",
-			"id": perk.id,
-			"label": perk.name,
-			"rarity": perk.rarity,
-			"tags": Array(perk.tags),
-			"weight": weight,
-		})
 	for module in modules:
-		if module.id in owned_modules:
+		if not module_is_eligible(module, run_state, blocked_ids):
 			continue
-		if not module_is_unlocked(module):
-			continue
-		if not _difficulty_allows_run(run_state, module.difficulty):
-			continue
-		if not _location_tier_allows(tier, module.min_location_tier, module.max_location_tier):
-			continue
-		var module_weight: float = _rarity_weight(module.rarity, rarity_bias) * maxf(module.draft_weight, 0.01)
-		var module_matches: int = 0
-		for tag in module.tags:
-			if tag in owned_tags:
-				module_matches += 1
-		if module_matches > 0:
-			module_weight *= minf(pow(affinity, float(module_matches)), affinity_cap)
 		pool.append({
-			"type": "module",
-			"id": module.id,
-			"label": module.name,
-			"rarity": module.rarity,
-			"tags": Array(module.tags),
-			"weight": module_weight,
+			"item": module,
+			"weight": _weighted_tag_affinity(
+				module.rarity, module.draft_weight, module.tags, owned_tags, rarity_bias
+			),
 		})
-	if pool.is_empty():
-		return []
-	var picks: Array = []
-	var mutable_pool: Array = pool.duplicate()
-	for _i in range(count):
-		if mutable_pool.is_empty():
-			break
-		var picked = rng.weighted_pick(mutable_pool, "weight")
-		if picked == null:
-			break
-		picks.append(picked)
-		mutable_pool.erase(picked)
+	var picks: Array[ModuleDefinition] = []
+	for entry in _weighted_picks(rng, pool, count):
+		picks.append(entry["item"])
 	return picks
 
 
@@ -275,6 +303,10 @@ func _location_tier_for_run(run_state: RunState) -> int:
 	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
 	var index: int = order.find(dwelling)
 	return maxi(0, index)
+
+
+func location_tier_for_run(run_state: RunState) -> int:
+	return _location_tier_for_run(run_state)
 
 
 func _difficulty_allows_run(run_state: RunState, allowed: PackedStringArray) -> bool:
@@ -291,25 +323,29 @@ func _location_tier_allows(tier: int, min_tier: int, max_tier: int) -> bool:
 	return true
 
 
-func draw_modules(
-	rng: DeterministicRng,
-	count: int = 2,
-	owned_ids: Array = [],
+func _weighted_tag_affinity(
+	rarity: String,
+	draft_weight: float,
+	tags: PackedStringArray,
+	owned_tags: Array,
 	rarity_bias: float = 0.0
-) -> Array[ModuleDefinition]:
-	var pool: Array = []
-	for module in modules:
-		if module.id in owned_ids:
-			continue
-		if not module_is_unlocked(module):
-			continue
-		pool.append({
-			"item": module,
-			"weight": _rarity_weight(module.rarity, rarity_bias) * maxf(module.draft_weight, 0.01),
-		})
-	if pool.is_empty():
+) -> float:
+	var affinity: float = float(_build_tuning().get("draft_tag_affinity", 1.5))
+	var affinity_cap: float = float(_build_tuning().get("draft_tag_affinity_cap", 4.0))
+	var weight: float = _rarity_weight(rarity, rarity_bias) * maxf(draft_weight, 0.01)
+	var matches: int = 0
+	for tag in tags:
+		if tag in owned_tags:
+			matches += 1
+	if matches > 0:
+		weight *= minf(pow(affinity, float(matches)), affinity_cap)
+	return weight
+
+
+func _weighted_picks(rng: DeterministicRng, pool: Array, count: int) -> Array:
+	if pool.is_empty() or count <= 0:
 		return []
-	var picks: Array[ModuleDefinition] = []
+	var picks: Array = []
 	var mutable_pool: Array = pool.duplicate()
 	for _i in range(count):
 		if mutable_pool.is_empty():
@@ -317,16 +353,25 @@ func draw_modules(
 		var picked = rng.weighted_pick(mutable_pool, "weight")
 		if picked == null:
 			break
-		picks.append(picked["item"])
+		picks.append(picked)
 		mutable_pool.erase(picked)
 	return picks
 
 
-## The angel's offer. `owned_tags` bends the draw towards whatever the build has
-## already committed to, so a run that has bought into local hardware keeps being
-## shown local hardware rather than three unrelated cards a round. `blocked_ids`
-## are perks the build could not take even if offered — a dead card on the table
-## is a wasted pick, so they never appear.
+## Legacy helper retained for older tests/tools. Prefer `draw_market_modules`.
+func draw_modules(
+	rng: DeterministicRng,
+	count: int = 2,
+	owned_ids: Array = [],
+	rarity_bias: float = 0.0
+) -> Array[ModuleDefinition]:
+	var state := RunState.new()
+	state.reset()
+	state.build["modules"] = owned_ids.duplicate()
+	return draw_market_modules(rng, state, count, [], [], rarity_bias)
+
+
+## Legacy helper. Prefer `draw_angel_perks` for production angel tables.
 func draw_perks(
 	rng: DeterministicRng,
 	count: int = 3,
@@ -335,32 +380,15 @@ func draw_perks(
 	owned_tags: Array = [],
 	blocked_ids: Array = []
 ) -> Array[PerkDefinition]:
-	var affinity: float = float(_build_tuning().get("draft_tag_affinity", 1.5))
-	var affinity_cap: float = float(_build_tuning().get("draft_tag_affinity_cap", 4.0))
-	var pool: Array = []
-	for perk in perks:
-		if perk.id in owned_ids or perk.id in blocked_ids:
-			continue
-		var weight: float = _rarity_weight(perk.rarity, rarity_bias)
-		var matches: int = 0
-		for tag in perk.tags:
-			if tag in owned_tags:
-				matches += 1
-		if matches > 0:
-			weight *= minf(pow(affinity, float(matches)), affinity_cap)
-		pool.append({"item": perk, "weight": weight})
-	if pool.is_empty():
-		return []
+	var state := RunState.new()
+	state.reset()
+	state.build["perk_inventory"] = owned_ids.duplicate()
+	var offers: Array = draw_angel_perks(rng, state, count, owned_tags, blocked_ids, rarity_bias)
 	var picks: Array[PerkDefinition] = []
-	var mutable_pool: Array = pool.duplicate()
-	for _i in range(count):
-		if mutable_pool.is_empty():
-			break
-		var picked = rng.weighted_pick(mutable_pool, "weight")
-		if picked == null:
-			break
-		picks.append(picked["item"])
-		mutable_pool.erase(picked)
+	for offer in offers:
+		var perk: PerkDefinition = get_perk(str(offer.get("id", "")))
+		if perk != null:
+			picks.append(perk)
 	return picks
 
 
@@ -862,8 +890,50 @@ func collect_validation_errors() -> Array[String]:
 			errors.append("module '%s' requires achievement '%s' but no achievement unlocks it" % [
 				module.id, module.unlock_achievement,
 			])
+	_validate_module_market_tuning(errors)
 	_validate_ascension_contracts(errors)
 	return errors
+
+
+func _validate_module_market_tuning(errors: Array[String]) -> void:
+	var economy: Dictionary = balance.get("economy", {})
+	var market: Variant = economy.get("module_market", {})
+	if not market is Dictionary or market.is_empty():
+		errors.append("economy.module_market tuning is missing")
+		return
+	var locations: Array = Array(economy.get("location_order", []))
+	var slots: Array = Array(market.get("slots_by_location_tier", []))
+	if slots.size() < locations.size():
+		errors.append(
+			"economy.module_market.slots_by_location_tier has %d entries; need at least %d for location_order"
+			% [slots.size(), locations.size()]
+		)
+	for index in range(slots.size()):
+		if int(slots[index]) <= 0:
+			errors.append(
+				"economy.module_market.slots_by_location_tier[%d] must be positive" % index
+			)
+	var price_mults: Variant = market.get("rarity_price_rent_mult", {})
+	if not price_mults is Dictionary:
+		errors.append("economy.module_market.rarity_price_rent_mult must be an object")
+	else:
+		for rarity in KNOWN_MODULE_RARITIES:
+			if not price_mults.has(rarity):
+				errors.append(
+					"economy.module_market.rarity_price_rent_mult is missing '%s'" % rarity
+				)
+			elif float(price_mults[rarity]) <= 0.0:
+				errors.append(
+					"economy.module_market.rarity_price_rent_mult.%s must be positive" % rarity
+				)
+		for rarity in price_mults.keys():
+			if not KNOWN_MODULE_RARITIES.has(str(rarity)):
+				errors.append(
+					"economy.module_market.rarity_price_rent_mult has unknown rarity '%s'" % rarity
+				)
+	for key in ["reroll_rent_mult", "reroll_job_reward_mult", "reroll_growth", "price_floor"]:
+		if float(market.get(key, 0.0)) <= 0.0:
+			errors.append("economy.module_market.%s must be positive" % key)
 
 
 ## One authoritative record of every place an upgrade/perk/event effect can
