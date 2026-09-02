@@ -57,6 +57,10 @@ var current: String = DESK
 
 var _stack: Array[String] = []
 var _switching: bool = false
+## A goto that arrives while a fade is running is kept, not dropped. Dropping
+## it is how a round-end walk-home plus a player tap left the fade up and the
+## next venue never mounted.
+var _queued_route: String = ""
 ## Reports that arrived while the desk genuinely did not exist (primarily tools
 ## booting directly into a venue). In the normal game the cached desk remains
 ## connected to the simulation and receives these itself while hidden.
@@ -80,6 +84,18 @@ func _ready() -> void:
 	UiSound.attach(self)
 	_connect_flow()
 	call_deferred("_adopt_boot_scene")
+
+
+func _notification(what: int) -> void:
+	match what:
+		MainLoop.NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT:
+			if Simulation != null and Simulation.has_method("autosave_now"):
+				Simulation.autosave_now()
+		NOTIFICATION_APPLICATION_FOCUS_IN, MainLoop.NOTIFICATION_APPLICATION_RESUMED:
+			UiSound.resume()
+			_assert_visible_route("resume")
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			handle_system_back()
 
 
 ## The screen the player is looking at. Playtests and the screenshot tool ask
@@ -169,8 +185,11 @@ func has_route(route: String) -> bool:
 ## so a caller with an older way of showing the same thing can fall back to it
 ## rather than leaving the press doing nothing.
 func goto(route: String) -> bool:
-	if _switching or not has_route(route):
+	if not has_route(route):
 		return false
+	if _switching:
+		_queued_route = route
+		return true
 	if route == current:
 		# Asking for the screen you are already on is a request to leave it,
 		# which is how the notes on the whiteboard behaved as panel tabs.
@@ -222,10 +241,13 @@ func _switch_to(route: String) -> void:
 	if not packed is PackedScene:
 		push_warning("SceneRouter: %s is not a scene" % ROUTES[route])
 		_switching = false
+		_reset_fade()
+		_drain_queued_route()
 		return
 	await _fade_to(1.0, FADE_OUT_SECONDS)
 	if not is_inside_tree():
 		_switching = false
+		_reset_fade()
 		return
 	_suspend_screen(_screen)
 	var incoming: Node = _cached_screen(route)
@@ -238,6 +260,8 @@ func _switch_to(route: String) -> void:
 	route_changed.emit(route)
 	await _fade_to(0.0, FADE_IN_SECONDS)
 	_switching = false
+	_assert_visible_route(route)
+	_drain_queued_route()
 
 
 func _cached_screen(route: String) -> Node:
@@ -356,8 +380,54 @@ func _fade_to(target: float, seconds: float) -> void:
 	if not is_instance_valid(_fade):
 		return
 	if target <= 0.01:
-		_fade.visible = false
-		_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_reset_fade()
+
+
+func _reset_fade() -> void:
+	if _fade == null or not is_instance_valid(_fade):
+		return
+	_fade.modulate.a = 0.0
+	_fade.visible = false
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func _drain_queued_route() -> void:
+	if _queued_route == "":
+		return
+	var next: String = _queued_route
+	_queued_route = ""
+	if next != current:
+		goto(next)
+
+
+## Android system back matches the visible back contract: overlays first, then
+## the venue stack, then a confirm-to-title if the player is mid-run on the desk.
+func handle_system_back() -> void:
+	if _switching:
+		return
+	if investor_busy():
+		hide_investor()
+		return
+	if current != DESK:
+		back()
+		return
+	_ask_shell("handle_system_back")
+
+
+func visible_route_ok() -> bool:
+	if _fade != null and is_instance_valid(_fade) and _fade.visible and _fade.modulate.a > 0.5:
+		return false
+	if _screen == null or not is_instance_valid(_screen):
+		return false
+	if _screen is CanvasItem and not (_screen as CanvasItem).is_visible_in_tree():
+		return false
+	return true
+
+
+func _assert_visible_route(context: String) -> void:
+	if visible_route_ok():
+		return
+	push_error("SceneRouter: blank shell after %s (route=%s)" % [context, current])
 
 
 # --- Named destinations ------------------------------------------------------

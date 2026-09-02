@@ -34,6 +34,7 @@ func run() -> void:
 	_test_recurring_revenue_pays_the_retainer_not_the_contract()
 	_test_a_hard_gated_rank_waits_for_a_hard_win()
 	_test_starting_cloud_scales_with_rank()
+	_test_sound_settings_default_on_and_persist()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -454,3 +455,15 @@ func _first_offer_tokens(sim: Node) -> float:
 
 func _first_offer_reward(sim: Node) -> float:
 	return float(_first_offer(sim).get("reward", 0.0))
+
+
+func _test_sound_settings_default_on_and_persist() -> void:
+	_fresh_profile()
+	assert_false(MetaProgress.sound_muted(), "Existing/new profiles default to sound on")
+	assert_eq(MetaProgress.sound_volume(), 1.0, "Default volume is full")
+	MetaProgress.toggle_sound_muted()
+	assert_true(MetaProgress.sound_muted(), "Mute persists on the live profile")
+	MetaProgress._loaded = false
+	MetaProgress._ensure_loaded()
+	assert_true(MetaProgress.sound_muted(), "Mute survives a profile reload")
+	MetaProgress.set_sound_muted(false)

@@ -6,7 +6,9 @@ export const site = {
   /** Drop the signed APK at site/public/downloads/, or point this at an external URL. */
   apkHref: "/downloads/token-burn.apk",
   apkSize: "~90 MB",
-  androidMinimum: "Android 8.0 or newer",
+  androidMinimum: "Android 7.0 or newer",
+  playStoreHref: "https://play.google.com/store/apps/details?id=com.tokenburn.game",
+  privacyHref: "/privacy/",
 };
 
 export const navLinks = [
@@ -15,4 +17,5 @@ export const navLinks = [
   { href: "/overview/", label: "Overview" },
   { href: "/tutorial/", label: "Tutorial" },
   { href: "/download/", label: "Download" },
+  { href: "/privacy/", label: "Privacy" },
 ];

@@ -523,7 +523,7 @@ const DYNAMIC_TARGET_PREFIXES := ["job.", "batch.", "stage.", "build.", "busines
 
 
 func _validate_content() -> void:
-	for message in collect_validation_errors():
+	for message in ContentValidator.validate(self):
 		push_error("ContentDatabase: %s" % message)
 
 

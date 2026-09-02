@@ -979,3 +979,75 @@ func _migrate_pending_choices(sim: Node) -> void:
 	for choice in sim.pending_choices:
 		if choice is Dictionary and str(choice.get("type", "")) == "operation":
 			choice["type"] = "module"
+
+
+func board_stamp(sim: Node) -> String:
+	return _board_stamp(sim)
+
+
+func grant_location_starter_rig(sim: Node, state: RunState, stats: Dictionary) -> void:
+	_grant_location_starter_rig(sim, state, stats)
+
+
+func install_permanent_rig(sim: Node) -> void:
+	_install_permanent_rig(sim)
+
+
+func begin_round(sim: Node) -> void:
+	_begin_round(sim)
+
+
+func pay_ascension_bonus(sim: Node, contract: Dictionary) -> void:
+	_pay_ascension_bonus(sim, contract)
+
+
+func complete_run_location(sim: Node) -> void:
+	_complete_run_location(sim)
+
+
+func run_is_final_chapter(sim: Node) -> bool:
+	return _run_is_final_chapter(sim)
+
+
+func spend_draft_pick(sim: Node, offer_type: String, offer_id: String) -> void:
+	_spend_draft_pick(sim, offer_type, offer_id)
+
+
+func accept_perk(sim: Node, perk_id: String) -> bool:
+	return _accept_perk(sim, perk_id)
+
+
+func accept_module(sim: Node, module_id: String) -> bool:
+	return _accept_module(sim, module_id)
+
+
+func draft_state(sim: Node) -> Dictionary:
+	return _draft_state(sim)
+
+
+func angel_draw_rng(sim: Node) -> DeterministicRng:
+	return _angel_draw_rng(sim)
+
+
+func location_base_job_reward(sim: Node) -> float:
+	return _location_base_job_reward(sim)
+
+
+func redraw_angel_offers(sim: Node) -> void:
+	_redraw_angel_offers(sim)
+
+
+func escalate_endless_costs(sim: Node) -> void:
+	_escalate_endless_costs(sim)
+
+
+func contract_deadline_round(sim: Node) -> int:
+	return _contract_deadline_round(sim)
+
+
+func bank_run_legacy(sim: Node, victory: bool) -> void:
+	_bank_run_legacy(sim, victory)
+
+
+func migrate_pending_choices(sim: Node) -> void:
+	_migrate_pending_choices(sim)

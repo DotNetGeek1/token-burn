@@ -22,6 +22,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/bg_color=Color(0.0118, 0.0275, 0.0235, 1)
 boot_splash/image="res://presentation/title/boot_splash.png"
 config/icon="res://icon.svg"
+config/quit_on_go_back=false
 
 [autoload]
 
@@ -44,6 +45,7 @@ window/dpi/allow_hidpi.web=false
 
 [editor_plugins]
 
+; Local-only; addons/* is gitignored. Release exports must not require this.
 enabled=PackedStringArray("res://addons/godot_mcp_server/plugin.cfg")
 
 [gui]

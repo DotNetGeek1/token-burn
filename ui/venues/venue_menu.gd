@@ -74,6 +74,8 @@ func _build_index() -> void:
 	_add_row(_difficulty, "normal", "1", "NORMAL", _on_pick_difficulty.bind("normal"))
 	_add_row(_difficulty, "hard", "2", "HARD", _on_pick_difficulty.bind("hard"))
 	_add_row(_difficulty, "endless", "3", "ENDLESS MODE", _on_toggle_endless)
+	_add_row(_difficulty, "sound", "4", "SOUND", _on_toggle_sound)
+	_add_row(_difficulty, "help", "5", "HOW TO PLAY", _on_help)
 
 	content.add_child(ConsoleStyle.rule(0.22))
 	_add_row(content, "title", "X", "QUIT TO TITLE", _on_title, true)
@@ -143,6 +145,8 @@ func _refresh_difficulty() -> void:
 	var current: String = MetaProgress.difficulty()
 	_rows["normal"].set_selected(current == "normal")
 	_rows["hard"].set_selected(current == "hard")
+	if _rows.has("sound"):
+		_rows["sound"].value_text = "OFF" if MetaProgress.sound_muted() else "ON"
 
 
 func _refresh_endless() -> void:
@@ -231,6 +235,16 @@ func _on_toggle_endless() -> void:
 	refresh()
 
 
+func _on_toggle_sound() -> void:
+	MetaProgress.toggle_sound_muted()
+	UiSound.resume()
+	refresh()
+
+
+func _on_help() -> void:
+	get_tree().call_group("main_ui", "open_help")
+
+
 func _on_title() -> void:
 	SceneRouter.open_title()
 
@@ -248,6 +262,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_3:
 			if MetaProgress.endless_unlocked():
 				_on_toggle_endless()
+		KEY_4:
+			_on_toggle_sound()
+		KEY_5:
+			_on_help()
 		KEY_X:
 			_on_title()
 		_:

@@ -301,13 +301,13 @@ func repair_after_load() -> void:
 
 
 func _ensure_job_offers() -> void:
-	_life._ensure_job_offers(self)
+	_life.ensure_job_offers(self)
 
 
 ## Stable per work session rather than per prompt, which would otherwise reroll
 ## the board mid-round.
 func _board_stamp() -> String:
-	return _life._board_stamp(self)
+	return _life.board_stamp(self)
 
 
 ## Refreshes the job board when in ROUND_PREP. Safe for UI to call on tab open.
@@ -334,7 +334,7 @@ func apply_run_location(state: RunState, location_id: String, grant_starter_rig:
 ## run that starts in the warehouse on a second-hand laptop would be handed work
 ## a thousand times beyond it.
 func _grant_location_starter_rig(state: RunState, stats: Dictionary) -> void:
-	_life._grant_location_starter_rig(self, state, stats)
+	_life.grant_location_starter_rig(self, state, stats)
 
 
 ## Racks the machines earned through the permanent starting-rig unlock ladder.
@@ -347,7 +347,7 @@ func _grant_location_starter_rig(state: RunState, stats: Dictionary) -> void:
 ## That second call is why a rung already standing is skipped rather than
 ## installed again.
 func _install_permanent_rig() -> void:
-	_life._install_permanent_rig(self)
+	_life.install_permanent_rig(self)
 
 
 func start_run(p_seed: int = 0, difficulty_override: String = "") -> void:
@@ -358,7 +358,7 @@ func start_run(p_seed: int = 0, difficulty_override: String = "") -> void:
 ## Market open. Nothing carries over from the last round except what the player
 ## owns, because a round only ends once its contracts have all resolved.
 func _begin_round() -> void:
-	_life._begin_round(self)
+	_life.begin_round(self)
 
 
 func accept_job(job_id: String) -> bool:
@@ -466,7 +466,7 @@ func start_work() -> void:
 
 
 func _fire_queued_options() -> void:
-	_work._fire_queued_options(self)
+	_work.fire_queued_options(self)
 
 
 func start_work_sync() -> Dictionary:
@@ -554,7 +554,7 @@ func focus_job(job_id: String) -> bool:
 ## points the editor at the pipeline that contract is actually worked through.
 ## Without this, tuning the board mid-job would quietly edit someone else's.
 func _follow_focused_workflow() -> void:
-	_work._follow_focused_workflow(self)
+	_work.follow_focused_workflow(self)
 
 
 func focused_job() -> Dictionary:
@@ -794,7 +794,7 @@ func _reach_victory(contract: Dictionary) -> void:
 ## same formula is pocket money in the bedroom and a fortune on the moon, without
 ## a table of per-location numbers to keep in step.
 func _pay_ascension_bonus(contract: Dictionary) -> void:
-	_life._pay_ascension_bonus(self, contract)
+	_life.pay_ascension_bonus(self, contract)
 
 
 ## Beating the boss retires the chapter and opens the next one. Guarded once-only
@@ -805,14 +805,14 @@ func _pay_ascension_bonus(contract: Dictionary) -> void:
 ## continues in place through `advance_to_next_chapter`, and a run started fresh
 ## afterwards is a fresh game from the bedroom, not a resume.
 func _complete_run_location() -> void:
-	_life._complete_run_location(self)
+	_life.complete_run_location(self)
 
 
 ## Whether the run is being played in the campaign's last location — the only
 ## place a victory is the end of the game rather than of a chapter, and so the
 ## only place permanent rewards are paid out.
 func _run_is_final_chapter() -> bool:
-	return _life._run_is_final_chapter(self)
+	return _life.run_is_final_chapter(self)
 
 
 ## The location this victory opened up, empty if the run was played in the last
@@ -969,25 +969,25 @@ func _finish_prompt(result: Dictionary) -> void:
 ## Shipping or abandoning the last live contract ends the round there and then,
 ## without spending another prompt on it.
 func _settle_if_resolved() -> void:
-	_work._settle_if_resolved(self)
+	_work.settle_if_resolved(self)
 
 
 ## One burn or cool is one prompt. Prompts are not rationed — the round runs for
 ## as long as its contracts do — but every one of them ages the deadlines and
 ## meters the power.
 func _advance_prompt(result: Dictionary) -> void:
-	_work._advance_prompt(self, result)
+	_work.advance_prompt(self, result)
 
 
 ## A round ends when there is nothing left on the books, and only then. Rent can
 ## no longer interrupt a contract halfway through, because the bills wait for the
 ## work to finish rather than the other way round.
 func _session_stop_reason(result: Dictionary) -> String:
-	return _work._session_stop_reason(result)
+	return _work.session_stop_reason(result)
 
 
 func _execute_tick() -> Dictionary:
-	return _work._execute_tick(self)
+	return _work.execute_tick(self)
 
 
 ## Settles the round. Every contract taken this round is resolved here — nothing
@@ -1055,13 +1055,13 @@ func cloud_engaged() -> bool:
 
 
 func _apply_boost() -> void:
-	_work._apply_boost(self)
+	_work.apply_boost(self)
 
 
 ## Rents capacity for one prompt. Cash is deducted immediately so the player
 ## sees the cost land on the balance sheet, not as a hidden end-of-round liability.
 func _apply_cloud_burst() -> bool:
-	return _work._apply_cloud_burst(self)
+	return _work.apply_cloud_burst(self)
 
 
 ## Snapshot of the round just finished, for the debrief screen. Every contract
@@ -1070,14 +1070,14 @@ func _apply_cloud_burst() -> bool:
 func _build_session_summary(
 	completed_jobs: Array, failed_jobs: Array, reward: float, reason: String
 ) -> void:
-	_work._build_session_summary(self, completed_jobs, failed_jobs, reward, reason)
+	_work.build_session_summary(self, completed_jobs, failed_jobs, reward, reason)
 
 
 ## Whether the contract is further behind than the year has left to give it. A
 ## run three quarters through the calendar with a quarter of the burn done is
 ## losing, however well the individual round went, and the debrief says so.
 func _behind_on_contract() -> bool:
-	return _work._behind_on_contract(self)
+	return _work.behind_on_contract(self)
 
 
 ## Takes one of the angel's offers. Everything on the table is free, so the only
@@ -1094,11 +1094,11 @@ func decline_offers() -> void:
 
 ## Spends the draft's one pick and closes it.
 func _spend_draft_pick(_offer_type: String, _offer_id: String) -> void:
-	_life._spend_draft_pick(self, _offer_type, _offer_id)
+	_life.spend_draft_pick(self, _offer_type, _offer_id)
 
 
 func _accept_perk(perk_id: String) -> bool:
-	return _life._accept_perk(self, perk_id)
+	return _life.accept_perk(self, perk_id)
 
 
 func collect_perk(perk_id: String) -> bool:
@@ -1169,7 +1169,7 @@ func _recalculate_after_perk_loadout_change() -> void:
 ## to be placed on the board to do anything, and on a full board that means
 ## taking something else out.
 func _accept_module(module_id: String) -> bool:
-	return _life._accept_module(self, module_id)
+	return _life.accept_module(self, module_id)
 
 
 ## Pickup effects: loans, permanent liabilities, anything the player owns the
@@ -1277,11 +1277,11 @@ func query_effect_breakdown(target_path: String, chain_id: String = "") -> Dicti
 ## The only draft there is: the round's free offer, one pick and out.
 
 func _draft_state() -> Dictionary:
-	return _life._draft_state(self)
+	return _life.draft_state(self)
 
 
 func _angel_draw_rng() -> DeterministicRng:
-	return _life._angel_draw_rng(self)
+	return _life.angel_draw_rng(self)
 
 
 func angel_reroll_cost() -> float:
@@ -1297,11 +1297,11 @@ func reroll_angel_offers() -> bool:
 
 
 func _location_base_job_reward() -> float:
-	return _life._location_base_job_reward(self)
+	return _life.location_base_job_reward(self)
 
 
 func _redraw_angel_offers() -> void:
-	_life._redraw_angel_offers(self)
+	_life.redraw_angel_offers(self)
 
 
 ## The round's angel draft. Everything here is free: somebody with more money
@@ -1341,14 +1341,14 @@ func _expire_status_effects() -> void:
 ## coasted through the final act starts to strain again, keeping an endless
 ## run a real challenge instead of a victory lap.
 func _escalate_endless_costs() -> void:
-	_life._escalate_endless_costs(self)
+	_life.escalate_endless_costs(self)
 
 
 ## The last round the contract can be finished in. A won run carrying on into
 ## endless mode is past its deadline by definition, so the calendar length is
 ## used there instead.
 func _contract_deadline_round() -> int:
-	return _life._contract_deadline_round(self)
+	return _life.contract_deadline_round(self)
 
 
 ## Rounds left before the contract's deadline, this round included.
@@ -1378,7 +1378,7 @@ func _end_run(victory: bool, outcome: String = "") -> void:
 ## that asks for ten losses can be earned by the tenth loss rather than the
 ## eleventh.
 func _bank_run_legacy(victory: bool) -> void:
-	_life._bank_run_legacy(self, victory)
+	_life.bank_run_legacy(self, victory)
 
 
 ## The permanent unlocks on offer after beating the campaign. Picks are rare —
@@ -1446,7 +1446,15 @@ func _phase_name(value: int) -> String:
 
 
 func _autosave() -> void:
+	autosave_now()
+
+
+## Public lifecycle hook. Android pause/focus-out calls this so a backgrounded
+## run is on disk even when the last simulation event was minutes ago.
+func autosave_now() -> void:
 	if not autosave_enabled:
+		return
+	if phase == Phase.IDLE:
 		return
 	SaveManager.save_run(run_state, _phase_name(phase), run_seed, pending_choices, _round_end_pending)
 
@@ -1459,7 +1467,7 @@ func load_saved_run() -> bool:
 ## perk / module, so a save taken on that wording would present a card nothing
 ## could take.
 func _migrate_pending_choices() -> void:
-	_life._migrate_pending_choices(self)
+	_life.migrate_pending_choices(self)
 
 
 func _phase_from_name(name: String) -> int:

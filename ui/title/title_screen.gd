@@ -329,9 +329,19 @@ func _entries() -> Array[Dictionary]:
 		"id": "new_run", "label": "NEW RUN", "value": "Start again from the bedroom",
 	})
 	entries.append({
+		"id": "sound",
+		"label": "SOUND",
+		"value": "OFF" if MetaProgress.sound_muted() else "ON",
+	})
+	entries.append({
 		"id": "difficulty",
 		"label": "DIFFICULTY",
 		"value": MetaProgress.difficulty().capitalize(),
+	})
+	entries.append({
+		"id": "help",
+		"label": "HOW TO PLAY",
+		"value": "Jobs, workflows, burn, bills",
 	})
 	if MetaProgress.endless_unlocked():
 		entries.append({
@@ -650,6 +660,12 @@ func _activate(entry_id: String) -> void:
 			get_tree().call_group("flow_overlay", "hide_overlay")
 			Simulation.start_run()
 			_leave()
+		"sound":
+			MetaProgress.toggle_sound_muted()
+			UiSound.resume()
+			refresh()
+		"help":
+			get_tree().call_group("main_ui", "open_help")
 		"difficulty":
 			MetaProgress.set_difficulty(
 				"hard" if MetaProgress.difficulty() == "normal" else "normal"

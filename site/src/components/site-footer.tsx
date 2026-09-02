@@ -22,6 +22,10 @@ export function SiteFooter() {
       <div className="border-t border-line/60">
         <p className="mx-auto max-w-6xl px-5 py-4 font-mono text-xs text-muted">
           v{site.version} playtest build &middot; not a commercial release
+          {" · "}
+          <Link href="/privacy/" className="hover:text-ink">
+            Privacy
+          </Link>
         </p>
       </div>
     </footer>

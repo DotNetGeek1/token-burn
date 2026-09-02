@@ -35,7 +35,7 @@ func _test_auto_ships_when_ready() -> void:
 	job["prompts_remaining"] = 8
 	sim.burn_batch()
 	assert_true(JobSystem.is_ready(sim.focused_job()), "The completing burn left it ready")
-	assert_true(sim._work._should_auto_ship(sim), "AUTO ships a ready contract")
+	assert_true(sim._work.should_auto_ship(sim), "AUTO ships a ready contract")
 	sim.free()
 
 
@@ -55,7 +55,7 @@ func _test_yolo_ships_when_ready_and_quality_met() -> void:
 	job["revision_risk"] = 0.0
 	sim.burn_batch()
 	assert_true(JobSystem.is_ready(sim.focused_job()), "YOLO still hits READY")
-	assert_false(sim._work._should_auto_ship(sim), "YOLO keeps burning while quality is short")
+	assert_false(sim._work.should_auto_ship(sim), "YOLO keeps burning while quality is short")
 	job["quality_threshold"] = JobSystem.delivered_quality(job)
 	sim.burn_batch()
 	assert_true(JobSystem.is_shipped(job), "YOLO cashes out when progress and quality are met")
@@ -73,7 +73,7 @@ func _test_yolo_never_cools() -> void:
 	var capacity: float = maxf(1.0, float(sim.run_state.compute.get("heat_capacity", 100.0)))
 	sim.run_state.compute["heat"] = capacity * 0.95
 	var heat_before: float = float(sim.run_state.compute.get("heat", 0.0))
-	var result: Dictionary = sim._work._execute_tick(sim)
+	var result: Dictionary = sim._work.execute_tick(sim)
 	assert_true(result.get("ok", false), "YOLO still acts")
 	assert_true(result.has("burn"), "YOLO burns instead of cooling")
 	assert_false(result.has("vented"), "YOLO never spends a prompt on the fans")

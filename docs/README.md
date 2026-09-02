@@ -30,6 +30,15 @@ The target experience is closer to **Balatro-style build construction** than a r
 - [Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md)
 - [UX and Production Plan](UX_AND_PRODUCTION.md)
 - [Late-game escalation plan](plans/late-game-escalation.md)
+- [Android release build](ANDROID_RELEASE.md)
+- [Android device matrix](ANDROID_DEVICE_MATRIX.md)
+- [Release candidate checklist](RELEASE_CANDIDATE.md)
+- [Play Console closed test](PLAY_CONSOLE.md)
+- [Launch runbook](PLAY_LAUNCH.md)
+- [Data safety inventory](DATA_SAFETY.md)
+- [Store listing](STORE_LISTING.md)
+- [1.0 content freeze](CONTENT_FREEZE.md)
+- [Simulation facade](SIMULATION_FACADE.md)
 
 ## Core design principle
 

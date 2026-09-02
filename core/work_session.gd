@@ -756,3 +756,53 @@ func _behind_on_contract(sim: Node) -> bool:
 		float(int(sim.run_state.calendar.get("round", 1))) / float(deadline), 0.0, 1.0
 	)
 	return elapsed >= 0.5 and float(progress.get("burn_ratio", 0.0)) < elapsed * 0.75
+
+
+func fire_queued_options(sim: Node) -> void:
+	_fire_queued_options(sim)
+
+
+func follow_focused_workflow(sim: Node) -> void:
+	_follow_focused_workflow(sim)
+
+
+func settle_if_resolved(sim: Node) -> void:
+	_settle_if_resolved(sim)
+
+
+func close_session(sim: Node, reason: String) -> void:
+	_close_session(sim, reason)
+
+
+func advance_prompt(sim: Node, result: Dictionary) -> void:
+	_advance_prompt(sim, result)
+
+
+func session_stop_reason(result: Dictionary) -> String:
+	return _session_stop_reason(result)
+
+
+func should_auto_ship(sim: Node) -> bool:
+	return _should_auto_ship(sim)
+
+
+func execute_tick(sim: Node) -> Dictionary:
+	return _execute_tick(sim)
+
+
+func apply_boost(sim: Node) -> void:
+	_apply_boost(sim)
+
+
+func apply_cloud_burst(sim: Node) -> bool:
+	return _apply_cloud_burst(sim)
+
+
+func build_session_summary(
+	sim: Node, completed_jobs: Array, failed_jobs: Array, reward: float, reason: String
+) -> void:
+	_build_session_summary(sim, completed_jobs, failed_jobs, reward, reason)
+
+
+func behind_on_contract(sim: Node) -> bool:
+	return _behind_on_contract(sim)

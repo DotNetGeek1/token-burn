@@ -6,6 +6,7 @@ extends RefCounted
 ## Autoload registration is optional — see docs/decisions/ADR-003-feature-flags.md.
 
 const CONFIG_PATH := "res://config/feature_flags.json"
+const RELEASE_CONFIG_PATH := "res://config/feature_flags.release.json"
 
 static var _flags: Dictionary = {}
 static var _loaded: bool = false
@@ -32,6 +33,13 @@ static func reload() -> void:
 	_ensure_loaded()
 
 
+## Release exports overlay debug-only flags. Editor and debug builds keep the
+## authored `feature_flags.json` so Burn Lab stays available while developing.
+static func apply_release_overlay() -> void:
+	_ensure_loaded()
+	_apply_release_overlay()
+
+
 static func _ensure_loaded() -> void:
 	if _loaded:
 		return
@@ -48,3 +56,21 @@ static func _ensure_loaded() -> void:
 		_flags = parsed
 	else:
 		push_warning("FeatureFlags: invalid JSON in %s" % CONFIG_PATH)
+	if OS.has_feature("release"):
+		_apply_release_overlay()
+
+
+static func _apply_release_overlay() -> void:
+	if not FileAccess.file_exists(RELEASE_CONFIG_PATH):
+		_flags["burn_lab_enabled"] = false
+		_flags["analytics_enabled"] = false
+		return
+	var file := FileAccess.open(RELEASE_CONFIG_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not parsed is Dictionary:
+		return
+	for key in parsed.keys():
+		_flags[str(key)] = parsed[key]

@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "phase": "ROUND_PREP",
+  "seed": 7,
+  "pending_choices": [],
+  "round_end_pending": false,
+  "run_state": {
+    "save_version": 1,
+    "economy": {
+      "cash": 250.0
+    },
+    "business": {
+      "reputation": 1.0
+    }
+  }
+}

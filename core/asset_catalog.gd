@@ -13,17 +13,7 @@ static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	if not FileAccess.file_exists(CATALOG_PATH):
-		push_warning("AssetCatalog: missing %s" % CATALOG_PATH)
-		_data = {}
-		return
-	var file := FileAccess.open(CATALOG_PATH, FileAccess.READ)
-	if file == null:
-		push_warning("AssetCatalog: could not open %s" % CATALOG_PATH)
-		_data = {}
-		return
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	_data = parsed if parsed is Dictionary else {}
+	_data = AssetCatalogLoader.load_catalog(CATALOG_PATH)
 
 
 static func get_path(category: String, key: String, fallback: String = "") -> String:

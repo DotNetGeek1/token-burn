@@ -349,6 +349,12 @@ func _forecast_line(job: Dictionary, working: bool) -> String:
 			parts.append("RISK %s" % risk_after)
 	elif int(preview.get("bugs_added", 0)) > 0:
 		parts.append("+%db" % int(preview.get("bugs_added", 0)))
+	var repeats: int = 0
+	for stage in Array(preview.get("stages", [])):
+		if stage is Dictionary:
+			repeats += int(stage.get("repeat_count", 0))
+	if repeats > 0:
+		parts.append("×%d repeats" % repeats)
 	if Simulation.boost_engaged():
 		parts.append("boost")
 	if Simulation.cloud_engaged():

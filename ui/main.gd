@@ -52,6 +52,7 @@ var _run_end: Control = null
 var _round_debrief: Control = null
 var _bills_screen: Control = null
 var _burn_lab: Control = null
+var _help: HelpOverlay = null
 var _last_angel_phase: bool = false
 var _pending_statement: Dictionary = {}
 var _board_dwelling: String = ""
@@ -167,8 +168,9 @@ func _build_overlays() -> void:
 	_round_debrief = ROUND_DEBRIEF.instantiate()
 	_bills_screen = BILLS_SCREEN.instantiate()
 	_burn_lab = BURN_LAB.instantiate()
+	_help = HelpOverlay.new()
 	for overlay in [
-		_angel_investors, _round_debrief, _bills_screen, _run_end, _burn_lab,
+		_angel_investors, _round_debrief, _bills_screen, _run_end, _burn_lab, _help,
 	]:
 		if overlay == null:
 			push_error("Failed to instantiate a desk overlay")
@@ -721,6 +723,7 @@ func _on_title_start() -> void:
 	# The investor's opening call is the first thing a fresh run does, before the
 	# player has touched anything.
 	_maybe_open_intro_call()
+	_maybe_show_onboarding()
 
 
 ## Skips the front door. Used by the screenshot tool, which needs to land on a
@@ -734,6 +737,36 @@ func dismiss_title() -> void:
 
 ## Returning to the front door from the menu. The run stays loaded, so Continue
 ## picks it straight back up.
+func open_help() -> void:
+	if _help == null:
+		return
+	_help.open_help(false)
+
+
+func handle_system_back() -> void:
+	if _title_active:
+		return
+	for overlay in [_help, _round_debrief, _bills_screen, _angel_investors, _run_end, _burn_lab]:
+		if overlay != null and overlay.visible:
+			if overlay.has_method("close"):
+				overlay.close()
+			elif overlay.has_method("hide_overlay"):
+				overlay.hide_overlay()
+			return
+	if _focus_key != "":
+		clear_room_focus()
+		return
+	SceneRouter.open_menu()
+
+
+func _maybe_show_onboarding() -> void:
+	if MetaProgress.seen_onboarding():
+		return
+	if _help == null:
+		return
+	_help.open_help(true)
+
+
 func open_title() -> void:
 	_ensure_title_screen()
 	_title_active = true

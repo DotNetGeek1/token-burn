@@ -10,7 +10,7 @@ extends Node
 
 const DEFAULT_PROFILE_PATH := "user://profile.json"
 const CATALOG_PATH := "res://content/meta/unlocks.json"
-const PROFILE_VERSION := 5
+const PROFILE_VERSION := 6
 
 ## Where a run that has unlocked nothing takes place. The campaign always has at
 ## least this rung, so no profile can ever end up with nowhere to play.
@@ -59,6 +59,72 @@ var _loaded: bool = false
 func _ready() -> void:
 	enabled = FeatureFlags.is_enabled("meta_progression_enabled")
 	_ensure_loaded()
+
+
+func sound_muted() -> bool:
+	_ensure_loaded()
+	return bool(_settings().get("sound_muted", false))
+
+
+func set_sound_muted(muted: bool) -> void:
+	_ensure_loaded()
+	var settings: Dictionary = _settings()
+	settings["sound_muted"] = muted
+	_profile["settings"] = settings
+	_save()
+	profile_changed.emit()
+
+
+func sound_volume() -> float:
+	_ensure_loaded()
+	return clampf(float(_settings().get("sound_volume", 1.0)), 0.0, 1.0)
+
+
+func set_sound_volume(volume: float) -> void:
+	_ensure_loaded()
+	var settings: Dictionary = _settings()
+	settings["sound_volume"] = clampf(volume, 0.0, 1.0)
+	_profile["settings"] = settings
+	_save()
+	profile_changed.emit()
+
+
+func toggle_sound_muted() -> void:
+	set_sound_muted(not sound_muted())
+
+
+func seen_onboarding() -> bool:
+	_ensure_loaded()
+	return bool(_settings().get("seen_onboarding", false))
+
+
+func mark_onboarding_seen() -> void:
+	_ensure_loaded()
+	var settings: Dictionary = _settings()
+	settings["seen_onboarding"] = true
+	_profile["settings"] = settings
+	_save()
+
+
+func _settings() -> Dictionary:
+	return _merge_settings(_profile.get("settings", {}))
+
+
+func _default_settings() -> Dictionary:
+	return {
+		"sound_muted": false,
+		"sound_volume": 1.0,
+		"seen_onboarding": false,
+	}
+
+
+func _merge_settings(raw: Variant) -> Dictionary:
+	var settings: Dictionary = _default_settings()
+	if raw is Dictionary:
+		for key in settings.keys():
+			if raw.has(key):
+				settings[key] = raw[key]
+	return settings
 
 
 func victories() -> int:
@@ -794,6 +860,7 @@ func _default_profile() -> Dictionary:
 		"difficulty": "normal",
 		"endless_enabled": false,
 		"locations": _default_locations(),
+		"settings": _default_settings(),
 	}
 
 
@@ -883,6 +950,7 @@ func _load_profile() -> void:
 		"difficulty": str(loaded.get("difficulty", "normal")),
 		"endless_enabled": bool(loaded.get("endless_enabled", false)),
 		"locations": locations,
+		"settings": _merge_settings(loaded.get("settings", {})),
 	}
 	_migrate_profile(int(loaded.get("version", 1)))
 
@@ -936,6 +1004,8 @@ func _migrate_profile(from_version: int) -> void:
 		if refunded > 0:
 			_profile["unlocks"] = unlocks
 			_profile["pending_picks"] = int(_profile.get("pending_picks", 0)) + refunded
+	if from_version < 6:
+		_profile["settings"] = _merge_settings(_profile.get("settings", {}))
 	_save()
 
 

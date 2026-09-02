@@ -7,7 +7,8 @@ extends Node
 ## can ship silent until authored sound arrives.
 
 const SAMPLE_RATE := 22050
-const VOICES := 4
+const VOICES := 8
+const AUTHORED_AUDIO_DIR := "res://presentation/audio/"
 
 ## cue -> [start_hz, end_hz, seconds, waveform, volume]. Waveforms: "sine",
 ## "square", "noise".
@@ -76,6 +77,18 @@ static func attach(root: Node) -> void:
 	root.add_child(_instance)
 
 
+## Pause/resume and Android focus can leave the audio server suspended. Call
+## after APPLICATION_FOCUS_IN so a backgrounded session does not stay silent.
+static func resume() -> void:
+	if not FeatureFlags.is_enabled("ui_sound_enabled"):
+		return
+	if Engine.has_singleton("AudioServer"):
+		AudioServer.set_bus_mute(0, MetaProgress.sound_muted() if _meta_settings_ready() else false)
+	if _instance == null or not is_instance_valid(_instance):
+		return
+	_instance._apply_player_volume()
+
+
 ## Resumes the browser AudioContext from a user gesture. Godot's web export
 ## still uses Web Audio / Sample playback; starting that graph is a click, not
 ## a driver change.
@@ -97,9 +110,17 @@ static func unlock() -> void:
 static func play(cue: String) -> void:
 	if _instance == null or not is_instance_valid(_instance):
 		return
+	if not FeatureFlags.is_enabled("ui_sound_enabled"):
+		return
+	if _meta_settings_ready() and MetaProgress.sound_muted():
+		return
 	if OS.has_feature("web") and not _unlocked:
 		return
 	_instance._play_cue(cue)
+
+
+static func _meta_settings_ready() -> bool:
+	return Engine.has_singleton("MetaProgress") or MetaProgress != null
 
 
 ## A cascade tick. `depth` is how many named procs have already landed, so the
@@ -120,19 +141,55 @@ func _ready() -> void:
 		add_child(player)
 		_players.append(player)
 	for cue in CUES:
-		_streams[cue] = _build_stream(CUES[cue])
+		_streams[cue] = _load_or_build(str(cue), CUES[cue])
 	for cue in SEQUENCES:
-		_streams[cue] = _build_sequence(SEQUENCES[cue])
+		_streams[cue] = _load_or_build(str(cue), [])
+		if _streams[cue] == null:
+			_streams[cue] = _build_sequence(SEQUENCES[cue])
+	_apply_player_volume()
 
 
 func _play_cue(cue: String) -> void:
-	if not _streams.has(cue):
+	if not _streams.has(cue) or _streams[cue] == null:
+		return
+	if _players.is_empty():
 		return
 	# Round-robin voices so a rapid sequence of taps does not cut itself off.
 	var player: AudioStreamPlayer = _players[_next_voice]
 	_next_voice = (_next_voice + 1) % _players.size()
+	if player.playing:
+		player.stop()
 	player.stream = _streams[cue]
+	_apply_player_volume()
 	player.play()
+
+
+func _apply_player_volume() -> void:
+	var volume: float = 1.0
+	if _meta_settings_ready():
+		volume = MetaProgress.sound_volume()
+	var db: float = linear_to_db(clampf(volume, 0.0, 1.0))
+	for player in _players:
+		player.volume_db = db
+
+
+func _load_or_build(cue: String, spec: Array) -> AudioStream:
+	var authored: AudioStream = _load_authored(cue)
+	if authored != null:
+		return authored
+	if spec.is_empty():
+		return null
+	return _build_stream(spec)
+
+
+func _load_authored(cue: String) -> AudioStream:
+	for ext in ["wav", "ogg"]:
+		var path: String = "%s%s.%s" % [AUTHORED_AUDIO_DIR, cue, ext]
+		if ResourceLoader.exists(path):
+			var loaded: Variant = load(path)
+			if loaded is AudioStream:
+				return loaded
+	return null
 
 
 func _build_stream(spec: Array) -> AudioStreamWAV:

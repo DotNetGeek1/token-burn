@@ -28,6 +28,15 @@ godot --headless res://tests/run_tests.tscn
 
 The runner exits with a status code equal to the number of failed assertions.
 
+CI (`.github/workflows/tests.yml`) runs this suite and the UI playtests on every
+pull request and push to `main`, using Godot 4.7.1. Playtests fail the job if
+the log contains `SCRIPT ERROR`.
+
+```bash
+bash tools/run_tests.sh
+bash tools/run_playtests.sh
+```
+
 It must be launched as a scene. Godot does not register project autoloads
 (`ContentDatabase`, `EventBus`, `Simulation`, `SceneRouter`, `MetaProgress`)
 under `--script`, so the systems under test fail to compile in that mode.

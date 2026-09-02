@@ -82,6 +82,7 @@ func _discover_test_scripts() -> Array[String]:
 		"res://tests/combo_tests",
 		"res://tests/content_validation",
 		"res://tests/regression_tests",
+		"res://tests/architecture_tests",
 	]
 	for dir_path in dirs:
 		_collect_scripts(dir_path, scripts)
@@ -106,7 +107,15 @@ func _run_test_script(path: String) -> void:
 	# Announced before it runs, so a suite that hangs or crashes names itself.
 	print("  Running %s..." % path)
 	var script: GDScript = load(path)
-	var test: TestCase = script.new()
+	if script == null:
+		_failed += 1
+		push_error("  FAIL  could not load %s" % path)
+		return
+	var test: Variant = script.new()
+	if not test is TestCase:
+		_failed += 1
+		push_error("  FAIL  %s is not a TestCase" % path)
+		return
 	test.run()
 	var results: Dictionary = test.get_results()
 	_passed += int(results.get("passed", 0))
