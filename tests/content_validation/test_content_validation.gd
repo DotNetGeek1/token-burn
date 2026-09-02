@@ -45,6 +45,64 @@ const VALID_STAGE_TARGETS := [
 	"stage.cascade_strength",
 ]
 
+const VALID_BATCH_TARGETS := [
+	"batch.progress_mult",
+	"batch.token_mult",
+	"batch.quality_mult",
+	"batch.thermal_mult",
+	"batch.quality",
+	"batch.heat",
+	"batch.cost",
+	"batch.known_bugs",
+	"batch.hidden_bugs",
+	"batch.revealed",
+	"batch.fixed",
+	"batch.bugs_created",
+	"batch.hidden_bugs_created",
+	"batch.total_bugs_created",
+	"batch.quality_to_progress",
+	"batch.progress_tokens",
+	"batch.scope_tokens",
+]
+
+const VALID_MASTERY_TARGETS := [
+	"mastery.output_gain",
+	"mastery.quality_gain",
+	"mastery.thermal_gain",
+	"mastery.gain_mult",
+	"mastery.output_gain_mult",
+	"mastery.quality_gain_mult",
+	"mastery.thermal_gain_mult",
+	"mastery.propagate_ratio",
+	"mastery.silo",
+	"mastery.strip_output",
+	"mastery.strip_quality",
+]
+
+## Completion effects may also write lasting run-state fields (Benchmark Harness
+## discounts the next hardware buy via build.hardware_discount).
+const VALID_BUILD_TARGETS := [
+	"build.hardware_discount",
+]
+
+const EXPANSION_MODULE_IDS := [
+	"op.system_prompt", "op.few_shot_examples", "op.repo_map", "op.vector_index",
+	"op.context_pruner", "op.requirements_doc", "op.dependency_graph", "op.prompt_mutator",
+	"op.constraint_solver", "op.memory_palace", "op.small_specialist", "op.moe_router",
+	"op.draft_model", "op.judge_model", "op.self_consistency", "op.sparse_expert",
+	"op.speculative_router", "op.verifier_model", "op.distilled_specialist", "op.world_model",
+	"op.static_analysis", "op.integration_tests", "op.property_tests", "op.fuzz_tester",
+	"op.mutation_testing", "op.golden_dataset", "op.canary_test", "op.formal_verification",
+	"op.snapshot_tests", "op.root_cause_analysis", "op.kernel_fusion", "op.cuda_graph",
+	"op.pinned_memory", "op.hbm_burst", "op.fan_wall", "op.heat_pipe", "op.phase_change",
+	"op.thermal_throttle", "op.voltage_spike", "op.cold_boot", "op.planner_agent",
+	"op.reviewer_agent", "op.parallel_workers", "op.watchdog_agent", "op.self_critique",
+	"op.tree_search", "op.backtracking_agent", "op.autonomous_loop", "op.prefix_cache",
+	"op.semantic_cache", "op.kv_cache", "op.canary_release", "op.blue_green",
+	"op.rollback_plan", "op.friday_deploy", "op.singularity_cache",
+	"op.thermodynamic_computer", "op.proof_carrying_code", "op.benchmark_daemon",
+]
+
 
 ## A declared combo is a promise printed in the pipeline editor, so its partners
 ## have to exist and its text has to render with the module's own numbers.
@@ -106,6 +164,100 @@ func _validate_percent_parameters(source_id: String, parameters: Dictionary) -> 
 			percent >= 0.0 and percent <= 200.0,
 			"%s keeps %s in a range a card can print: %s" % [source_id, name, str(percent)]
 		)
+
+
+func _module_has_combo_effects(module: ModuleDefinition) -> bool:
+	for combo in module.combos:
+		if combo is Dictionary and Array(combo.get("effects", [])).size() > 0:
+			return true
+	return false
+
+
+func _validate_module_effect_targets(module: ModuleDefinition) -> void:
+	_validate_effect_target_list(module.id, "slot", module.slot_effects, true)
+	_validate_effect_target_list(module.id, "folded", module.folded_effects, false)
+	_validate_effect_target_list(module.id, "finalizing", module.finalizing_effects, false)
+	_validate_effect_target_list(module.id, "completion", module.completion_effects, false)
+	for combo in module.combos:
+		if combo is Dictionary:
+			_validate_effect_target_list(
+				module.id, "combo", Array(combo.get("effects", [])), true
+			)
+
+
+func _validate_effect_target_list(
+	module_id: String,
+	kind: String,
+	effects: Array,
+	stage_only: bool
+) -> void:
+	for effect in effects:
+		if not effect is Dictionary:
+			continue
+		var target: String = str(effect.get("target", ""))
+		if target == "":
+			continue
+		var ok: bool = target in VALID_STAGE_TARGETS
+		if not stage_only:
+			ok = (
+				ok
+				or target in VALID_BATCH_TARGETS
+				or target in VALID_MASTERY_TARGETS
+				or target in VALID_BUILD_TARGETS
+			)
+		assert_true(
+			ok,
+			"Module %s %s targets a real field, not '%s'" % [module_id, kind, target]
+		)
+		_validate_effect_target_list(
+			module_id, kind, Array(effect.get("effects", [])), stage_only
+		)
+
+
+func _validate_expansion_distributions() -> void:
+	var open_count: int = 0
+	var achievement_count: int = 0
+	var v1: int = 0
+	var v2: int = 0
+	var v3: int = 0
+	var v5: int = 0
+	var h1: int = 0
+	var h3: int = 0
+	var rarities: Dictionary = {}
+	for module_id in EXPANSION_MODULE_IDS:
+		var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+		assert_true(module != null, "Expansion module %s exists" % module_id)
+		if module == null:
+			continue
+		rarities[module.rarity] = int(rarities.get(module.rarity, 0)) + 1
+		if module.unlock_achievement != "":
+			achievement_count += 1
+		elif module.min_hard_victories >= 3:
+			h3 += 1
+		elif module.min_hard_victories >= 1:
+			h1 += 1
+		elif module.min_victories >= 5:
+			v5 += 1
+		elif module.min_victories >= 3:
+			v3 += 1
+		elif module.min_victories >= 2:
+			v2 += 1
+		elif module.min_victories >= 1:
+			v1 += 1
+		else:
+			open_count += 1
+	assert_eq(open_count, 11, "Expansion OPEN gate count")
+	assert_eq(achievement_count, 20, "Expansion achievement gate count")
+	assert_eq(v1, 11, "Expansion V1 gate count")
+	assert_eq(v2, 6, "Expansion V2 gate count")
+	assert_eq(v3, 5, "Expansion V3 gate count")
+	assert_eq(v5, 3, "Expansion V5 gate count")
+	assert_eq(h1, 2, "Expansion H1 gate count")
+	assert_eq(h3, 1, "Expansion H3 gate count")
+	assert_eq(int(rarities.get("common", 0)), 9, "Expansion common count")
+	assert_eq(int(rarities.get("uncommon", 0)), 17, "Expansion uncommon count")
+	assert_eq(int(rarities.get("rare", 0)), 23, "Expansion rare count")
+	assert_eq(int(rarities.get("legendary", 0)), 10, "Expansion legendary count")
 
 
 ## Cooling a machine should cost less than a couple of the machine. Above this
@@ -278,6 +430,11 @@ func _test_validation_catches_unknown_rules_and_capabilities() -> void:
 func _test_validation_catches_unknown_module_operation() -> void:
 	var bad := ModuleDefinition.new()
 	bad.id = "op.synthetic_multipyl"
+	bad.name = "Synthetic"
+	bad.category = "test"
+	bad.rarity = "common"
+	bad.description_template = "Broken."
+	bad.tags = PackedStringArray(["test"])
 	bad.difficulty = PackedStringArray(["normal", "hard"])
 	bad.slot_effects = [{"operation": "multipyl", "target": "stage.quality", "value": 1}]
 	ContentDatabase.modules.append(bad)
@@ -290,6 +447,78 @@ func _test_validation_catches_unknown_module_operation() -> void:
 	assert_true(
 		ContentDatabase.collect_validation_errors().is_empty(),
 		"Removing the synthetic module restores a clean validation pass"
+	)
+
+
+func _test_validation_catches_module_gate_and_shape_errors() -> void:
+	var bad := ModuleDefinition.new()
+	bad.id = "op.synthetic_gates"
+	bad.name = ""
+	bad.category = "not_a_category"
+	bad.rarity = "mythic"
+	bad.description_template = ""
+	bad.tags = PackedStringArray([])
+	bad.difficulty = PackedStringArray(["normal", "hard"])
+	bad.min_victories = -1
+	bad.min_hard_victories = -2
+	bad.draft_weight = 0.0
+	bad.slot_effects = []
+	ContentDatabase.modules.append(bad)
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.modules.pop_back()
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("empty name")),
+		"Validation catches an empty module name"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown category")),
+		"Validation catches an unknown module category"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("unknown rarity")),
+		"Validation catches an unknown module rarity"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("negative min_victories")),
+		"Validation catches a negative victory gate"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("non-positive draft_weight")),
+		"Validation catches a non-positive draft weight"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("no slot, folded, finalizing, completion, or combo effects")),
+		"Validation catches a module with no mechanical effects"
+	)
+	assert_true(
+		ContentDatabase.collect_validation_errors().is_empty(),
+		"Removing the synthetic gated module restores a clean validation pass"
+	)
+
+
+func _test_folded_only_module_is_accepted() -> void:
+	var folded := ModuleDefinition.new()
+	folded.id = "op.synthetic_folded_only"
+	folded.name = "Folded Only"
+	folded.category = "test"
+	folded.rarity = "common"
+	folded.description_template = "Reacts after the fold."
+	folded.tags = PackedStringArray(["test"])
+	folded.difficulty = PackedStringArray(["normal", "hard"])
+	folded.folded_effects = [{
+		"operation": "multiply",
+		"target": "stage.next_multiplier",
+		"value": 1.3,
+		"conditions": [{"left": "$stage_caught", "operator": ">", "right": 0}],
+	}]
+	ContentDatabase.modules.append(folded)
+	ContentDatabase._modules_by_id[folded.id] = folded
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.modules.pop_back()
+	ContentDatabase._modules_by_id.erase(folded.id)
+	assert_false(
+		errors.any(func(e: String) -> bool: return e.contains("op.synthetic_folded_only")),
+		"A folded-only module is mechanically non-empty"
 	)
 
 
@@ -445,6 +674,8 @@ func run() -> void:
 	_test_validation_catches_synthetic_bad_content()
 	_test_validation_catches_unknown_rules_and_capabilities()
 	_test_validation_catches_unknown_module_operation()
+	_test_validation_catches_module_gate_and_shape_errors()
+	_test_folded_only_module_is_accepted()
 	_test_effect_resolver_errors_on_unknown_operation()
 
 	for upgrade in ContentDatabase.upgrades:
@@ -461,19 +692,33 @@ func run() -> void:
 	assert_true(ContentDatabase.modules.size() >= 8, "Burn Board ships a starting set of modules")
 	assert_true(ContentDatabase.starter_modules().size() >= 2, "A new run owns enough modules to fill a pipeline")
 	var evaluator := ExpressionEvaluator.new()
+	var expansion_present: int = 0
 	for module in ContentDatabase.modules:
 		assert_true(module.id.begins_with("op."), "Module id is namespaced: %s" % module.id)
 		assert_true(
-			module.slot_effects.size() > 0 or module.finalizing_effects.size() > 0 or module.completion_effects.size() > 0,
+			module.slot_effects.size() > 0
+				or module.folded_effects.size() > 0
+				or module.finalizing_effects.size() > 0
+				or module.completion_effects.size() > 0
+				or _module_has_combo_effects(module),
 			"Module %s does something" % module.id
 		)
-		for effect in module.slot_effects:
-			var target: String = str(effect.get("target", ""))
-			assert_true(target in VALID_STAGE_TARGETS, "Module %s targets a real stage field, not '%s'" % [module.id, target])
+		_validate_module_effect_targets(module)
 		var rendered: String = evaluator.render_template(module.description_template, module.parameters)
 		assert_false(rendered.contains("{"), "Module %s description resolves every parameter" % module.id)
 		_validate_percent_parameters(module.id, module.parameters)
 		_validate_combos(module, evaluator)
+		if module.id in EXPANSION_MODULE_IDS:
+			expansion_present += 1
+	if ContentDatabase.modules.size() >= 120:
+		assert_eq(ContentDatabase.modules.size(), 120, "Expanded catalogue is exactly 120 modules")
+		assert_eq(expansion_present, EXPANSION_MODULE_IDS.size(), "All 59 expansion module ids are present")
+		_validate_expansion_distributions()
+	else:
+		assert_eq(
+			ContentDatabase.modules.size(), 61,
+			"Baseline catalogue stays at 61 until the expansion lands"
+		)
 
 	for perk in ContentDatabase.perks:
 		_validate_percent_parameters(perk.id, perk.parameters)

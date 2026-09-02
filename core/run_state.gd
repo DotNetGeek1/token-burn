@@ -148,6 +148,16 @@ var statistics: Dictionary = {
 	"lifetime_overkill": 0.0,
 	"depth_reached": 0,
 	"depth_score": 0.0,
+	"clean_completions": 0,
+	"one_shot_completions": 0,
+	"clean_one_shot_completions": 0,
+	"cool_completions": 0,
+	"hot_one_shot_completions": 0,
+	"overkill_2x_completions": 0,
+	"bugs_created": 0,
+	"hidden_bugs_created": 0,
+	"bugs_fixed": 0,
+	"hidden_bugs_revealed": 0,
 }
 
 ## The location's contract, which is live from the first prompt of the run; see
@@ -952,16 +962,26 @@ func _default_statistics() -> Dictionary:
 		"jobs_accepted": 0,
 		"angel_offers_taken": 0,
 		"angel_offers_declined": 0,
-	"hardware_sold": 0,
-	"modules_drafted": 0,
-	"cascades_triggered": 0,
-	"faults_suffered": 0,
-	"max_instability": 0.0,
-	"peak_overkill": 0.0,
-	"lifetime_overkill": 0.0,
-	"depth_reached": 0,
-	"depth_score": 0.0,
-}
+		"hardware_sold": 0,
+		"modules_drafted": 0,
+		"cascades_triggered": 0,
+		"faults_suffered": 0,
+		"max_instability": 0.0,
+		"peak_overkill": 0.0,
+		"lifetime_overkill": 0.0,
+		"depth_reached": 0,
+		"depth_score": 0.0,
+		"clean_completions": 0,
+		"one_shot_completions": 0,
+		"clean_one_shot_completions": 0,
+		"cool_completions": 0,
+		"hot_one_shot_completions": 0,
+		"overkill_2x_completions": 0,
+		"bugs_created": 0,
+		"hidden_bugs_created": 0,
+		"bugs_fixed": 0,
+		"hidden_bugs_revealed": 0,
+	}
 
 
 func _default_ascension() -> Dictionary:

@@ -52,6 +52,10 @@ static func evaluate(
 	var cool: bool = float(job.get("peak_heat_ratio", 0.0)) <= COOL_RATIO
 	var overkill_ratio: float = float(burn.get("overkill_ratio", job.get("overkill_ratio", 0.0)))
 	var start_heat_ratio: float = float(burn.get("start_heat_ratio", 0.0))
+	var hot: bool = start_heat_ratio >= REDLINE_RATIO
+	_record_completion_telemetry(
+		run_state, clean, one_shot, cool, hot, overkill_ratio
+	)
 	var extras := {
 		"one_shot": one_shot,
 		"clean": clean,
@@ -133,6 +137,31 @@ static func evaluate(
 	burn["mastery"] = report
 	job["mastery_report"] = report.duplicate(true)
 	return report
+
+
+## Run-level counters for achievements. Recorded once per mastery evaluation so
+## a polish burn on an already-finished contract cannot inflate them.
+static func _record_completion_telemetry(
+	run_state: RunState,
+	clean: bool,
+	one_shot: bool,
+	cool: bool,
+	hot: bool,
+	overkill_ratio: float
+) -> void:
+	var stats: Dictionary = run_state.statistics
+	if clean:
+		stats["clean_completions"] = int(stats.get("clean_completions", 0)) + 1
+	if one_shot:
+		stats["one_shot_completions"] = int(stats.get("one_shot_completions", 0)) + 1
+	if clean and one_shot:
+		stats["clean_one_shot_completions"] = int(stats.get("clean_one_shot_completions", 0)) + 1
+	if cool:
+		stats["cool_completions"] = int(stats.get("cool_completions", 0)) + 1
+	if hot and one_shot:
+		stats["hot_one_shot_completions"] = int(stats.get("hot_one_shot_completions", 0)) + 1
+	if overkill_ratio >= 2.0:
+		stats["overkill_2x_completions"] = int(stats.get("overkill_2x_completions", 0)) + 1
 
 
 static func _module_completion_subscriptions(workflow: Dictionary, burn: Dictionary) -> Array:

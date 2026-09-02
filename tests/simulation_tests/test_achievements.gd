@@ -33,6 +33,12 @@ func run() -> void:
 	_test_a_disabled_meta_layer_earns_nothing()
 	_test_maximum_pipeline_reads_the_fullest_workflow()
 	_test_a_fatal_heat_prompt_earns_thermal_event()
+	_test_victory_gates_unlock_in_order()
+	_test_hard_victories_unlock_hard_gated_modules()
+	_test_achievement_and_victory_gates_and_together()
+	_test_draw_pool_respects_victory_gates()
+	_test_repurposed_awards_hand_over_new_modules()
+	_test_telemetry_achievements_unlock_their_modules()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -233,7 +239,127 @@ func _test_a_fatal_heat_prompt_earns_thermal_event() -> void:
 		MetaProgress.has_achievement(THERMAL_EVENT),
 		"The run-end award sees the peak recorded by the fatal prompt"
 	)
+	assert_true(
+		_can_draw("op.thermal_throttle"),
+		"Thermal Event now unlocks Emergency Throttle"
+	)
 	sim.free()
+
+
+func _test_victory_gates_unlock_in_order() -> void:
+	_fresh_profile()
+	assert_false(_can_draw("op.requirements_doc"), "Fresh profiles cannot draft V1 modules")
+	assert_false(_can_draw("op.constraint_solver"), "Fresh profiles cannot draft V2 modules")
+	assert_false(_can_draw("op.memory_palace"), "Fresh profiles cannot draft V3 modules")
+	assert_false(_can_draw("op.formal_verification"), "Fresh profiles cannot draft V5 modules")
+	assert_true(_can_draw("op.system_prompt"), "OPEN expansion modules remain draftable")
+
+	MetaProgress.bank_victory(0, "normal")
+	assert_true(_can_draw("op.requirements_doc"), "One victory unlocks V1")
+	assert_false(_can_draw("op.constraint_solver"), "V2 stays locked after one victory")
+
+	MetaProgress.bank_victory(0, "normal")
+	assert_true(_can_draw("op.constraint_solver"), "Two victories unlock V2")
+	assert_false(_can_draw("op.memory_palace"), "V3 stays locked after two victories")
+
+	MetaProgress.bank_victory(0, "normal")
+	assert_true(_can_draw("op.memory_palace"), "Three victories unlock V3")
+	assert_false(_can_draw("op.formal_verification"), "V5 stays locked after three victories")
+
+	MetaProgress.bank_victory(0, "normal")
+	MetaProgress.bank_victory(0, "normal")
+	assert_true(_can_draw("op.formal_verification"), "Five victories unlock V5")
+
+
+func _test_hard_victories_unlock_hard_gated_modules() -> void:
+	_fresh_profile()
+	assert_false(_can_draw("op.autonomous_loop"), "Fresh profiles cannot draft H1 modules")
+	assert_false(_can_draw("op.benchmark_daemon"), "Fresh profiles cannot draft H3 modules")
+	MetaProgress.bank_victory(0, "hard")
+	assert_eq(MetaProgress.victories(), 1, "A Hard win still counts as a total victory")
+	assert_true(_can_draw("op.autonomous_loop"), "One Hard victory unlocks H1")
+	assert_false(_can_draw("op.benchmark_daemon"), "H3 stays locked after one Hard victory")
+	MetaProgress.bank_victory(0, "hard")
+	MetaProgress.bank_victory(0, "hard")
+	assert_true(_can_draw("op.benchmark_daemon"), "Three Hard victories unlock H3")
+
+
+func _test_achievement_and_victory_gates_and_together() -> void:
+	_fresh_profile()
+	var module := ModuleDefinition.new()
+	module.id = "op.synthetic_and_gate"
+	module.unlock_achievement = WIPEOUT
+	module.min_victories = 1
+	assert_false(
+		ContentDatabase.module_is_unlocked(module),
+		"Missing achievement keeps a combined gate closed"
+	)
+	MetaProgress.grant_achievement(WIPEOUT)
+	assert_false(
+		ContentDatabase.module_is_unlocked(module),
+		"Missing victories keep a combined gate closed"
+	)
+	MetaProgress.bank_victory(0, "normal")
+	assert_true(
+		ContentDatabase.module_is_unlocked(module),
+		"Achievement and victories AND together"
+	)
+
+
+func _test_draw_pool_respects_victory_gates() -> void:
+	_fresh_profile()
+	var state := RunState.new()
+	state.reset()
+	var offers: Array = ContentDatabase.draw_angel_offers(DeterministicRng.new(88), state, 24)
+	for offer in offers:
+		if str(offer.get("type", "")) != "module":
+			continue
+		var module: ModuleDefinition = ContentDatabase.get_module(str(offer.get("id", "")))
+		assert_true(
+			module != null and ContentDatabase.module_is_unlocked(module),
+			"Angel offers never include locked modules"
+		)
+		assert_eq(int(module.min_victories), 0, "Fresh draw pool stays at OPEN victory gates")
+		assert_eq(int(module.min_hard_victories), 0, "Fresh draw pool stays at OPEN Hard gates")
+
+
+func _test_repurposed_awards_hand_over_new_modules() -> void:
+	_fresh_profile()
+	assert_false(_can_draw("op.judge_model"), "Judge Model starts locked behind Spotless")
+	MetaProgress.grant_achievement("ach.spotless")
+	assert_true(_can_draw("op.judge_model"), "Spotless unlocks Judge Model")
+	assert_false(_can_draw("op.thermal_throttle"), "Emergency Throttle starts locked")
+	MetaProgress.grant_achievement(THERMAL_EVENT)
+	assert_true(_can_draw("op.thermal_throttle"), "Thermal Event unlocks Emergency Throttle")
+
+
+func _test_telemetry_achievements_unlock_their_modules() -> void:
+	_fresh_profile()
+	var cases: Array = [
+		["ach.property_owner", "op.property_tests", {"clean_completions": 3}],
+		["ach.fuzzed_prod", "op.fuzz_tester", {"hidden_bugs_created": 8}],
+		["ach.golden_reference", "op.golden_dataset", {"clean_one_shot_completions": 3}],
+		["ach.cold_operator", "op.heat_pipe", {"cool_completions": 4}],
+		["ach.code_review", "op.reviewer_agent", {"bugs_fixed": 10}],
+		["ach.watch_this", "op.watchdog_agent", {"hidden_bugs_revealed": 10}],
+	]
+	for entry in cases:
+		_fresh_profile()
+		var achievement_id: String = str(entry[0])
+		var module_id: String = str(entry[1])
+		var stats: Dictionary = Dictionary(entry[2])
+		assert_false(_can_draw(module_id), "%s starts locked" % module_id)
+		var state := RunState.new()
+		state.reset()
+		for key in stats.keys():
+			state.statistics[str(key)] = stats[key]
+		AchievementSystem.new().evaluate_tick(state, ContentDatabase)
+		AchievementSystem.new().evaluate_run_end(state, {}, ContentDatabase)
+		assert_true(
+			MetaProgress.has_achievement(achievement_id),
+			"%s unlocks from its telemetry" % achievement_id
+		)
+		assert_true(_can_draw(module_id), "%s becomes draftable after its award" % module_id)
 
 
 ## Whether the module can turn up in an angel draft at all. Drawing two at a

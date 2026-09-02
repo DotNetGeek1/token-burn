@@ -24,6 +24,11 @@ func run() -> void:
 	_test_inspect_burn_does_not_mutate_statistics()
 	_test_golden_path_does_not_strip_same_evaluation_gain()
 	_test_benchmark_harness_coupon_does_not_stack()
+	_test_completion_telemetry_records_once_on_commit()
+	_test_preview_does_not_increment_completion_telemetry()
+	_test_burn_telemetry_aggregates_created_fixed_and_revealed()
+	_test_created_then_fixed_is_not_a_clean_completion()
+	_test_hot_one_shot_and_overkill_telemetry()
 
 
 class Harness:
@@ -607,3 +612,89 @@ func _test_benchmark_harness_coupon_does_not_stack() -> void:
 			0.01,
 			"Buying hardware still consumes the coupon"
 		)
+
+
+func _test_completion_telemetry_records_once_on_commit() -> void:
+	var harness := Harness.new(40)
+	harness.finish_clean([])
+	assert_eq(int(harness.state.statistics.get("clean_completions", 0)), 1, "Clean completion counts once")
+	assert_eq(int(harness.state.statistics.get("one_shot_completions", 0)), 1, "One-shot counts once")
+	assert_eq(
+		int(harness.state.statistics.get("clean_one_shot_completions", 0)), 1,
+		"Clean one-shot counts once"
+	)
+	assert_eq(int(harness.state.statistics.get("cool_completions", 0)), 1, "Cool completion counts once")
+	harness.job["tokens_remaining"] = 0.0
+	harness.commit(1_000_000.0)
+	assert_eq(
+		int(harness.state.statistics.get("clean_completions", 0)), 1,
+		"A later polish burn does not double-count completion telemetry"
+	)
+
+
+func _test_preview_does_not_increment_completion_telemetry() -> void:
+	var harness := Harness.new(41)
+	harness.pipeline(["op.prompt"])
+	harness.job["token_requirement"] = 1.0
+	harness.job["tokens_remaining"] = 1.0
+	harness.jobs.run_burn(
+		harness.state, harness.rng, harness.resolver, [],
+		{}, harness.compute, harness.heat, harness.economy, harness.board, -1, ResolveMode.PREVIEW
+	)
+	assert_eq(int(harness.state.statistics.get("clean_completions", 0)), 0, "Preview leaves clean_completions alone")
+	assert_eq(int(harness.state.statistics.get("bugs_created", 0)), 0, "Preview leaves burn telemetry alone")
+
+
+func _test_burn_telemetry_aggregates_created_fixed_and_revealed() -> void:
+	var harness := Harness.new(42)
+	harness.pipeline(["op.cheap_model", "op.unit_tests"])
+	harness.job["token_requirement"] = 100.0
+	harness.job["tokens_remaining"] = 100.0
+	harness.commit(1000.0)
+	assert_true(int(harness.state.statistics.get("bugs_created", 0)) > 0, "Committed burns aggregate bugs_created")
+	assert_true(int(harness.state.statistics.get("bugs_fixed", 0)) > 0, "Committed burns aggregate bugs_fixed")
+	var buried := Harness.new(43)
+	buried.pipeline(["op.crash_dump", "op.static_analysis"])
+	buried.job["token_requirement"] = 100.0
+	buried.job["tokens_remaining"] = 100.0
+	buried.commit(1000.0)
+	assert_true(
+		int(buried.state.statistics.get("hidden_bugs_created", 0)) > 0,
+		"Committed burns aggregate hidden_bugs_created"
+	)
+	assert_true(
+		int(buried.state.statistics.get("hidden_bugs_revealed", 0)) > 0,
+		"Committed burns aggregate hidden_bugs_revealed"
+	)
+
+
+func _test_created_then_fixed_is_not_a_clean_completion() -> void:
+	var harness := Harness.new(44)
+	harness.pipeline(["op.cheap_model", "op.unit_tests"])
+	harness.job["token_requirement"] = 1.0
+	harness.job["tokens_remaining"] = 1.0
+	harness.commit(1_000_000.0)
+	assert_eq(
+		int(harness.state.statistics.get("clean_completions", 0)), 0,
+		"Created-then-fixed is still dirty for clean_completions"
+	)
+
+
+func _test_hot_one_shot_and_overkill_telemetry() -> void:
+	var harness := Harness.new(45)
+	harness.state.compute["heat_capacity"] = 100.0
+	harness.state.compute["heat"] = 90.0
+	harness.finish_clean([])
+	assert_eq(
+		int(harness.state.statistics.get("hot_one_shot_completions", 0)), 1,
+		"A hot one-shot increments hot_one_shot_completions"
+	)
+	var overkill := Harness.new(46)
+	overkill.pipeline(["op.overclock"])
+	overkill.job["token_requirement"] = 1.0
+	overkill.job["tokens_remaining"] = 1.0
+	overkill.commit(1_000_000.0)
+	assert_eq(
+		int(overkill.state.statistics.get("overkill_2x_completions", 0)), 1,
+		"A 2× overkill increments overkill_2x_completions"
+	)

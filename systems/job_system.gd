@@ -691,6 +691,18 @@ func _apply_burn(
 		job["hidden_bugs_created"] = int(job.get("hidden_bugs_created", 0)) + int(
 			burn.get("hidden_bugs_created", 0)
 		)
+		run_state.statistics["bugs_created"] = int(run_state.statistics.get("bugs_created", 0)) + int(
+			burn.get("bugs_created", 0)
+		)
+		run_state.statistics["hidden_bugs_created"] = int(
+			run_state.statistics.get("hidden_bugs_created", 0)
+		) + int(burn.get("hidden_bugs_created", 0))
+		run_state.statistics["bugs_fixed"] = int(run_state.statistics.get("bugs_fixed", 0)) + int(
+			burn.get("fixed", 0)
+		)
+		run_state.statistics["hidden_bugs_revealed"] = int(
+			run_state.statistics.get("hidden_bugs_revealed", 0)
+		) + int(burn.get("revealed", 0))
 	if int(burn.get("bugs_added", 0)) > 0 or int(burn.get("hidden_added", 0)) > 0:
 		if mode == ResolveMode.COMMIT:
 			EventBus.emit_event(EventBus.EVENT_BUG_GENERATED)

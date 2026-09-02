@@ -1191,6 +1191,9 @@ func _dispatch_stage_folded(
 			0.0, float(batch.get("fixed", 0.0)) - float(fold_before.get("fixed", 0.0))
 		),
 	}
+	# A single "caught anything" signal so a card can react to reveal OR fix
+	# without OR syntax and without stacking two subscriptions.
+	extras["stage_caught"] = float(extras["stage_revealed"]) + float(extras["stage_fixed"])
 	var mod_ctx := ModifierContext.new(EVENT_STAGE_FOLDED, run_state)
 	mod_ctx.rng = rng.derive("board.stage_folded.%d" % index)
 	mod_ctx.job = job

@@ -40,6 +40,22 @@ func run() -> void:
 	_test_tag_density_uses_slotted_modules()
 	_test_slot_edits_invalidate_tag_synergy_subscriptions()
 	_test_all_tag_density_thresholds_ignore_benched_inventory()
+	_test_requirements_doc_first_stage_bonus()
+	_test_dependency_graph_middle_bonus()
+	_test_memory_palace_switches_at_six_stages()
+	_test_prompt_mutator_is_deterministic()
+	_test_speculative_router_is_deterministic()
+	_test_mutation_testing_stays_dirty_with_repair_bonus()
+	_test_formal_verification_clears_a_dirty_burn()
+	_test_canary_test_blocks_hidden_bugs_next()
+	_test_cold_boot_and_emergency_throttle_branches()
+	_test_hbm_burst_cold_thermal_bonus()
+	_test_parallel_workers_and_tree_search_fork_counts()
+	_test_autonomous_loop_does_not_double_scale_repeats()
+	_test_friday_deploy_and_blue_green()
+	_test_verifier_model_uses_stage_caught_once()
+	_test_proof_carrying_code_and_benchmark_daemon()
+	_test_thermodynamic_computer_heat_bands()
 
 
 # --- Harness -----------------------------------------------------------------
@@ -831,4 +847,252 @@ func _test_conditions_see_the_stage_before_effects_run() -> void:
 	assert_almost_eq(
 		float(mod_ctx.get_value("stage.repeat_previous", 0.0)), 1.0, 0.001,
 		"And a floor applied after the adds leaves the larger value alone"
+	)
+
+
+# --- Module expansion --------------------------------------------------------
+
+func _test_requirements_doc_first_stage_bonus() -> void:
+	var first: Dictionary = Build.new(["op.requirements_doc", "op.prompt"]).burn()
+	var later: Dictionary = Build.new(["op.prompt", "op.requirements_doc"]).burn()
+	assert_true(
+		float(first.get("quality", 0.0)) > float(later.get("quality", 0.0)),
+		"Requirements Doc's first-stage bonus only lands when first"
+	)
+
+
+func _test_dependency_graph_middle_bonus() -> void:
+	var middle: Dictionary = Build.new(["op.prompt", "op.dependency_graph", "op.cheap_model"]).burn()
+	var edge: Dictionary = Build.new(["op.dependency_graph", "op.cheap_model"]).burn()
+	assert_true(
+		float(middle.get("progress_tokens", 0.0)) > float(edge.get("progress_tokens", 0.0)),
+		"Dependency Graph only boosts the next stage from the middle"
+	)
+
+
+func _test_memory_palace_switches_at_six_stages() -> void:
+	var short_pipeline: Array = ["op.prompt", "op.prompt", "op.memory_palace", "op.prompt"]
+	var long_pipeline: Array = [
+		"op.prompt", "op.prompt", "op.prompt", "op.memory_palace", "op.prompt", "op.prompt",
+	]
+	var short_burn: Dictionary = Build.new(short_pipeline).burn()
+	var long_burn: Dictionary = Build.new(long_pipeline).burn()
+	assert_true(
+		float(long_burn.get("quality", 0.0)) > float(short_burn.get("quality", 0.0)),
+		"Memory Palace switches up at six stages"
+	)
+
+
+func _test_prompt_mutator_is_deterministic() -> void:
+	var a: Dictionary = Build.new(["op.prompt_mutator"], [], 9001).burn()
+	var b: Dictionary = Build.new(["op.prompt_mutator"], [], 9001).burn()
+	assert_almost_eq(
+		float(a.get("progress_tokens", 0.0)), float(b.get("progress_tokens", 0.0)), 0.001,
+		"Prompt Mutator is deterministic for a known seed"
+	)
+
+
+func _test_speculative_router_is_deterministic() -> void:
+	var a: Dictionary = Build.new(["op.speculative_router"], [], 9002).burn()
+	var b: Dictionary = Build.new(["op.speculative_router"], [], 9002).burn()
+	assert_almost_eq(
+		float(a.get("progress_tokens", 0.0)), float(b.get("progress_tokens", 0.0)), 0.001,
+		"Speculative Router is deterministic for a known seed"
+	)
+
+
+func _test_mutation_testing_stays_dirty_with_repair_bonus() -> void:
+	var result: Dictionary = Build.new(["op.mutation_testing"]).burn()
+	assert_true(int(result.get("bugs_created", 0)) >= 2, "Mutation Testing creates bugs")
+	assert_true(int(result.get("fixed", 0)) >= 2, "Mutation Testing fixes its injected bugs")
+	assert_true(float(result.get("quality_mult", 1.0)) >= 1.5, "Two fixes unlock the QUALITY bonus")
+
+
+func _test_formal_verification_clears_a_dirty_burn() -> void:
+	var result: Dictionary = Build.new(["op.cheap_model", "op.formal_verification"]).burn()
+	assert_eq(int(result.get("known_bugs", -1)), 0, "Formal Verification clears known bugs")
+	assert_eq(int(result.get("hidden_bugs", -1)), 0, "Formal Verification clears hidden bugs")
+
+
+func _test_canary_test_blocks_hidden_bugs_next() -> void:
+	var result: Dictionary = Build.new(["op.canary_test", "op.crash_dump"]).burn()
+	assert_eq(int(result.get("hidden_bugs_created", -1)), 0, "Canary Test blocks hidden bugs next")
+
+
+func _test_cold_boot_and_emergency_throttle_branches() -> void:
+	var cold := Build.new(["op.cold_boot"])
+	cold.state.compute["heat_capacity"] = 100.0
+	cold.state.compute["heat"] = 10.0
+	var cold_burn: Dictionary = cold.burn()
+	var hot := Build.new(["op.cold_boot"], [], 7701)
+	hot.state.compute["heat_capacity"] = 100.0
+	hot.state.compute["heat"] = 80.0
+	var hot_burn: Dictionary = hot.burn()
+	assert_true(
+		float(cold_burn.get("progress_tokens", 0.0)) > float(hot_burn.get("progress_tokens", 0.0)),
+		"Cold Boot rewards a cold start"
+	)
+	var cool := Build.new(["op.thermal_throttle"], [], 7702)
+	cool.state.compute["heat_capacity"] = 100.0
+	cool.state.compute["heat"] = 50.0
+	var cool_burn: Dictionary = cool.burn()
+	var red := Build.new(["op.thermal_throttle"], [], 7703)
+	red.state.compute["heat_capacity"] = 100.0
+	red.state.compute["heat"] = 90.0
+	var red_burn: Dictionary = red.burn()
+	assert_true(
+		float(cool_burn.get("progress_tokens", 0.0)) > float(red_burn.get("progress_tokens", 0.0)),
+		"Emergency Throttle changes branch at 80% heat"
+	)
+
+
+func _test_hbm_burst_cold_thermal_bonus() -> void:
+	var cold := Build.new(["op.hbm_burst", "op.overclock"])
+	cold.state.compute["heat_capacity"] = 100.0
+	cold.state.compute["heat"] = 20.0
+	var cold_burn: Dictionary = cold.burn()
+	var hot := Build.new(["op.hbm_burst", "op.overclock"], [], 7710)
+	hot.state.compute["heat_capacity"] = 100.0
+	hot.state.compute["heat"] = 80.0
+	var hot_burn: Dictionary = hot.burn()
+	assert_true(
+		float(cold_burn.get("heat", 0.0)) < float(hot_burn.get("heat", 0.0)),
+		"HBM Burst applies its cold-side thermal bonus"
+	)
+
+
+func _test_parallel_workers_and_tree_search_fork_counts() -> void:
+	var workers: Dictionary = _stage_named(
+		Build.new(["op.prompt", "op.parallel_workers"]).burn(), "op.parallel_workers"
+	)
+	assert_almost_eq(float(workers.get("repeated_previous", 0.0)), 0.45, 0.001, "Parallel Workers forks at 45%")
+	assert_eq(int(workers.get("repeat_count", 0)), 2, "Parallel Workers forks twice")
+	var tree: Dictionary = _stage_named(
+		Build.new(["op.prompt", "op.tree_search"]).burn(), "op.tree_search"
+	)
+	assert_almost_eq(float(tree.get("repeated_previous", 0.0)), 0.4, 0.001, "Tree Search forks at 40%")
+	assert_eq(int(tree.get("repeat_count", 0)), 3, "Tree Search forks three times")
+
+
+func _test_autonomous_loop_does_not_double_scale_repeats() -> void:
+	var report: Dictionary = _stage_named(
+		Build.new(["op.prompt", "op.autonomous_loop"]).burn(), "op.autonomous_loop"
+	)
+	var stage: Dictionary = Dictionary(report.get("stage", {}))
+	assert_almost_eq(float(report.get("repeated_previous", 0.0)), 1.0, 0.001, "Autonomous Loop repeats once")
+	assert_eq(int(report.get("repeat_count", 0)), 1, "Autonomous Loop uses one fork")
+	assert_almost_eq(float(report.get("repeat_strength", 0.0)), 1.0, 0.001, "Repeat strength stays unboosted")
+	assert_almost_eq(float(stage.get("cascade_chance", 0.0)), 0.25, 0.001, "Cascade chance rises by 25%")
+	assert_almost_eq(float(stage.get("cascade_strength", 0.0)), 1.25, 0.001, "Cascade strength is ×1.25")
+
+
+func _test_friday_deploy_and_blue_green() -> void:
+	var last: Dictionary = Build.new(["op.prompt", "op.friday_deploy"]).burn()
+	var early: Dictionary = Build.new(["op.friday_deploy", "op.prompt"]).burn()
+	assert_true(
+		float(last.get("progress_tokens", 0.0)) > float(early.get("progress_tokens", 0.0)),
+		"Friday Deploy only doubles in the last slot"
+	)
+	var clean: Dictionary = Build.new(["op.prompt", "op.blue_green"]).burn()
+	var dirty: Dictionary = Build.new(["op.crash_dump", "op.blue_green"]).burn()
+	assert_almost_eq(
+		float(clean.get("quality_mult", 1.0)), 1.15, 0.001,
+		"Blue/Green awards its QUALITY bonus when no hidden bugs remain"
+	)
+	assert_almost_eq(
+		float(dirty.get("quality_mult", 1.0)), 1.0, 0.001,
+		"Blue/Green withholds the bonus when hidden bugs remain"
+	)
+	assert_true(
+		int(dirty.get("hidden_bugs", 0)) > 0,
+		"Crash Dump leaves remaining hidden bugs for Blue/Green to see"
+	)
+
+
+func _test_verifier_model_uses_stage_caught_once() -> void:
+	var result: Dictionary = Build.new(["op.crash_dump", "op.verifier_model", "op.prompt"]).burn()
+	var verifier: Dictionary = Dictionary(
+		_stage_named(result, "op.verifier_model").get("stage", {})
+	)
+	assert_almost_eq(
+		float(verifier.get("next_multiplier", 1.0)), 1.3, 0.001,
+		"Verifier Model applies its caught bonus once"
+	)
+
+
+func _test_proof_carrying_code_and_benchmark_daemon() -> void:
+	# Same commit path Benchmark Harness already covers: module completion
+	# subscriptions only fire after a real one-shot finish.
+	var proof := Build.new(["op.proof_carrying_code"])
+	JobSystem.normalize_job_evidence(proof.job)
+	proof.job["token_requirement"] = 1.0
+	proof.job["tokens_remaining"] = 1.0
+	proof.job["prompts_remaining"] = 6
+	proof.job["deadline_prompts"] = 6
+	proof.job["bug_chance"] = 0.0
+	proof.state.business["active_jobs"] = [proof.job]
+	proof.state.business["focused_job_id"] = "job.test"
+	var jobs := JobSystem.new()
+	var result: Dictionary = jobs.run_burn(
+		proof.state, proof.rng, proof.resolver, [],
+		{}, ComputeSystem.new(), HeatSystem.new(), EconomySystem.new(), proof.board
+	)
+	assert_true(bool(result.get("ok", false)), "Proof-Carrying Code can finish a tiny contract")
+	assert_almost_eq(
+		float(proof.job.get("tokens_remaining", 1.0)), 0.0, 0.001,
+		"Proof-Carrying Code completes the contract"
+	)
+	assert_true(
+		bool(Dictionary(proof.job.get("mastery_report", {})).get("clean", false)),
+		"Proof-Carrying Code sees a clean completion"
+	)
+	assert_almost_eq(
+		float(Dictionary(proof.job.get("mastery_report", {})).get("quality_gain", 0.0)),
+		0.04, 0.001,
+		"Proof-Carrying Code reports +0.04 QUALITY mastery"
+	)
+	assert_almost_eq(
+		float(proof.board.active_workflow(proof.state).get("quality_mult", 1.0)),
+		1.04, 0.001, "Proof-Carrying Code trains +0.04 QUALITY on a clean completion"
+	)
+
+	var daemon := Build.new(["op.benchmark_daemon"], ["perk.first_try", "perk.benchmark_chaser"])
+	JobSystem.normalize_job_evidence(daemon.job)
+	daemon.job["token_requirement"] = 1.0
+	daemon.job["tokens_remaining"] = 1.0
+	daemon.job["prompts_remaining"] = 6
+	daemon.job["deadline_prompts"] = 6
+	daemon.job["bug_chance"] = 0.0
+	daemon.state.business["active_jobs"] = [daemon.job]
+	daemon.state.business["focused_job_id"] = "job.test"
+	jobs.run_burn(
+		daemon.state, daemon.rng, daemon.resolver, daemon.subscriptions(),
+		{}, ComputeSystem.new(), HeatSystem.new(), EconomySystem.new(), daemon.board
+	)
+	assert_true(
+		float(daemon.board.active_workflow(daemon.state).get("output_mult", 1.0)) >= 1.13,
+		"Benchmark Daemon stacks one-shot and overkill mastery with existing perks"
+	)
+
+
+func _test_thermodynamic_computer_heat_bands() -> void:
+	var cool := Build.new(["op.thermodynamic_computer"], [], 8801)
+	cool.state.compute["heat_capacity"] = 100.0
+	cool.state.compute["heat"] = 50.0
+	var cool_burn: Dictionary = cool.burn()
+	var mid := Build.new(["op.thermodynamic_computer"], [], 8802)
+	mid.state.compute["heat_capacity"] = 100.0
+	mid.state.compute["heat"] = 90.0
+	var mid_burn: Dictionary = mid.burn()
+	var hot := Build.new(["op.thermodynamic_computer"], [], 8803)
+	hot.state.compute["heat_capacity"] = 100.0
+	hot.state.compute["heat"] = 120.0
+	var hot_burn: Dictionary = hot.burn()
+	assert_true(
+		float(mid_burn.get("progress_tokens", 0.0)) > float(cool_burn.get("progress_tokens", 0.0)),
+		"Thermodynamic Computer's mid band beats the cold band"
+	)
+	assert_true(
+		float(hot_burn.get("progress_tokens", 0.0)) > float(mid_burn.get("progress_tokens", 0.0)),
+		"Thermodynamic Computer's redline band beats the mid band"
 	)

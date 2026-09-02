@@ -9,9 +9,17 @@
     "hint": "Complete your first contract.",
     "condition": {
       "trigger": "tick",
-      "checks": [{"stat": "run.completed_jobs", "op": ">=", "value": 1}]
+      "checks": [
+        {
+          "stat": "run.completed_jobs",
+          "op": ">=",
+          "value": 1
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.first_ascension",
@@ -23,9 +31,17 @@
     "hint": "Complete any Ascension Contract.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.outcome", "op": "==", "value": "ascended"}]
+      "checks": [
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.tier_two",
@@ -38,11 +54,21 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.ascension_tier", "op": ">=", "value": 2}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        },
+        {
+          "stat": "run.ascension_tier",
+          "op": ">=",
+          "value": 2
+        }
       ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.tier_three",
@@ -55,11 +81,22 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.ascension_tier", "op": ">=", "value": 3}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        },
+        {
+          "stat": "run.ascension_tier",
+          "op": ">=",
+          "value": 3
+        }
       ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.foundation_model"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.foundation_model"
+    }
   },
   {
     "id": "ach.full_board",
@@ -71,9 +108,18 @@
     "hint": "Fill all eight pipeline slots in one run.",
     "condition": {
       "trigger": "tick",
-      "checks": [{"stat": "run.board_filled", "op": ">=", "value": 8}]
+      "checks": [
+        {
+          "stat": "run.board_filled",
+          "op": ">=",
+          "value": 8
+        }
+      ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.crunch_mode"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.crunch_mode"
+    }
   },
   {
     "id": "ach.trillion_burn",
@@ -85,9 +131,18 @@
     "hint": "Burn a trillion tokens in one run.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.tokens_burned", "op": ">=", "value": 1000000000000}]
+      "checks": [
+        {
+          "stat": "run.tokens_burned",
+          "op": ">=",
+          "value": 1000000000000
+        }
+      ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.quantum_annealer"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.quantum_annealer"
+    }
   },
   {
     "id": "ach.retired",
@@ -100,11 +155,22 @@
     "condition": {
       "trigger": "tick",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.round", "op": ">=", "value": 12}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        },
+        {
+          "stat": "run.round",
+          "op": ">=",
+          "value": 12
+        }
       ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.rubber_duck"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.rubber_duck"
+    }
   },
   {
     "id": "ach.deep_pockets",
@@ -116,9 +182,18 @@
     "hint": "Hold a million in cash at any point in a run.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.peak_cash", "op": ">=", "value": 1000000}]
+      "checks": [
+        {
+          "stat": "run.peak_cash",
+          "op": ">=",
+          "value": 1000000
+        }
+      ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.the_intern"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.the_intern"
+    }
   },
   {
     "id": "ach.spotless",
@@ -131,11 +206,22 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.completed_jobs", "op": ">=", "value": 8},
-        {"stat": "run.hidden_bugs_shipped", "op": "==", "value": 0}
+        {
+          "stat": "run.completed_jobs",
+          "op": ">=",
+          "value": 8
+        },
+        {
+          "stat": "run.hidden_bugs_shipped",
+          "op": "==",
+          "value": 0
+        }
       ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.judge_model"
+    }
   },
   {
     "id": "ach.endless_ten",
@@ -147,9 +233,18 @@
     "hint": "Survive ten Endless rounds past round twelve.",
     "condition": {
       "trigger": "tick",
-      "checks": [{"stat": "run.endless_rounds", "op": ">=", "value": 10}]
+      "checks": [
+        {
+          "stat": "run.endless_rounds",
+          "op": ">=",
+          "value": 10
+        }
+      ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.agi_prototype"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.agi_prototype"
+    }
   },
   {
     "id": "ach.round_one_wipeout",
@@ -162,15 +257,26 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "lost"},
-        {"stat": "run.rounds_survived", "op": "<=", "value": 1}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "lost"
+        },
+        {
+          "stat": "run.rounds_survived",
+          "op": "<=",
+          "value": 1
+        }
       ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.stack_overflow"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.stack_overflow"
+    }
   },
   {
     "id": "ach.datacentre_flambe",
-    "name": "Datacentre Flambé",
+    "name": "Datacentre Flamb\u00e9",
     "category": "disaster",
     "icon": "flame",
     "hidden": false,
@@ -179,11 +285,22 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.max_heat_ratio", "op": ">=", "value": 0.99},
-        {"stat": "run.infrastructure_tier", "op": ">=", "value": 3}
+        {
+          "stat": "run.max_heat_ratio",
+          "op": ">=",
+          "value": 0.99
+        },
+        {
+          "stat": "run.infrastructure_tier",
+          "op": ">=",
+          "value": 3
+        }
       ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.chaos_monkey"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.chaos_monkey"
+    }
   },
   {
     "id": "ach.bug_farm",
@@ -195,9 +312,18 @@
     "hint": "Ship ten hidden bugs in a single run.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.hidden_bugs_shipped", "op": ">=", "value": 10}]
+      "checks": [
+        {
+          "stat": "run.hidden_bugs_shipped",
+          "op": ">=",
+          "value": 10
+        }
+      ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.vibe_coder"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.vibe_coder"
+    }
   },
   {
     "id": "ach.evicted",
@@ -210,11 +336,21 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "lost"},
-        {"stat": "run.cash", "op": "<", "value": 0}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "lost"
+        },
+        {
+          "stat": "run.cash",
+          "op": "<",
+          "value": 0
+        }
       ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.debt_spiral",
@@ -226,9 +362,17 @@
     "hint": "Rack up a hundred thousand in debt.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.peak_debt", "op": ">=", "value": 100000}]
+      "checks": [
+        {
+          "stat": "run.peak_debt",
+          "op": ">=",
+          "value": 100000
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.nothing_ventured",
@@ -240,9 +384,17 @@
     "hint": "Finish a run having completed zero contracts.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.completed_jobs", "op": "==", "value": 0}]
+      "checks": [
+        {
+          "stat": "run.completed_jobs",
+          "op": "==",
+          "value": 0
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.yes_man",
@@ -255,11 +407,21 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.jobs_accepted", "op": ">=", "value": 15},
-        {"stat": "run.outcome", "op": "==", "value": "lost"}
+        {
+          "stat": "run.jobs_accepted",
+          "op": ">=",
+          "value": 15
+        },
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "lost"
+        }
       ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.thermal_event",
@@ -271,9 +433,18 @@
     "hint": "Push the rig to full heat.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.max_heat_ratio", "op": ">=", "value": 0.99}]
+      "checks": [
+        {
+          "stat": "run.max_heat_ratio",
+          "op": ">=",
+          "value": 0.99
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.thermal_throttle"
+    }
   },
   {
     "id": "ach.serial_disappointment",
@@ -285,9 +456,17 @@
     "hint": "Fail ten contracts in a single run.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.failed_jobs", "op": ">=", "value": 10}]
+      "checks": [
+        {
+          "stat": "run.failed_jobs",
+          "op": ">=",
+          "value": 10
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.serial_loser",
@@ -299,9 +478,18 @@
     "hint": "Lose ten runs across your whole career.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "lifetime.losses", "op": ">=", "value": 10}]
+      "checks": [
+        {
+          "stat": "lifetime.losses",
+          "op": ">=",
+          "value": 10
+        }
+      ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.blameless_postmortem"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.blameless_postmortem"
+    }
   },
   {
     "id": "ach.so_close",
@@ -313,9 +501,17 @@
     "hint": "Fail an Ascension Contract you committed to.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "run.outcome", "op": "==", "value": "ascension_failed"}]
+      "checks": [
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascension_failed"
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.monk_mode",
@@ -328,11 +524,21 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.angel_offers_declined", "op": ">=", "value": 5},
-        {"stat": "run.angel_offers_taken", "op": "==", "value": 0}
+        {
+          "stat": "run.angel_offers_declined",
+          "op": ">=",
+          "value": 5
+        },
+        {
+          "stat": "run.angel_offers_taken",
+          "op": "==",
+          "value": 0
+        }
       ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.fire_sale",
@@ -344,9 +550,17 @@
     "hint": "Sell three pieces of hardware in one run.",
     "condition": {
       "trigger": "tick",
-      "checks": [{"stat": "run.hardware_sold", "op": ">=", "value": 3}]
+      "checks": [
+        {
+          "stat": "run.hardware_sold",
+          "op": ">=",
+          "value": 3
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.tightrope",
@@ -359,11 +573,21 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.max_heat_ratio", "op": ">=", "value": 0.95},
-        {"stat": "run.rounds_survived", "op": ">=", "value": 8}
+        {
+          "stat": "run.max_heat_ratio",
+          "op": ">=",
+          "value": 0.95
+        },
+        {
+          "stat": "run.rounds_survived",
+          "op": ">=",
+          "value": 8
+        }
       ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.hoarder",
@@ -375,9 +599,17 @@
     "hint": "Own twelve modules at once.",
     "condition": {
       "trigger": "tick",
-      "checks": [{"stat": "run.modules_owned", "op": ">=", "value": 12}]
+      "checks": [
+        {
+          "stat": "run.modules_owned",
+          "op": ">=",
+          "value": 12
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.trophy_cabinet",
@@ -389,9 +621,17 @@
     "hint": "Earn twenty achievements.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "meta.achievements", "op": ">=", "value": 20}]
+      "checks": [
+        {
+          "stat": "meta.achievements",
+          "op": ">=",
+          "value": 20
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.veteran",
@@ -403,9 +643,17 @@
     "hint": "Finish ten runs.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "lifetime.runs", "op": ">=", "value": 10}]
+      "checks": [
+        {
+          "stat": "lifetime.runs",
+          "op": ">=",
+          "value": 10
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.absurd",
@@ -417,9 +665,17 @@
     "hint": "Burn a quadrillion tokens across all your runs.",
     "condition": {
       "trigger": "run_end",
-      "checks": [{"stat": "lifetime.tokens_burned", "op": ">=", "value": 1000000000000000}]
+      "checks": [
+        {
+          "stat": "lifetime.tokens_burned",
+          "op": ">=",
+          "value": 1000000000000000
+        }
+      ]
     },
-    "reward": {"type": "none"}
+    "reward": {
+      "type": "none"
+    }
   },
   {
     "id": "ach.bare_metal_purist",
@@ -432,11 +688,22 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.location_tier", "op": ">=", "value": 2}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        },
+        {
+          "stat": "run.location_tier",
+          "op": ">=",
+          "value": 2
+        }
       ]
     },
-    "reward": {"type": "unlock_perk", "perk_id": "perk.rack_mount_religion"}
+    "reward": {
+      "type": "unlock_perk",
+      "perk_id": "perk.rack_mount_religion"
+    }
   },
   {
     "id": "ach.ship_it_pray_ii",
@@ -449,11 +716,22 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.hidden_bugs_shipped", "op": ">=", "value": 20}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        },
+        {
+          "stat": "run.hidden_bugs_shipped",
+          "op": ">=",
+          "value": 20
+        }
       ]
     },
-    "reward": {"type": "unlock_perk", "perk_id": "perk.known_unknowns"}
+    "reward": {
+      "type": "unlock_perk",
+      "perk_id": "perk.known_unknowns"
+    }
   },
   {
     "id": "ach.audit_ready",
@@ -466,13 +744,32 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.completed_jobs", "op": ">=", "value": 5},
-        {"stat": "run.hidden_bugs_shipped", "op": "==", "value": 0},
-        {"stat": "run.ascension_tier", "op": ">=", "value": 2}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        },
+        {
+          "stat": "run.completed_jobs",
+          "op": ">=",
+          "value": 5
+        },
+        {
+          "stat": "run.hidden_bugs_shipped",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "stat": "run.ascension_tier",
+          "op": ">=",
+          "value": 2
+        }
       ]
     },
-    "reward": {"type": "unlock_perk", "perk_id": "perk.audit_trail"}
+    "reward": {
+      "type": "unlock_perk",
+      "perk_id": "perk.audit_trail"
+    }
   },
   {
     "id": "ach.redline",
@@ -485,11 +782,22 @@
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.outcome", "op": "==", "value": "ascended"},
-        {"stat": "run.max_heat_ratio", "op": ">=", "value": 0.9}
+        {
+          "stat": "run.outcome",
+          "op": "==",
+          "value": "ascended"
+        },
+        {
+          "stat": "run.max_heat_ratio",
+          "op": ">=",
+          "value": 0.9
+        }
       ]
     },
-    "reward": {"type": "unlock_module", "module_id": "op.heat_sink_bank"}
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.heat_sink_bank"
+    }
   },
   {
     "id": "ach.recursive_business",
@@ -497,14 +805,465 @@
     "category": "milestone",
     "icon": "brain",
     "hidden": false,
-    "description": "A hundred stage repeats in one run. The pipeline is a möbius strip with invoices.",
+    "description": "A hundred stage repeats in one run. The pipeline is a m\u00f6bius strip with invoices.",
     "hint": "Trigger one hundred stage repeats in a single run.",
     "condition": {
       "trigger": "run_end",
       "checks": [
-        {"stat": "run.stage_repeats", "op": ">=", "value": 100}
+        {
+          "stat": "run.stage_repeats",
+          "op": ">=",
+          "value": 100
+        }
       ]
     },
-    "reward": {"type": "unlock_perk", "perk_id": "perk.infinite_backlog"}
+    "reward": {
+      "type": "unlock_perk",
+      "perk_id": "perk.infinite_backlog"
+    }
+  },
+  {
+    "id": "ach.repo_cartographer",
+    "name": "Repo Cartographer",
+    "category": "milestone",
+    "icon": "wrench",
+    "hidden": false,
+    "description": "Five stages filled. You have drawn a map of the codebase that future-you will ignore.",
+    "hint": "Fill five pipeline stages in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.board_filled",
+          "op": ">=",
+          "value": 5
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.repo_map"
+    }
+  },
+  {
+    "id": "ach.vector_search",
+    "name": "Found It in Context",
+    "category": "milestone",
+    "icon": "brain",
+    "hidden": false,
+    "description": "Five contracts, zero hidden bugs shipped. Retrieval is a lifestyle now.",
+    "hint": "Complete five contracts in a run without shipping a hidden bug.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {
+          "stat": "run.completed_jobs",
+          "op": ">=",
+          "value": 5
+        },
+        {
+          "stat": "run.hidden_bugs_shipped",
+          "op": "==",
+          "value": 0
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.vector_index"
+    }
+  },
+  {
+    "id": "ach.dependency_spaghetti",
+    "name": "Dependency Spaghetti",
+    "category": "milestone",
+    "icon": "wrench",
+    "hidden": false,
+    "description": "A full-looking pipeline that keeps looping back on itself. Somewhere a package.json is crying.",
+    "hint": "Fill six pipeline stages and trigger five stage repeats in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.board_filled",
+          "op": ">=",
+          "value": 6
+        },
+        {
+          "stat": "run.stage_repeats",
+          "op": ">=",
+          "value": 5
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.dependency_graph"
+    }
+  },
+  {
+    "id": "ach.chaos_prompting",
+    "name": "Temperature: Yes",
+    "category": "disaster",
+    "icon": "flame",
+    "hidden": false,
+    "description": "Instability crossed fifty percent. The prompt is no longer a request; it is a dare.",
+    "hint": "Reach 50% instability in a run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.max_instability",
+          "op": ">=",
+          "value": 0.5
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.prompt_mutator"
+    }
+  },
+  {
+    "id": "ach.mixture_of_everything",
+    "name": "Mixture of Everything",
+    "category": "milestone",
+    "icon": "brain",
+    "hidden": false,
+    "description": "Ten modules owned. The angel has stopped asking what your product does.",
+    "hint": "Own ten modules in a single run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.modules_owned",
+          "op": ">=",
+          "value": 10
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.moe_router"
+    }
+  },
+  {
+    "id": "ach.sparse_operator",
+    "name": "Sparse Operator",
+    "category": "milestone",
+    "icon": "flame",
+    "hidden": false,
+    "description": "Hot enough to matter, finished enough to count. Density is for people with budget.",
+    "hint": "Hit 90% heat and complete three contracts in one run.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {
+          "stat": "run.max_heat_ratio",
+          "op": ">=",
+          "value": 0.9
+        },
+        {
+          "stat": "run.completed_jobs",
+          "op": ">=",
+          "value": 3
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.sparse_expert"
+    }
+  },
+  {
+    "id": "ach.integration_day",
+    "name": "Works on My Machine",
+    "category": "milestone",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Six contracts, zero failures. The integration environment has not been invented yet.",
+    "hint": "Complete six contracts in a run without failing any.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {
+          "stat": "run.completed_jobs",
+          "op": ">=",
+          "value": 6
+        },
+        {
+          "stat": "run.failed_jobs",
+          "op": "==",
+          "value": 0
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.integration_tests"
+    }
+  },
+  {
+    "id": "ach.property_owner",
+    "name": "Property Owner",
+    "category": "milestone",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Three clean completions. The invariants held, which is suspicious.",
+    "hint": "Finish three clean contract completions in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.clean_completions",
+          "op": ">=",
+          "value": 3
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.property_tests"
+    }
+  },
+  {
+    "id": "ach.fuzzed_prod",
+    "name": "Production Was the Fuzzer",
+    "category": "disaster",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Eight hidden bugs created. You did not find the edge cases. The edge cases found you.",
+    "hint": "Create eight hidden bugs in a single run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.hidden_bugs_created",
+          "op": ">=",
+          "value": 8
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.fuzz_tester"
+    }
+  },
+  {
+    "id": "ach.golden_reference",
+    "name": "Golden Reference",
+    "category": "milestone",
+    "icon": "trophy",
+    "hidden": false,
+    "description": "Three clean one-shots. The reference answer was you, somehow.",
+    "hint": "Finish three clean one-shot completions in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.clean_one_shot_completions",
+          "op": ">=",
+          "value": 3
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.golden_dataset"
+    }
+  },
+  {
+    "id": "ach.graph_capture",
+    "name": "Captured the Graph",
+    "category": "milestone",
+    "icon": "wrench",
+    "hidden": false,
+    "description": "Fifteen stage repeats. The pipeline has stopped being a pipeline and become a ritual.",
+    "hint": "Trigger fifteen stage repeats in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.stage_repeats",
+          "op": ">=",
+          "value": 15
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.cuda_graph"
+    }
+  },
+  {
+    "id": "ach.pinned_down",
+    "name": "Pinned Down",
+    "category": "milestone",
+    "icon": "wrench",
+    "hidden": false,
+    "description": "Three machines owned. Memory is pinned. So is your rent.",
+    "hint": "Own three pieces of hardware in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.hardware_owned",
+          "op": ">=",
+          "value": 3
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.pinned_memory"
+    }
+  },
+  {
+    "id": "ach.cold_operator",
+    "name": "Cold Operator",
+    "category": "milestone",
+    "icon": "flame",
+    "hidden": false,
+    "description": "Four cool completions. The fans have started writing thank-you notes.",
+    "hint": "Finish four cool contract completions in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.cool_completions",
+          "op": ">=",
+          "value": 4
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.heat_pipe"
+    }
+  },
+  {
+    "id": "ach.code_review",
+    "name": "Reviewed Until It Hurt",
+    "category": "milestone",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Ten bugs fixed. The review comments have started reviewing you.",
+    "hint": "Fix ten bugs in a single run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.bugs_fixed",
+          "op": ">=",
+          "value": 10
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.reviewer_agent"
+    }
+  },
+  {
+    "id": "ach.parallel_everything",
+    "name": "Parallel Everything",
+    "category": "milestone",
+    "icon": "wrench",
+    "hidden": false,
+    "description": "Twenty-five repeats and at least one cascade. The org chart has become a DAG.",
+    "hint": "Trigger twenty-five stage repeats and at least one cascade in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.stage_repeats",
+          "op": ">=",
+          "value": 25
+        },
+        {
+          "stat": "run.cascades_triggered",
+          "op": ">=",
+          "value": 1
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.parallel_workers"
+    }
+  },
+  {
+    "id": "ach.watch_this",
+    "name": "Nothing Gets Past Me",
+    "category": "milestone",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Ten hidden bugs revealed. The watchdog has started watching the watchdog.",
+    "hint": "Reveal ten hidden bugs in a single run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.hidden_bugs_revealed",
+          "op": ">=",
+          "value": 10
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.watchdog_agent"
+    }
+  },
+  {
+    "id": "ach.semantic_reuse",
+    "name": "Seen This Before",
+    "category": "milestone",
+    "icon": "brain",
+    "hidden": false,
+    "description": "Five one-shots. The cache hit rate is now a personality trait.",
+    "hint": "Finish five one-shot completions in one run.",
+    "condition": {
+      "trigger": "tick",
+      "checks": [
+        {
+          "stat": "run.one_shot_completions",
+          "op": ">=",
+          "value": 5
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.semantic_cache"
+    }
+  },
+  {
+    "id": "ach.canary_keeper",
+    "name": "Canary Still Singing",
+    "category": "milestone",
+    "icon": "bug",
+    "hidden": false,
+    "description": "Six clean completions, no hidden bugs shipped. The canary is suspiciously cheerful.",
+    "hint": "Finish six clean completions in a run without shipping a hidden bug.",
+    "condition": {
+      "trigger": "run_end",
+      "checks": [
+        {
+          "stat": "run.clean_completions",
+          "op": ">=",
+          "value": 6
+        },
+        {
+          "stat": "run.hidden_bugs_shipped",
+          "op": "==",
+          "value": 0
+        }
+      ]
+    },
+    "reward": {
+      "type": "unlock_module",
+      "module_id": "op.canary_release"
+    }
   }
 ]

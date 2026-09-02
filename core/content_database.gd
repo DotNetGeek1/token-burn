@@ -110,13 +110,17 @@ func opening_pipeline_modules() -> Array[String]:
 	return ids
 
 
-## An achievement-gated module is not in the pool until its award has been
-## earned, which is the whole point of earning it: the draft itself gets deeper
-## rather than the player getting a one-off handout.
+## A gated module stays out of the draft until every authored gate is met:
+## achievement, total victories, and Hard victories are ANDed together so a
+## veteran card cannot leak into a fresh profile through any single path.
 func module_is_unlocked(module: ModuleDefinition) -> bool:
-	if module.unlock_achievement == "":
-		return true
-	return MetaProgress.has_achievement(module.unlock_achievement)
+	if module.unlock_achievement != "" and not MetaProgress.has_achievement(module.unlock_achievement):
+		return false
+	if MetaProgress.victories() < module.min_victories:
+		return false
+	if MetaProgress.victories_on("hard") < module.min_hard_victories:
+		return false
+	return true
 
 
 func unlocked_modules() -> Array[ModuleDefinition]:
@@ -125,6 +129,60 @@ func unlocked_modules() -> Array[ModuleDefinition]:
 		if module_is_unlocked(module):
 			result.append(module)
 	return result
+
+
+## Modules that become eligible exactly when the profile reaches these victory
+## counts. Used by the run-end report so crossing 1/2/3/5 or Hard 1/3 is visible.
+func modules_unlocked_at_victory_counts(total_victories: int, hard_victories: int) -> Array[ModuleDefinition]:
+	var total_thresholds := [1, 2, 3, 5]
+	var hard_thresholds := [1, 3]
+	var result: Array[ModuleDefinition] = []
+	for module in modules:
+		var crossed_total: bool = (
+			module.min_victories > 0
+			and module.min_victories == total_victories
+			and total_victories in total_thresholds
+		)
+		var crossed_hard: bool = (
+			module.min_hard_victories > 0
+			and module.min_hard_victories == hard_victories
+			and hard_victories in hard_thresholds
+		)
+		if not crossed_total and not crossed_hard:
+			continue
+		if not module_is_unlocked(module):
+			continue
+		result.append(module)
+	return result
+
+
+## Human-readable reasons a module is still out of the angel pool.
+func module_lock_reasons(module: ModuleDefinition) -> PackedStringArray:
+	var reasons: PackedStringArray = []
+	if module.unlock_achievement != "":
+		if not MetaProgress.has_achievement(module.unlock_achievement):
+			var achievement: Dictionary = get_achievement(module.unlock_achievement)
+			var label: String = str(achievement.get("name", module.unlock_achievement))
+			reasons.append("Earn achievement: %s" % label)
+	if MetaProgress.victories() < module.min_victories:
+		var wins: int = module.min_victories
+		reasons.append("Win %d run%s" % [wins, "" if wins == 1 else "s"])
+	if MetaProgress.victories_on("hard") < module.min_hard_victories:
+		var hard_wins: int = module.min_hard_victories
+		if hard_wins == 1:
+			reasons.append("Win Hard once")
+		else:
+			reasons.append("Win Hard %d times" % hard_wins)
+	if module.min_location_tier > 0:
+		var order: Array = MetaProgress.location_order()
+		var highest_tier: int = 0
+		for location_id in MetaProgress.unlocked_locations():
+			highest_tier = maxi(highest_tier, order.find(str(location_id)))
+		if highest_tier < module.min_location_tier and module.min_location_tier < order.size():
+			reasons.append(
+				"Requires %s or later" % MetaProgress.location_name(str(order[module.min_location_tier]))
+			)
+	return reasons
 
 
 func perk_is_unlocked(perk: PerkDefinition) -> bool:
@@ -245,7 +303,10 @@ func draw_modules(
 			continue
 		if not module_is_unlocked(module):
 			continue
-		pool.append({"item": module, "weight": _rarity_weight(module.rarity, rarity_bias)})
+		pool.append({
+			"item": module,
+			"weight": _rarity_weight(module.rarity, rarity_bias) * maxf(module.draft_weight, 0.01),
+		})
 	if pool.is_empty():
 		return []
 	var picks: Array[ModuleDefinition] = []
@@ -466,6 +527,8 @@ func _load_modules() -> void:
 		module.starter = bool(entry.get("starter", false))
 		module.opens_pipeline = bool(entry.get("opens_pipeline", false))
 		module.unlock_achievement = str(entry.get("unlock_achievement", ""))
+		module.min_victories = int(entry.get("min_victories", 0))
+		module.min_hard_victories = int(entry.get("min_hard_victories", 0))
 		module.min_location_tier = int(entry.get("min_location_tier", 0))
 		module.max_location_tier = int(entry.get("max_location_tier", -1))
 		module.draft_weight = float(entry.get("draft_weight", 1.0))
@@ -518,6 +581,13 @@ const KNOWN_EFFECT_OPERATIONS := [
 ## Category enums recognised by `Simulation`/`UpgradeSystem` when installing
 ## an upgrade. Anything else is a typo that would silently fail to install.
 const KNOWN_UPGRADE_CATEGORIES := ["hardware", "component", "dwelling"]
+## Module categories the Burn Board and draft affinity already understand.
+const KNOWN_MODULE_CATEGORIES := [
+	"prompt", "context", "model", "agent", "cache", "test", "hardware", "deploy",
+]
+## Rarity bands that have draft weights. An unknown rarity drafts at a default
+## weight of 1.0 and looks like a balance change rather than a typo.
+const KNOWN_MODULE_RARITIES := ["common", "uncommon", "rare", "legendary"]
 ## Prefixes an effect target may use without resolving against `RunState`:
 ## `job.`/`batch.`/`stage.` are per-resolution scratch values (see
 ## `ModifierContext` and `BoardSystem`'s per-stage batch dictionary),
@@ -601,6 +671,30 @@ func collect_validation_errors() -> Array[String]:
 
 	for module in modules:
 		_check_unique_id(errors, seen_ids, "module", module.id)
+		if module.name.strip_edges() == "":
+			errors.append("module '%s' has an empty name" % module.id)
+		if module.category.strip_edges() == "":
+			errors.append("module '%s' has an empty category" % module.id)
+		elif not KNOWN_MODULE_CATEGORIES.has(module.category):
+			errors.append("module '%s' has unknown category '%s'" % [module.id, module.category])
+		if module.rarity.strip_edges() == "":
+			errors.append("module '%s' has an empty rarity" % module.id)
+		elif not KNOWN_MODULE_RARITIES.has(module.rarity):
+			errors.append("module '%s' has unknown rarity '%s'" % [module.id, module.rarity])
+		if module.description_template.strip_edges() == "":
+			errors.append("module '%s' has an empty description" % module.id)
+		if module.tags.is_empty():
+			errors.append("module '%s' has no tags" % module.id)
+		if module.min_victories < 0:
+			errors.append("module '%s' has negative min_victories %d" % [module.id, module.min_victories])
+		if module.min_hard_victories < 0:
+			errors.append(
+				"module '%s' has negative min_hard_victories %d" % [module.id, module.min_hard_victories]
+			)
+		if module.draft_weight <= 0.0:
+			errors.append(
+				"module '%s' has non-positive draft_weight %s" % [module.id, str(module.draft_weight)]
+			)
 		_check_draft_gates(
 			errors,
 			"module",
@@ -618,6 +712,21 @@ func collect_validation_errors() -> Array[String]:
 				errors.append("module '%s' declares a combo with missing module '%s'" % [
 					module.id, partner_id,
 				])
+		var has_effects: bool = (
+			module.slot_effects.size() > 0
+			or module.folded_effects.size() > 0
+			or module.finalizing_effects.size() > 0
+			or module.completion_effects.size() > 0
+		)
+		if not has_effects:
+			for combo in module.combos:
+				if combo is Dictionary and Array(combo.get("effects", [])).size() > 0:
+					has_effects = true
+					break
+		if not has_effects:
+			errors.append(
+				"module '%s' has no slot, folded, finalizing, completion, or combo effects" % module.id
+			)
 		_validate_effect_list(errors, known_paths, "module '%s'" % module.id, module.slot_effects)
 		_validate_effect_list(
 			errors, known_paths, "module '%s' finalizing" % module.id, module.finalizing_effects
@@ -634,6 +743,16 @@ func collect_validation_errors() -> Array[String]:
 					errors, known_paths,
 					"module '%s' combo" % module.id, Array(combo.get("effects", []))
 				)
+		_validate_module_parameters(
+			errors,
+			module,
+			[
+				module.slot_effects,
+				module.folded_effects,
+				module.finalizing_effects,
+				module.completion_effects,
+			]
+		)
 	var demands: Dictionary = balance.get("job_demands", {})
 	# Built locally rather than as constants so this file keeps no load-time
 	# dependency on BoardSystem, which reads back from this database.
@@ -772,6 +891,91 @@ func _validate_effect_list(errors: Array[String], known_paths: Dictionary, conte
 			errors, known_paths, context, str(effect.get("operation", "add")), str(effect.get("target", ""))
 		)
 		_validate_effect_list(errors, known_paths, context, Array(effect.get("effects", [])))
+
+
+## Every `$parameter` referenced by a module's effects or description has to
+## exist on the module. A missing key silently resolves to null at the table.
+## Runtime context keys (`$heat_ratio`, `$is_first_stage`, …) are exempt.
+const KNOWN_CONTEXT_PARAMETER_KEYS := [
+	"is_first_stage", "is_last_stage", "stage_count", "slot_count", "slot_index",
+	"stage_position", "stage_index", "heat_ratio", "start_heat_ratio", "stage_roll",
+	"instability", "overflow", "prev_module", "next_module", "prev_op", "next_op",
+	"op_id", "op_category", "module_id", "module_category", "stage_created_bugs",
+	"stage_known_bugs_created", "stage_hidden_bugs_created", "stage_revealed",
+	"stage_fixed", "stage_caught", "one_shot", "clean", "cool", "overkill_ratio",
+	"bugs_created", "workflow_id", "workflow_name", "batch_faulted", "batch_survived",
+]
+
+
+func _validate_module_parameters(
+	errors: Array[String],
+	module: ModuleDefinition,
+	effect_collections: Array
+) -> void:
+	var referenced: Dictionary = {}
+	_collect_parameter_refs(referenced, module.description_template)
+	for collection in effect_collections:
+		_collect_effect_parameter_refs(referenced, Array(collection))
+	for combo in module.combos:
+		if not combo is Dictionary:
+			continue
+		_collect_parameter_refs(referenced, str(combo.get("description", "")))
+		_collect_effect_parameter_refs(referenced, Array(combo.get("effects", [])))
+	for key in referenced.keys():
+		if KNOWN_CONTEXT_PARAMETER_KEYS.has(key):
+			continue
+		if key.begins_with("stage_") or key.begins_with("batch_") or key.begins_with("job_"):
+			continue
+		if not module.parameters.has(key):
+			errors.append("module '%s' references missing parameter '$%s'" % [module.id, key])
+
+
+func _collect_effect_parameter_refs(out: Dictionary, effects: Array) -> void:
+	for effect in effects:
+		if not effect is Dictionary:
+			continue
+		_collect_parameter_refs(out, str(effect.get("value", "")))
+		_collect_parameter_refs(out, str(effect.get("from", "")))
+		_collect_parameter_refs(out, str(effect.get("to", "")))
+		_collect_parameter_refs(out, str(effect.get("ratio", "")))
+		for condition in Array(effect.get("conditions", [])):
+			if not condition is Dictionary:
+				continue
+			_collect_parameter_refs(out, str(condition.get("left", "")))
+			_collect_parameter_refs(out, str(condition.get("right", "")))
+		_collect_effect_parameter_refs(out, Array(effect.get("effects", [])))
+		var pick: Variant = effect.get("pick", null)
+		if pick is Array:
+			for entry in pick:
+				_collect_parameter_refs(out, str(entry))
+
+
+func _collect_parameter_refs(out: Dictionary, text: Variant) -> void:
+	var source: String = str(text)
+	if source == "" or not source.contains("$"):
+		return
+	var i: int = 0
+	while i < source.length():
+		if source[i] != "$":
+			i += 1
+			continue
+		var start: int = i + 1
+		var end: int = start
+		while end < source.length():
+			var ch: String = source[end]
+			var code: int = ch.unicode_at(0)
+			var is_alnum: bool = (
+				(code >= 48 and code <= 57)
+				or (code >= 65 and code <= 90)
+				or (code >= 97 and code <= 122)
+				or ch == "_"
+			)
+			if not is_alnum:
+				break
+			end += 1
+		if end > start:
+			out[source.substr(start, end - start)] = true
+		i = maxi(end, start + 1)
 
 
 func _validate_effect(errors: Array[String], known_paths: Dictionary, context: String, operation: String, target: String) -> void:

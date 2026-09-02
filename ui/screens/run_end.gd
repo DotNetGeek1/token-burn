@@ -156,7 +156,9 @@ func _apply_verdict(score: Dictionary) -> void:
 				"%s: requirement met." % contract_name
 				if contract_name != "" else "The contract is complete."
 			)
-			_statement.set_note("%s %s" % [opening, _campaign_progress_text()])
+			_statement.set_note("%s %s%s" % [
+				opening, _campaign_progress_text(), _victory_module_unlock_text(),
+			])
 		"depth_complete":
 			_statement.set_title("DEPTH COMPLETE", ConsoleStyle.PHOSPHOR)
 			set_context("DEEP BURN")
@@ -183,6 +185,26 @@ func _apply_verdict(score: Dictionary) -> void:
 	if aside == "":
 		aside = str(score.get("comparison", ""))
 	_statement.set_aside(aside)
+
+
+## Compact angel-pool notice when this banked victory crosses a module gate.
+func _victory_module_unlock_text() -> String:
+	if not _earned_this_run:
+		return ""
+	var unlocked: Array[ModuleDefinition] = ContentDatabase.modules_unlocked_at_victory_counts(
+		MetaProgress.victories(), MetaProgress.victories_on("hard")
+	)
+	if unlocked.is_empty():
+		return ""
+	var names: PackedStringArray = []
+	for module in unlocked:
+		names.append(module.name)
+		if names.size() >= 6:
+			break
+	var listed: String = ", ".join(names)
+	if unlocked.size() > names.size():
+		listed = "%s, +%d more" % [listed, unlocked.size() - names.size()]
+	return " NEW MODULES ADDED TO ANGEL POOL: %s." % listed
 
 
 ## How close the run came, which is the only useful thing to say to somebody who

@@ -8,11 +8,12 @@ extends VenueScene
 ## instead of stacked in a 442-pixel column.
 ##
 ## The records go up the left because they are figures rather than things. The
-## board is the gallery, and it is a gallery of two shelves: what has been
-## permanently bought, and which ascension contracts have been beaten.
+## board is the gallery: permanent unlocks, every module in the angel pool with
+## its lock reason when gated, and which ascension contracts have been beaten.
 
 const UNLOCKS := "unlocks"
 const CONTRACTS := "contracts"
+const MODULES := "modules"
 
 var _kicker: Label = null
 var _records: VBoxContainer = null
@@ -153,7 +154,7 @@ func _total_ascensions() -> int:
 
 
 func _refresh_counters() -> void:
-	var wanted: Array[String] = [UNLOCKS]
+	var wanted: Array[String] = [UNLOCKS, MODULES]
 	if not ContentDatabase.ascension_contracts.is_empty():
 		wanted.append(CONTRACTS)
 	if wanted != _counter_order():
@@ -190,18 +191,34 @@ func _counter_order() -> Array[String]:
 
 ## Short enough to survive the archive's narrow index panel alongside a count.
 func _counter_label(key: String) -> String:
-	return "CONTRACTS" if key == CONTRACTS else "UNLOCKS"
+	match key:
+		CONTRACTS:
+			return "CONTRACTS"
+		MODULES:
+			return "MODULES"
+		_:
+			return "UNLOCKS"
 
 
 ## The full name, for the heading over the board where there is room for it.
 func _shelf_heading(key: String) -> String:
-	return "Ascension contracts" if key == CONTRACTS else "Permanent unlocks"
+	match key:
+		CONTRACTS:
+			return "Ascension contracts"
+		MODULES:
+			return "Modules"
+		_:
+			return "Permanent unlocks"
 
 
 func _shelf_size(key: String) -> int:
-	if key == CONTRACTS:
-		return ContentDatabase.ascension_contracts.size()
-	return MetaProgress.catalog().size()
+	match key:
+		CONTRACTS:
+			return ContentDatabase.ascension_contracts.size()
+		MODULES:
+			return ContentDatabase.modules.size()
+		_:
+			return MetaProgress.catalog().size()
 
 
 func _on_counter_pressed(key: String) -> void:
@@ -215,12 +232,16 @@ func _on_counter_pressed(key: String) -> void:
 func _refresh_board() -> void:
 	_board_panel.set_heading(_shelf_heading(_shelf))
 	var entries: Array = []
-	if _shelf == CONTRACTS:
-		for contract in ContentDatabase.ascension_contracts:
-			entries.append(_contract_entry(Dictionary(contract)))
-	else:
-		for unlock in MetaProgress.catalog():
-			entries.append(_unlock_entry(Dictionary(unlock)))
+	match _shelf:
+		CONTRACTS:
+			for contract in ContentDatabase.ascension_contracts:
+				entries.append(_contract_entry(Dictionary(contract)))
+		MODULES:
+			for module in ContentDatabase.modules:
+				entries.append(_module_entry(module))
+		_:
+			for unlock in MetaProgress.catalog():
+				entries.append(_unlock_entry(Dictionary(unlock)))
 	var note: String = ""
 	if entries.is_empty():
 		note = "NOTHING RECORDED YET — FINISH A RUN AND THIS FILLS UP"
@@ -266,6 +287,28 @@ func _contract_entry(contract: Dictionary) -> Dictionary:
 		"status_color": (
 			ConsoleStyle.PHOSPHOR if completions > 0 else ConsoleStyle.PHOSPHOR_DIM
 		),
+	}
+
+
+func _module_entry(module: ModuleDefinition) -> Dictionary:
+	var unlocked: bool = ContentDatabase.module_is_unlocked(module)
+	var reasons: PackedStringArray = ContentDatabase.module_lock_reasons(module)
+	var rarity: String = str(module.rarity).to_upper()
+	var evaluator := ExpressionEvaluator.new()
+	var spec: String = evaluator.render_template(module.description_template, module.parameters)
+	if not unlocked and not reasons.is_empty():
+		spec = " · ".join(reasons)
+	return {
+		"meta": null,
+		"name": module.name,
+		"figure": rarity if rarity != "" else "—",
+		"figure_color": ConsoleStyle.PHOSPHOR if unlocked else ConsoleStyle.PHOSPHOR_DIM,
+		"unit": "rarity",
+		"spec": spec,
+		"price": str(module.category).replace("_", " ").to_upper(),
+		"price_color": ConsoleStyle.PHOSPHOR_DIM,
+		"status": "IN POOL" if unlocked else "LOCKED",
+		"status_color": ConsoleStyle.PHOSPHOR if unlocked else ConsoleStyle.PHOSPHOR_DIM,
 	}
 
 
