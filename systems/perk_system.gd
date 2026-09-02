@@ -85,8 +85,8 @@ func can_swap(run_state: RunState, out_id: String, in_id: String, content_db: No
 	return swap_block_reason(run_state, out_id, in_id, content_db) == ""
 
 
-## Whether a perk can enter the run's collection. A full active loadout must not
-## remove an uncollected perk from the draft pool.
+## Whether a perk can enter the run's collection. Equipping is a separate
+## decision; angel drafts apply the stricter legal-loadout check below.
 func can_collect(run_state: RunState, perk_id: String, content_db: Node) -> bool:
 	if perk_id in collected_ids(run_state):
 		return false
@@ -279,9 +279,31 @@ func owned_tags(run_state: RunState, content_db: Node) -> Array:
 func undraftable_ids(run_state: RunState, content_db: Node) -> Array:
 	var blocked: Array = []
 	for perk in content_db.perks:
-		if not can_collect(run_state, perk.id, content_db):
+		if not can_collect(run_state, perk.id, content_db) \
+				or not _can_legally_join_loadout(run_state, perk.id, content_db):
 			blocked.append(perk.id)
 	return blocked
+
+
+## Angel cards must have at least one legal route into the six-slot loadout:
+## either an open slot now, or a valid swap for one currently equipped perk.
+## The temporary inventory entry mirrors accepting the card and is removed
+## before returning, so draft generation remains read-only.
+func _can_legally_join_loadout(
+	run_state: RunState, perk_id: String, content_db: Node
+) -> bool:
+	var inventory: Array = _ensure_inventory(run_state)
+	if perk_id in inventory:
+		return false
+	inventory.append(perk_id)
+	var legal: bool = can_equip(run_state, perk_id, content_db)
+	if not legal:
+		for outgoing_id in Array(run_state.build.get("perks", [])):
+			if can_swap(run_state, str(outgoing_id), perk_id, content_db):
+				legal = true
+				break
+	inventory.erase(perk_id)
+	return legal
 
 
 ## Perk ids that cannot be equipped right now (but may still be draftable).
@@ -309,20 +331,110 @@ func detect_synergies(run_state: RunState, content_db: Node) -> Array[String]:
 
 ## The synergy entries the active loadout currently satisfies.
 func active_synergies(run_state: RunState, content_db: Node) -> Array:
-	var owned: Array = run_state.build["perks"]
 	var found: Array = []
 	for synergy in content_db.synergies:
 		if not synergy is Dictionary:
 			continue
-		var required: Array = synergy.get("perks", [])
-		var has_all := true
-		for req in required:
-			if str(req) not in owned:
-				has_all = false
-				break
-		if has_all:
+		if synergy_is_active(run_state, content_db, synergy):
 			found.append(synergy)
 	return found
+
+
+func synergy_is_active(run_state: RunState, content_db: Node, synergy: Dictionary) -> bool:
+	var required: Array = synergy.get("perks", [])
+	if not required.is_empty():
+		var owned: Array = run_state.build["perks"]
+		for req in required:
+			if str(req) not in owned:
+				return false
+	for requirement in Array(synergy.get("requires_tag_counts", [])):
+		if not requirement is Dictionary:
+			continue
+		var needed: int = int(requirement.get("count", 0))
+		if needed <= 0:
+			continue
+		if slotted_tag_density(run_state, content_db, Array(requirement.get("tags", []))) < needed:
+			return false
+	return not required.is_empty() or not Array(synergy.get("requires_tag_counts", [])).is_empty()
+
+
+## Equipped perks plus modules actually sitting in a workflow. Benched cards do
+## not count: density is about the machine you are running, not the drawer.
+func slotted_tag_density(run_state: RunState, content_db: Node, tags: Array) -> int:
+	var wanted: Dictionary = {}
+	for tag in tags:
+		wanted[str(tag)] = true
+	if wanted.is_empty():
+		return 0
+	var counted: Dictionary = {}
+	var total: int = 0
+	for perk_id in run_state.build.get("perks", []):
+		var perk: PerkDefinition = content_db.get_perk(str(perk_id))
+		if perk == null or counted.has(perk.id):
+			continue
+		if _has_any_tag(perk.tags, wanted):
+			counted[perk.id] = true
+			total += 1
+	for workflow in Array(run_state.build.get("workflows", [])):
+		if not workflow is Dictionary:
+			continue
+		for module_id in Array(workflow.get("slots", [])):
+			var key: String = str(module_id)
+			if key == "" or counted.has(key):
+				continue
+			var module: ModuleDefinition = content_db.get_module(key)
+			if module == null:
+				continue
+			if _has_any_tag(module.tags, wanted):
+				counted[key] = true
+				total += 1
+	return total
+
+
+func _has_any_tag(tags: PackedStringArray, wanted: Dictionary) -> bool:
+	for tag in tags:
+		if wanted.has(str(tag)):
+			return true
+	return false
+
+
+func near_synergies(run_state: RunState, content_db: Node) -> Array:
+	var near: Array = []
+	for synergy in content_db.synergies:
+		if not synergy is Dictionary:
+			continue
+		if synergy_is_active(run_state, content_db, synergy):
+			continue
+		var progress: Dictionary = synergy_progress(run_state, content_db, synergy)
+		if int(progress.get("have", 0)) > 0 and int(progress.get("need", 0)) > 0:
+			near.append(progress)
+	return near
+
+
+func synergy_progress(run_state: RunState, content_db: Node, synergy: Dictionary) -> Dictionary:
+	var have: int = 0
+	var need: int = 0
+	var required: Array = Array(synergy.get("perks", []))
+	if not required.is_empty():
+		need = required.size()
+		for req in required:
+			if str(req) in Array(run_state.build.get("perks", [])):
+				have += 1
+	for requirement in Array(synergy.get("requires_tag_counts", [])):
+		if not requirement is Dictionary:
+			continue
+		var count: int = int(requirement.get("count", 0))
+		if count <= 0:
+			continue
+		need += count
+		have += mini(count, slotted_tag_density(run_state, content_db, Array(requirement.get("tags", []))))
+	return {
+		"name": str(synergy.get("name", "Synergy")),
+		"description": str(synergy.get("description", "")),
+		"have": have,
+		"need": need,
+		"active": have >= need and need > 0,
+	}
 
 
 func _ensure_inventory(run_state: RunState) -> Array:

@@ -687,5 +687,223 @@
         "effects": [{"operation": "multiply", "target": "compute.cooling", "value": "$cooling"}]
       }
     ]
+  },
+  {
+    "id": "perk.first_try",
+    "name": "First Try",
+    "rarity": "uncommon",
+    "tags": ["board", "workflow", "output"],
+    "description_template": "Complete a contract in one burn and that workflow's OUTPUT permanently gains +{gain}.",
+    "parameters": {"gain": 0.08},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 20,
+      "conditions": [{"left": "$one_shot", "operator": "==", "right": true}],
+      "effects": [{"operation": "add", "target": "mastery.output_gain", "value": "$gain"}]
+    }]
+  },
+  {
+    "id": "perk.clean_compile",
+    "name": "Clean Compile",
+    "rarity": "uncommon",
+    "tags": ["board", "workflow", "quality", "test"],
+    "description_template": "Complete a contract without creating a bug and that workflow's QUALITY permanently gains +{gain}.",
+    "parameters": {"gain": 0.08},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 20,
+      "conditions": [{"left": "$clean", "operator": "==", "right": true}],
+      "effects": [{"operation": "add", "target": "mastery.quality_gain", "value": "$gain"}]
+    }]
+  },
+  {
+    "id": "perk.cool_operator",
+    "name": "Cool Operator",
+    "rarity": "uncommon",
+    "tags": ["board", "workflow", "heat", "thermal_safety"],
+    "description_template": "Complete a contract without exceeding {threshold_pct}% heat and that workflow's THERMAL permanently gains +{gain}.",
+    "parameters": {"gain": 0.08, "threshold": 0.7, "threshold_pct": 70},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 20,
+      "conditions": [{"left": "$cool", "operator": "==", "right": true}],
+      "effects": [{"operation": "add", "target": "mastery.thermal_gain", "value": "$gain"}]
+    }]
+  },
+  {
+    "id": "perk.golden_run",
+    "name": "Golden Run",
+    "rarity": "rare",
+    "tags": ["board", "workflow", "quality", "output"],
+    "description_template": "A clean one-shot permanently grants +{gain} OUTPUT and +{gain} QUALITY to that workflow.",
+    "parameters": {"gain": 0.05},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 22,
+      "conditions": [
+        {"left": "$one_shot", "operator": "==", "right": true},
+        {"left": "$clean", "operator": "==", "right": true}
+      ],
+      "effects": [
+        {"operation": "add", "target": "mastery.output_gain", "value": "$gain"},
+        {"operation": "add", "target": "mastery.quality_gain", "value": "$gain"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.benchmark_chaser",
+    "name": "Benchmark Chaser",
+    "rarity": "rare",
+    "tags": ["board", "workflow", "output", "risk"],
+    "description_template": "Complete a contract at {overkill_pct}% overkill or more and that workflow's OUTPUT permanently gains +{gain}.",
+    "parameters": {"gain": 0.05, "overkill": 2.0, "overkill_pct": 200},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 22,
+      "conditions": [{"left": "$overkill_ratio", "operator": ">=", "right": "$overkill"}],
+      "effects": [{"operation": "add", "target": "mastery.output_gain", "value": "$gain"}]
+    }]
+  },
+  {
+    "id": "perk.sustainable_engineering",
+    "name": "Sustainable Engineering",
+    "rarity": "rare",
+    "tags": ["board", "workflow", "quality", "thermal_safety"],
+    "description_template": "A clean, cool completion permanently grants +{gain} QUALITY and +{gain} THERMAL to that workflow.",
+    "parameters": {"gain": 0.05},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 22,
+      "conditions": [
+        {"left": "$clean", "operator": "==", "right": true},
+        {"left": "$cool", "operator": "==", "right": true}
+      ],
+      "effects": [
+        {"operation": "add", "target": "mastery.quality_gain", "value": "$gain"},
+        {"operation": "add", "target": "mastery.thermal_gain", "value": "$gain"}
+      ]
+    }]
+  },
+  {
+    "id": "perk.redline_graduate",
+    "name": "Redline Graduate",
+    "rarity": "rare",
+    "tags": ["board", "workflow", "heat", "risk", "thermal_runaway"],
+    "description_template": "One-shot a contract that starts at {threshold_pct}% heat or hotter: that workflow gains +{gain} OUTPUT. Every burn generates +{heat_pct}% heat.",
+    "parameters": {"gain": 0.12, "threshold": 0.85, "threshold_pct": 85, "heat": 1.05, "heat_pct": 5},
+    "subscriptions": [
+      {
+        "event": "workflow.mastery_evaluated",
+        "priority": 24,
+        "conditions": [
+          {"left": "$one_shot", "operator": "==", "right": true},
+          {"left": "$start_heat_ratio", "operator": ">=", "right": "$threshold"}
+        ],
+        "effects": [{"operation": "add", "target": "mastery.output_gain", "value": "$gain"}]
+      },
+      {
+        "event": "board.batch_started",
+        "priority": 15,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "batch.heat_gen_mult", "value": "$heat"}]
+      }
+    ]
+  },
+  {
+    "id": "perk.knowledge_sharing",
+    "name": "Knowledge Sharing",
+    "rarity": "rare",
+    "tags": ["board", "workflow"],
+    "incompatible_ids": ["perk.specialist_silos"],
+    "description_template": "{copy_pct}% of a workflow's mastery gains copy to your other workflows.",
+    "parameters": {"ratio": 0.5, "copy_pct": 50},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 80,
+      "conditions": [],
+      "effects": [{"operation": "set", "target": "mastery.propagate_ratio", "value": "$ratio"}]
+    }]
+  },
+  {
+    "id": "perk.specialist_silos",
+    "name": "Specialist Silos",
+    "rarity": "rare",
+    "tags": ["board", "workflow"],
+    "incompatible_ids": ["perk.knowledge_sharing"],
+    "description_template": "Workflow mastery gains are {bonus_pct}% larger, but never copy to another workflow.",
+    "parameters": {"gain_mult": 1.5, "bonus_pct": 50},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 81,
+      "conditions": [],
+      "effects": [
+        {"operation": "multiply", "target": "mastery.gain_mult", "value": "$gain_mult"},
+        {"operation": "set", "target": "mastery.silo", "value": 1}
+      ]
+    }]
+  },
+  {
+    "id": "perk.no_free_lunch",
+    "name": "No Free Lunch",
+    "rarity": "legendary",
+    "tags": ["board", "workflow", "heat", "risk"],
+    "description_template": "Every whole +1.0 OUTPUT a workflow has trained causes +{heat_pct}% pipeline heat.",
+    "parameters": {"heat": 0.15, "heat_pct": 15},
+    "subscriptions": [{
+      "event": "board.batch_started",
+      "priority": 16,
+      "conditions": [],
+      "effects": [{
+        "operation": "add",
+        "target": "batch.heat_gen_mult",
+        "value_from": "batch.output_whole_stacks",
+        "value": "$heat"
+      }]
+    }]
+  },
+  {
+    "id": "perk.golden_path",
+    "name": "Golden Path",
+    "rarity": "legendary",
+    "tags": ["board", "workflow", "quality", "output", "keystone"],
+    "description_template": "Clean one-shots grow OUTPUT and QUALITY twice as fast. Creating any bug removes one trained stack from each.",
+    "parameters": {"clean_mult": 2.0},
+    "subscriptions": [
+      {
+        "event": "workflow.mastery_evaluated",
+        "priority": 70,
+        "conditions": [
+          {"left": "$one_shot", "operator": "==", "right": true},
+          {"left": "$clean", "operator": "==", "right": true}
+        ],
+        "effects": [
+          {"operation": "multiply", "target": "mastery.output_gain_mult", "value": "$clean_mult"},
+          {"operation": "multiply", "target": "mastery.quality_gain_mult", "value": "$clean_mult"}
+        ]
+      },
+      {
+        "event": "workflow.mastery_evaluated",
+        "priority": 70,
+        "conditions": [{"left": "$clean", "operator": "==", "right": false}],
+        "effects": [
+          {"operation": "set", "target": "mastery.strip_output", "value": 1},
+          {"operation": "set", "target": "mastery.strip_quality", "value": 1}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "perk.perpetual_benchmark",
+    "name": "Perpetual Benchmark",
+    "rarity": "legendary",
+    "tags": ["board", "workflow", "output", "risk", "keystone"],
+    "description_template": "Overkill of {overkill}× or more counts as an extra First Try: +{gain} OUTPUT.",
+    "parameters": {"gain": 0.08, "overkill": 3.0},
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 21,
+      "conditions": [{"left": "$overkill_ratio", "operator": ">=", "right": "$overkill"}],
+      "effects": [{"operation": "add", "target": "mastery.output_gain", "value": "$gain"}]
+    }]
   }
 ]

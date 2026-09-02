@@ -138,7 +138,8 @@ func draw_angel_offers(
 	run_state: RunState,
 	count: int = 3,
 	owned_tags: Array = [],
-	rarity_bias: float = 0.0
+	rarity_bias: float = 0.0,
+	blocked_ids: Array = []
 ) -> Array:
 	var pool: Array = []
 	var collected: Array = run_state.build.get("perk_inventory", [])
@@ -147,7 +148,7 @@ func draw_angel_offers(
 	var affinity: float = float(_build_tuning().get("draft_tag_affinity", 1.5))
 	var affinity_cap: float = float(_build_tuning().get("draft_tag_affinity_cap", 4.0))
 	for perk in perks:
-		if perk.id in collected:
+		if perk.id in collected or perk.id in blocked_ids:
 			continue
 		if not perk_is_unlocked(perk):
 			continue
@@ -471,6 +472,8 @@ func _load_modules() -> void:
 		module.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
 		module.combos = Array(entry.get("combos", []), TYPE_DICTIONARY, "", null)
 		module.finalizing_effects = Array(entry.get("finalizing_effects", []), TYPE_DICTIONARY, "", null)
+		module.folded_effects = Array(entry.get("folded_effects", []), TYPE_DICTIONARY, "", null)
+		module.completion_effects = Array(entry.get("completion_effects", []), TYPE_DICTIONARY, "", null)
 		modules.append(module)
 		_modules_by_id[module.id] = module
 
@@ -519,7 +522,20 @@ const KNOWN_UPGRADE_CATEGORIES := ["hardware", "component", "dwelling"]
 ## `job.`/`batch.`/`stage.` are per-resolution scratch values (see
 ## `ModifierContext` and `BoardSystem`'s per-stage batch dictionary),
 ## `build.`/`business.` accept new keys by design (`EffectResolver._finalize_to_run_state`).
-const DYNAMIC_TARGET_PREFIXES := ["job.", "batch.", "stage.", "build.", "business."]
+const DYNAMIC_TARGET_PREFIXES := ["job.", "batch.", "stage.", "build.", "business.", "mastery."]
+const KNOWN_MASTERY_TARGETS := [
+	"mastery.output_gain",
+	"mastery.quality_gain",
+	"mastery.thermal_gain",
+	"mastery.gain_mult",
+	"mastery.output_gain_mult",
+	"mastery.quality_gain_mult",
+	"mastery.thermal_gain_mult",
+	"mastery.propagate_ratio",
+	"mastery.silo",
+	"mastery.strip_output",
+	"mastery.strip_quality",
+]
 
 
 func _validate_content() -> void:
@@ -605,6 +621,12 @@ func collect_validation_errors() -> Array[String]:
 		_validate_effect_list(errors, known_paths, "module '%s'" % module.id, module.slot_effects)
 		_validate_effect_list(
 			errors, known_paths, "module '%s' finalizing" % module.id, module.finalizing_effects
+		)
+		_validate_effect_list(
+			errors, known_paths, "module '%s' folded" % module.id, module.folded_effects
+		)
+		_validate_effect_list(
+			errors, known_paths, "module '%s' completion" % module.id, module.completion_effects
 		)
 		for combo in module.combos:
 			if combo is Dictionary:
@@ -756,6 +778,9 @@ func _validate_effect(errors: Array[String], known_paths: Dictionary, context: S
 	if not KNOWN_EFFECT_OPERATIONS.has(operation.to_lower()):
 		errors.append("%s has unknown effect operation '%s'" % [context, operation])
 	if target == "" or operation.to_lower() == "convert":
+		return
+	if target.begins_with("mastery.") and not KNOWN_MASTERY_TARGETS.has(target):
+		errors.append("%s targets unknown mastery field '%s'" % [context, target])
 		return
 	for prefix in DYNAMIC_TARGET_PREFIXES:
 		if target.begins_with(prefix):

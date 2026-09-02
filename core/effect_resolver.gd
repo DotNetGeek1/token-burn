@@ -241,6 +241,7 @@ func _apply_effect_dict(
 			mod_ctx.run_state.add_rate_modifier(_as_float(value, 1.0), 999, chain_id)
 			metadata["rate_modifier"] = true
 			metadata["multiplier"] = _as_float(value, 1.0)
+			_add_context_trace_metadata(mod_ctx, metadata)
 			_record_trace(
 				chain_id, event_name, target, operation, current, current, source_id, phase, metadata
 			)
@@ -314,6 +315,7 @@ func _apply_effect_dict(
 		mod_ctx.set_value(target, result)
 
 	var tx := Transaction.new(chain_id, event_name, target, operation, result)
+	_add_context_trace_metadata(mod_ctx, metadata)
 	_record_trace(chain_id, event_name, target, operation, current, result, source_id, phase, metadata)
 	return tx
 
@@ -651,6 +653,16 @@ func _record_trace(
 	if not metadata.is_empty():
 		entry["metadata"] = metadata.duplicate(true)
 	_trace.append(entry)
+
+
+func _add_context_trace_metadata(mod_ctx: ModifierContext, metadata: Dictionary) -> void:
+	for key in [
+		"workflow_id", "workflow_name", "one_shot", "clean", "cool",
+		"start_heat_ratio", "overkill_ratio", "stage_created_bugs",
+		"stage_revealed", "stage_fixed",
+	]:
+		if mod_ctx.extras.has(key):
+			metadata[key] = mod_ctx.extras[key]
 
 
 ## Stats that ComputeSystem derives from scratch on every recalculation. Any

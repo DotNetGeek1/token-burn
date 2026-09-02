@@ -596,6 +596,7 @@ func _editing_job() -> Dictionary:
 func place_module(module_id: String, slot_index: int) -> bool:
 	if not _board_system.place_module(run_state, _editing_job(), module_id, slot_index):
 		return false
+	_invalidate_subscriptions()
 	_autosave()
 	return true
 
@@ -603,6 +604,7 @@ func place_module(module_id: String, slot_index: int) -> bool:
 func clear_slot(slot_index: int) -> bool:
 	if not _board_system.clear_slot(run_state, _editing_job(), slot_index):
 		return false
+	_invalidate_subscriptions()
 	_autosave()
 	return true
 
@@ -610,6 +612,7 @@ func clear_slot(slot_index: int) -> bool:
 func swap_slots(from_index: int, to_index: int) -> bool:
 	if not _board_system.swap_slots(run_state, _editing_job(), from_index, to_index):
 		return false
+	_invalidate_subscriptions()
 	_autosave()
 	return true
 
@@ -665,6 +668,7 @@ func auto_arrange_board(max_passes: int = 2) -> bool:
 		str(_board_system.owned_modules(run_state)), str(slots), str(job.get("id", ""))
 	]
 	if changed:
+		_invalidate_subscriptions()
 		_autosave()
 	return changed
 
@@ -863,6 +867,7 @@ func create_workflow(name: String = "") -> Dictionary:
 	var created: Dictionary = _board_system.create_workflow(run_state, name, ContentDatabase)
 	if created.is_empty():
 		return {}
+	_invalidate_subscriptions()
 	_autosave()
 	return created
 
@@ -877,6 +882,7 @@ func rename_workflow(index: int, name: String) -> bool:
 func delete_workflow(index: int) -> bool:
 	if not _board_system.delete_workflow(run_state, index):
 		return false
+	_invalidate_subscriptions()
 	_autosave()
 	return true
 

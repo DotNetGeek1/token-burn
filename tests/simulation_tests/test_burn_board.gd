@@ -16,6 +16,7 @@ func run() -> void:
 	_test_order_matters()
 	_test_cache_is_positional()
 	_test_agent_repeats_the_stage_above()
+	_test_cascades_count_replayed_bug_creation()
 	_test_ship_it_hides_its_bugs()
 	_test_tests_reveal_and_fix()
 	_test_burn_is_deterministic()
@@ -169,7 +170,28 @@ func _test_agent_repeats_the_stage_above() -> void:
 		int(repeated.get("bugs_added", 0)) > int(single.get("bugs_added", 0)),
 		"Including the model's bugs"
 	)
+	assert_true(
+		int(repeated.get("bugs_created", 0)) > int(single.get("bugs_created", 0)),
+		"Repeat telemetry counts every replayed bug before fixes"
+	)
 	assert_true(float(repeated.get("heat", 0.0)) > 0.0, "And it runs hot")
+
+
+func _test_cascades_count_replayed_bug_creation() -> void:
+	var cascaded: Dictionary = {}
+	for seed in range(200):
+		var harness := Harness.new(4000 + seed)
+		harness.pipeline(["op.cheap_model", "op.recursive_compiler"])
+		var burn: Dictionary = harness.burn()
+		var stages: Array = Array(burn.get("stages", []))
+		if stages.size() > 1 and int(Dictionary(stages[1]).get("cascade_depth", 0)) > 0:
+			cascaded = burn
+			break
+	assert_false(cascaded.is_empty(), "A deterministic seed exercises the cascade path")
+	assert_true(
+		int(cascaded.get("bugs_created", 0)) >= 2,
+		"Cascade telemetry counts the bug created by the replay"
+	)
 
 
 # --- Bugs --------------------------------------------------------------------

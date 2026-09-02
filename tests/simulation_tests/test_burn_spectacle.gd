@@ -26,6 +26,8 @@ func run() -> void:
 	_test_spectacle_flag_disables_preview_beats()
 	_test_clearing_the_bar_is_a_loud_beat()
 	_test_rising_bug_risk_is_a_loud_beat()
+	_test_stage_beats_show_combined_output()
+	_test_committed_mastery_compiles_gain_share_and_loss()
 
 
 func _beats_of(kind: String, beats: Array) -> Array:
@@ -41,6 +43,45 @@ func _labels(beats: Array) -> PackedStringArray:
 	for beat in beats:
 		labels.append(str(beat.get("label", "")))
 	return labels
+
+
+func _test_stage_beats_show_combined_output() -> void:
+	var harness := BurnBoardTest.Harness.new(9901)
+	harness.pipeline(["op.overclock"])
+	var burn: Dictionary = harness.burn()
+	var beats: Array = BurnSpectacle.compile(burn, harness.resolver.get_trace())
+	var stages: Array = _beats_of(BurnSpectacle.KIND_STAGE, beats)
+	assert_true(not stages.is_empty(), "Overclock produces a stage beat")
+	assert_almost_eq(
+		float(Dictionary(stages[0]).get("multiplier_after", 0.0)),
+		2.0,
+		0.001,
+		"Stage spectacle shows token_mult × progress_mult as combined OUTPUT"
+	)
+
+
+func _test_committed_mastery_compiles_gain_share_and_loss() -> void:
+	var burn := {
+		"ok": true,
+		"output_mult": 1.4,
+		"progress_tokens": 100.0,
+		"mastery": {
+			"applied": true,
+			"workflow_id": "workflow.1",
+			"workflow_name": "House Style",
+			"output_gain": 0.08,
+			"quality_gain": 0.0,
+			"thermal_gain": 0.0,
+			"propagated": true,
+			"stripped": true,
+		},
+	}
+	var beats: Array = BurnSpectacle.compile_mastery(burn)
+	assert_eq(beats.size(), 1, "Committed mastery produces one closing beat")
+	var label: String = str(Dictionary(beats[0]).get("label", ""))
+	assert_true("OUT+0.08" in label, "The mastery gain is named")
+	assert_true("SHARED" in label, "Propagation is named")
+	assert_true("STACK LOST" in label, "Golden Path loss is named")
 
 
 func _test_combo_subscriptions_carry_the_combo_name() -> void:

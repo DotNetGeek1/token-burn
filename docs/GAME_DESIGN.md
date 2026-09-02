@@ -13,7 +13,7 @@ After each job, you reinvest in hardware, housing, cooling, and strange rule-cha
 3. Process the job while managing tokens, time, heat, cost, and quality.
 4. Resolve complications such as bugs, scope creep, outages, and revisions.
 5. Get paid and gain reputation.
-6. Choose an upgrade, perk, or investment.
+6. Draft modules and perks, then route contracts through trained workflows.
 7. Pay rent, electricity, debt, and other overhead.
 8. Repeat until the run is won or collapses.
 
@@ -29,6 +29,15 @@ After each job, you reinvest in hardware, housing, cooling, and strange rule-cha
 - **Space:** Limits hardware, cooling, and staff capacity.
 - **Job slots:** How many contracts the installed machines can take at once.
 - **Reputation:** Opens stretch contracts on the band above the current location.
+- **Workflow mastery:** Each named pipeline trains run-long OUTPUT, QUALITY, and THERMAL multipliers. Hardware sets the raw token rate; the workflow decides how obscene that output becomes.
+
+Mastery is scored once, the first time a contract's remaining tokens hit zero. Clean and cool are the whole contract's history: bugs created on any burn, and peak heat across every burn. Shipping or polishing after that cannot train the same contract again.
+
+- **OUTPUT** seeds the pipeline's progress multiplier. The number the board shows is `token_mult × progress_mult`. Raw hardware tokens stay raw.
+- **QUALITY** multiplies positive pipeline quality only. Penalties and the contract's passive quality share stay additive.
+- **THERMAL** divides positive pipeline heat only. Signed cooling stays additive; ambient rig heat is unchanged.
+
+Tag density is the main build glue. Equipped perks and slotted modules count; the bench does not. Named perk pairs remain easter eggs.
 
 ## 4. Strategic archetypes
 

@@ -123,7 +123,7 @@ static func _effect_text(effect: EffectDefinition) -> String:
 static func blockers(upgrade: UpgradeDefinition, affordable: bool) -> Array:
 	var chips: Array = []
 	var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-	var cost: float = UpgradeSystem.purchase_cost(upgrade, level)
+	var cost: float = UpgradeSystem.quoted_cost(Simulation.run_state, upgrade, level)
 	if not affordable:
 		var shortfall: float = cost - float(Simulation.run_state.economy.get("cash", 0.0))
 		chips.append({

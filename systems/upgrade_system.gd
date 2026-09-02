@@ -100,6 +100,19 @@ static func purchase_cost(upgrade: UpgradeDefinition, level: int) -> float:
 	return upgrade.cost
 
 
+static func quoted_cost(run_state: RunState, upgrade: UpgradeDefinition, level: int) -> float:
+	var cost: float = purchase_cost(upgrade, level)
+	if upgrade.category != "hardware" and upgrade.category != "component":
+		return cost
+	var discount: float = clampf(float(run_state.build.get("hardware_discount", 0.0)), 0.0, 0.9)
+	return cost * (1.0 - discount)
+
+
+static func consume_hardware_discount(run_state: RunState) -> void:
+	if float(run_state.build.get("hardware_discount", 0.0)) > 0.0:
+		run_state.build["hardware_discount"] = 0.0
+
+
 static func is_maxed(run_state: RunState, upgrade: UpgradeDefinition) -> bool:
 	if not upgrade.repeatable or upgrade.max_level <= 0:
 		return false
@@ -225,9 +238,11 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 	if not _passes_gates(run_state, upgrade, content_db):
 		return false
 	var level: int = upgrade_level(run_state, upgrade_id)
-	var cost: float = purchase_cost(upgrade, level)
+	var cost: float = quoted_cost(run_state, upgrade, level)
 	if not economy_system.purchase(run_state, cost, "upgrade:%s" % upgrade_id):
 		return false
+	if upgrade.category == "hardware" or upgrade.category == "component":
+		consume_hardware_discount(run_state)
 	run_state.economy["recurring_costs_base"] = (
 		float(run_state.economy.get("recurring_costs_base", 0.0)) + upgrade.recurring_cost_delta
 	)
@@ -311,7 +326,7 @@ func can_purchase(run_state: RunState, upgrade_id: String, content_db: Node) -> 
 	if not _passes_gates(run_state, upgrade, content_db):
 		return false
 	var level: int = upgrade_level(run_state, upgrade_id)
-	return float(run_state.economy.get("cash", 0.0)) >= purchase_cost(upgrade, level)
+	return float(run_state.economy.get("cash", 0.0)) >= quoted_cost(run_state, upgrade, level)
 
 
 ## Every refusal that is not about cash, shared by the check and the purchase so

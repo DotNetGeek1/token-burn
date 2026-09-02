@@ -1,5 +1,9 @@
 # Token Burn — Multi-Agent Development Plan
 
+> Current-state note: Cloud, advertising, and sales systems were retired in
+> save v21. References below describe only the active local-hardware,
+> contract-demand, workflow-mastery architecture.
+
 ## 1. Working Model
 
 The project should be divided into independent workstreams with explicit ownership.
@@ -363,7 +367,7 @@ systems/economy/
 * Income.
 * Recurring expenses.
 * Rent.
-* Cloud bills.
+* Operating bills.
 * Power bills.
 * Debt.
 * Purchases.
@@ -411,7 +415,7 @@ systems/heat/
 ### Responsibilities
 
 * Local compute.
-* Cloud compute.
+* Workflow OUTPUT multiplication.
 * Token throughput.
 * Power consumption.
 * Cooling.
@@ -442,37 +446,38 @@ get_capacity()
 * Throughput calculation produces an effect trace.
 * Heat and cooling interact predictably.
 * Capacity limits are enforced.
-* Cloud compute can be added independently of local hardware.
+* Raw local hardware throughput remains independent from workflow mastery.
 * Extreme values do not generate invalid numbers.
 
 ---
 
-## Workstream F — Demand, Advertising and Reputation
+## Workstream F — Contract Demands and Reputation
 
 ### Ownership
 
 ```text
-systems/demand/
+systems/job_system.gd
+systems/board_system.gd
 ```
 
 ### Responsibilities
 
-* Job demand.
-* Advertising spend.
-* Lead generation.
+* Authored contract demands.
+* Workflow-to-contract matching.
+* Offer generation.
 * Reputation.
 * Job rarity.
 * Client quality.
 * Sector unlocks.
-* Offer refresh rates.
+* Deterministic offer refresh.
 
 ### Interfaces provided
 
 ```text
-calculate_demand()
-generate_leads()
+demand_report()
+workflow_match()
+generate_offers()
 update_reputation()
-calculate_offer_quality()
 ```
 
 ### Must not own
@@ -480,13 +485,13 @@ calculate_offer_quality()
 * Job resolution.
 * Economy ledger.
 * Job-board presentation.
-* Advertising screen layout.
+* Workflow-editor presentation.
 
 ### Acceptance criteria
 
-* Advertising affects lead quantity or quality.
+* Contract demands advertise capabilities the workflow can actually satisfy.
 * Reputation affects available contracts.
-* Demand curves are configurable.
+* Demand definitions are configurable content.
 * Offer generation remains reproducible with fixed seeds.
 
 ---
@@ -1393,7 +1398,7 @@ For the current stage, use approximately eight parallel agents.
 
 * Token throughput.
 * Hardware capacity.
-* Cloud compute.
+* Workflow OUTPUT.
 * Heat.
 * Cooling.
 * Throttling.

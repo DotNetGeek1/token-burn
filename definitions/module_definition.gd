@@ -44,6 +44,11 @@ extends Resource
 ## Optional effects on `board.batch_finalizing`, so a module can change the
 ## finished batch (Dead Man's Switch) without pretending those are slot effects.
 @export var finalizing_effects: Array[Dictionary] = []
+## After a stage has folded, so a card can react to bugs it just created or
+## revealed without guessing during slot resolution.
+@export var folded_effects: Array[Dictionary] = []
+## Fired when the assigned contract first completes, through the mastery event.
+@export var completion_effects: Array[Dictionary] = []
 
 
 func to_dict() -> Dictionary:
@@ -67,6 +72,8 @@ func to_dict() -> Dictionary:
 		"difficulty": Array(difficulty),
 		"combos": combos,
 		"finalizing_effects": finalizing_effects,
+		"folded_effects": folded_effects,
+		"completion_effects": completion_effects,
 	}
 
 
@@ -151,12 +158,24 @@ func _combo_subscriptions(event_name: String) -> Array:
 	return subscriptions
 
 
+func to_folded_subscriptions(event_name: String) -> Array:
+	return _effects_to_subscriptions(folded_effects, event_name)
+
+
+func to_completion_subscriptions(event_name: String) -> Array:
+	return _effects_to_subscriptions(completion_effects, event_name)
+
+
 func to_finalizing_subscriptions(event_name: String) -> Array:
-	if finalizing_effects.is_empty():
+	return _effects_to_subscriptions(finalizing_effects, event_name)
+
+
+func _effects_to_subscriptions(effects: Array, event_name: String) -> Array:
+	if effects.is_empty():
 		return []
 	var unconditional: Array = []
 	var subscriptions: Array = []
-	for effect in finalizing_effects:
+	for effect in effects:
 		if not effect is Dictionary:
 			continue
 		var conditions: Array = Array(effect.get("conditions", []))

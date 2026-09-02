@@ -13,6 +13,8 @@ const VALID_EVENTS := [
 	"board.batch_finalizing",
 	"board.batch_finished",
 	"board.cascade_triggered",
+	"board.stage_folded",
+	"workflow.mastery_evaluated",
 ]
 
 ## Contributions the Burn Board knows how to fold. A module writing anywhere
@@ -20,6 +22,10 @@ const VALID_EVENTS := [
 const VALID_STAGE_TARGETS := [
 	"stage.progress_mult",
 	"stage.token_mult",
+	"stage.quality_mult",
+	"stage.thermal_mult",
+	"stage.next_block_hidden",
+	"stage.next_hidden_on_bug",
 	"stage.quality",
 	"stage.bugs",
 	"stage.hidden_bugs",
@@ -458,7 +464,7 @@ func run() -> void:
 	for module in ContentDatabase.modules:
 		assert_true(module.id.begins_with("op."), "Module id is namespaced: %s" % module.id)
 		assert_true(
-			module.slot_effects.size() > 0 or module.finalizing_effects.size() > 0,
+			module.slot_effects.size() > 0 or module.finalizing_effects.size() > 0 or module.completion_effects.size() > 0,
 			"Module %s does something" % module.id
 		)
 		for effect in module.slot_effects:

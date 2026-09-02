@@ -665,7 +665,8 @@ func _redraw_angel_offers(sim: Node) -> void:
 		sim.run_state,
 		3,
 		sim.perk_system().owned_tags(sim.run_state, ContentDatabase),
-		0.0
+		0.0,
+		sim.perk_system().undraftable_ids(sim.run_state, ContentDatabase)
 	):
 		var offer_type: String = str(offer.get("type", ""))
 		var offer_id: String = str(offer.get("id", ""))

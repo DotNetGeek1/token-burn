@@ -326,14 +326,29 @@ func _refresh_board(racks: Dictionary) -> void:
 ## perks that are individually worse than a third.
 func _refresh_notice() -> void:
 	var entries: Array[Dictionary] = _active_synergy_entries()
-	if entries.is_empty():
+	var near: Array = Simulation.perk_system().near_synergies(Simulation.run_state, ContentDatabase)
+	if entries.is_empty() and near.is_empty():
 		_notice.text = "NO SYNERGIES RECOGNISED YET"
 		_notice.add_theme_color_override("font_color", ConsoleStyle.PHOSPHOR_DIM)
 		return
 	var names: PackedStringArray = []
 	for entry in entries:
 		names.append(str(entry.get("name", "Synergy")).to_upper())
-	_notice.text = "%d SYNERGY(S)\n%s" % [entries.size(), " · ".join(names)]
+	var near_names: PackedStringArray = []
+	for entry in near:
+		near_names.append("%s %d/%d" % [
+			str(entry.get("name", "Synergy")).to_upper(),
+			int(entry.get("have", 0)),
+			int(entry.get("need", 0)),
+		])
+	if names.is_empty():
+		_notice.text = "NEAR\n%s" % " · ".join(near_names)
+	elif near_names.is_empty():
+		_notice.text = "%d SYNERGY(S)\n%s" % [entries.size(), " · ".join(names)]
+	else:
+		_notice.text = "%d SYNERGY(S)\n%s\nNEAR %s" % [
+			entries.size(), " · ".join(names), " · ".join(near_names),
+		]
 	_notice.add_theme_color_override("font_color", ConsoleStyle.PHOSPHOR)
 
 
@@ -412,27 +427,13 @@ func _on_perk_action(meta: Variant) -> void:
 
 
 func _active_synergy_entries() -> Array[Dictionary]:
-	var owned: Array = Array(Simulation.run_state.build.get("perks", []))
 	var entries: Array[Dictionary] = []
-	for synergy in ContentDatabase.synergies:
+	for synergy in Simulation.perk_system().active_synergies(Simulation.run_state, ContentDatabase):
 		if not synergy is Dictionary:
 			continue
-		var required: Array = Array(Dictionary(synergy).get("perks", []))
-		var has_all: bool = true
-		for req in required:
-			if not (str(req) in owned):
-				has_all = false
-				break
-		if not has_all:
-			continue
-		var perk_names: PackedStringArray = []
-		for req in required:
-			var req_perk: PerkDefinition = ContentDatabase.get_perk(str(req))
-			if req_perk != null:
-				perk_names.append(req_perk.name)
 		entries.append({
 			"name": str(Dictionary(synergy).get("name", "Synergy")),
-			"perks": " + ".join(perk_names),
+			"perks": str(Dictionary(synergy).get("description", "")),
 		})
 	return entries
 

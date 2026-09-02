@@ -31,11 +31,24 @@ if [[ -n "${GODOT_ANDROID_KEYSTORE_RELEASE_PATH:-}" ]]; then
 fi
 
 echo "Exporting Android $MODE AAB to $AAB"
+rm -f "$AAB"
+STAMP="$(mktemp)"
+set +e
 godot --headless --path "$ROOT" --install-android-build-template "$EXPORT_FLAG" Android "$AAB"
+GODOT_EXIT=$?
+set -e
 
-if [[ ! -f "$AAB" ]]; then
-  echo "Export finished but $AAB is missing."
+# Editor addons can make Godot exit non-zero after a successful export
+# (teardown errors). A freshly written AAB is the real signal.
+if [[ ! -f "$AAB" || ! "$AAB" -nt "$STAMP" ]]; then
+  rm -f "$STAMP"
+  echo "Godot export failed (exit $GODOT_EXIT) and no new $AAB was written."
+  if [[ "$GODOT_EXIT" -ne 0 ]]; then exit "$GODOT_EXIT"; fi
   exit 1
+fi
+rm -f "$STAMP"
+if [[ "$GODOT_EXIT" -ne 0 ]]; then
+  echo "Godot exited $GODOT_EXIT after writing the AAB; continuing (editor addon teardown noise)."
 fi
 
 INSPECT=("$PYTHON" "$ROOT/tools/inspect_aab.py" "$AAB")

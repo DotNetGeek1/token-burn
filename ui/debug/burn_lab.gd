@@ -30,6 +30,8 @@ const KNOBS := [
 var _captions: Array[Label] = []
 var _sliders: Dictionary = {}
 var _readouts: Dictionary = {}
+var _burn_caption: Label = null
+var _burn_breakdown: ConsoleTable = null
 var _trace_caption: Label = null
 var _trace: ConsoleTable = null
 ## The last batch result, kept so it survives the trace being rebuilt under it.
@@ -58,6 +60,18 @@ func _build_body() -> void:
 
 	for knob in KNOBS:
 		_build_knob(column, knob)
+
+	_burn_caption = ConsoleStyle.label(
+		"BURN BREAKDOWN · CURRENT WORKFLOW", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
+	)
+	column.add_child(_burn_caption)
+	_burn_breakdown = ConsoleTable.new()
+	_burn_breakdown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_burn_breakdown)
+	_burn_breakdown.set_columns([
+		{"label": "value", "weight": 1.5},
+		{"label": "raw", "weight": 1.0, "align": HORIZONTAL_ALIGNMENT_RIGHT},
+	])
 
 	_trace_caption = ConsoleStyle.label(
 		"EFFECT TRACE · LATEST", ConsoleStyle.FONT_TINY, ConsoleStyle.PHOSPHOR_DIM
@@ -144,6 +158,7 @@ func refresh() -> void:
 		var slider: HSlider = _sliders[key]
 		slider.value = float(Simulation.tuning.get(key, 1.0))
 		_refresh_readout(key)
+	_refresh_burn_breakdown()
 	_refresh_trace()
 	_apply_body_metrics()
 
@@ -161,12 +176,16 @@ func _apply_body_metrics() -> void:
 	var font_small: int = ConsoleMetrics.font_small(scale)
 	for caption in _captions:
 		caption.add_theme_font_size_override("font_size", font_tiny)
+	if _burn_caption != null:
+		_burn_caption.add_theme_font_size_override("font_size", font_tiny)
 	if _trace_caption != null:
 		_trace_caption.add_theme_font_size_override("font_size", font_tiny)
 	for readout in _readouts.values():
 		(readout as Label).add_theme_font_size_override("font_size", font_small)
 	for slider in _sliders.values():
 		(slider as HSlider).custom_minimum_size = Vector2(0, ConsoleMetrics.px(20, scale))
+	if _burn_breakdown != null:
+		_burn_breakdown.set_metrics(scale)
 	if _trace != null:
 		_trace.set_metrics(scale)
 
@@ -195,6 +214,7 @@ func _refresh_readout(key: String) -> void:
 
 func _reload_content() -> void:
 	ContentDatabase.reload()
+	_refresh_burn_breakdown()
 	_refresh_trace()
 
 
@@ -211,6 +231,25 @@ func _refresh_trace() -> void:
 		_trace.add_note("NO EFFECTS RESOLVED YET")
 	if _batch_note != "":
 		_trace.add_note(_batch_note, ConsoleStyle.WARNING)
+
+
+func _refresh_burn_breakdown() -> void:
+	_burn_breakdown.clear()
+	var preview: Dictionary = Simulation.preview_burn()
+	if not preview.get("ok", false):
+		_burn_breakdown.add_note(str(preview.get("reason", "NO ACTIVE BURN")))
+		return
+	for row in [
+		["TOKEN MULT", float(preview.get("token_mult", 1.0))],
+		["PROGRESS MULT", float(preview.get("progress_mult", 1.0))],
+		["COMBINED OUTPUT", float(preview.get("output_mult", 1.0))],
+		["QUALITY MULT", float(preview.get("quality_mult", 1.0))],
+		["THERMAL MULT", float(preview.get("thermal_mult", 1.0))],
+	]:
+		_burn_breakdown.add_row([
+			str(row[0]),
+			{"text": "×%.3f" % float(row[1]), "color": ConsoleStyle.PHOSPHOR_DIM},
+		])
 
 
 func _run_batch() -> void:

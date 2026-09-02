@@ -33,6 +33,13 @@ func run() -> void:
 	_test_bench_is_blocked_when_it_orphans_a_dependent()
 	_test_owned_modules_steer_the_draft()
 	_test_conditions_see_the_stage_before_effects_run()
+	_test_flash_attention_combo_replaces_base_bonus()
+	_test_debug_symbols_requires_an_actual_reveal()
+	_test_ecc_memory_blocks_hidden_bug_creation()
+	_test_hidden_bugs_make_clean_room_dirty()
+	_test_tag_density_uses_slotted_modules()
+	_test_slot_edits_invalidate_tag_synergy_subscriptions()
+	_test_all_tag_density_thresholds_ignore_benched_inventory()
 
 
 # --- Harness -----------------------------------------------------------------
@@ -650,6 +657,140 @@ func _test_owned_modules_steer_the_draft() -> void:
 	assert_true(
 		"agent" in tags, "Along with the rest of what those modules say about the build"
 	)
+
+
+func _test_flash_attention_combo_replaces_base_bonus() -> void:
+	var build := Build.new(["op.large_context", "op.flash_attention"])
+	var burn: Dictionary = build.burn()
+	var flash: Dictionary = Array(burn.get("stages", []))[1]
+	assert_almost_eq(
+		float(Dictionary(flash.get("stage", {})).get("progress_mult", 0.0)),
+		1.55,
+		0.001,
+		"Prefetched replaces Flash Attention's base bonus instead of stacking with it"
+	)
+
+
+func _test_debug_symbols_requires_an_actual_reveal() -> void:
+	var clean := Build.new(["op.debug_symbols", "op.prompt"])
+	var without_hidden: Dictionary = clean.burn()
+	var baseline: Dictionary = Build.new(["op.prompt"]).burn()
+	var dirty := Build.new(["op.debug_symbols", "op.prompt"])
+	dirty.job["hidden_bugs"] = 1
+	var with_hidden: Dictionary = dirty.burn()
+	assert_almost_eq(
+		float(without_hidden.get("progress_mult", 0.0)),
+		float(baseline.get("progress_mult", 0.0)),
+		0.001,
+		"Debug Symbols does not buff the next stage when it revealed nothing"
+	)
+	assert_true(
+		float(with_hidden.get("progress_mult", 0.0)) > float(without_hidden.get("progress_mult", 0.0)),
+		"An actual reveal buffs the next stage"
+	)
+
+
+func _test_ecc_memory_blocks_hidden_bug_creation() -> void:
+	var burn: Dictionary = Build.new(["op.ecc_memory", "op.crash_dump"]).burn()
+	assert_eq(
+		int(burn.get("hidden_bugs_created", -1)),
+		0,
+		"ECC Memory blocks every hidden-bug channel on the next stage"
+	)
+
+
+func _test_hidden_bugs_make_clean_room_dirty() -> void:
+	var burn: Dictionary = Build.new(["op.crash_dump", "op.clean_room_gate"]).burn()
+	assert_true(int(burn.get("hidden_bugs_created", 0)) > 0, "The burn created a hidden bug")
+	assert_almost_eq(
+		float(burn.get("quality_mult", 0.0)),
+		1.0,
+		0.001,
+		"Hidden bugs disqualify Clean Room Gate's clean QUALITY bonus"
+	)
+
+
+func _test_tag_density_uses_slotted_modules() -> void:
+	var build := Build.new(["op.agent_swarm", "op.echo_chamber", "op.fractal_split"])
+	var names: Array[String] = build.perk_system.detect_synergies(build.state, ContentDatabase)
+	assert_true("Recursion Density" in names, "Three slotted recursion modules activate density")
+	build.board.slots(build.state)[2] = ""
+	names = build.perk_system.detect_synergies(build.state, ContentDatabase)
+	assert_false("Recursion Density" in names, "Benching one module deactivates density")
+
+
+func _test_slot_edits_invalidate_tag_synergy_subscriptions() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(7788)
+	sim.debug_collect_subscriptions()
+	for module_id in ["op.agent_swarm", "op.echo_chamber", "op.fractal_split"]:
+		if module_id not in Array(sim.run_state.build.get("modules", [])):
+			sim.run_state.build["modules"].append(module_id)
+	for index in range(3):
+		assert_true(
+			sim.place_module(
+				["op.agent_swarm", "op.echo_chamber", "op.fractal_split"][index],
+				index
+			),
+			"Recursion module can be slotted"
+		)
+	var active: bool = false
+	for sub in sim.debug_collect_subscriptions():
+		if str(sub.get("source_id", "")) == "synergy.Recursion Density":
+			active = true
+			break
+	assert_true(active, "Slot edits invalidate and rebuild tag-synergy subscriptions")
+	sim.free()
+
+
+func _test_all_tag_density_thresholds_ignore_benched_inventory() -> void:
+	var system := PerkSystem.new()
+	for synergy_name in [
+		"Recursion Density",
+		"Clean Room Culture",
+		"Heat Cult",
+		"Cold Iron",
+		"Four-Alarm Build",
+		"Safe Hands",
+	]:
+		var synergy: Dictionary = {}
+		for candidate in ContentDatabase.synergies:
+			if str(candidate.get("name", "")) == synergy_name:
+				synergy = Dictionary(candidate)
+				break
+		assert_false(synergy.is_empty(), "%s is authored" % synergy_name)
+		var requirement: Dictionary = Dictionary(
+			Array(synergy.get("requires_tag_counts", []))[0]
+		)
+		var wanted: Array = Array(requirement.get("tags", []))
+		var needed: int = int(requirement.get("count", 0))
+		var module_ids: Array = []
+		for module in ContentDatabase.modules:
+			for tag in module.tags:
+				if str(tag) in wanted:
+					module_ids.append(module.id)
+					break
+			if module_ids.size() >= needed:
+				break
+		assert_eq(module_ids.size(), needed, "%s has enough supporting modules" % synergy_name)
+		var state := RunState.new()
+		state.build["perks"] = []
+		state.build["modules"] = module_ids.duplicate()
+		state.build["workflows"] = [{
+			"id": "workflow.1",
+			"name": "Density Test",
+			"slots": module_ids.duplicate(),
+		}]
+		assert_true(
+			system.synergy_is_active(state, ContentDatabase, synergy),
+			"%s activates at its threshold" % synergy_name
+		)
+		state.build["workflows"][0]["slots"].pop_back()
+		assert_false(
+			system.synergy_is_active(state, ContentDatabase, synergy),
+			"%s ignores the now-benched final module" % synergy_name
+		)
 
 
 # --- Resolver contracts ------------------------------------------------------

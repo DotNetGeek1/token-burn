@@ -19,6 +19,7 @@ extends RefCounted
 
 const EVENT_BATCH_STARTED := "board.batch_started"
 const EVENT_STAGE_RESOLVED := "board.stage_resolved"
+const EVENT_STAGE_FOLDED := "board.stage_folded"
 ## Last chance to change what the batch achieves. Dispatched after every stage
 ## and demand has had its say but before tokens and progress are worked out, so
 ## an effect that multiplies throughput still reaches the burn it belongs to.
@@ -68,6 +69,10 @@ const HEAVY_QUALITY_THRESHOLD := 10.0
 const STAGE_DEFAULTS := {
 	"progress_mult": 1.0,
 	"token_mult": 1.0,
+	"quality_mult": 1.0,
+	"thermal_mult": 1.0,
+	"next_block_hidden": 0.0,
+	"next_hidden_on_bug": 0.0,
 	"quality": 0.0,
 	"bugs": 0.0,
 	"hidden_bugs": 0.0,
@@ -141,11 +146,13 @@ func _migrate_board_to_workflows(run_state: RunState) -> void:
 		layouts.append([])
 	var workflows: Array = []
 	for index in range(layouts.size()):
-		workflows.append({
+		var migrated: Dictionary = {
 			"id": "workflow.%d" % (index + 1),
 			"name": _default_workflow_name(index),
 			"slots": layouts[index],
-		})
+		}
+		normalize_workflow_fields(migrated)
+		workflows.append(migrated)
 	run_state.build["workflows"] = workflows
 	# A save that already carried two lanes has already earned the room for two.
 	var lanes: int = maxi(1, int(run_state.build.get("lane_count", 1)))
@@ -180,6 +187,7 @@ func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: N
 			workflow["id"] = "workflow.%d" % (index + 1)
 		if str(workflow.get("name", "")) == "":
 			workflow["name"] = _default_workflow_name(index)
+		normalize_workflow_fields(workflow)
 		var layout: Array = Array(workflow.get("slots", []))
 		var target: int = _normalized_layout_length(layout, slot_count_value, overflow_ok)
 		layout.resize(target)
@@ -216,6 +224,24 @@ func _default_workflow_name(index: int) -> String:
 func workflows(run_state: RunState) -> Array:
 	var stored: Variant = run_state.build.get("workflows", null)
 	return Array(stored) if stored is Array else []
+
+
+## OUTPUT / QUALITY / THERMAL are run-long training on this layout. The ledger
+## remembers each gain so Golden Path can peel a real stack rather than guess.
+static func normalize_workflow_fields(workflow: Dictionary) -> Dictionary:
+	if float(workflow.get("output_mult", 0.0)) <= 0.0:
+		workflow["output_mult"] = 1.0
+	if float(workflow.get("quality_mult", 0.0)) <= 0.0:
+		workflow["quality_mult"] = 1.0
+	if float(workflow.get("thermal_mult", 0.0)) <= 0.0:
+		workflow["thermal_mult"] = 1.0
+	if not (workflow.get("gain_ledger", null) is Array):
+		workflow["gain_ledger"] = []
+	return workflow
+
+
+static func workflow_output_display(token_mult: float, progress_mult: float) -> float:
+	return maxf(0.0, token_mult) * maxf(0.0, progress_mult)
 
 
 func workflow_count(run_state: RunState) -> int:
@@ -428,6 +454,7 @@ func create_workflow(run_state: RunState, name: String = "", content_db: Node = 
 		"name": name if name != "" else _default_workflow_name(index),
 		"slots": seed_layout,
 	}
+	normalize_workflow_fields(created)
 	list.append(created)
 	run_state.build["workflows"] = list
 	run_state.build["board"]["active_workflow"] = list.size() - 1
@@ -664,9 +691,18 @@ func resolve_burn(
 	var batch: Dictionary = {
 		"tokens": base_tokens,
 		"token_mult": 1.0,
-		"progress_mult": 1.0,
+		"progress_mult": maxf(0.0, float(workflow.get("output_mult", 1.0))),
+		"quality_mult": maxf(0.0, float(workflow.get("quality_mult", 1.0))),
+		"thermal_mult": maxf(0.01, float(workflow.get("thermal_mult", 1.0))),
+		"heat_gen_mult": 1.0,
 		"quality": 0.0,
+		"quality_positive": 0.0,
+		"quality_penalty": 0.0,
+		"quality_flat": 0.0,
 		"heat": 0.0,
+		"heat_positive": 0.0,
+		"heat_cooling": 0.0,
+		"heat_flat": 0.0,
 		"cost": 0.0,
 		"hide_bugs": 0.0,
 		"quality_to_progress": 0.0,
@@ -675,9 +711,17 @@ func resolve_burn(
 		"revealed": 0.0,
 		"fixed": 0.0,
 		"scope_tokens": 0.0,
+		"bugs_created": 0.0,
+		"hidden_bugs_created": 0.0,
+		"total_bugs_created": 0.0,
+		"pending_block_hidden": 0.0,
+		"pending_hidden_on_bug": 0.0,
+		"output_whole_stacks": floor(maxf(0.0, float(workflow.get("output_mult", 1.0)) - 1.0)),
 	}
 	var bugs_before: float = batch["known_bugs"]
 	var hidden_before: float = batch["hidden_bugs"]
+	batch["bugs_before"] = bugs_before
+	batch["hidden_before"] = hidden_before
 
 	var start_heat_ratio: float = _heat_ratio(run_state)
 	var dropped_stages: int = 0
@@ -687,6 +731,9 @@ func resolve_burn(
 			"slot_count": board_slots.size(),
 			"heat_ratio": start_heat_ratio,
 			"start_heat_ratio": start_heat_ratio,
+			"workflow_output_mult": float(workflow.get("output_mult", 1.0)),
+			"workflow_quality_mult": float(workflow.get("quality_mult", 1.0)),
+			"workflow_thermal_mult": float(workflow.get("thermal_mult", 1.0)),
 		}, board_slots
 	)
 
@@ -727,16 +774,22 @@ func resolve_burn(
 			dropped_stages += 1
 			messages.append("%s dropped — the rack blinked." % module.name)
 		else:
-			_fold(batch, stage, effective_multiplier, pending_cost_mult)
+			var fold_before: Dictionary = _fold_outcome_snapshot(batch)
+			_fold(batch, stage, effective_multiplier, pending_cost_mult, true)
+			_dispatch_stage_folded(
+				run_state, job, batch, stage, fold_before, module, rng, effect_resolver,
+				subscriptions, board_slots, order, position, index
+			)
 			if repeat > 0.0 and repeat_count > 0 and not previous_stage.is_empty():
 				for _fork in range(repeat_count):
 					_fold(
 						batch, previous_stage,
-						repeat * repeat_strength * effective_multiplier, pending_cost_mult
+						repeat * repeat_strength * effective_multiplier, pending_cost_mult, false
 					)
-				run_state.statistics["stage_repeats"] = int(
-					run_state.statistics.get("stage_repeats", 0)
-				) + repeat_count
+				if mode == ResolveMode.COMMIT:
+					run_state.statistics["stage_repeats"] = int(
+						run_state.statistics.get("stage_repeats", 0)
+					) + repeat_count
 			_apply_stage_rules(rules, module, stage, batch, job, messages)
 			cascade_depth = _maybe_cascade(
 				run_state, job, batch, stage, cascade_history, module, rng,
@@ -783,6 +836,9 @@ func resolve_burn(
 
 		pending_multiplier = maxf(0.0, float(stage["next_multiplier"]))
 		pending_cost_mult = maxf(0.0, float(stage["next_cost_mult"]))
+		if not dropped:
+			batch["pending_block_hidden"] = float(stage.get("next_block_hidden", 0.0))
+			batch["pending_hidden_on_bug"] = float(stage.get("next_hidden_on_bug", 0.0))
 		previous_stage = stage
 
 	# What the contract asked of this workflow, and what it costs to have
@@ -801,8 +857,12 @@ func resolve_burn(
 		}, reached_modules
 	)
 
+	_write_batch_views(batch)
 	var tokens: float = maxf(0.0, base_tokens * maxf(0.0, float(batch["token_mult"])))
 	var progress_tokens: float = tokens * maxf(0.0, float(batch["progress_mult"]))
+	var output_mult: float = workflow_output_display(
+		float(batch["token_mult"]), float(batch["progress_mult"])
+	)
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 	var convert: float = clampf(float(batch["quality_to_progress"]), 0.0, 1.0)
 	var converted_quality: float = 0.0
@@ -833,8 +893,12 @@ func resolve_burn(
 		"tokens": tokens,
 		"token_mult": float(batch["token_mult"]),
 		"progress_mult": float(batch["progress_mult"]),
+		"output_mult": output_mult,
+		"quality_mult": float(batch["quality_mult"]),
+		"thermal_mult": float(batch["thermal_mult"]),
 		"progress_tokens": maxf(0.0, float(batch["progress_tokens"])),
 		"quality": float(batch["quality"]),
+		"start_heat_ratio": start_heat_ratio,
 		"quality_converted": converted_quality,
 		# Signed: a pipeline built around Liquid Cooling or a tripped Circuit
 		# Breaker is meant to take heat back off the rig, and clamping the total
@@ -846,11 +910,14 @@ func resolve_burn(
 		"hidden_bugs": maxi(0, int(round(float(batch["hidden_bugs"])))),
 		"bugs_added": maxi(0, int(round(float(batch["known_bugs"]) - bugs_before))),
 		"hidden_added": maxi(0, int(round(float(batch["hidden_bugs"]) - hidden_before))),
+		"bugs_created": maxi(0, int(round(float(batch.get("bugs_created", 0.0))))),
+		"hidden_bugs_created": maxi(0, int(round(float(batch.get("hidden_bugs_created", 0.0))))),
 		"revealed": maxi(0, int(round(float(batch["revealed"])))),
 		"fixed": maxi(0, int(round(float(batch["fixed"])))),
 		"scope_tokens": maxf(0.0, float(batch["scope_tokens"])),
 		"hides_bugs": float(batch["hide_bugs"]) > 0.0,
 		"stages": stages,
+		"reached_modules": reached_modules.duplicate(),
 		"stage_count": stages.size(),
 		"truncated": limit < order.size(),
 		"messages": messages,
@@ -969,13 +1036,21 @@ func _apply_demands(demands: Array, batch: Dictionary, messages: Array[String]) 
 		var effects: Dictionary = Dictionary(entry.get("effects", {}))
 		if effects.is_empty():
 			continue
-		batch["quality"] = float(batch["quality"]) + float(effects.get("quality", 0.0))
+		var demand_quality: float = float(effects.get("quality", 0.0))
+		if demand_quality >= 0.0:
+			batch["quality_flat"] = float(batch.get("quality_flat", 0.0)) + demand_quality
+		else:
+			batch["quality_penalty"] = float(batch.get("quality_penalty", 0.0)) + demand_quality
 		batch["progress_mult"] = float(batch["progress_mult"]) * float(effects.get("progress_mult", 1.0))
-		batch["hidden_bugs"] = float(batch["hidden_bugs"]) + maxf(0.0, float(effects.get("hidden_bugs", 0.0)))
+		var demand_hidden: float = maxf(0.0, float(effects.get("hidden_bugs", 0.0)))
+		if demand_hidden > 0.0:
+			batch["hidden_bugs"] = float(batch["hidden_bugs"]) + demand_hidden
+			batch["hidden_bugs_created"] = float(batch.get("hidden_bugs_created", 0.0)) + demand_hidden
 		batch["cost"] = float(batch["cost"]) * maxf(0.0, float(effects.get("cost_mult", 1.0)))
 		bug_chance_mult *= maxf(0.0, float(effects.get("bug_chance_mult", 1.0)))
 		if not bool(entry.get("met", false)):
 			messages.append("%s: %s" % [str(entry.get("name", "This contract")), str(entry.get("note", ""))])
+	_write_batch_views(batch)
 	return bug_chance_mult
 
 
@@ -1064,8 +1139,74 @@ func _dispatch_stage(
 
 	for key in stage.keys():
 		stage[key] = _as_float(mod_ctx.get_value("stage.%s" % key, stage[key]))
+	_ingest_batch_context(batch, mod_ctx)
+
+
+func _dispatch_stage_folded(
+	run_state: RunState,
+	job: Dictionary,
+	batch: Dictionary,
+	stage: Dictionary,
+	fold_before: Dictionary,
+	module: ModuleDefinition,
+	rng: DeterministicRng,
+	effect_resolver: EffectResolver,
+	subscriptions: Array,
+	board_slots: Array,
+	order: Array,
+	position: int,
+	index: int
+) -> void:
+	var previous_id: String = str(board_slots[int(order[position - 1])]) if position > 0 else ""
+	var next_id: String = (
+		str(board_slots[int(order[position + 1])]) if position < order.size() - 1 else ""
+	)
+	var stage_known_created: float = maxf(
+		0.0,
+		float(batch.get("bugs_created", 0.0)) - float(fold_before.get("bugs_created", 0.0))
+	)
+	var stage_hidden_created: float = maxf(
+		0.0,
+		float(batch.get("hidden_bugs_created", 0.0))
+		- float(fold_before.get("hidden_bugs_created", 0.0))
+	)
+	var extras := {
+		"stage_index": index,
+		"stage_position": position,
+		"stage_count": order.size(),
+		"slot_count": board_slots.size(),
+		"is_first_stage": position == 0,
+		"is_last_stage": position == order.size() - 1,
+		"prev_module": previous_id,
+		"next_module": next_id,
+		"module_id": module.id,
+		"heat_ratio": _heat_ratio(run_state),
+		"stage_created_bugs": stage_known_created + stage_hidden_created,
+		"stage_known_bugs_created": stage_known_created,
+		"stage_hidden_bugs_created": stage_hidden_created,
+		"stage_revealed": maxf(
+			0.0, float(batch.get("revealed", 0.0)) - float(fold_before.get("revealed", 0.0))
+		),
+		"stage_fixed": maxf(
+			0.0, float(batch.get("fixed", 0.0)) - float(fold_before.get("fixed", 0.0))
+		),
+	}
+	var mod_ctx := ModifierContext.new(EVENT_STAGE_FOLDED, run_state)
+	mod_ctx.rng = rng.derive("board.stage_folded.%d" % index)
+	mod_ctx.job = job
+	mod_ctx.tags = PackedStringArray(Array(module.tags))
+	mod_ctx.extras = extras
+	for key in stage.keys():
+		mod_ctx.set_value("stage.%s" % key, stage[key])
 	for key in batch.keys():
-		batch[key] = _as_float(mod_ctx.get_value("batch.%s" % key, batch[key]))
+		mod_ctx.set_value("batch.%s" % key, batch[key])
+	var folded_subs: Array = subscriptions.duplicate()
+	folded_subs.append_array(module.to_folded_subscriptions(EVENT_STAGE_FOLDED))
+	effect_resolver.begin_action("board.stage_folded.%d.%s" % [index, module.id])
+	effect_resolver.dispatch(EVENT_STAGE_FOLDED, mod_ctx, folded_subs)
+	for key in stage.keys():
+		stage[key] = _as_float(mod_ctx.get_value("stage.%s" % key, stage[key]))
+	_ingest_batch_context(batch, mod_ctx)
 
 
 func _dispatch_batch_event(
@@ -1091,8 +1232,7 @@ func _dispatch_batch_event(
 	event_subscriptions.append_array(_module_event_subscriptions(board_slots, event_name))
 	effect_resolver.begin_action(event_name)
 	effect_resolver.dispatch(event_name, mod_ctx, event_subscriptions)
-	for key in batch.keys():
-		batch[key] = _as_float(mod_ctx.get_value("batch.%s" % key, batch[key]))
+	_ingest_batch_context(batch, mod_ctx)
 
 
 func _module_event_subscriptions(board_slots: Array, event_name: String) -> Array:
@@ -1134,7 +1274,8 @@ func _maybe_redline_twist(
 		return
 	var band_t: float = clampf((ratio - 1.0) / 0.40, 0.0, 1.0)
 	if rng.derive("corrupt_%d" % index).next_float() < 0.12 * band_t:
-		batch["quality"] = maxf(0.0, float(batch["quality"]) - 4.0)
+		batch["quality_penalty"] = float(batch.get("quality_penalty", 0.0)) - 4.0
+		_write_batch_views(batch)
 	if rng.derive("rerun_%d" % index).next_float() < 0.10 * band_t:
 		stage["repeat_count"] = float(stage["repeat_count"]) + 1.0
 		stage["heat"] = float(stage["heat"]) + 6.0
@@ -1219,11 +1360,12 @@ func _drain_cascade_queue(
 			continue
 		var multiplier: float = float(proc.get("multiplier", 1.0))
 		var cost_mult: float = float(proc.get("cost_mult", 1.0))
-		_fold(batch, replay, multiplier, cost_mult)
+		_fold(batch, replay, multiplier, cost_mult, false)
 		triggered += 1
-		run_state.statistics["cascades_triggered"] = int(
-			run_state.statistics.get("cascades_triggered", 0)
-		) + 1
+		if mode == ResolveMode.COMMIT:
+			run_state.statistics["cascades_triggered"] = int(
+				run_state.statistics.get("cascades_triggered", 0)
+			) + 1
 		var heat_ratio: float = _heat_ratio(run_state)
 		var source_module_id: String = str(proc.get("source_id", ""))
 		var replayed_module_id: String = str(entry.get("module_id", ""))
@@ -1247,10 +1389,11 @@ func _drain_cascade_queue(
 		var repeat_count: int = maxi(0, int(round(float(replay.get("repeat_count", 0.0)))))
 		if repeat > 0.0 and repeat_count > 0 and not prior.is_empty():
 			for _fork in range(repeat_count):
-				_fold(batch, prior, repeat * repeat_strength * multiplier, cost_mult)
-			run_state.statistics["stage_repeats"] = int(
-				run_state.statistics.get("stage_repeats", 0)
-			) + repeat_count
+				_fold(batch, prior, repeat * repeat_strength * multiplier, cost_mult, false)
+			if mode == ResolveMode.COMMIT:
+				run_state.statistics["stage_repeats"] = int(
+					run_state.statistics.get("stage_repeats", 0)
+				) + repeat_count
 		var next_depth: int = int(proc.get("depth", 1))
 		if hist_index > 0 and _cascade_hits(
 			run_state, replay, rng, int(entry.get("index", 0)), next_depth
@@ -1269,24 +1412,65 @@ func _drain_cascade_queue(
 ## Folds one stage's contribution into the batch at `multiplier` strength. A
 ## multiplier below 1 is a partial re-run (an agent echoing the stage above it);
 ## above 1 is a stage being amplified by the one before it.
-func _fold(batch: Dictionary, stage: Dictionary, multiplier: float, cost_mult: float) -> void:
+func _fold(
+	batch: Dictionary,
+	stage: Dictionary,
+	multiplier: float,
+	cost_mult: float,
+	consume_pending: bool = true
+) -> void:
 	var strength: float = maxf(0.0, multiplier)
+	var block_hidden: bool = false
+	var hidden_on_bug: float = 0.0
+	if consume_pending:
+		block_hidden = float(batch.get("pending_block_hidden", 0.0)) > 0.0
+		hidden_on_bug = maxf(0.0, float(batch.get("pending_hidden_on_bug", 0.0)))
+		batch["pending_block_hidden"] = 0.0
+		batch["pending_hidden_on_bug"] = 0.0
 	batch["token_mult"] = float(batch["token_mult"]) * _scaled_multiplier(float(stage["token_mult"]), strength)
 	batch["progress_mult"] = float(batch["progress_mult"]) * _scaled_multiplier(float(stage["progress_mult"]), strength)
-	batch["quality"] = float(batch["quality"]) + float(stage["quality"]) * strength
-	batch["heat"] = float(batch["heat"]) + float(stage["heat"]) * strength
+	batch["quality_mult"] = float(batch.get("quality_mult", 1.0)) * _scaled_multiplier(
+		float(stage.get("quality_mult", 1.0)), strength
+	)
+	batch["thermal_mult"] = maxf(0.01, float(batch.get("thermal_mult", 1.0)) * _scaled_multiplier(
+		float(stage.get("thermal_mult", 1.0)), strength
+	))
+	var staged_quality: float = float(stage["quality"]) * strength
+	if staged_quality >= 0.0:
+		batch["quality_positive"] = float(batch.get("quality_positive", 0.0)) + staged_quality
+	else:
+		batch["quality_penalty"] = float(batch.get("quality_penalty", 0.0)) + staged_quality
+	var staged_heat: float = float(stage["heat"]) * strength
+	var heat_gen: float = maxf(0.0, float(batch.get("heat_gen_mult", 1.0)))
+	if staged_heat > 0.0:
+		batch["heat_positive"] = float(batch.get("heat_positive", 0.0)) + staged_heat * heat_gen
+	else:
+		batch["heat_cooling"] = float(batch.get("heat_cooling", 0.0)) + staged_heat
 	batch["cost"] = float(batch["cost"]) + float(stage["cost"]) * strength * maxf(0.0, cost_mult)
 	batch["quality_to_progress"] = (
 		float(batch["quality_to_progress"]) + float(stage["quality_to_progress"]) * strength
 	)
 
 	var new_bugs: float = maxf(0.0, float(stage["bugs"]) * strength)
-	if float(batch["hide_bugs"]) > 0.0:
+	if float(batch["hide_bugs"]) > 0.0 and not block_hidden:
 		batch["hidden_bugs"] = float(batch["hidden_bugs"]) + new_bugs
+		if new_bugs > 0.0:
+			batch["hidden_bugs_created"] = float(batch.get("hidden_bugs_created", 0.0)) + new_bugs
 	else:
 		batch["known_bugs"] = float(batch["known_bugs"]) + new_bugs
-	batch["hidden_bugs"] = float(batch["hidden_bugs"]) + maxf(0.0, float(stage["hidden_bugs"]) * strength)
+		if new_bugs > 0.0:
+			batch["bugs_created"] = float(batch.get("bugs_created", 0.0)) + new_bugs
+	var staged_hidden: float = maxf(0.0, float(stage["hidden_bugs"]) * strength)
+	if block_hidden:
+		staged_hidden = 0.0
+	if staged_hidden > 0.0:
+		batch["hidden_bugs_created"] = float(batch.get("hidden_bugs_created", 0.0)) + staged_hidden
+		batch["hidden_bugs"] = float(batch["hidden_bugs"]) + staged_hidden
+	if not block_hidden and hidden_on_bug > 0.0 and (new_bugs > 0.0 or staged_hidden > 0.0):
+		batch["hidden_bugs_created"] = float(batch.get("hidden_bugs_created", 0.0)) + hidden_on_bug
+		batch["hidden_bugs"] = float(batch["hidden_bugs"]) + hidden_on_bug
 	batch["hide_bugs"] = float(batch["hide_bugs"]) + float(stage["hide_bugs"]) * strength
+	_write_batch_views(batch)
 
 	var reveal: float = minf(maxf(0.0, float(stage["reveal_bugs"]) * strength), float(batch["hidden_bugs"]))
 	if reveal > 0.0:
@@ -1339,7 +1523,8 @@ func _apply_stage_rules(
 				var forks: float = maxf(0.0, float(stage["repeat_count"]))
 				if repeat <= 0.0 or forks <= 0.0:
 					continue
-				batch["quality"] = float(batch["quality"]) - float(rule.get("value", 0.0)) * repeat * forks
+				batch["quality_penalty"] = float(batch.get("quality_penalty", 0.0)) - float(rule.get("value", 0.0)) * repeat * forks
+				_write_batch_views(batch)
 				messages.append("Compliance flags the recursive stage: quality docked.")
 			RULE_AGENT_SCOPE:
 				if not ("agent" in Array(module.tags)):
@@ -1353,12 +1538,75 @@ func _snapshot(batch: Dictionary) -> Dictionary:
 	return {
 		"progress_mult": float(batch["progress_mult"]),
 		"token_mult": float(batch["token_mult"]),
+		"output_mult": workflow_output_display(
+			float(batch["token_mult"]), float(batch["progress_mult"])
+		),
+		"quality_mult": float(batch.get("quality_mult", 1.0)),
+		"thermal_mult": float(batch.get("thermal_mult", 1.0)),
 		"quality": float(batch["quality"]),
 		"heat": float(batch["heat"]),
 		"cost": float(batch["cost"]),
 		"known_bugs": float(batch["known_bugs"]),
 		"hidden_bugs": float(batch["hidden_bugs"]),
+		"bugs_created": float(batch.get("bugs_created", 0.0)),
+		"hidden_bugs_created": float(batch.get("hidden_bugs_created", 0.0)),
 	}
+
+
+func _fold_outcome_snapshot(batch: Dictionary) -> Dictionary:
+	return {
+		"bugs_created": float(batch.get("bugs_created", 0.0)),
+		"hidden_bugs_created": float(batch.get("hidden_bugs_created", 0.0)),
+		"revealed": float(batch.get("revealed", 0.0)),
+		"fixed": float(batch.get("fixed", 0.0)),
+	}
+
+
+func _write_batch_views(batch: Dictionary) -> void:
+	var quality_mult: float = maxf(0.0, float(batch.get("quality_mult", 1.0)))
+	var thermal_mult: float = maxf(0.01, float(batch.get("thermal_mult", 1.0)))
+	batch["quality"] = (
+		float(batch.get("quality_positive", 0.0)) * quality_mult
+		+ float(batch.get("quality_penalty", 0.0))
+		+ float(batch.get("quality_flat", 0.0))
+	)
+	batch["heat"] = (
+		float(batch.get("heat_positive", 0.0)) / thermal_mult
+		+ float(batch.get("heat_cooling", 0.0))
+		+ float(batch.get("heat_flat", 0.0))
+	)
+	batch["total_bugs_created"] = (
+		float(batch.get("bugs_created", 0.0))
+		+ float(batch.get("hidden_bugs_created", 0.0))
+	)
+
+
+func _ingest_batch_context(batch: Dictionary, mod_ctx: ModifierContext) -> void:
+	var known_before: float = float(batch.get("known_bugs", 0.0))
+	var hidden_before: float = float(batch.get("hidden_bugs", 0.0))
+	_write_batch_views(batch)
+	for key in batch.keys():
+		if key == "quality" or key == "heat":
+			continue
+		batch[key] = _as_float(mod_ctx.get_value("batch.%s" % key, batch[key]))
+	_write_batch_views(batch)
+	var new_quality: float = _as_float(mod_ctx.get_value("batch.quality", batch["quality"]))
+	var new_heat: float = _as_float(mod_ctx.get_value("batch.heat", batch["heat"]))
+	var quality_delta: float = new_quality - float(batch["quality"])
+	var heat_delta: float = new_heat - float(batch["heat"])
+	if absf(quality_delta) > 0.0001:
+		batch["quality_flat"] = float(batch.get("quality_flat", 0.0)) + quality_delta
+	if absf(heat_delta) > 0.0001:
+		batch["heat_flat"] = float(batch.get("heat_flat", 0.0)) + heat_delta
+	var known_after: float = float(batch.get("known_bugs", 0.0))
+	var hidden_after: float = float(batch.get("hidden_bugs", 0.0))
+	if known_after > known_before:
+		batch["bugs_created"] = float(batch.get("bugs_created", 0.0)) + (known_after - known_before)
+	if hidden_after > hidden_before:
+		batch["hidden_bugs_created"] = float(batch.get("hidden_bugs_created", 0.0)) + (
+			hidden_after - hidden_before
+		)
+	_write_batch_views(batch)
 
 
 func _heat_ratio(run_state: RunState) -> float:

@@ -36,6 +36,10 @@ if ($env:GODOT_ANDROID_KEYSTORE_RELEASE_PATH) {
 }
 
 Write-Host "Exporting Android $mode AAB to $aab"
+if (Test-Path $aab) {
+    Remove-Item $aab -Force
+}
+$started = Get-Date
 $godotArgs = @(
     "--headless",
     "--path", $repoRoot,
@@ -44,13 +48,17 @@ $godotArgs = @(
     $aab
 )
 & $godotCmd.Source @godotArgs
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Godot export failed with exit code $LASTEXITCODE."
-    exit $LASTEXITCODE
-}
-if (-not (Test-Path $aab)) {
-    Write-Host "Export finished but $aab is missing."
+$godotExit = $LASTEXITCODE
+# Local editor addons can make Godot exit non-zero after a successful export
+# (teardown errors). A freshly written AAB is the real signal.
+$fresh = (Test-Path $aab) -and ((Get-Item $aab).LastWriteTime -ge $started)
+if (-not $fresh) {
+    Write-Host "Godot export failed (exit $godotExit) and no new $aab was written."
+    if ($godotExit -ne 0) { exit $godotExit }
     exit 1
+}
+if ($godotExit -ne 0) {
+    Write-Host "Godot exited $godotExit after writing the AAB; continuing (editor addon teardown noise)."
 }
 
 $inspect = @(Join-Path $repoRoot "tools\inspect_aab.py", $aab)

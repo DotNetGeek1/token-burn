@@ -148,6 +148,53 @@ func _print_statement(summary: Dictionary) -> void:
 			"%+.0f" % reputation_delta,
 			"Clearing the quality bar comfortably earns more than scraping under it. Reputation opens bigger clients and raises what they pay."
 		)
+	var workflows: Array = Array(summary.get("workflows", []))
+	if not workflows.is_empty():
+		var trained: PackedStringArray = []
+		for workflow in workflows:
+			if not workflow is Dictionary:
+				continue
+			trained.append("%s OUT ×%.2f Q ×%.2f T ×%.2f" % [
+				str(workflow.get("name", "Workflow")),
+				float(workflow.get("output_mult", 1.0)),
+				float(workflow.get("quality_mult", 1.0)),
+				float(workflow.get("thermal_mult", 1.0)),
+			])
+		_statement.add_item(
+			"Workflows",
+			" · ".join(trained),
+			"Each pipeline keeps the OUTPUT, QUALITY and THERMAL it trained this run."
+		)
+	var mastery_events: Array = Array(summary.get("mastery_events", []))
+	if not mastery_events.is_empty():
+		var changes: PackedStringArray = []
+		for report in mastery_events:
+			if not report is Dictionary:
+				continue
+			var parts: PackedStringArray = []
+			for axis in ["output", "quality", "thermal"]:
+				var gain: float = float(report.get("%s_gain" % axis, 0.0))
+				if gain != 0.0:
+					parts.append("%s%+.2f" % [axis.substr(0, 1).to_upper(), gain])
+			var stripped_output: float = float(report.get("stripped_output", 0.0))
+			var stripped_quality: float = float(report.get("stripped_quality", 0.0))
+			if stripped_output > 0.0:
+				parts.append("OUT−%.2f" % stripped_output)
+			if stripped_quality > 0.0:
+				parts.append("Q−%.2f" % stripped_quality)
+			if bool(report.get("propagated", false)):
+				parts.append("SHARED")
+			if not parts.is_empty():
+				changes.append("%s %s" % [
+					str(report.get("workflow_name", "Workflow")),
+					" ".join(parts),
+				])
+		if not changes.is_empty():
+			_statement.add_item(
+				"Mastery gained",
+				" · ".join(changes),
+				"Completion training, sharing and any Golden Path stack losses from this session."
+			)
 	var bugs: int = int(summary.get("bugs", 0))
 	if bugs > 0:
 		_statement.add_item(

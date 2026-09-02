@@ -28,6 +28,7 @@ const KIND_CONVERT := "convert"
 const KIND_QUALITY_GATE := "quality_gate"
 const KIND_BUG_RISK := "bug_risk"
 const KIND_FINAL := "final"
+const KIND_MASTERY := "mastery"
 
 const CONSEQUENCE_SCOPE := "scope"
 const CONSEQUENCE_BUG := "bug"
@@ -61,6 +62,17 @@ static func compile(burn: Dictionary, traces: Array = []) -> Array:
 	beats.append_array(_closing_beats(burn, board_traces))
 	_cap_holds(beats)
 	return beats
+
+
+## Completion mastery exists only after the authoritative burn commits, while
+## the stage spectacle is previewed before commit. Compile these closing beats
+## separately so the board can present the real result without replaying stages.
+static func compile_mastery(burn: Dictionary) -> Array:
+	return _mastery_beats(
+		burn,
+		float(burn.get("output_mult", burn.get("progress_mult", 1.0))),
+		float(burn.get("progress_tokens", 0.0))
+	)
 
 
 ## Older board code and incoming tests called `build`. Compile is the live path.
@@ -159,9 +171,11 @@ static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> 
 	var beats: Array = []
 	var after: Dictionary = stage.get("after", {})
 	var before: Dictionary = stage.get("before", {})
-	var progress_mult: float = float(after.get("progress_mult", 1.0))
+	var progress_mult: float = float(after.get("output_mult", after.get("progress_mult", 1.0)))
 	var tokens: float = _running_tokens(burn, after)
-	var multiplier_before: float = float(before.get("progress_mult", 1.0))
+	var multiplier_before: float = float(
+		before.get("output_mult", before.get("progress_mult", 1.0))
+	)
 	var tokens_before: float = _running_tokens(burn, before)
 	var combos: Array = stage.get("combos", [])
 	var forked: bool = (
@@ -231,7 +245,7 @@ static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> 
 
 static func _closing_beats(burn: Dictionary, traces: Array) -> Array:
 	var beats: Array = []
-	var progress_mult: float = float(burn.get("progress_mult", 1.0))
+	var progress_mult: float = float(burn.get("output_mult", burn.get("progress_mult", 1.0)))
 	var tokens: float = maxf(0.0, float(burn.get("progress_tokens", 0.0)))
 	if float(burn.get("quality_converted", 0.0)) > 0.0:
 		beats.append(_beat(
@@ -248,10 +262,60 @@ static func _closing_beats(burn: Dictionary, traces: Array) -> Array:
 				{}
 			))
 	beats.append_array(_consequence_beats(burn, progress_mult, tokens))
+	beats.append_array(_mastery_beats(burn, progress_mult, tokens))
 	beats.append(_beat(KIND_FINAL, FINAL_LABEL, true, progress_mult, tokens, {}))
 	if not beats.is_empty():
 		beats[beats.size() - 1]["hold"] = FINALE_HOLD
 	return beats
+
+
+static func _mastery_beats(burn: Dictionary, progress_mult: float, tokens: float) -> Array:
+	var beats: Array = []
+	var reports: Array = []
+	var direct: Dictionary = Dictionary(burn.get("mastery", {}))
+	if bool(direct.get("applied", false)):
+		reports.append(direct)
+	var seen: Dictionary = {}
+	if not direct.is_empty():
+		seen[str(direct.get("workflow_id", ""))] = true
+	for lane in Array(burn.get("lanes", [])):
+		if not lane is Dictionary:
+			continue
+		var lane_mastery: Dictionary = Dictionary(lane.get("mastery", {}))
+		var workflow_id: String = str(lane_mastery.get("workflow_id", ""))
+		if not bool(lane_mastery.get("applied", false)) or seen.has(workflow_id):
+			continue
+		seen[workflow_id] = true
+		reports.append(lane_mastery)
+	for mastery in reports:
+		beats.append(_mastery_beat(Dictionary(mastery), progress_mult, tokens))
+	return beats
+
+
+static func _mastery_beat(
+	mastery: Dictionary, progress_mult: float, tokens: float
+) -> Dictionary:
+	var parts: PackedStringArray = []
+	if float(mastery.get("output_gain", 0.0)) != 0.0:
+		parts.append("OUT%+.2f" % float(mastery.get("output_gain", 0.0)))
+	if float(mastery.get("quality_gain", 0.0)) != 0.0:
+		parts.append("Q%+.2f" % float(mastery.get("quality_gain", 0.0)))
+	if float(mastery.get("thermal_gain", 0.0)) != 0.0:
+		parts.append("T%+.2f" % float(mastery.get("thermal_gain", 0.0)))
+	if bool(mastery.get("stripped", false)):
+		parts.append("STACK LOST")
+	if bool(mastery.get("propagated", false)):
+		parts.append("SHARED")
+	if parts.is_empty():
+		return {}
+	return _beat(
+		KIND_MASTERY,
+		"%s  %s" % [str(mastery.get("workflow_name", "WORKFLOW")).to_upper(), " ".join(parts)],
+		true,
+		progress_mult,
+		tokens,
+		{}
+	)
 
 
 static func _beat(

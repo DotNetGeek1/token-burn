@@ -291,9 +291,8 @@ func _refresh_readouts(job: Dictionary, working: bool) -> void:
 	if heat_ratio >= REDLINE_RATIO:
 		heat_text += " redlined"
 	_laptop.set_meter("heat", "heat", heat_ratio, heat_text)
-	# Cloud bursts are bought a batch at a time out of the same account the rent
-	# comes out of, so what is left in it belongs on the deck where the spending
-	# happens rather than only on the wall behind the laptop.
+	# Cash is spent from this same deck as the next hardware purchase, so the
+	# remaining balance belongs here rather than only on the wall behind the laptop.
 	var cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
 	_laptop.set_stat(
 		"cash",
@@ -328,9 +327,9 @@ func _forecast_line(job: Dictionary, working: bool) -> String:
 		return str(preview.get("reason", "this pipeline produces nothing"))
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 	var parts: PackedStringArray = [
-		"%s BT ×%.2f +%s%%" % [
+		"%s BT OUT ×%.2f +%s%%" % [
 			NumberFormat.format(float(preview.get("tokens", 0.0))),
-			float(preview.get("progress_mult", 1.0)),
+			float(preview.get("output_mult", preview.get("progress_mult", 1.0))),
 			NumberFormat.format(
 				float(preview.get("progress_tokens", 0.0)) / requirement * 100.0
 			),
@@ -547,9 +546,19 @@ func _workflow_rows(job: Dictionary) -> Array:
 		var workflow_id: String = str(match_report.get("workflow_id", ""))
 		if workflow_id == assigned_id:
 			continue
+		var assigned_workflow: Dictionary = {}
+		for workflow in Simulation.workflows():
+			if str(Dictionary(workflow).get("id", "")) == workflow_id:
+				assigned_workflow = Dictionary(workflow)
+				break
 		rows.append({
 			"headline": "USE %s" % str(match_report.get("name", "workflow")).to_upper(),
-			"value": JobPresentation.match_summary(match_report).to_lower(),
+			"value": "%s  out ×%.2f q ×%.2f t ×%.2f" % [
+				JobPresentation.match_summary(match_report).to_lower(),
+				float(assigned_workflow.get("output_mult", 1.0)),
+				float(assigned_workflow.get("quality_mult", 1.0)),
+				float(assigned_workflow.get("thermal_mult", 1.0)),
+			],
 			"pressed": _on_assign_workflow.bind(job_id, workflow_id),
 		})
 	return rows
@@ -694,6 +703,8 @@ func _on_burn() -> void:
 	var result: Dictionary = Simulation.burn_batch(stage_limit)
 	var after: Dictionary = _consequence_snapshot(committed_job)
 	if result.get("ok", false):
+		var committed_burn: Dictionary = Dictionary(result.get("burn", {}))
+		await _animate_mastery(BurnSpectacle.compile_mastery(committed_burn))
 		await _animate_consequences(BurnSpectacle.compile_consequences(before, after))
 	_burning = false
 	refresh()
@@ -745,6 +756,8 @@ func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned
 			"%s BT" % NumberFormat.format(float(beat.get("tokens", 0.0))),
 			label
 		)
+	elif kind == BurnSpectacle.KIND_MASTERY:
+		_laptop.set_status("WORKFLOW TRAINED", label)
 	else:
 		_laptop.set_status(
 			"×%.2f > ×%.2f" % [
@@ -811,6 +824,15 @@ func _animate_consequences(beats: Array) -> void:
 		if role == "danger":
 			rig.shake(6.0)
 		await get_tree().create_timer(float(beat.get("hold", 0.35))).timeout
+
+
+func _animate_mastery(beats: Array) -> void:
+	for raw in beats:
+		if not raw is Dictionary or Dictionary(raw).is_empty():
+			continue
+		var beat: Dictionary = raw
+		_present_beat(beat, {}, 1.0, 0.0)
+		await get_tree().create_timer(float(beat.get("hold", BurnSpectacle.LOUD_HOLD))).timeout
 
 
 func _fast_forward(

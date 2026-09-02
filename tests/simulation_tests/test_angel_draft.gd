@@ -4,6 +4,7 @@ extends TestCase
 func run() -> void:
 	_test_draw_returns_three_mixed_offers()
 	_test_reroll_is_deterministic_for_sequence()
+	_test_angel_filters_perks_with_no_legal_swap()
 
 
 func _sim() -> Node:
@@ -43,3 +44,37 @@ func _test_reroll_is_deterministic_for_sequence() -> void:
 	assert_eq(ids_a, ids_b, "Sequence-keyed angel RNG reproduces the same table")
 	sim_a.free()
 	sim_b.free()
+
+
+func _test_angel_filters_perks_with_no_legal_swap() -> void:
+	var state := RunState.new()
+	state.reset()
+	state.build["modules"] = ["op.unit_tests"]
+	state.build["perks"] = [
+		"perk.thermal_paste",
+		"perk.clean_compile",
+		"perk.cool_operator",
+		"perk.sustainable_engineering",
+		"perk.audit_trail",
+		"perk.enterprise_grade",
+	]
+	state.build["perk_inventory"] = Array(state.build["perks"]).duplicate()
+	var system := PerkSystem.new()
+	var blocked: Array = system.undraftable_ids(state, ContentDatabase)
+	assert_true(
+		"perk.move_fast_and_break_everything" in blocked,
+		"A perk excluded by several active cards has no legal one-card swap"
+	)
+	var offers: Array = ContentDatabase.draw_angel_offers(
+		DeterministicRng.new(991),
+		state,
+		200,
+		system.owned_tags(state, ContentDatabase),
+		0.0,
+		blocked
+	)
+	for offer in offers:
+		assert_false(
+			str(offer.get("id", "")) == "perk.move_fast_and_break_everything",
+			"Angel offers omit perks that cannot legally join the loadout"
+		)

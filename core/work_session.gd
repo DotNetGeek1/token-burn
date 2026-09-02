@@ -662,7 +662,34 @@ func _build_session_summary(
 		"early_bonus_pct": early_bonus_total / float(early_jobs) if early_jobs > 0 else 0.0,
 		"stop_reason": reason,
 		"behind_on_contract": _behind_on_contract(sim),
+		"workflows": _workflow_mastery_lines(sim),
+		"mastery_events": _workflow_mastery_events(jobs),
 	}
+
+
+func _workflow_mastery_lines(sim: Node) -> Array:
+	var lines: Array = []
+	for workflow in sim.workflows():
+		if not workflow is Dictionary:
+			continue
+		lines.append({
+			"name": str(workflow.get("name", "Workflow")),
+			"output_mult": float(workflow.get("output_mult", 1.0)),
+			"quality_mult": float(workflow.get("quality_mult", 1.0)),
+			"thermal_mult": float(workflow.get("thermal_mult", 1.0)),
+		})
+	return lines
+
+
+func _workflow_mastery_events(jobs: Array) -> Array:
+	var events: Array = []
+	for job in jobs:
+		if not job is Dictionary:
+			continue
+		var report: Dictionary = Dictionary(job.get("mastery_report", {}))
+		if bool(report.get("applied", false)):
+			events.append(report.duplicate(true))
+	return events
 
 
 ## Whether the contract is further behind than the year has left to give it. A

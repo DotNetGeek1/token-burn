@@ -1,10 +1,26 @@
 class_name JobSystem
 extends RefCounted
 
+const WorkflowMastery := preload("res://systems/workflow_mastery_system.gd")
+
 ## How many authored contracts a band needs before the board stops borrowing
 ## from the band below it. Under this a thin location shows the same posting
 ## three times, which reads as a bug rather than as a quiet week.
 const MIN_BAND_POOL := 3
+
+
+static func normalize_job_evidence(job: Dictionary) -> Dictionary:
+	if int(job.get("burn_count", -1)) < 0:
+		job["burn_count"] = 0
+	if int(job.get("bugs_created", -1)) < 0:
+		job["bugs_created"] = 0
+	if int(job.get("hidden_bugs_created", -1)) < 0:
+		job["hidden_bugs_created"] = 0
+	if float(job.get("peak_heat_ratio", -1.0)) < 0.0:
+		job["peak_heat_ratio"] = 0.0
+	if not job.has("mastery_evaluated"):
+		job["mastery_evaluated"] = false
+	return job
 
 
 func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Node, tuning: Dictionary) -> void:
@@ -468,6 +484,7 @@ func run_burn(
 				return {"ok": false, "reason": str(lane_burn.get("reason", "The pipeline produced nothing."))}
 			continue
 		prompt_tokens += float(lane_burn.get("tokens", 0.0))
+		var remaining_before: float = float(job.get("tokens_remaining", 0.0))
 		_apply_burn(
 			run_state, job, lane_burn, rng, messages, mode, heat_system, economy_system,
 			effect_resolver, subscriptions
@@ -475,6 +492,11 @@ func run_burn(
 		_roll_job_risks(
 			run_state, job, lane_rng, messages, float(lane_burn.get("bug_chance_mult", 1.0)), mode
 		)
+		if mode == ResolveMode.COMMIT:
+			WorkflowMastery.evaluate(
+				run_state, job, lane_burn, remaining_before, effect_resolver, subscriptions,
+				lane_rng, mode
+			)
 		if primary.is_empty():
 			primary = lane_burn
 		lane_reports.append({
@@ -486,6 +508,7 @@ func run_burn(
 			"quality": float(lane_burn.get("quality", 0.0)),
 			"tokens_remaining": float(job.get("tokens_remaining", 0.0)),
 			"prompts_remaining": int(job.get("prompts_remaining", 0)),
+			"mastery": Dictionary(lane_burn.get("mastery", {})).duplicate(true),
 		})
 	run_state.statistics["peak_prompt_tokens"] = maxf(
 		float(run_state.statistics.get("peak_prompt_tokens", 0.0)), prompt_tokens
@@ -619,6 +642,10 @@ func _apply_burn(
 ) -> void:
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 	var remaining_before: float = float(job.get("tokens_remaining", 0.0))
+	normalize_job_evidence(job)
+	var start_heat_ratio: float = float(run_state.compute.get("heat", 0.0)) / maxf(
+		1.0, float(run_state.compute.get("heat_capacity", 100.0))
+	)
 	var progress: float = minf(remaining_before, float(burn.get("progress_tokens", 0.0)))
 	job["tokens_remaining"] = maxf(0.0, remaining_before - progress)
 	if remaining_before <= 0.0 and FeatureFlags.is_enabled("ready_to_ship_enabled"):
@@ -656,6 +683,12 @@ func _apply_burn(
 	job["known_bugs"] = maxi(0, int(burn.get("known_bugs", 0)))
 	job["hidden_bugs"] = maxi(0, int(burn.get("hidden_bugs", 0)))
 	job["bugs_this_job"] = int(job["known_bugs"]) + int(job["hidden_bugs"])
+	if mode == ResolveMode.COMMIT:
+		job["burn_count"] = int(job.get("burn_count", 0)) + 1
+		job["bugs_created"] = int(job.get("bugs_created", 0)) + int(burn.get("bugs_created", 0))
+		job["hidden_bugs_created"] = int(job.get("hidden_bugs_created", 0)) + int(
+			burn.get("hidden_bugs_created", 0)
+		)
 	if int(burn.get("bugs_added", 0)) > 0 or int(burn.get("hidden_added", 0)) > 0:
 		if mode == ResolveMode.COMMIT:
 			EventBus.emit_event(EventBus.EVENT_BUG_GENERATED)
@@ -670,6 +703,14 @@ func _apply_burn(
 		job["tokens_remaining"] = float(job.get("tokens_remaining", 0.0)) + scope_tokens
 
 	HeatSystem.apply_pipeline_heat(heat_system, run_state, float(burn.get("heat", 0.0)))
+	var after_heat_ratio: float = float(run_state.compute.get("heat", 0.0)) / maxf(
+		1.0, float(run_state.compute.get("heat_capacity", 100.0))
+	)
+	if mode == ResolveMode.COMMIT:
+		job["peak_heat_ratio"] = maxf(
+			float(job.get("peak_heat_ratio", 0.0)),
+			maxf(start_heat_ratio, after_heat_ratio)
+		)
 	var cost: float = float(burn.get("cost", 0.0))
 	if cost > 0.0:
 		economy_system.debit(run_state, cost, "pipeline_cost", {"job_id": job.get("id", "")})
@@ -735,6 +776,7 @@ func _roll_job_risks(
 		job["hidden_bugs"] = int(job.get("hidden_bugs", 0)) + 1
 		job["bugs_this_job"] = int(job.get("known_bugs", 0)) + int(job["hidden_bugs"])
 		if mode == ResolveMode.COMMIT:
+			job["hidden_bugs_created"] = int(job.get("hidden_bugs_created", 0)) + 1
 			EventBus.emit_event(EventBus.EVENT_BUG_GENERATED)
 
 	_roll_feature_creep(job, rng, messages)
@@ -1213,6 +1255,7 @@ func _prepare_job(offer: Dictionary, run_state: RunState, content_db: Node) -> D
 	job["bugs_this_job"] = 0
 	job["known_bugs"] = 0
 	job["hidden_bugs"] = 0
+	normalize_job_evidence(job)
 	job["features_added"] = []
 	job["blocked_slots"] = _blocked_slots_from_rules(job)
 	if str(job.get("workflow_id", "")) == "":

@@ -27,7 +27,7 @@ Reusable office props:
 - Coffee cups
 - Fire extinguisher
 - Landlord notices
-- Cloud-provider hologram
+- Benchmark and thermal-monitor displays
 
 ## 2. Platform direction
 
@@ -73,7 +73,7 @@ Office | Jobs | Build | Market | Menu
 │ Deadline   2.4 days             │
 │ Heat       ████████░░ 81%       │
 │                                 │
-│ [BOOST]       [CLOUD BURST]      │
+│ [BOOST]       [COOL RIG]         │
 ├─────────────────────────────────┤
 │ Office  Jobs  Build  Market  ☰  │
 └─────────────────────────────────┘
@@ -85,8 +85,8 @@ The diorama occupies roughly one-third of the screen and provides visual feedbac
 
 ```text
 ┌─────────────────────────────────┐
-│ JOB BOARD             Demand 4  │
-│ Ad Spend: $340/day       [Edit] │
+│ JOB BOARD             4 SLOTS   │
+│ Contract fit             [VIEW] │
 ├─────────────────────────────────┤
 │ ┌─────────────────────────────┐ │
 │ │ URGENT • FINTECH            │ │
@@ -127,18 +127,18 @@ Cards scroll vertically. Critical contract information remains visible without o
 │ └────────────┘  └────────────┘  │
 │                                 │
 │ ┌────────────┐  ┌────────────┐  │
-│ │ RECURSIVE  │  │ FREE TRIAL │  │
-│ │ INTERN     │  │            │  │
-│ │ Every 5th  │  │ Cloud free │  │
-│ │ agent +1   │  │ for 3 jobs │  │
+│ │ FIRST TRY  │  │ COOL       │  │
+│ │            │  │ OPERATOR   │  │
+│ │ One-shot   │  │ Cool jobs  │  │
+│ │ trains OUT │  │ train T    │  │
 │ └────────────┘  └────────────┘  │
 ├─────────────────────────────────┤
 │ CURRENT SYNERGIES               │
-│ ⚡ Reckless Scaling             │
-│ Recursive Intern + Free Trial   │
+│ Recursion Density               │
+│ 3 recursion cards active        │
 │                                 │
-│ Token rate              ×4.8    │
-│ Cloud liability        $32.4K   │
+│ House Style  OUT ×1.24          │
+│              Q ×1.08 T ×1.16    │
 ├─────────────────────────────────┤
 │ Office  Jobs  Build  Market  ☰  │
 └─────────────────────────────────┘
@@ -175,10 +175,10 @@ Rules:
 │ └─────────────────────────────┘ │
 │                                 │
 │ ┌─────────────────────────────┐ │
-│ │ MYSTERIOUS CLOUD CREDITS    │ │
-│ │ Free compute for 2 jobs     │ │
-│ │ Something is clearly wrong  │ │
-│ │                       FREE  │ │
+│ │ BENCHMARK HARNESS           │ │
+│ │ Clean one-shots discount    │ │
+│ │ the next hardware purchase  │ │
+│ │                       RARE  │ │
 │ └─────────────────────────────┘ │
 └─────────────────────────────────┘
 ```
@@ -222,7 +222,7 @@ Target one complete 10–15 minute run containing:
 - Staff management
 - Multiple currencies
 - Investors
-- Complex cloud-provider submenus
+- Hosted-compute provider submenus
 - Meta-progression
 - Online services
 - Procedurally generated perk text

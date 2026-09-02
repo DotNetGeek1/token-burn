@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource path="res://tools/run_balance_sweep.gd" type="Script" id="1"]
+
+[node name="RunBalanceSweep" type="Node"]
+script = ExtResource("1")

@@ -56,6 +56,7 @@ func run() -> void:
 	_test_v21_refunds_legacy_repeatable_levels()
 	_test_v21_skips_a_legacy_granted_cloud_account()
 	_test_v21_is_idempotent()
+	_test_v22_normalizes_workflow_mastery_and_job_evidence()
 	_test_corrupt_primary_save_recovers_from_backup()
 
 
@@ -471,6 +472,37 @@ func _test_v21_is_idempotent() -> void:
 		float(first.economy.get("cash", 0.0)),
 		0.01,
 		"Reloading a migrated save does not refund again"
+	)
+
+
+func _test_v22_normalizes_workflow_mastery_and_job_evidence() -> void:
+	var legacy: Dictionary = {
+		"save_version": 21,
+		"build": {
+			"workflows": [{"id": "workflow.1", "name": "House Style", "slots": ["op.prompt"]}],
+		},
+		"business": {
+			"active_jobs": [{"id": "job.old", "token_requirement": 100.0, "tokens_remaining": 40.0}],
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	var workflow: Dictionary = Array(migrated.build.get("workflows", []))[0]
+	assert_almost_eq(float(workflow.get("output_mult", 0.0)), 1.0, 0.001, "v22 seeds OUTPUT ×1")
+	assert_almost_eq(float(workflow.get("quality_mult", 0.0)), 1.0, 0.001, "v22 seeds QUALITY ×1")
+	assert_almost_eq(float(workflow.get("thermal_mult", 0.0)), 1.0, 0.001, "v22 seeds THERMAL ×1")
+	assert_true(workflow.get("gain_ledger") is Array, "v22 adds a gain ledger")
+	var job: Dictionary = Array(migrated.business.get("active_jobs", []))[0]
+	assert_eq(int(job.get("burn_count", -1)), 0, "v22 seeds burn_count")
+	assert_eq(int(job.get("bugs_created", -1)), 0, "v22 seeds bugs_created")
+	assert_false(bool(job.get("mastery_evaluated", true)), "v22 leaves mastery unevaluated")
+	var again := RunState.new()
+	again.from_dict(migrated.to_dict())
+	assert_almost_eq(
+		float(Array(again.build.get("workflows", []))[0].get("output_mult", 0.0)),
+		1.0,
+		0.001,
+		"v22 remigration is idempotent"
 	)
 
 

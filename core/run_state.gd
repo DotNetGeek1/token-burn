@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 21
+const SAVE_VERSION := 22
 
 ## Upgrades that no longer exist in content. Migration refunds the original
 ## purchase total from this table rather than looking the defs up.
@@ -448,6 +448,20 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_v20()
 	if from_version < 21:
 		_migrate_to_v21(from_version)
+	if from_version < 22:
+		_migrate_to_v22()
+
+
+## Workflows become trained engines: each layout keeps run-long OUTPUT / QUALITY
+## / THERMAL multipliers, and live contracts remember how they were burned.
+func _migrate_to_v22() -> void:
+	for workflow in Array(build.get("workflows", [])):
+		if workflow is Dictionary:
+			BoardSystem.normalize_workflow_fields(workflow)
+	for collection in ["active_jobs", "job_queue", "job_offers"]:
+		for job in Array(business.get(collection, [])):
+			if job is Dictionary:
+				JobSystem.normalize_job_evidence(job)
 
 
 ## Cloud, sales and advertising are gone. Refund paid purchases, drop the

@@ -501,7 +501,7 @@ Where feasible show:
 ```text
 estimated prompts to complete
 estimated heat exposure
-estimated running/power/cloud cost
+estimated running and power cost
 deadline margin
 known quality risk
 projected profit
@@ -560,8 +560,8 @@ Tutorial/optimisation.
 * tiny floor space;
 * cheap overhead;
 * desktops/components;
-* basic cloud;
-* teach contracts, workflow and upgrades.
+* starter workflow mastery;
+* teach contracts, local hardware, workflow and upgrades.
 
 Question:
 

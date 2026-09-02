@@ -33,12 +33,13 @@
     "rarity": "common",
     "starter": false,
     "badge": "+{quality} Q",
-    "tags": ["context", "quality"],
-    "description_template": "Feed it the whole repository. +{quality} quality for ${cost} a batch.",
-    "parameters": {"quality": 16, "cost": 45},
+    "tags": ["context", "quality", "positional"],
+    "description_template": "Feed it the whole repository. +{quality} quality and the stage below runs {next_pct}% stronger, for ${cost}.",
+    "parameters": {"quality": 12, "cost": 45, "next": 1.15, "next_pct": 15},
     "slot_effects": [
       {"operation": "add", "target": "stage.quality", "value": "$quality"},
-      {"operation": "add", "target": "stage.cost", "value": "$cost"}
+      {"operation": "add", "target": "stage.cost", "value": "$cost"},
+      {"operation": "multiply", "target": "stage.next_multiplier", "value": "$next"}
     ]
   },
   {
@@ -193,7 +194,7 @@
     "rarity": "uncommon",
     "starter": false,
     "badge": "×{throughput}",
-    "tags": ["hardware", "heat", "risk"],
+    "tags": ["hardware", "heat", "risk", "local"],
     "description_template": "×{throughput} tokens through the whole pipeline. +{heat} heat, ${cost} a batch.",
     "parameters": {"throughput": 2.0, "heat": 18, "cost": 10},
     "slot_effects": [
@@ -270,16 +271,16 @@
   },
   {
     "id": "op.spot_instance",
-    "name": "Spot Instance",
+    "name": "Silicon Lottery",
     "category": "hardware",
     "rarity": "common",
     "starter": false,
     "badge": "×{throughput}?",
-    "tags": ["hardware", "risk", "economy"],
-    "description_template": "Usually ×{throughput} tokens for ${cost} and +{heat} heat a batch. Roughly one batch in four, the region has nothing spare and you get ×1.",
+    "tags": ["hardware", "risk", "local"],
+    "description_template": "Usually ×{throughput} OUTPUT for ${cost} and +{heat} heat. One chip in four is a dud and you get ×1.",
     "parameters": {"throughput": 1.7, "cost": 8, "heat": 4},
     "slot_effects": [
-      {"operation": "reroll", "target": "stage.token_mult", "value": {"pick": [1.7, 1.7, 1.7, 1.0]}},
+      {"operation": "reroll", "target": "stage.progress_mult", "value": {"pick": [1.7, 1.7, 1.7, 1.0]}},
       {"operation": "add", "target": "stage.cost", "value": "$cost"},
       {"operation": "add", "target": "stage.heat", "value": "$heat"}
     ]
@@ -416,7 +417,7 @@
     "rarity": "uncommon",
     "starter": false,
     "badge": "Cool",
-    "tags": ["hardware", "cooling", "positional"],
+    "tags": ["hardware", "cooling", "positional", "local"],
     "description_template": "Takes {heat_cut} heat back off the batch for ${cost}, and lets the stage below it run at ×{boost}.",
     "parameters": {
       "heat_cut": 14,
@@ -737,13 +738,14 @@
     "category": "context",
     "rarity": "common",
     "starter": false,
-    "tags": ["context", "local"],
+    "tags": ["context", "local", "hardware"],
     "min_location_tier": 0,
-    "badge": "+{quality} Q",
-    "description_template": "Keep the weights on disk. +{quality} quality for ${cost} a batch.",
-    "parameters": {"quality": 6, "cost": 2},
+    "badge": "×{progress}",
+    "description_template": "Keep the weights on disk. ×{progress} OUTPUT and ×{thermal} THERMAL for ${cost}.",
+    "parameters": {"progress": 1.15, "thermal": 1.1, "cost": 2},
     "slot_effects": [
-      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "multiply", "target": "stage.thermal_mult", "value": "$thermal"},
       {"operation": "add", "target": "stage.cost", "value": "$cost"}
     ]
   },
@@ -769,7 +771,7 @@
     "category": "hardware",
     "rarity": "common",
     "starter": false,
-    "tags": ["hardware", "heat"],
+    "tags": ["hardware", "heat", "local"],
     "badge": "−{heat} H",
     "description_template": "Closed loop on the rack. −{heat} heat for ${cost} a batch.",
     "parameters": {"heat": -8, "cost": 6},
@@ -836,13 +838,21 @@
     "category": "test",
     "rarity": "common",
     "starter": false,
-    "tags": ["test", "quality"],
-    "badge": "+{quality} Q",
-    "description_template": "The compiler is your friend. +{quality} quality for ${cost} a batch.",
-    "parameters": {"quality": 12, "cost": 5},
+    "tags": ["test", "quality", "safe"],
+    "badge": "FIX",
+    "description_template": "Fixes {bugs} known bug. If this burn fixed anything, ×{quality_mult} QUALITY at the end.",
+    "parameters": {"bugs": 1, "quality_mult": 1.2, "cost": 5},
     "slot_effects": [
-      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.fix_bugs", "value": "$bugs"},
       {"operation": "add", "target": "stage.cost", "value": "$cost"}
+    ],
+    "finalizing_effects": [
+      {
+        "operation": "multiply",
+        "target": "batch.quality_mult",
+        "value": "$quality_mult",
+        "conditions": [{"left": "batch.fixed", "operator": ">", "right": 0}]
+      }
     ]
   },
   {
@@ -851,14 +861,27 @@
     "category": "test",
     "rarity": "legendary",
     "starter": false,
-    "tags": ["test", "quality"],
+    "tags": ["test", "quality", "safe"],
     "min_location_tier": 3,
-    "badge": "+{quality} Q",
-    "description_template": "Signed off by three committees. +{quality} quality, buries one hidden bug.",
-    "parameters": {"quality": 20},
+    "badge": "CLEAN ×{clean}",
+    "description_template": "Buries one hidden bug. Clean burn: ×{clean} QUALITY. Dirty burn: merely +{dirty} quality.",
+    "parameters": {"clean": 1.8, "dirty": 10},
     "slot_effects": [
-      {"operation": "add", "target": "stage.quality", "value": "$quality"},
       {"operation": "add", "target": "stage.fix_hidden_bugs", "value": 1}
+    ],
+    "finalizing_effects": [
+      {
+        "operation": "multiply",
+        "target": "batch.quality_mult",
+        "value": "$clean",
+        "conditions": [{"left": "batch.total_bugs_created", "operator": "==", "right": 0}]
+      },
+      {
+        "operation": "add",
+        "target": "batch.quality",
+        "value": "$dirty",
+        "conditions": [{"left": "batch.total_bugs_created", "operator": ">", "right": 0}]
+      }
     ]
   },
   {
@@ -983,6 +1006,322 @@
         "value": "$fault",
         "conditions": [{"left": "$batch_faulted", "operator": "==", "right": true}]
       }
+    ]
+  },
+  {
+    "id": "op.quantized_weights",
+    "name": "Quantized Weights",
+    "category": "model",
+    "rarity": "uncommon",
+    "draft_weight": 0.8,
+    "tags": ["model", "output", "hardware", "local"],
+    "badge": "×{progress}",
+    "description_template": "×{progress} OUTPUT, ×{quality} QUALITY, ×{thermal} THERMAL.",
+    "parameters": {"progress": 1.45, "quality": 0.8, "thermal": 1.3},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "multiply", "target": "stage.quality_mult", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.thermal_mult", "value": "$thermal"}
+    ]
+  },
+  {
+    "id": "op.speculative_decoding",
+    "name": "Speculative Decoding",
+    "category": "model",
+    "rarity": "uncommon",
+    "draft_weight": 0.8,
+    "tags": ["model", "output", "risk"],
+    "badge": "×{progress}?",
+    "description_template": "×{progress} OUTPUT and +{heat} heat. {bug_pct}% chance of creating a bug.",
+    "parameters": {"progress": 1.65, "heat": 6, "bug_chance": 0.25, "bug_pct": 25},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {
+        "operation": "add",
+        "target": "stage.bugs",
+        "value": 1,
+        "conditions": [{"left": "$stage_roll", "operator": "<", "right": "$bug_chance"}]
+      }
+    ]
+  },
+  {
+    "id": "op.flash_attention",
+    "name": "Flash Attention",
+    "category": "model",
+    "rarity": "rare",
+    "min_location_tier": 1,
+    "draft_weight": 0.75,
+    "tags": ["model", "output", "positional"],
+    "badge": "×{progress}",
+    "description_template": "×{progress} OUTPUT and +{heat} heat. Immediately after Large Context or The Monorepo: ×{combo} instead.",
+    "parameters": {"progress": 1.25, "combo": 1.55, "combo_bonus": 1.24, "heat": 8},
+    "combos": [
+      {
+        "name": "Prefetched",
+        "after": ["op.large_context", "op.monorepo"],
+        "description": "The context is already in SRAM: ×{combo} OUTPUT.",
+        "effects": [{"operation": "multiply", "target": "stage.progress_mult", "value": "$combo_bonus"}]
+      }
+    ],
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "add", "target": "stage.heat", "value": "$heat"}
+    ]
+  },
+  {
+    "id": "op.undervolt",
+    "name": "Undervolt",
+    "category": "hardware",
+    "rarity": "uncommon",
+    "draft_weight": 0.85,
+    "tags": ["hardware", "cooling", "quality", "local"],
+    "badge": "×{thermal} T",
+    "description_template": "×{progress} OUTPUT, ×{quality} QUALITY, ×{thermal} THERMAL.",
+    "parameters": {"progress": 0.85, "quality": 1.15, "thermal": 2.0},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "multiply", "target": "stage.quality_mult", "value": "$quality"},
+      {"operation": "multiply", "target": "stage.thermal_mult", "value": "$thermal"}
+    ]
+  },
+  {
+    "id": "op.power_limit",
+    "name": "Power Limit",
+    "category": "hardware",
+    "rarity": "uncommon",
+    "draft_weight": 0.85,
+    "tags": ["hardware", "heat", "local"],
+    "badge": "75%",
+    "description_template": "Below {threshold_pct}% heat: ×{progress} OUTPUT. Above it: ×{thermal} THERMAL instead.",
+    "parameters": {"threshold": 0.75, "threshold_pct": 75, "progress": 1.15, "thermal": 2.0},
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$progress",
+        "conditions": [{"left": "$heat_ratio", "operator": "<", "right": "$threshold"}]
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.thermal_mult",
+        "value": "$thermal",
+        "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": "$threshold"}]
+      }
+    ]
+  },
+  {
+    "id": "op.clean_room_gate",
+    "name": "Clean Room Gate",
+    "category": "test",
+    "rarity": "rare",
+    "min_location_tier": 1,
+    "draft_weight": 0.75,
+    "tags": ["test", "quality", "safe"],
+    "badge": "CLEAN ×{clean}",
+    "description_template": "If this burn created no bugs: ×{clean} QUALITY. Otherwise ×{dirty} OUTPUT.",
+    "parameters": {"clean": 1.5, "dirty": 0.85},
+    "finalizing_effects": [
+      {
+        "operation": "multiply",
+        "target": "batch.quality_mult",
+        "value": "$clean",
+        "conditions": [{"left": "batch.total_bugs_created", "operator": "==", "right": 0}]
+      },
+      {
+        "operation": "multiply",
+        "target": "batch.progress_mult",
+        "value": "$dirty",
+        "conditions": [{"left": "batch.total_bugs_created", "operator": ">", "right": 0}]
+      }
+    ]
+  },
+  {
+    "id": "op.regression_suite",
+    "name": "Regression Suite",
+    "category": "test",
+    "rarity": "uncommon",
+    "draft_weight": 0.8,
+    "tags": ["test", "quality", "bugs"],
+    "badge": "REPAIR ×{quality}",
+    "description_template": "If bugs were created and all were fixed, ×{quality} QUALITY.",
+    "parameters": {"quality": 1.4},
+    "finalizing_effects": [
+      {
+        "operation": "multiply",
+        "target": "batch.quality_mult",
+        "value": "$quality",
+        "conditions": [
+          {"left": "batch.total_bugs_created", "operator": ">", "right": 0},
+          {"left": "batch.fixed", "operator": ">=", "right": "batch.total_bugs_created"}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.benchmark_harness",
+    "name": "Benchmark Harness",
+    "category": "test",
+    "rarity": "rare",
+    "min_location_tier": 2,
+    "draft_weight": 0.7,
+    "tags": ["test", "hardware", "economy"],
+    "badge": "−{discount_pct}% HW",
+    "description_template": "A clean one-shot grants {discount_pct}% off the next hardware purchase.",
+    "parameters": {"discount": 0.1, "discount_pct": 10},
+    "completion_effects": [
+      {
+        "operation": "add",
+        "target": "build.hardware_discount",
+        "value": "$discount",
+        "conditions": [
+          {"left": "$one_shot", "operator": "==", "right": true},
+          {"left": "$clean", "operator": "==", "right": true}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "op.branch_predictor",
+    "name": "Branch Predictor",
+    "category": "model",
+    "rarity": "uncommon",
+    "draft_weight": 0.75,
+    "tags": ["model", "positional", "risk"],
+    "badge": "NEXT ×{next}",
+    "description_template": "The stage below runs ×{next} OUTPUT. If it creates a bug, add another hidden bug.",
+    "parameters": {"next": 1.6, "hidden": 1},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.next_multiplier", "value": "$next"},
+      {"operation": "add", "target": "stage.next_hidden_on_bug", "value": "$hidden"}
+    ]
+  },
+  {
+    "id": "op.ecc_memory",
+    "name": "ECC Memory",
+    "category": "hardware",
+    "rarity": "uncommon",
+    "draft_weight": 0.8,
+    "tags": ["hardware", "safe", "test", "local"],
+    "badge": "ECC",
+    "description_template": "The stage below creates no hidden bugs, but runs ×{progress} OUTPUT.",
+    "parameters": {"progress": 0.9},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.next_multiplier", "value": "$progress"},
+      {"operation": "add", "target": "stage.next_block_hidden", "value": 1}
+    ]
+  },
+  {
+    "id": "op.thermal_recuperator",
+    "name": "Thermal Recuperator",
+    "category": "hardware",
+    "rarity": "rare",
+    "min_location_tier": 1,
+    "draft_weight": 0.75,
+    "tags": ["hardware", "cooling", "heat", "local"],
+    "badge": "−{heat} H",
+    "description_template": "−{heat} heat. If the burn started at or above {threshold_pct}% heat, the stage below gets ×{next} OUTPUT.",
+    "parameters": {"heat": -12, "threshold": 0.7, "threshold_pct": 70, "next": 1.3},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.heat", "value": "$heat"},
+      {
+        "operation": "multiply",
+        "target": "stage.next_multiplier",
+        "value": "$next",
+        "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": "$threshold"}]
+      }
+    ]
+  },
+  {
+    "id": "op.batch_scheduler",
+    "name": "Batch Scheduler",
+    "category": "agent",
+    "rarity": "uncommon",
+    "draft_weight": 0.75,
+    "tags": ["agent", "output", "positional"],
+    "badge": "5+",
+    "description_template": "Pipeline has {long} or more stages: ×{long_progress} OUTPUT. Otherwise ×{short}.",
+    "parameters": {"long": 5, "long_progress": 1.6, "short": 0.9},
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$long_progress",
+        "conditions": [{"left": "$stage_count", "operator": ">=", "right": "$long"}]
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$short",
+        "conditions": [{"left": "$stage_count", "operator": "<", "right": "$long"}]
+      }
+    ]
+  },
+  {
+    "id": "op.vram_compression",
+    "name": "VRAM Compression",
+    "category": "model",
+    "rarity": "uncommon",
+    "min_location_tier": 1,
+    "draft_weight": 0.8,
+    "tags": ["model", "output", "hardware"],
+    "badge": "×{progress}",
+    "description_template": "×{progress} OUTPUT, ×{thermal} THERMAL, ×{quality} QUALITY.",
+    "parameters": {"progress": 1.35, "thermal": 1.25, "quality": 0.8},
+    "slot_effects": [
+      {"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+      {"operation": "multiply", "target": "stage.thermal_mult", "value": "$thermal"},
+      {"operation": "multiply", "target": "stage.quality_mult", "value": "$quality"}
+    ]
+  },
+  {
+    "id": "op.debug_symbols",
+    "name": "Debug Symbols",
+    "category": "test",
+    "rarity": "uncommon",
+    "draft_weight": 0.8,
+    "tags": ["test", "quality", "positional"],
+    "badge": "+{quality} Q",
+    "description_template": "+{quality} quality. Every bug this stage reveals makes the next stage {next_pct}% stronger.",
+    "parameters": {"quality": 8, "reveal": 1, "next": 1.2, "next_pct": 20},
+    "slot_effects": [
+      {"operation": "add", "target": "stage.quality", "value": "$quality"},
+      {"operation": "add", "target": "stage.reveal_bugs", "value": "$reveal"}
+    ],
+    "folded_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.next_multiplier",
+        "value": "$next",
+        "conditions": [{"left": "$stage_revealed", "operator": ">", "right": 0}]
+      }
+    ]
+  },
+  {
+    "id": "op.power_virus",
+    "name": "Power Virus",
+    "category": "hardware",
+    "rarity": "legendary",
+    "tags": ["hardware", "output", "heat", "risk"],
+    "min_location_tier": 3,
+    "draft_weight": 0.6,
+    "badge": "×{progress}",
+    "description_template": "×{progress} OUTPUT and ×{thermal} THERMAL. Already redlined: ×{redline} OUTPUT instead.",
+    "parameters": {"progress": 2.0, "thermal": 0.65, "redline": 3.0, "threshold": 0.85},
+    "slot_effects": [
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$progress",
+        "conditions": [{"left": "$heat_ratio", "operator": "<", "right": "$threshold"}]
+      },
+      {
+        "operation": "multiply",
+        "target": "stage.progress_mult",
+        "value": "$redline",
+        "conditions": [{"left": "$heat_ratio", "operator": ">=", "right": "$threshold"}]
+      },
+      {"operation": "multiply", "target": "stage.thermal_mult", "value": "$thermal"}
     ]
   }
 ]

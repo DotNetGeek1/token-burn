@@ -297,7 +297,14 @@ func _refresh_workflow_picker() -> void:
 		var workflow: Dictionary = Dictionary(workflows[index])
 		var filled: int = _filled_count(Array(workflow.get("slots", [])))
 		_workflow_picker.add_item(
-			"%d  %s%s%d MOD" % [index + 1, str(workflow.get("name", "Workflow")).to_upper(), DOT, filled],
+			"%d  %s%s%d MOD%s%s" % [
+				index + 1,
+				str(workflow.get("name", "Workflow")).to_upper(),
+				DOT,
+				filled,
+				DOT,
+				_mastery_short(workflow),
+			],
 			index
 		)
 	_workflow_picker.select(Simulation.active_workflow_index())
@@ -368,9 +375,10 @@ func _refresh_diagram() -> void:
 		_diagram.select(_slot_meta(_selected_slot_index))
 	else:
 		_diagram.clear_selection()
-	_pipeline_title.text = str(
-		Simulation.active_workflow().get("name", "Workflow")
-	).to_upper()
+	_pipeline_title.text = "%s  %s" % [
+		str(Simulation.active_workflow().get("name", "Workflow")).to_upper(),
+		_mastery_short(Simulation.active_workflow()),
+	]
 	_add_stage_button.visible = Simulation.can_append_overflow()
 
 
@@ -398,11 +406,20 @@ func _refresh_status() -> void:
 		var job: Dictionary = Dictionary(job_value)
 		if str(job.get("workflow_id", "")) == workflow_id:
 			names.append(str(job.get("name", "a contract")).to_upper())
-	_status.text = (
+	var assigned: String = (
 		"ACTIVE: %s" % DOT.join(names)
 		if not names.is_empty()
 		else "NO CONTRACT ASSIGNED"
 	)
+	_status.text = "%s%s%s" % [assigned, DOT, _mastery_short(Simulation.active_workflow())]
+
+
+func _mastery_short(workflow: Dictionary) -> String:
+	return "OUT ×%.2f  Q ×%.2f  T ×%.2f" % [
+		float(workflow.get("output_mult", 1.0)),
+		float(workflow.get("quality_mult", 1.0)),
+		float(workflow.get("thermal_mult", 1.0)),
+	]
 
 
 func _slot_entry(

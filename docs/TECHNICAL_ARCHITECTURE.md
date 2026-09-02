@@ -291,7 +291,7 @@ Development builds should contain a hidden tuning screen with:
 - Simulation speed controls
 - Economy multipliers
 - Token requirement multipliers
-- Cloud-cost controls
+- Raw token/progress/OUTPUT and workflow-mastery breakdowns
 - Perk rarity controls
 - Event-probability controls
 - Hot reload
@@ -354,7 +354,9 @@ token-burn/
 │   ├── economy_system.gd
 │   ├── compute_system.gd
 │   ├── heat_system.gd
-│   ├── demand_system.gd
+│   ├── board_system.gd
+│   ├── workflow_mastery_system.gd   # one-shot contract completion training
+│   ├── perk_system.gd               # loadout, tag density, synergies
 │   └── progression_system.gd
 ├── content/
 │   ├── jobs/

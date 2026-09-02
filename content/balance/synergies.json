@@ -45,5 +45,71 @@
       "conditions": [],
       "effects": [{"operation": "multiply", "target": "compute.local_rate", "value": 1.25}]
     }]
+  },
+  {
+    "name": "Recursion Density",
+    "requires_tag_counts": [{"tags": ["recursion"], "count": 3}],
+    "description": "Three recursion cards: repeats run 15% stronger.",
+    "subscriptions": [{
+      "event": "board.stage_resolved",
+      "priority": 8,
+      "conditions": [],
+      "effects": [{"operation": "multiply", "target": "stage.repeat_strength", "value": 1.15}]
+    }]
+  },
+  {
+    "name": "Clean Room Culture",
+    "requires_tag_counts": [{"tags": ["test", "quality"], "count": 3}],
+    "description": "Three test or quality cards: clean burns run ×1.15 QUALITY.",
+    "subscriptions": [{
+      "event": "board.batch_finalizing",
+      "priority": 26,
+      "conditions": [{"left": "batch.total_bugs_created", "operator": "==", "right": 0}],
+      "effects": [{"operation": "multiply", "target": "batch.quality_mult", "value": 1.15}]
+    }]
+  },
+  {
+    "name": "Heat Cult",
+    "requires_tag_counts": [{"tags": ["heat", "risk"], "count": 3}],
+    "description": "Three heat or risk cards: burns that start above 85% heat run ×1.20 OUTPUT.",
+    "subscriptions": [{
+      "event": "board.batch_started",
+      "priority": 18,
+      "conditions": [{"left": "$start_heat_ratio", "operator": ">=", "right": 0.85}],
+      "effects": [{"operation": "multiply", "target": "batch.progress_mult", "value": 1.2}]
+    }]
+  },
+  {
+    "name": "Cold Iron",
+    "requires_tag_counts": [{"tags": ["hardware", "cooling"], "count": 3}],
+    "description": "Three hardware or cooling cards: +10% THERMAL.",
+    "subscriptions": [{
+      "event": "board.batch_started",
+      "priority": 14,
+      "conditions": [],
+      "effects": [{"operation": "multiply", "target": "batch.thermal_mult", "value": 1.1}]
+    }]
+  },
+  {
+    "name": "Four-Alarm Build",
+    "requires_tag_counts": [{"tags": ["risk"], "count": 4}],
+    "description": "Four risk cards: overkill mastery gains grow 25% larger.",
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 60,
+      "conditions": [{"left": "$overkill_ratio", "operator": ">=", "right": 2.0}],
+      "effects": [{"operation": "multiply", "target": "mastery.gain_mult", "value": 1.25}]
+    }]
+  },
+  {
+    "name": "Safe Hands",
+    "requires_tag_counts": [{"tags": ["safe", "test", "quality", "thermal_safety"], "count": 4}],
+    "description": "Four safe cards: clean mastery gains grow 25% larger.",
+    "subscriptions": [{
+      "event": "workflow.mastery_evaluated",
+      "priority": 60,
+      "conditions": [{"left": "$clean", "operator": "==", "right": true}],
+      "effects": [{"operation": "multiply", "target": "mastery.gain_mult", "value": 1.25}]
+    }]
   }
 ]

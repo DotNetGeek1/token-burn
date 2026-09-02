@@ -253,7 +253,7 @@ func _refresh_notice() -> void:
 
 func _upgrade_entry(upgrade: UpgradeDefinition) -> Dictionary:
 	var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-	var cost: float = UpgradeSystem.purchase_cost(upgrade, level)
+	var cost: float = UpgradeSystem.quoted_cost(Simulation.run_state, upgrade, level)
 	var can_buy: bool = Simulation.can_buy_upgrade(upgrade.id)
 	var affordable: bool = float(Simulation.run_state.economy.get("cash", 0.0)) >= cost
 	var headline: Dictionary = _headline_figure(upgrade)
@@ -422,8 +422,8 @@ func _shelves() -> Dictionary:
 
 
 func _card_cost(upgrade: UpgradeDefinition) -> float:
-	return UpgradeSystem.purchase_cost(
-		upgrade, UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
+	return UpgradeSystem.quoted_cost(
+		Simulation.run_state, upgrade, UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
 	)
 
 
