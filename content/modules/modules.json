@@ -1171,7 +1171,7 @@
     "parameters": {"discount": 0.1, "discount_pct": 10},
     "completion_effects": [
       {
-        "operation": "add",
+        "operation": "cap_min",
         "target": "build.hardware_discount",
         "value": "$discount",
         "conditions": [

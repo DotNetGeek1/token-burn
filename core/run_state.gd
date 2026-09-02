@@ -455,6 +455,7 @@ func _migrate(from_version: int) -> void:
 ## Workflows become trained engines: each layout keeps run-long OUTPUT / QUALITY
 ## / THERMAL multipliers, and live contracts remember how they were burned.
 func _migrate_to_v22() -> void:
+	_clear_removed_workflow_slots()
 	for workflow in Array(build.get("workflows", [])):
 		if workflow is Dictionary:
 			BoardSystem.normalize_workflow_fields(workflow)
@@ -477,6 +478,7 @@ func _migrate_to_v21(from_version: int) -> void:
 	build["perks"] = _without_removed_ids(Array(build.get("perks", [])), REMOVED_PERKS)
 	build["perk_inventory"] = _without_removed_ids(Array(build.get("perk_inventory", [])), REMOVED_PERKS)
 	build["modules"] = _without_removed_ids(Array(build.get("modules", [])), REMOVED_MODULES)
+	_clear_removed_workflow_slots()
 	for stale in [
 		"cloud_surcharge_liability", "cloud_base_cost_per_prompt", "cloud_cost_per_prompt",
 		"cloud_liability", "cloud_cost_per_round",
@@ -533,6 +535,17 @@ func _cloud_account_was_granted() -> bool:
 		or MetaProgress.unlock_count("unlock.cloud_account") > 0
 		or MetaProgress.unlock_count("unlock.starting_cloud") > 0
 	)
+
+
+func _clear_removed_workflow_slots() -> void:
+	for workflow in Array(build.get("workflows", [])):
+		if not workflow is Dictionary:
+			continue
+		var slots: Array = Array(workflow.get("slots", []))
+		for i in range(slots.size()):
+			if str(slots[i]) in REMOVED_MODULES:
+				slots[i] = ""
+		workflow["slots"] = slots
 
 
 func _without_removed_ids(owned: Array, removed: Array) -> Array:

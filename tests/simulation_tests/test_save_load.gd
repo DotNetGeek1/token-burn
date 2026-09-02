@@ -56,7 +56,9 @@ func run() -> void:
 	_test_v21_refunds_legacy_repeatable_levels()
 	_test_v21_skips_a_legacy_granted_cloud_account()
 	_test_v21_is_idempotent()
+	_test_v21_clears_removed_modules_from_workflow_slots()
 	_test_v22_normalizes_workflow_mastery_and_job_evidence()
+	_test_v22_clears_removed_modules_from_workflow_slots()
 	_test_corrupt_primary_save_recovers_from_backup()
 
 
@@ -475,6 +477,32 @@ func _test_v21_is_idempotent() -> void:
 	)
 
 
+func _test_v21_clears_removed_modules_from_workflow_slots() -> void:
+	var legacy: Dictionary = {
+		"save_version": 20,
+		"build": {
+			"modules": ["op.spot_fleet", "op.prompt"],
+			"workflows": [{
+				"id": "workflow.1",
+				"name": "Cloud Hangover",
+				"slots": ["op.prompt", "op.spot_fleet", "op.egress_shield"],
+			}],
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(legacy)
+	var slots: Array = Array(Array(migrated.build.get("workflows", []))[0].get("slots", []))
+	assert_eq(slots, ["op.prompt", "", ""], "v21 empties retired module slots")
+	assert_eq(Array(migrated.build.get("modules", [])), ["op.prompt"], "Retired modules leave inventory")
+	var again := RunState.new()
+	again.from_dict(migrated.to_dict())
+	assert_eq(
+		Array(Array(again.build.get("workflows", []))[0].get("slots", [])),
+		["op.prompt", "", ""],
+		"Clearing retired slots is idempotent"
+	)
+
+
 func _test_v22_normalizes_workflow_mastery_and_job_evidence() -> void:
 	var legacy: Dictionary = {
 		"save_version": 21,
@@ -503,6 +531,31 @@ func _test_v22_normalizes_workflow_mastery_and_job_evidence() -> void:
 		1.0,
 		0.001,
 		"v22 remigration is idempotent"
+	)
+
+
+func _test_v22_clears_removed_modules_from_workflow_slots() -> void:
+	var leftover: Dictionary = {
+		"save_version": 21,
+		"build": {
+			"modules": ["op.prompt"],
+			"workflows": [{
+				"id": "workflow.1",
+				"name": "House Style",
+				"slots": ["op.prompt", "op.spot_fleet"],
+			}],
+		},
+	}
+	var migrated := RunState.new()
+	migrated.from_dict(leftover)
+	var slots: Array = Array(Array(migrated.build.get("workflows", []))[0].get("slots", []))
+	assert_eq(slots, ["op.prompt", ""], "v22 empties leftover retired slots")
+	var again := RunState.new()
+	again.from_dict(migrated.to_dict())
+	assert_eq(
+		Array(Array(again.build.get("workflows", []))[0].get("slots", [])),
+		["op.prompt", ""],
+		"v22 slot scrubbing is idempotent"
 	)
 
 

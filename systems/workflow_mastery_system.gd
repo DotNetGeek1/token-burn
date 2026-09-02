@@ -93,9 +93,6 @@ static func evaluate(
 	)
 	var silo: bool = float(mod_ctx.get_value("mastery.silo", 0.0)) > 0.0
 	var propagate_ratio: float = 0.0 if silo else maxf(0.0, float(mod_ctx.get_value("mastery.propagate_ratio", 0.0)))
-	_apply_gain(workflow, "output", output_gain)
-	_apply_gain(workflow, "quality", quality_gain)
-	_apply_gain(workflow, "thermal", thermal_gain)
 	var stripped_output: float = 0.0
 	var stripped_quality: float = 0.0
 	if float(mod_ctx.get_value("mastery.strip_output", 0.0)) > 0.0:
@@ -103,6 +100,9 @@ static func evaluate(
 	if float(mod_ctx.get_value("mastery.strip_quality", 0.0)) > 0.0:
 		stripped_quality = _strip_latest_gain(workflow, "quality")
 	var stripped: bool = stripped_output > 0.0 or stripped_quality > 0.0
+	_apply_gain(workflow, "output", output_gain)
+	_apply_gain(workflow, "quality", quality_gain)
+	_apply_gain(workflow, "thermal", thermal_gain)
 	var propagated: bool = false
 	if propagate_ratio > 0.0 and (output_gain != 0.0 or quality_gain != 0.0 or thermal_gain != 0.0):
 		for other in Array(run_state.build.get("workflows", [])):

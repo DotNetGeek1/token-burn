@@ -21,6 +21,9 @@ func run() -> void:
 	_test_blocked_benchmark_harness_does_not_discount_hardware()
 	_test_mastery_trace_names_its_workflow_and_evidence()
 	_test_preview_leaves_job_evidence_unchanged()
+	_test_inspect_burn_does_not_mutate_statistics()
+	_test_golden_path_does_not_strip_same_evaluation_gain()
+	_test_benchmark_harness_coupon_does_not_stack()
 
 
 class Harness:
@@ -473,3 +476,134 @@ func _test_preview_leaves_job_evidence_unchanged() -> void:
 	)
 	for key in before:
 		assert_eq(harness.job.get(key), before[key], "Preview leaves %s unchanged" % key)
+
+
+func _test_inspect_burn_does_not_mutate_statistics() -> void:
+	var harness := Harness.new(36)
+	harness.pipeline(["op.cheap_model", "op.agent_swarm"])
+	harness.state.compute["token_rate"] = 1000.0
+	var repeats_before: int = int(harness.state.statistics.get("stage_repeats", 0))
+	var cascades_before: int = int(harness.state.statistics.get("cascades_triggered", 0))
+	var inspected: Dictionary = harness.jobs.inspect_burn(
+		harness.state, harness.rng, harness.resolver, [], {}, harness.compute, harness.board
+	)
+	assert_true(inspected.get("ok", false), "Inspection resolves a repeating pipeline")
+	assert_eq(
+		int(harness.state.statistics.get("stage_repeats", 0)),
+		repeats_before,
+		"inspect_burn does not increment stage_repeats"
+	)
+	assert_eq(
+		int(harness.state.statistics.get("cascades_triggered", 0)),
+		cascades_before,
+		"inspect_burn does not increment cascades_triggered"
+	)
+	var committed: Dictionary = harness.resolve(1000.0)
+	assert_true(
+		int(committed.get("bugs_created", 0)) > 0,
+		"The same pipeline creates bugs when committed"
+	)
+	assert_true(
+		int(harness.state.statistics.get("stage_repeats", 0)) > repeats_before,
+		"A committed repeat still records telemetry"
+	)
+
+
+func _test_golden_path_does_not_strip_same_evaluation_gain() -> void:
+	var harness := Harness.new(37)
+	var subs: Array = harness.equip("perk.first_try")
+	subs.append_array(harness.equip("perk.golden_path"))
+	harness.finish_clean(subs)
+	assert_almost_eq(
+		float(harness.board.active_workflow(harness.state).get("output_mult", 1.0)),
+		1.16,
+		0.001,
+		"A clean one-shot trains the doubled First Try stack"
+	)
+	harness.job["mastery_evaluated"] = false
+	harness.job["burn_count"] = 1
+	harness.job["bugs_created"] = 1
+	harness.job["hidden_bugs_created"] = 0
+	harness.job["tokens_remaining"] = 0.0
+	var report: Dictionary = harness.evaluate_now(subs, 10.0)
+	assert_almost_eq(
+		float(report.get("stripped_output", 0.0)),
+		0.16,
+		0.001,
+		"Golden Path peels the stack that existed before this evaluation"
+	)
+	assert_almost_eq(
+		float(report.get("output_gain", 0.0)),
+		0.08,
+		0.001,
+		"First Try still awards this dirty one-shot"
+	)
+	assert_almost_eq(
+		float(harness.board.active_workflow(harness.state).get("output_mult", 1.0)),
+		1.08,
+		0.001,
+		"The new First Try gain survives Golden Path"
+	)
+	var ledger: Array = Array(harness.board.active_workflow(harness.state).get("gain_ledger", []))
+	assert_eq(ledger.size(), 1, "Only the current evaluation's OUTPUT gain remains")
+	assert_almost_eq(
+		float(Dictionary(ledger[0]).get("amount", 0.0)),
+		0.08,
+		0.001,
+		"The surviving ledger entry is the same-evaluation First Try gain"
+	)
+
+
+func _test_benchmark_harness_coupon_does_not_stack() -> void:
+	var harness := Harness.new(38)
+	harness.pipeline(["op.prompt", "op.benchmark_harness"])
+	for index in range(2):
+		harness.job = {
+			"id": "job.coupon.%d" % index,
+			"name": "Coupon Contract",
+			"token_requirement": 1.0,
+			"tokens_remaining": 1.0,
+			"quality": 0.0,
+			"quality_threshold": 40.0,
+			"known_bugs": 0,
+			"hidden_bugs": 0,
+			"blocked_slots": 0,
+			"board_rules": [],
+			"tags": [],
+			"bug_chance": 0.0,
+			"revision_risk": 0.0,
+			"deadline_prompts": 6,
+			"prompts_remaining": 6,
+			"workflow_id": "workflow.1",
+		}
+		JobSystem.normalize_job_evidence(harness.job)
+		harness.state.business["active_jobs"] = [harness.job]
+		harness.state.business["focused_job_id"] = str(harness.job.get("id", ""))
+		harness.commit(1_000_000.0)
+	assert_almost_eq(
+		float(harness.state.build.get("hardware_discount", 0.0)),
+		0.1,
+		0.001,
+		"A second clean one-shot does not stack another 10% coupon"
+	)
+	var hardware: UpgradeDefinition = null
+	for upgrade in ContentDatabase.upgrades:
+		if upgrade.category == "hardware":
+			hardware = upgrade
+			break
+	assert_true(hardware != null, "The catalog has hardware to discount")
+	if hardware != null:
+		var base: float = UpgradeSystem.purchase_cost(hardware, 0)
+		assert_almost_eq(
+			UpgradeSystem.quoted_cost(harness.state, hardware, 0),
+			base * 0.9,
+			0.01,
+			"The pending coupon stays a single 10% off"
+		)
+		UpgradeSystem.consume_hardware_discount(harness.state)
+		assert_almost_eq(
+			UpgradeSystem.quoted_cost(harness.state, hardware, 0),
+			base,
+			0.01,
+			"Buying hardware still consumes the coupon"
+		)

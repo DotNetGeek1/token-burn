@@ -428,7 +428,9 @@ func inspect_burn(
 	if job.is_empty():
 		return {"ok": false, "reason": "No contract in progress."}
 	var batch: float = prepare_batch(run_state, rng, effect_resolver, subscriptions, tuning, compute_system)
-	return board_system.resolve_burn(run_state, job, batch, rng, effect_resolver, subscriptions, stage_limit)
+	return board_system.resolve_burn(
+		run_state, job, batch, rng, effect_resolver, subscriptions, stage_limit, ResolveMode.PREVIEW
+	)
 
 
 ## One prompt of work: a batch through the board for every contract the rig can
