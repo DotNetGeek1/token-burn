@@ -1,6 +1,8 @@
 class_name BoardNotes
 extends Control
 
+const PostItNoteScript := preload("res://ui/board/post_it_note.gd")
+
 ## The main menu, as notes stuck down the side of the whiteboard.
 ##
 ## The menu used to be printed across the bottom of the laptop, which cost the
@@ -14,16 +16,15 @@ extends Control
 ## hangs a narrow board and gets narrow notes.
 
 ## Paper the notes are written on. Cycled so a column of them reads as a pad
-## that has been torn from rather than as a set of tabs.
+## that has been torn from rather than as a set of tabs. Tuned for a desk lamp
+## on a night room: muted, slightly deepened pastels rather than clip-art brights.
 const PAPER: Array[Color] = [
-	Color(0.94, 0.87, 0.47),
-	Color(0.86, 0.90, 0.62),
-	Color(0.95, 0.79, 0.56),
-	Color(0.79, 0.87, 0.91),
-	Color(0.93, 0.82, 0.80),
+	Color(0.70, 0.64, 0.40),
+	Color(0.60, 0.66, 0.48),
+	Color(0.70, 0.56, 0.42),
+	Color(0.54, 0.62, 0.66),
+	Color(0.66, 0.56, 0.56),
 ]
-## The paper a note is rewritten on when it has something worth looking at.
-const PAPER_FLAGGED := Color(0.98, 0.72, 0.31)
 ## Biro, on paper lit by a desk lamp.
 const INK := Color(0.10, 0.10, 0.13)
 ## How far off square a note is stuck. Nobody lines these up.
@@ -32,6 +33,9 @@ const TILT_DEGREES := 1.6
 const MONO_ADVANCE := 0.55
 ## Gap between notes, as a fraction of the cell each one gets.
 const GAP_SHARE := 0.16
+## Soft corner on the paper face. Bottom-right is larger so it meets the curl.
+const PAPER_CORNER := 3
+const PAPER_CORNER_CURL := 8
 
 ## How many notes are stuck side by side. One for a column down the edge of a
 ## wide board, more for a block along the bottom of a board too narrow to give
@@ -84,9 +88,8 @@ func set_plane(corners: PackedVector2Array) -> void:
 	_relayout()
 
 
-## Marks a note as worth a look — stock the player can now afford, say. On a
-## piece of paper there is nowhere to put a badge, so the note is rewritten on
-## brighter paper.
+## Marks a note as worth a look — stock the player can now afford, say. Drawn as
+## a folded corner mark on the same paper rather than rewriting the pad.
 func set_flag(key: String, flagged: bool) -> void:
 	if bool(_flagged.get(key, false)) == flagged:
 		return
@@ -97,7 +100,7 @@ func set_flag(key: String, flagged: bool) -> void:
 
 
 func _make_note(headline: String, index: int) -> Button:
-	var note := Button.new()
+	var note: Button = PostItNoteScript.new()
 	note.text = headline.to_upper()
 	note.focus_mode = Control.FOCUS_NONE
 	note.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -112,23 +115,36 @@ func _make_note(headline: String, index: int) -> Button:
 
 
 ## Paper, and the shadow it casts. A note is only stuck at one corner, so the
-## bottom edge lifts: the shadow is drawn under it rather than around it.
+## bottom-right edge lifts: the shadow is biased that way rather than centred.
 func _paint(note: Button, index: int) -> void:
 	var key: String = _keys[index] if index < _keys.size() else ""
 	var paper: Color = PAPER[index % PAPER.size()]
-	if bool(_flagged.get(key, false)):
-		paper = PAPER_FLAGGED
+	var is_flagged: bool = bool(_flagged.get(key, false))
+	if note is PostItNoteScript:
+		var post_it: PostItNoteScript = note
+		post_it.paper_color = paper
+		post_it.flagged = is_flagged
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		var box := StyleBoxFlat.new()
 		# Pressed reads as the note being pushed flat against the board.
 		box.bg_color = paper.darkened(0.18) if state == "pressed" else paper
 		if state == "hover":
-			box.bg_color = paper.lightened(0.12)
-		box.set_corner_radius_all(0)
-		box.shadow_color = Color(0, 0, 0, 0.35)
-		box.shadow_size = 2
-		box.shadow_offset = Vector2(1, 2)
+			box.bg_color = paper.lightened(0.08)
+		box.set_corner_radius_all(PAPER_CORNER)
+		box.corner_radius_bottom_right = PAPER_CORNER_CURL
+		# Soft AA on the stylebox fringes light against the board under shear;
+		# project 2D MSAA covers the edge without the halo.
+		box.anti_aliasing = false
+		box.content_margin_left = 3
+		box.content_margin_right = 3
+		box.content_margin_top = 2
+		box.content_margin_bottom = 4
+		# Soft lift under the peeling corner, not a hard double outline.
+		box.shadow_color = Color(0, 0, 0, 0.32 if state != "pressed" else 0.12)
+		box.shadow_size = 6 if state != "pressed" else 2
+		box.shadow_offset = Vector2(2, 4) if state != "pressed" else Vector2(1, 1)
 		note.add_theme_stylebox_override(state, box)
+	note.queue_redraw()
 
 
 ## Notes are placed by hand rather than by a container, because each one is
@@ -158,6 +174,16 @@ func _relayout() -> void:
 			else deg_to_rad(TILT_DEGREES * (1.0 if index % 2 == 0 else -1.0))
 		)
 		note.add_theme_font_size_override("font_size", _note_font(note.text, paper))
+		# Shadow scale tracks the paper size so a zoomed-in board keeps soft lift.
+		_paint(note, index)
+		var shadow_scale: float = clampf(mini(paper.x, paper.y) / 40.0, 0.75, 1.6)
+		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+			var box: StyleBox = note.get_theme_stylebox(state)
+			if box is StyleBoxFlat:
+				var flat_box: StyleBoxFlat = box
+				if state != "pressed":
+					flat_box.shadow_size = int(round(6.0 * shadow_scale))
+					flat_box.shadow_offset = Vector2(2.0 * shadow_scale, 4.0 * shadow_scale)
 
 
 ## Gives the notes a natural layout size, then shears that layout into the
