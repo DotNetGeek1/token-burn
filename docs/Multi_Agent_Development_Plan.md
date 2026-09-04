@@ -3,6 +3,12 @@
 > Current-state note: Cloud, advertising, and sales systems were retired in
 > save v21. References below describe only the active local-hardware,
 > contract-demand, workflow-mastery architecture.
+>
+> Dwellings were superseded by the Burn Cabinet v2 in save v23 (see
+> `docs/cabinet-v2`). Where this plan says "dwelling progression" or
+> `DwellingDefinition`, read campaign chapters plus the five tiered cabinet
+> systems in `content/upgrades/cabinet_systems.json`; the visual progression is
+> the cabinet's system tiles, not a room.
 
 ## 1. Working Model
 

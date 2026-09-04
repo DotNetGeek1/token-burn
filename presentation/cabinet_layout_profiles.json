@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "coordinate_space": "normalized_safe_area",
+  "notes": [
+    "Seeded from docs/cabinet-v2/data/cabinet_regions_v2.json and tuned so the CRT clears the acceptance targets at every supported viewport.",
+    "Region rects are [x, y, w, h] fractions of the safe area (viewport minus display safe-area insets minus safe_inset_px).",
+    "Profiles are tried in `order`; the first whose aspect and pixel constraints match wins. A 16:9 window narrower than wide.min_width_px falls through to compact, because ten bays in one row do not stay touchable below that width."
+  ],
+  "order": ["wide", "compact", "tablet"],
+  "profiles": {
+    "wide": {
+      "min_aspect": 1.65,
+      "min_width_px": 1100,
+      "abort_rail": [0.0, 0.0, 0.05, 0.60],
+      "crt": [0.06, 0.0, 0.76, 0.60],
+      "telemetry": [0.83, 0.0, 0.17, 0.60],
+      "telemetry_orientation": "vertical",
+      "command_deck": [0.06, 0.615, 0.94, 0.125],
+      "backplane": [0.06, 0.755, 0.94, 0.245],
+      "dock_columns": 10,
+      "dock_rows": 1,
+      "decorative_edge_max": 0.07,
+      "type_scale": 1.0
+    },
+    "compact": {
+      "min_aspect": 1.35,
+      "abort_rail": [0.0, 0.0, 0.055, 0.59],
+      "crt": [0.065, 0.0, 0.745, 0.59],
+      "telemetry": [0.82, 0.0, 0.18, 0.59],
+      "telemetry_orientation": "vertical",
+      "command_deck": [0.065, 0.60, 0.935, 0.11],
+      "backplane": [0.065, 0.72, 0.935, 0.28],
+      "dock_columns": 5,
+      "dock_rows": 2,
+      "decorative_edge_max": 0.04,
+      "type_scale": 0.92
+    },
+    "tablet": {
+      "max_aspect": 1.3499,
+      "abort_rail": [0.0, 0.0, 0.06, 0.58],
+      "crt": [0.07, 0.0, 0.93, 0.58],
+      "telemetry": [0.07, 0.595, 0.93, 0.09],
+      "telemetry_orientation": "horizontal",
+      "command_deck": [0.07, 0.695, 0.93, 0.085],
+      "backplane": [0.07, 0.79, 0.93, 0.21],
+      "dock_columns": 5,
+      "dock_rows": 2,
+      "decorative_edge_max": 0.02,
+      "type_scale": 0.96
+    }
+  },
+  "frames": {
+    "_doc": "How each cabinet_v2 9-slice frame is fitted to its region. `lip` is the opaque/bevelled rim of the texture in texture pixels [l, t, r, b] (content stays clear of it); the frame is scaled so its top lip is `lip_of_height` of the region height, clamped to [min_px, max_px].",
+    "crt_bezel": {"lip": [52, 52, 52, 67], "lip_of_height": 0.035, "min_px": 6, "max_px": 26},
+    "telemetry_frame": {"lip": [29, 29, 29, 32], "lip_of_height": 0.03, "min_px": 5, "max_px": 20},
+    "deck_plate": {"lip": [40, 40, 40, 40], "lip_of_height": 0.05, "min_px": 2, "max_px": 10},
+    "backplane_rail": {"lip": [68, 68, 68, 68], "lip_of_height": 0.055, "min_px": 4, "max_px": 14},
+    "panel": {"lip": [28, 28, 28, 28], "lip_of_height": 0.05, "min_px": 3, "max_px": 12}
+  },
+  "dock": {
+    "gap_of_cell": 0.04,
+    "header_of_height": 0.18,
+    "header_min_px": 20,
+    "header_max_px": 34,
+    "bay_max_stretch": 1.15
+  },
+  "deck": {
+    "commit_of_width": 0.34,
+    "commit_aspect": 2.4,
+    "switch_of_width": 0.2,
+    "led_of_height": 0.22
+  },
+  "lever": {
+    "_doc": "channel_slot mirrors asset_catalog.json cabinet_v2.lever.channel_slot (slot as a fraction of the channel plate). handle_grip_of_canvas is how much of the 320x320 handle canvas the grip spans.",
+    "channel_of_height": 0.86,
+    "channel_slot": [0.431, 0.072, 0.135, 0.855],
+    "handle_of_slot_width": 1.6,
+    "handle_grip_of_canvas": 0.34,
+    "legend_of_height": 0.09
+  },
+  "maintenance": {
+    "_doc": "The maintenance camera. The OperationGrid is scaled by `zoom_scale` about `zoom_pivot` (a fraction of the grid) over `duration_s`; the rest are [x, y, w, h] fractions of the safe area for the menu column, the generation caption, the inspection readout and the five system mounts. `profiles` overrides any key per layout profile.",
+    "zoom_scale": 0.62,
+    "zoom_pivot": [0.5, 0.0],
+    "duration_s": 0.3,
+    "wall_alpha": 0.9,
+    "menu": [0.0, 0.03, 0.175, 0.58],
+    "caption": [0.825, 0.02, 0.175, 0.11],
+    "inspect": [0.825, 0.15, 0.175, 0.36],
+    "mount_compute": [0.19, 0.66, 0.112, 0.31],
+    "mount_cooling": [0.317, 0.66, 0.112, 0.31],
+    "mount_power": [0.444, 0.66, 0.112, 0.31],
+    "mount_backplane": [0.571, 0.66, 0.112, 0.31],
+    "mount_control": [0.698, 0.66, 0.112, 0.31],
+    "profiles": {
+      "tablet": {
+        "zoom_scale": 0.6,
+        "menu": [0.0, 0.02, 0.19, 0.58],
+        "caption": [0.80, 0.02, 0.20, 0.10],
+        "inspect": [0.0, 0.62, 1.0, 0.09],
+        "mount_compute": [0.03, 0.73, 0.17, 0.25],
+        "mount_cooling": [0.215, 0.73, 0.17, 0.25],
+        "mount_power": [0.40, 0.73, 0.17, 0.25],
+        "mount_backplane": [0.585, 0.73, 0.17, 0.25],
+        "mount_control": [0.77, 0.73, 0.17, 0.25]
+      }
+    }
+  },
+  "constraints": {
+    "safe_inset_px": 16,
+    "minimum_touch_px": 48,
+    "minimum_touch_px_at_854x480": 44,
+    "minimum_body_font_px": 12,
+    "target_body_font_px_at_1280x720": 16,
+    "minimum_crt_width_ratio": 0.65,
+    "minimum_crt_height_ratio": 0.50,
+    "decorative_edge_slack_ratio": 0.015
+  }
+}

@@ -93,6 +93,32 @@ func toggle_sound_muted() -> void:
 	set_sound_muted(not sound_muted())
 
 
+## The profile's reduced-motion choice, or null when the player has never set
+## it (the project default then applies; see `UiFx.reduced_motion`).
+func reduced_motion_setting() -> Variant:
+	_ensure_loaded()
+	var settings: Dictionary = _settings()
+	if not settings.has("reduced_motion"):
+		return null
+	return bool(settings["reduced_motion"])
+
+
+func reduced_motion() -> bool:
+	var stored: Variant = reduced_motion_setting()
+	if stored == null:
+		return UiFx.reduced_motion()
+	return bool(stored)
+
+
+func set_reduced_motion(value: bool) -> void:
+	_ensure_loaded()
+	var settings: Dictionary = _settings()
+	settings["reduced_motion"] = value
+	_profile["settings"] = settings
+	_save()
+	profile_changed.emit()
+
+
 func seen_onboarding() -> bool:
 	_ensure_loaded()
 	return bool(_settings().get("seen_onboarding", false))
@@ -118,10 +144,18 @@ func _default_settings() -> Dictionary:
 	}
 
 
+## Settings the profile only stores once the player has chosen them; absent
+## means "use the project default" (see `reduced_motion_setting`).
+const OPTIONAL_SETTINGS: Array[String] = ["reduced_motion"]
+
+
 func _merge_settings(raw: Variant) -> Dictionary:
 	var settings: Dictionary = _default_settings()
 	if raw is Dictionary:
 		for key in settings.keys():
+			if raw.has(key):
+				settings[key] = raw[key]
+		for key in OPTIONAL_SETTINGS:
 			if raw.has(key):
 				settings[key] = raw[key]
 	return settings

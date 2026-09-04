@@ -1,5 +1,7 @@
 # Token Burn — Perk Draft + Module Market Implementation Brief
 
+> Historical brief. Its UI file references (`ui/venues/venue_market.gd`, `venue_achievements.gd`, `VenueBoard`) are superseded by the Burn Cabinet v2 (see `docs/cabinet-v2`): the Market is now `ui/cabinet/tab_market.gd` (MODULES / hardware / SYSTEMS / RIG shelves), achievements live in the Maintenance Records sheet, and "dwelling"/"location" capacity tables now read from cabinet system tiers. The perk-draft and module-market rules themselves still apply.
+
 **Target repo:** `DotNetGeek1/token-burn`  
 **Reviewed baseline:** `b01fd1d22fb9158eef37fc2bc6cd806cc45a010c`  
 **Purpose:** Change how perks and modules are acquired.  

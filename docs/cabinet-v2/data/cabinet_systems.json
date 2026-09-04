@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "tier_range": [1, 4],
+  "systems": [
+    {
+      "id": "compute",
+      "name": "Compute Stack",
+      "stat": "compute.token_rate",
+      "tier_names": ["Exposed Board", "GPU Cage", "Accelerator Stack", "Impossible Core"],
+      "visual_mount": "system_compute",
+      "design_note": "Controls base throughput. Exact values must be tuned against existing hardware output before legacy rows are consolidated."
+    },
+    {
+      "id": "cooling",
+      "name": "Cooling Loop",
+      "stats": ["compute.heat_capacity", "compute.cooling"],
+      "tier_names": ["Desk Fan", "Radiator", "Liquid Manifold", "Phase Cooler"],
+      "visual_mount": "system_cooling",
+      "design_note": "Controls thermal capacity and vent effectiveness. Preserve existing heat-state thresholds."
+    },
+    {
+      "id": "power",
+      "name": "Power Bus",
+      "stats": ["build.hardware_capacity", "compute.power_headroom"],
+      "tier_names": ["Household Lead", "Transformer", "Busbar Bank", "Unstable Core"],
+      "visual_mount": "system_power",
+      "design_note": "Absorbs the old dwelling hardware-slot responsibility and supports risky boost. Add power_headroom only when simulation design is explicitly approved."
+    },
+    {
+      "id": "backplane",
+      "name": "Workflow Backplane",
+      "stat": "build.board.slot_count",
+      "tier_names": ["3-Bay Rail", "5-Bay Rail", "7-Bay Rail", "10-Bay Rail"],
+      "tier_values": [3, 5, 7, 10],
+      "visual_mount": "system_backplane"
+    },
+    {
+      "id": "control",
+      "name": "Control Rack",
+      "stat": "build.workflow_capacity",
+      "tier_names": ["Single Selector", "Dual Selector", "Triple Selector", "Quad Selector"],
+      "tier_values": [1, 2, 3, 4],
+      "visual_mount": "system_control"
+    }
+  ],
+  "generation_thresholds": [
+    {"min_sum": 5, "name": "Improvised Cabinet"},
+    {"min_sum": 8, "name": "Spliced Rig"},
+    {"min_sum": 11, "name": "Token Furnace"},
+    {"min_sum": 15, "name": "Grid Eater"},
+    {"min_sum": 19, "name": "Impossible Engine"}
+  ],
+  "migration_from_dwelling": {
+    "bedroom": [1, 1, 1, 1, 1],
+    "garage": [2, 2, 2, 2, 1],
+    "office_unit": [2, 2, 2, 2, 2],
+    "warehouse": [3, 3, 3, 3, 2],
+    "datacentre_campus": [3, 3, 3, 3, 3],
+    "private_power_grid": [4, 3, 4, 4, 3],
+    "moon_facility": [4, 4, 4, 4, 4]
+  },
+  "migration_value_order": ["compute", "cooling", "power", "backplane", "control"]
+}
+

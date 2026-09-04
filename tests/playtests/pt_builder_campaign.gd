@@ -42,29 +42,27 @@ func play(harness: UiHarness) -> void:
 
 
 func _buy_cooling_if_possible(harness: UiHarness) -> void:
-	if not SceneRouter.has_route("market"):
-		return
-	await harness.goto_route("market")
+	await harness.goto_tab("market")
 	var cooling: Control = harness.driver.command("COOLING")
 	if cooling != null:
 		await harness.driver.press(cooling)
 		var tile: Control = harness.driver.first_tile()
 		if tile != null:
-			await harness.driver.lean_if_needed(tile)
 			await harness.driver.press(tile)
 			var buy: Control = harness.driver.command("BUY")
 			if buy != null and buy is BaseButton and not buy.disabled:
 				await harness.driver.press(buy)
-	harness.driver.audit_screen("market", "market")
+	harness.driver.audit_screen("market", "desk")
+	await harness.goto_tab("run")
 
 
 func _take_work_or_skip(harness: UiHarness) -> void:
 	await dismiss_investor(harness)
-	if SceneRouter.current != "jobs":
-		await harness.goto_route("jobs")
+	await harness.goto_tab("contracts")
 	# accept_first_job asserts a tile. No offer is a skip, not a suite failure.
 	if harness.driver.first_tile() == null:
-		harness.driver.audit_screen("jobs", "jobs")
+		harness.driver.audit_screen("contracts", "desk")
+		await harness.goto_tab("run")
 		return
 	await accept_first_job(harness)
 

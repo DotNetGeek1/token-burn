@@ -110,6 +110,30 @@ func activated() -> void:
 
 
 func refresh() -> void:
+	var scrolls: Dictionary = capture_scroll(self)
+	_refresh_contents()
+	restore_scroll(self, scrolls)
+
+
+## The picked contract's id, "" when the shelf is bare.
+func selected_id() -> String:
+	return _selected
+
+
+func current_shelf() -> String:
+	return _shelf
+
+
+## Picks a contract on the current shelf by id. Returns false when it is not there.
+func select_job(id: String) -> bool:
+	for job in Array(_shelves()[_shelf]):
+		if str(Dictionary(job).get("id", "")) == id:
+			_on_card(id)
+			return true
+	return false
+
+
+func _refresh_contents() -> void:
 	var costs: Dictionary = Simulation.cost_forecast()
 	_round_cost = maxf(1.0, float(costs.get("fixed_due", 0.0)))
 	var shelves: Dictionary = _shelves()
@@ -252,12 +276,31 @@ func _can_accept(offer_id: String) -> bool:
 
 func primary_action() -> Dictionary:
 	var job: Dictionary = _selected_job()
-	if _shelf == SLATE or job.is_empty():
-		return {"label": "ACCEPT", "enabled": false, "sub": "pick a contract on the wire" if job.is_empty() else "already on the slate", "pressed": Callable()}
+	if job.is_empty():
+		return blocked_action("ACCEPT", BLOCK_SELECT_ITEM)
+	if _shelf == SLATE:
+		return blocked_action("ACCEPT", "ALREADY ON THE SLATE")
 	var id: String = str(job.get("id", ""))
-	var can: bool = _can_accept(id)
-	var sub: String = NumberFormat.format_cash(float(job.get("reward", 0.0))) if can else _status_line(job).to_lower()
-	return {"label": "ACCEPT", "enabled": can, "sub": sub, "pressed": _accept.bind(id)}
+	if not _can_accept(id):
+		return blocked_action("ACCEPT", _accept_blocker())
+	# The reward and what taking it commits the player to: the deadline.
+	return normalize_action({
+		"label": "ACCEPT",
+		"enabled": true,
+		"sub": "%s · %d PROMPTS" % [NumberFormat.format_cash(float(job.get("reward", 0.0))), int(job.get("deadline_prompts", 0))],
+		"pressed": _accept.bind(id),
+	})
+
+
+## Why the picked offer cannot be taken right now, in plain words.
+func _accept_blocker() -> String:
+	if Simulation.phase == Simulation.Phase.ANGEL_ROUND:
+		return "UPGRADE FIRST"
+	if Simulation.phase == Simulation.Phase.RUN_END:
+		return "RUN OVER"
+	if Simulation.is_work_running() or Simulation.phase != Simulation.Phase.ROUND_PREP:
+		return "ROUND UNDER WAY"
+	return "SLATE FULL"
 
 
 func _accept(job_id: String) -> void:

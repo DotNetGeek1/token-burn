@@ -5,6 +5,13 @@ extends CabinetTab
 ## workflow, as cartridges. Tap one to arm it, then tap a bay in the dock (or
 ## drag it there) to seat it. A seated module picked out of the dock can be
 ## ejected back into the bin from here.
+##
+## The strip along the top carries the workflow housekeeping the old editor
+## had: RENAME the active workflow (an inline field on the glass), DELETE it
+## (its contracts fall back to the first one), CLEAR every stage, and + STAGE
+## for an overflow bay. Picking and building workflows is the backplane's
+## `WorkflowKeys`; a new workflow copies the active layout, so "duplicate" is
+## the `+` key there.
 
 ## The cartridge armed for seating, or "".
 var armed_module_id: String = ""
@@ -15,6 +22,7 @@ var _bin: HBoxContainer = null
 var _scroll: ScrollContainer = null
 var _empty: Label = null
 var _count: Label = null
+var _name_edit: LineEdit = null
 var _title: Label = null
 var _kicker: Label = null
 var _rows: VBoxContainer = null
@@ -42,6 +50,25 @@ func _ready() -> void:
 	_count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	strip.add_child(_count)
+	_name_edit = ConsoleStyle.line_edit("WORKFLOW NAME", CabinetStyle.FONT_SMALL)
+	_name_edit.name = "WorkflowNameEdit"
+	_name_edit.max_length = 28
+	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_name_edit.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_name_edit.add_theme_color_override("font_color", CabinetStyle.AMBER)
+	_name_edit.add_theme_color_override("caret_color", CabinetStyle.AMBER)
+	_name_edit.visible = false
+	_name_edit.text_submitted.connect(func(text: String) -> void: _commit_rename(text))
+	_name_edit.focus_exited.connect(func() -> void:
+		if _name_edit.visible:
+			_commit_rename(_name_edit.text)
+	)
+	_name_edit.gui_input.connect(func(event: InputEvent) -> void:
+		if event.is_action_pressed("ui_cancel"):
+			_cancel_rename()
+			get_viewport().set_input_as_handled()
+	)
+	strip.add_child(_name_edit)
 	_keys = HBoxContainer.new()
 	_keys.mouse_filter = Control.MOUSE_FILTER_PASS
 	_keys.add_theme_constant_override("separation", 4)
@@ -95,6 +122,12 @@ func _ready() -> void:
 
 
 func refresh() -> void:
+	var scrolls: Dictionary = capture_scroll(self)
+	_refresh_contents()
+	restore_scroll(self, scrolls)
+
+
+func _refresh_contents() -> void:
 	var seated: Array = Simulation.board_slots()
 	var loose: Array[String] = []
 	for module_id in Simulation.owned_modules():
@@ -124,6 +157,24 @@ func _refresh_keys() -> void:
 	for child in _keys.get_children():
 		_keys.remove_child(child)
 		child.queue_free()
+	var running: bool = Simulation.is_work_running()
+	var in_run: bool = Simulation.phase != Simulation.Phase.IDLE
+	var name_text: String = str(Simulation.active_workflow().get("name", ""))
+	var rename: Button = CabinetStyle.key("RENAME", CabinetStyle.PHOSPHOR, CabinetStyle.FONT_TINY)
+	rename.tooltip_text = "Rename %s." % (name_text if name_text != "" else "the active workflow")
+	rename.disabled = not in_run or Simulation.workflow_count() <= 0
+	rename.pressed.connect(begin_rename)
+	_keys.add_child(rename)
+	var clear: Button = CabinetStyle.key("CLEAR", CabinetStyle.PHOSPHOR, CabinetStyle.FONT_TINY)
+	clear.tooltip_text = "Eject every stage of %s back into the bin." % (name_text if name_text != "" else "the active workflow")
+	clear.disabled = running or Simulation.filled_slot_count() <= 0
+	clear.pressed.connect(clear_active_workflow)
+	_keys.add_child(clear)
+	var delete: Button = CabinetStyle.key("DELETE", CabinetStyle.RED, CabinetStyle.FONT_TINY)
+	delete.tooltip_text = "Scrap %s; its contracts fall back to workflow 1." % (name_text if name_text != "" else "the active workflow")
+	delete.disabled = running or Simulation.workflow_count() <= 1
+	delete.pressed.connect(delete_active_workflow)
+	_keys.add_child(delete)
 	if Simulation.can_append_overflow():
 		var stage: Button = CabinetStyle.key("+ STAGE", CabinetStyle.PHOSPHOR, CabinetStyle.FONT_TINY)
 		stage.tooltip_text = "Bolt another stage onto the pipeline (%d overflow)." % Simulation.overflow_count()
@@ -133,9 +184,91 @@ func _refresh_keys() -> void:
 				shell.call("refresh_all")
 		)
 		_keys.add_child(stage)
-	var editor: Button = CabinetStyle.key("FULL EDITOR", CabinetStyle.GREY, CabinetStyle.FONT_TINY)
-	editor.pressed.connect(func() -> void: SceneRouter.open_workflows())
-	_keys.add_child(editor)
+
+
+# --- Workflow housekeeping ----------------------------------------------------
+
+## Opens the inline name field over the counter, filled with the current name.
+func begin_rename() -> void:
+	if Simulation.workflow_count() <= 0:
+		return
+	UiSound.play("tap")
+	_name_edit.text = str(Simulation.active_workflow().get("name", ""))
+	_count.visible = false
+	_name_edit.visible = true
+	_name_edit.grab_focus()
+	_name_edit.select_all()
+
+
+func is_renaming() -> bool:
+	return _name_edit != null and _name_edit.visible
+
+
+func _cancel_rename() -> void:
+	_name_edit.visible = false
+	_count.visible = true
+	_name_edit.release_focus()
+
+
+func _commit_rename(text: String) -> void:
+	_name_edit.visible = false
+	_count.visible = true
+	_name_edit.release_focus()
+	rename_active_workflow(text)
+
+
+## Renames the active workflow; a blank or unchanged name is a no-op.
+func rename_active_workflow(new_name: String) -> bool:
+	var wanted: String = new_name.strip_edges()
+	if wanted == "" or str(Simulation.active_workflow().get("name", "")) == wanted:
+		return false
+	if not Simulation.rename_workflow(Simulation.active_workflow_index(), wanted):
+		UiSound.play("error")
+		return false
+	UiSound.play("accept")
+	shell.call("refresh_all")
+	changed.emit()
+	return true
+
+
+## Ejects every seated stage of the active workflow back into the bin. Stages a
+## contract has locked stay where they are.
+func clear_active_workflow() -> bool:
+	if Simulation.is_work_running():
+		UiSound.play("error")
+		return false
+	var cleared: bool = false
+	var slots: Array = Simulation.board_slots()
+	for index in range(slots.size() - 1, -1, -1):
+		if str(slots[index]) != "" and Simulation.clear_slot(index):
+			cleared = true
+	if not cleared:
+		UiSound.play("error")
+		return false
+	UiSound.play("tap")
+	armed_module_id = ""
+	shell.call("set_dock_armed", false)
+	shell.call("refresh_all")
+	changed.emit()
+	return true
+
+
+## Scraps the active workflow. The last one cannot go; its contracts move to
+## the first workflow, which is what the sim does for a deleted pipeline.
+func delete_active_workflow() -> bool:
+	if Simulation.is_work_running() or Simulation.workflow_count() <= 1:
+		UiSound.play("error")
+		return false
+	if not Simulation.delete_workflow(Simulation.active_workflow_index()):
+		UiSound.play("error")
+		return false
+	UiSound.play("accept")
+	armed_module_id = ""
+	dock_slot = -1
+	shell.call("set_dock_armed", false)
+	shell.call("refresh_all")
+	changed.emit()
+	return true
 
 
 ## What the detail column describes: the armed cartridge, else the module in the
@@ -156,11 +289,12 @@ func _refresh_detail() -> void:
 		_title.text = "PICK A CARTRIDGE OR A BAY"
 		_kicker.text = ""
 		detail_rows(_rows, [
-			{"text": "Tap a cartridge to arm it, then tap a bay in the dock to seat it. Tap two bays to swap them."},
+			{"text": "Tap a cartridge to arm it, then tap a bay in the dock to seat it. Tap two bays to swap them, or drag a bay onto another."},
+			{"text": "The keys on the backplane pick a workflow; the + key builds a new one from this layout. RENAME, CLEAR and DELETE above act on the active workflow."},
 		])
 		return
 	_title.text = module.name.to_upper()
-	_kicker.text = "%s · %s · %s" % [module.category.to_upper(), module.rarity.to_upper(), str(module.badge).to_upper()]
+	_kicker.text = "%s · %s · %s" % [module.category.to_upper(), module.rarity.to_upper(), Simulation.get_module_badge(module_id).to_upper()]
 	_kicker.add_theme_color_override("font_color", AssetCatalog.rarity_color(module.rarity))
 	var rows: Array = [{"text": Simulation.get_module_description(module_id)}]
 	var combos: Array = module.combos
@@ -188,22 +322,30 @@ func _refresh_detail() -> void:
 
 func primary_action() -> Dictionary:
 	var slots: Array = Simulation.board_slots()
+	var running: bool = Simulation.is_work_running()
 	if armed_module_id != "":
-		var can: bool = dock_slot >= 0 and dock_slot < slots.size() and not Simulation.is_work_running()
-		return {
+		var bay_picked: bool = dock_slot >= 0 and dock_slot < slots.size()
+		if running:
+			return blocked_action("SEAT", "ROUND UNDER WAY")
+		if not bay_picked:
+			return blocked_action("SEAT", BLOCK_SELECT_BAY)
+		var swaps: bool = str(slots[dock_slot]) != ""
+		return normalize_action({
 			"label": "SEAT",
-			"enabled": can,
-			"sub": "into bay %d" % (dock_slot + 1) if can else ("tap a bay in the dock" if not Simulation.is_work_running() else "not mid-burn"),
+			"enabled": true,
+			"sub": ("BAY %d · REPLACES SEATED" % (dock_slot + 1)) if swaps else ("BAY %d" % (dock_slot + 1)),
 			"pressed": func() -> void: seat(armed_module_id, dock_slot),
-		}
+		})
 	if dock_slot >= 0 and dock_slot < slots.size() and str(slots[dock_slot]) != "":
-		return {
+		if running:
+			return blocked_action("EJECT", "ROUND UNDER WAY")
+		return normalize_action({
 			"label": "EJECT",
-			"enabled": not Simulation.is_work_running(),
-			"sub": "bay %d back to the bin" % (dock_slot + 1),
+			"enabled": true,
+			"sub": "BAY %d · BACK TO THE BIN" % (dock_slot + 1),
 			"pressed": func() -> void: eject(dock_slot),
-		}
-	return {"label": "SEAT", "enabled": false, "sub": "arm a cartridge", "pressed": Callable()}
+		})
+	return blocked_action("SEAT", BLOCK_SELECT_ITEM)
 
 
 func arm(module_id: String) -> void:

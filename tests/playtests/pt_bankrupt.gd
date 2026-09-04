@@ -20,9 +20,8 @@ func play(harness: UiHarness) -> void:
 		if Simulation.phase == Simulation.Phase.RUN_END:
 			break
 		await dismiss_investor(harness)
-		if SceneRouter.current != "jobs":
-			await harness.goto_route("jobs")
-		driver.audit_screen("jobs", "jobs")
+		await harness.goto_tab("contracts")
+		driver.audit_screen("contracts", "desk")
 		assert_false(
 			Simulation.run_state.has_queued_jobs(),
 			"Refusing work left the slate empty"
@@ -32,9 +31,8 @@ func play(harness: UiHarness) -> void:
 			"And nothing was already in flight"
 		)
 		Simulation.debug_end_round()
-		# Bills and the verdict live on the desk. Ending the round from the
-		# job board does not walk us home, so the reports would never appear.
-		await harness.go_desk()
+		# Bills and the verdict land over the run tab.
+		await harness.goto_tab("run")
 		await _dismiss_bills_and_decline_angels(harness)
 
 	# Refusing work is the point of the loop. Eviction can take more rounds

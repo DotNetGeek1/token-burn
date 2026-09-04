@@ -1,104 +1,62 @@
-# Venue Layout Architecture
+# Venue Layout Architecture (retired)
 
-Venue screens are photographed rooms with live Godot `Control` trees mounted on
-displays authored in `presentation/asset_catalog.json`. Every venue extends
-`VenueScene`; venue scripts provide content and actions, not independent screen
-positioning systems.
+> **Superseded by the Burn Cabinet v2 (see `docs/cabinet-v2`).** The per-venue
+> painted-room architecture described below — `VenueScene`, `VenuePanel`,
+> `VenueSurface`, painted / room / console modes, authored `regions` and
+> `planes` per venue, and the desk in `ui/main.gd` — has been removed from the
+> tree. This page is kept as a short historical note; nothing in it describes
+> current behaviour.
 
-## Supported viewports
+## What replaced it
 
-- Mobile gameplay is landscape only. The UI playtest handset target is `854x480`.
-- Desktop and web gameplay are supported from `1920x1080` upward.
-- Portrait may use the console fallback as a courtesy, but it is not a release
-  target and must not determine new venue composition.
+The whole game now runs on one scene, `res://ui/cabinet/burn_cabinet.tscn`.
+Contracts, modules, the market and the perk rack are tabs on the cabinet's
+central CRT rather than separate rooms, and the menu, settings and records live
+in the cabinet's Maintenance camera rather than a `venue_menu` scene.
 
-## Layout modes
+The layout contract that replaced this one is documented in
+[Technical Architecture — Burn Cabinet shell](TECHNICAL_ARCHITECTURE.md#2a-burn-cabinet-shell).
+In short:
 
-`VenueScene` chooses one mode for the current viewport:
+- **Geometry comes from data, not paint.** `ui/cabinet/cabinet_layout.gd`
+  loads `presentation/cabinet_layout_profiles.json`, picks a profile from the
+  window's aspect and width (`wide` ≥ 1.65 with 10×1 bays, `compact` ≥ 1.35
+  with 5×2, `tablet` < 1.35 with 5×2 and a telemetry strip), and hands out the
+  coarse regions — abort rail, CRT, telemetry, command deck, backplane — as
+  fractions of the safe area. Nothing measures a rect off a picture.
+- **Art decorates containers.** `ui/cabinet/cabinet_frame.gd` fits the
+  generated 9-slice frames (`crt_bezel`, `telemetry_frame`, `deck_plate`,
+  `backplane_rail`, `panel_9slice` in the `cabinet_v2` block of
+  `presentation/asset_catalog.json`) around a region, scaling each frame so
+  its opaque lip is a fixed fraction of the region height and keeping content
+  clear of it. The chassis and maintenance wall are cover-cropped backdrops.
+- **One tree, three shapes.** The same `OperationGrid` is laid out under every
+  profile; the module dock re-grids from `dock_columns × dock_rows`. There is
+  no second copy of a screen for a different mode and no console fallback.
+- **Safe area and touch floors** are constraints in the same profile file
+  (16 px inset, 48 px minimum touch, 44 px at 854×480, 12 px body floor) and
+  are asserted by `tests/playtests/pt_cabinet_viewports.gd` at 1600×900,
+  1280×720, 1024×768, 960×540 and 854×480.
 
-- **Painted:** controls are registered to display regions in the room artwork.
-- **Room:** a landscape handset keeps the room composition and lets the player
-  lean into a panel to read and operate it.
-- **Console:** panels are reparented into one or two scrolling columns when art
-  or authored regions are unavailable, or the viewport cannot carry the room.
-
-The same `VenuePanel` nodes are moved between painted mounts and console
-containers. Do not build a second copy of a venue for a different mode.
-
-## Authored geometry
-
-Each venue entry may define:
-
-- `regions`: normalized rectangles `[x, y, width, height]`.
-- `planes`: normalized corners in this order: top-left, top-right,
-  bottom-right, bottom-left.
-
-Coordinates are fractions of the full artwork and must be finite. Rectangles
-must have positive width and height. Planes must have four non-degenerate,
-consistently ordered points.
-
-The rectangle is always required. It supplies focus geometry and the safe
-fallback when a plane cannot be mounted.
-
-## Mount backends
-
-`VenueScene` owns backend selection; venue content must not inspect the renderer.
-
-- Native measured planes use `VenueSurface`, which renders the panel through a
-  `SubViewport` and projectively maps it to the four photographed corners.
-- Flat measured planes use the affine `Node2D` mount.
-- Rectangular displays use a scaled `Node2D` mount. The panel keeps a readable
-  local canvas while the host transform preserves the exact authored
-  screen-space rectangle. Content minimum sizes must never move the display.
-- A rejected projective or affine mount falls back to the safe axis-aligned
-  region instead of hiding the panel.
-
-The Build index currently has an explicit rectangular flat policy because its
-art was composed for a straight-on CRT face. Keep exceptional placement policy
-explicit and tested; do not copy placement math into other venue scripts.
-
-## Layout lifecycle
-
-A layout pass is guarded against re-entry and runs in this order:
-
-1. Read the current viewport and choose painted, room, or console mode.
-2. Compute readability scale and apply `VenuePanel` chrome metrics.
-3. Mount and place panels.
-4. Apply venue-specific width-dependent metrics in `_on_venue_layout()`.
-5. Refit painted mounts once and snapshot panel minimum sizes.
-
-`minimum_size_changed` schedules a deferred pass only when the completed panel
-minimum-size snapshot actually changed. This prevents callback storms while
-still responding to opened detail sheets and refreshed board content.
-
-Cached routed venues implement `route_activated()` through `VenueScene`, so they
-recompute mode and geometry after hidden viewport changes.
-
-## Adding a venue
-
-1. Add art, normalized regions, and optional planes to the asset catalog.
-2. Extend `VenueScene` and implement `venue_key()`, `_build_venue()`, and
-   `refresh()`.
-3. Register content with `add_panel()`. Use `console_order` and `grow` for the
-   fallback column. Treat `console_min` as an exceptional minimum, not painted
-   geometry.
-4. Put width-dependent board, row, and font metrics in `_on_venue_layout()`.
-5. Do not assign screen-space panel positions in the venue subclass.
-6. Add the route to `pt_venue_layout_matrix.gd` and add a focused playtest for
-   any exceptional internal composition.
-
-## Required checks
-
-Run:
+## Required checks (current)
 
 ```powershell
 godot --headless res://tests/run_tests.tscn
-./tools/run_playtests.ps1 -- --filter=pt_venue_layout_matrix
-./tools/run_playtests.ps1 -- --filter=pt_workflow_resize
-./tools/run_playtests.ps1 -- --filter=pt_mobile_scrolling
+./tools/run_playtests.ps1 -- --filter=pt_cabinet_viewports
+./tools/run_playtests.ps1 -- --filter=pt_cabinet_dock_profiles
+./tools/run_playtests.ps1 -- --filter=pt_cabinet_commit_matrix
+./tools/run_playtests.ps1 -- --filter=pt_maintenance_view
 ```
 
-The matrix verifies every visible panel has finite positive screen-space bounds
-and remains registered after a repeated layout at Full HD and landscape handset
-sizes. Web exports still require a route smoke test because their affine backend
-differs from native projective rendering.
+## Historical note
+
+Between the desk prototype and the cabinet, each screen was a photographed
+room with live `Control` trees mounted on displays authored as normalised
+rectangles and, on native builds, projective four-corner planes rendered
+through a `SubViewport`. A landscape handset kept the room and let the player
+lean into one panel; anything smaller fell back to one or two scrolling
+console columns. The approach was retired because geometry lived in the
+paintings: every art change moved rects, every new viewport needed a new
+composition, and the venues duplicated the shell around what were really tabs
+on one screen. The 9-slice, profile-driven cabinet keeps the "controls mounted
+on a machine" feel without any of that coupling.

@@ -1,0 +1,218 @@
+{
+  "pending_choices": [],
+  "phase": "ROUND_PREP",
+  "round_end_pending": false,
+  "run_state": {
+    "ascension": {
+      "baseline_tokens": 0.0,
+      "contract_id": "ascension.first_scale_up",
+      "deadline_round": 12,
+      "quality_count": 0,
+      "quality_sum": 0.0,
+      "status": "active",
+      "tokens_burned": 0.0
+    },
+    "build": {
+      "board": {
+        "active_workflow": 0,
+        "meta_slot_bonus": 0,
+        "slot_count": 3
+      },
+      "draft_state": {
+        "rerolls": 0,
+        "sequence": 0
+      },
+      "dwelling": "bedroom",
+      "hardware": [
+        "used_laptop"
+      ],
+      "meta_workflow_bonus": 0,
+      "modules": [
+        "op.prompt",
+        "op.cheap_model",
+        "op.unit_tests"
+      ],
+      "perk_inventory": [],
+      "perk_liabilities": [],
+      "perks": [],
+      "purchased_upgrade_counts": {},
+      "status_effects": [],
+      "upgrade_counts": {},
+      "upgrade_levels": {},
+      "upgrades": [],
+      "workflow_capacity": 1,
+      "workflows": [
+        {
+          "gain_ledger": [],
+          "id": "workflow.1",
+          "name": "House Style",
+          "output_mult": 1.0,
+          "quality_mult": 1.0,
+          "slots": [
+            "op.prompt",
+            "op.cheap_model",
+            "op.unit_tests"
+          ],
+          "thermal_mult": 1.0
+        }
+      ]
+    },
+    "business": {
+      "active_job": {},
+      "active_jobs": [],
+      "focused_job_id": "",
+      "job_board_seq": 0,
+      "job_board_stamp": "1.0",
+      "job_offers": [
+        {
+          "board_rules": [],
+          "bug_chance": 0.04,
+          "complications": [
+            {
+              "label": "Overzealous Bans"
+            }
+          ],
+          "deadline_days": 3.0,
+          "deadline_prompts": 8,
+          "definition_id": "job.discord_mod_bot",
+          "demands": [
+            "demand.testing"
+          ],
+          "description": "Must ban spammers, not the community manager.",
+          "fit": "bread_and_butter",
+          "id": "job.discord_mod_bot.r1.i0",
+          "name": "Discord Moderation Bot",
+          "quality_threshold": 58.0,
+          "revision_risk": 0.04,
+          "reward": 665.0,
+          "rig_matched": true,
+          "scope_creep_pct": 0.02,
+          "tags": [
+            "gaming",
+            "backend"
+          ],
+          "tier": 0,
+          "token_requirement": 10150569.6789594,
+          "unmet_demands": 0,
+          "windfall": false
+        }
+      ],
+      "job_queue": [],
+      "module_market": {
+        "location": "bedroom",
+        "rerolls": 0,
+        "round": 1,
+        "sequence": 1,
+        "stock": [
+          "op.spot_instance",
+          "op.pair_programmer",
+          "op.overclock"
+        ]
+      },
+      "reputation": 10.0
+    },
+    "calendar": {
+      "deadline_progress": 0.0,
+      "prompt": 1,
+      "round": 2
+    },
+    "compute": {
+      "cooling": 16.0,
+      "efficiency": 1.0,
+      "efficiency_base": 1.0,
+      "heat": 0.0,
+      "heat_capacity": 100.0,
+      "instability": 0.0,
+      "local_capacity": 1000000.0,
+      "local_rate": 1000000.0,
+      "meta_cooling": 0.0,
+      "power_draw": 65.0,
+      "prompt_rate": 1000000.0,
+      "rate_modifiers": [],
+      "token_rate": 1000000.0
+    },
+    "depth": {
+      "affixes": [],
+      "baseline_tokens": 0.0,
+      "level": 0,
+      "pending_picks": [],
+      "requirement_mult": 1.0,
+      "score_mult": 1.0,
+      "stacks": {},
+      "status": "",
+      "tokens_needed": 0.0
+    },
+    "economy": {
+      "cash": 623.0,
+      "cash_multiplier": 1.0,
+      "costs_this_round": 0.0,
+      "debt": 0.0,
+      "income": 0.0,
+      "last_round_costs": 0.0,
+      "pending_bills": [],
+      "power_base_cost_per_prompt": 10.0,
+      "power_cost_per_prompt": 13.25,
+      "recurring_costs": 0.0,
+      "recurring_costs_base": 0.0,
+      "rent_multiplier": 1.0,
+      "rent_unpaid_streak": 0,
+      "round_rent": 400.0
+    },
+    "flags": {
+      "ascension_tier": 0,
+      "depth_complete": false,
+      "depth_complete_pending": false,
+      "difficulty": "normal",
+      "draft_kind": "",
+      "fire_risk": false,
+      "investor_beats": {},
+      "legacy_banked": false,
+      "location_completed": false,
+      "loss_reason": "",
+      "next_location": "",
+      "outcome": "",
+      "post_victory": false,
+      "post_victory_phase": "",
+      "victory": false
+    },
+    "save_version": 22,
+    "statistics": {
+      "absurdity_metrics": {},
+      "angel_offers_declined": 0,
+      "angel_offers_taken": 0,
+      "bugs_created": 0,
+      "bugs_fixed": 0,
+      "cascades_triggered": 0,
+      "clean_completions": 0,
+      "clean_one_shot_completions": 0,
+      "completed_jobs": 0,
+      "cool_completions": 0,
+      "depth_reached": 0,
+      "depth_score": 0.0,
+      "failed_jobs": 0,
+      "faults_suffered": 0,
+      "hardware_sold": 0,
+      "hidden_bugs_created": 0,
+      "hidden_bugs_revealed": 0,
+      "hidden_bugs_shipped": 0,
+      "hot_one_shot_completions": 0,
+      "jobs_accepted": 0,
+      "last_job_reward": 0.0,
+      "lifetime_overkill": 0.0,
+      "lifetime_tokens": 0.0,
+      "max_heat_ratio": 0.0,
+      "max_instability": 0.0,
+      "modules_drafted": 0,
+      "one_shot_completions": 0,
+      "overkill_2x_completions": 0,
+      "peak_cash": 0.0,
+      "peak_debt": 0.0,
+      "peak_overkill": 0.0,
+      "peak_prompt_tokens": 0.0,
+      "peak_token_rate": 0.0,
+      "stage_repeats": 0
+    }
+  },
+  "seed": 2200,
+  "version": 2
+}

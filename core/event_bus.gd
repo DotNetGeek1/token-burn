@@ -22,6 +22,7 @@ const EVENT_REWARD_CALCULATED := "reward.calculated"
 const EVENT_BILL_DUE := "bill.due"
 const EVENT_UPGRADE_PURCHASED := "upgrade.purchased"
 const EVENT_HARDWARE_SOLD := "hardware.sold"
+const EVENT_CABINET_SYSTEM_UPGRADED := "cabinet_system.upgraded"
 const EVENT_PERK_ACQUIRED := "perk.acquired"
 const EVENT_MODULE_ACQUIRED := "module.acquired"
 const EVENT_HEAT_THRESHOLD_CROSSED := "heat.threshold_crossed"
@@ -56,6 +57,7 @@ signal reward_calculated(amount: float)
 signal bill_due(bill_type: String, amount: float)
 signal upgrade_purchased(upgrade_id: String)
 signal hardware_sold(hardware_key: String)
+signal cabinet_system_upgraded(system_id: String, tier: int)
 signal perk_acquired(perk_id: String)
 signal module_acquired(module_id: String)
 signal heat_threshold_crossed(level: float)
@@ -101,6 +103,8 @@ func emit_event(event_name: String, payload: Dictionary = {}) -> void:
 			upgrade_purchased.emit(payload.get("upgrade_id", ""))
 		EVENT_HARDWARE_SOLD:
 			hardware_sold.emit(payload.get("hardware_key", ""))
+		EVENT_CABINET_SYSTEM_UPGRADED:
+			cabinet_system_upgraded.emit(payload.get("system_id", ""), int(payload.get("tier", 0)))
 		EVENT_PERK_ACQUIRED:
 			perk_acquired.emit(payload.get("perk_id", ""))
 		EVENT_MODULE_ACQUIRED:

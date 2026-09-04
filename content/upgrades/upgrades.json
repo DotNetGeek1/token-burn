@@ -25,35 +25,11 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["hardware"],
-    "requires_dwelling": "garage",
+    "requires_system": {"power": 2},
     "recurring_cost_delta": 50,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 30}
     ]
-  },
-  {
-    "id": "upgrade.garage",
-    "name": "Rent the Garage",
-    "category": "dwelling",
-    "dwelling_key": "garage",
-    "description": "Room for four machines, and enough extraction to run a desktop hard. Anything heavier still needs cooling of its own. Rent becomes $1,400/round.",
-    "cost": 2000,
-    "tags": ["dwelling"],
-    "requires_dwelling": "bedroom",
-    "recurring_cost_delta": 0,
-    "effects": []
-  },
-  {
-    "id": "upgrade.warehouse",
-    "name": "Lease the Warehouse",
-    "category": "dwelling",
-    "dwelling_key": "warehouse",
-    "description": "Sixteen slots of industrial space, and a roof strong enough for a cooling tower. Rent becomes $8,000/round.",
-    "cost": 45000,
-    "tags": ["dwelling"],
-    "requires_dwelling": "office_unit",
-    "recurring_cost_delta": 0,
-    "effects": []
   },
   {
     "id": "upgrade.compute_cluster",
@@ -65,7 +41,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["hardware"],
-    "requires_dwelling": "office_unit",
+    "requires_chapter": "office_unit",
     "recurring_cost_delta": 400,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 80}
@@ -81,7 +57,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["hardware"],
-    "requires_dwelling": "warehouse",
+    "requires_system": {"power": 3},
     "recurring_cost_delta": 2500,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 250}
@@ -97,7 +73,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["hardware"],
-    "requires_dwelling": "datacentre_campus",
+    "requires_chapter": "datacentre_campus",
     "recurring_cost_delta": 12000,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 1200}
@@ -113,7 +89,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["hardware"],
-    "requires_dwelling": "private_power_grid",
+    "requires_system": {"power": 4},
     "recurring_cost_delta": 60000,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 6000}
@@ -129,59 +105,11 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["hardware", "cooling"],
-    "requires_dwelling": "datacentre_campus",
+    "requires_chapter": "datacentre_campus",
     "recurring_cost_delta": 30000,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 300000}
     ]
-  },
-  {
-    "id": "upgrade.office_unit",
-    "name": "Rent an Office Unit",
-    "category": "dwelling",
-    "dwelling_key": "office_unit",
-    "description": "Eight slots, ducted air, and a landlord who will let you hang a chiller off the wall. Rent becomes $3,200/round.",
-    "cost": 12000,
-    "tags": ["dwelling"],
-    "requires_dwelling": "garage",
-    "recurring_cost_delta": 0,
-    "effects": []
-  },
-  {
-    "id": "upgrade.datacentre_campus",
-    "name": "Lease the Data Centre Campus",
-    "category": "dwelling",
-    "dwelling_key": "datacentre_campus",
-    "description": "A campus built for compute warehouses. Rent becomes $150,000/round.",
-    "cost": 4000000,
-    "tags": ["dwelling"],
-    "requires_dwelling": "warehouse",
-    "recurring_cost_delta": 0,
-    "effects": []
-  },
-  {
-    "id": "upgrade.private_power_grid",
-    "name": "Build a Private Power Grid",
-    "category": "dwelling",
-    "dwelling_key": "private_power_grid",
-    "description": "Your own substation and the slots for an industrial campus. The hall runs close to the line; the cryo exchange is what keeps it there. Rent becomes $900,000/round.",
-    "cost": 60000000,
-    "tags": ["dwelling"],
-    "requires_dwelling": "datacentre_campus",
-    "recurring_cost_delta": 0,
-    "effects": []
-  },
-  {
-    "id": "upgrade.moon_facility",
-    "name": "Build the Moon Facility",
-    "category": "dwelling",
-    "dwelling_key": "moon_facility",
-    "description": "Vacuum helps, but it is not free cooling — the campus still needs the orbital array to run flat out. Nobody left to complain about the noise. Rent becomes $6,000,000/round.",
-    "cost": 1200000000,
-    "tags": ["dwelling"],
-    "requires_dwelling": "private_power_grid",
-    "recurring_cost_delta": 0,
-    "effects": []
   },
   {
     "id": "upgrade.portable_ac",
@@ -208,7 +136,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["cooling"],
-    "requires_dwelling": "garage",
+    "requires_system": {"cooling": 2},
     "recurring_cost_delta": 60,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 450}
@@ -224,7 +152,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["cooling"],
-    "requires_dwelling": "office_unit",
+    "requires_chapter": "office_unit",
     "recurring_cost_delta": 400,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 1800}
@@ -240,7 +168,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["cooling"],
-    "requires_dwelling": "warehouse",
+    "requires_system": {"cooling": 3},
     "recurring_cost_delta": 3000,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 12000}
@@ -256,7 +184,7 @@
     "repeatable": true,
     "cost_growth": 1.15,
     "tags": ["cooling"],
-    "requires_dwelling": "datacentre_campus",
+    "requires_chapter": "datacentre_campus",
     "recurring_cost_delta": 40000,
     "effects": [
       {"operation": "add", "target": "compute.cooling", "value": 100000}

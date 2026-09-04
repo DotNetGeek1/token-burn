@@ -35,6 +35,8 @@ var lit_step: bool = false
 
 var _screen: CabinetStyle.ModuleScreen = null
 var _frame: TextureRect = null
+## The kit's shutter, drawn over a locked bay in place of the frame.
+var _shutter: TextureRect = null
 var _led: Panel = null
 var _outline: Panel = null
 var _name: Label = null
@@ -72,6 +74,14 @@ func _ready() -> void:
 	_frame.stretch_mode = TextureRect.STRETCH_SCALE
 	_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_frame)
+	_shutter = TextureRect.new()
+	_shutter.name = "Shutter"
+	_shutter.texture = AssetCatalog.cabinet_v2_texture("bay_shutter")
+	_shutter.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_shutter.stretch_mode = TextureRect.STRETCH_SCALE
+	_shutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shutter.visible = false
+	add_child(_shutter)
 	_led = Panel.new()
 	_led.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_led)
@@ -100,11 +110,14 @@ func _fit() -> void:
 	var origin := Vector2((size.x - drawn.x) * 0.5, 0.0)
 	_frame.position = origin
 	_frame.size = drawn
+	# The shutter is cut to the frame's aspect and sits where the frame would.
+	_shutter.position = origin
+	_shutter.size = drawn
 	_body = Rect2(origin, Vector2(drawn.x, drawn.y * BODY_HEIGHT))
 	var window := Rect2(origin + WINDOW.position * drawn, WINDOW.size * drawn)
 	_screen.position = window.position
 	_screen.size = window.size
-	var tiny: int = clampi(int(window.size.y * 0.22), 7, 11)
+	var tiny: int = clampi(int(window.size.y * 0.22), 8, 13)
 	_name.add_theme_font_size_override("font_size", tiny)
 	_name.position = window.position + Vector2(window.size.x * 0.04, window.size.y * 0.04)
 	_name.size = Vector2(window.size.x * 0.92, window.size.y * 0.26)
@@ -130,6 +143,12 @@ func show_slot(slot: int, id: String, is_covered: bool) -> void:
 	module_id = id
 	covered = is_covered
 	mouse_filter = Control.MOUSE_FILTER_IGNORE if covered else Control.MOUSE_FILTER_STOP
+	mouse_default_cursor_shape = Control.CURSOR_ARROW if covered else Control.CURSOR_POINTING_HAND
+	if covered:
+		if has_focus():
+			release_focus()
+		focus_mode = Control.FOCUS_NONE
+	tooltip_text = "Locked bay — the backplane has no slot here yet." if covered else ""
 	_render()
 
 
@@ -158,8 +177,9 @@ func _render() -> void:
 	if _screen == null:
 		return
 	var module: ModuleDefinition = ContentDatabase.get_module(module_id) if module_id != "" else null
-	# A shut socket shows the plate's own recess and nothing else.
+	# A locked bay is shut behind the kit's shutter and shows nothing else.
 	_frame.visible = not covered
+	_shutter.visible = covered and _shutter.texture != null
 	_screen.visible = not covered
 	_led.visible = not covered
 	_note.visible = not covered and module == null
@@ -215,6 +235,12 @@ func _on_input(event: InputEvent) -> void:
 	if covered:
 		return
 	if _tap.feed(event):
+		pressed.emit(slot_index)
+		accept_event()
+		return
+	# A focused bay takes the accept action like a key, so a controller or a
+	# keyboard can seat and pick without a pointer.
+	if event.is_action_pressed("ui_accept") and has_focus():
 		pressed.emit(slot_index)
 		accept_event()
 

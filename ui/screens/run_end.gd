@@ -427,12 +427,12 @@ func _chapter_ahead() -> bool:
 	return _earned_this_run and Simulation.next_location_unlocked() != ""
 
 
-## What the main exit leads to. After a mid-campaign win it is the move into
-## the newly opened chapter; otherwise it is a fresh game from the bottom of
-## the campaign, carrying only the permanent unlocks.
+## What the main exit leads to. After a mid-campaign win it is the next
+## chapter, carrying the whole rig; otherwise it is a fresh game from the
+## bottom of the campaign, carrying only the permanent unlocks.
 func _new_run_subtitle() -> String:
 	if _chapter_ahead():
-		return "Move into the %s with everything you own" % MetaProgress.location_name(
+		return "Next chapter: the %s, with everything you own" % MetaProgress.location_name(
 			Simulation.next_location_unlocked()
 		)
 	var location: String = MetaProgress.location_name(MetaProgress.selected_location())

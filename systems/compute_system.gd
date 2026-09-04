@@ -10,6 +10,10 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 		var hw: Dictionary = hardware_curves.get(str(hardware_id), {})
 		hardware_rate += float(hw.get("token_rate", 0.0))
 		power_draw += float(hw.get("power_draw", 0.0))
+	# The Compute Stack tier is a flat base alongside the machines, so it takes
+	# the same overclock, modifier and efficiency chain a machine's rate does.
+	# Tier 1 is worth nothing: the bedroom baseline is the laptop.
+	hardware_rate += cabinet_base_rate(run_state)
 	run_state.compute["local_capacity"] = hardware_rate
 	run_state.compute["power_draw"] = power_draw
 	_update_power_cost(run_state, power_draw)
@@ -103,7 +107,12 @@ static func _sum_hardware_rate(run_state: RunState) -> float:
 	for hardware_id in run_state.build["hardware"]:
 		var hw: Dictionary = hardware_curves.get(str(hardware_id), {})
 		hardware_rate += float(hw.get("token_rate", 0.0))
-	return hardware_rate
+	return hardware_rate + cabinet_base_rate(run_state)
+
+
+## What the Compute Stack tier contributes before any machine is counted.
+static func cabinet_base_rate(run_state: RunState) -> float:
+	return maxf(0.0, CabinetSystems.capacity(run_state, "compute", "base_token_rate"))
 
 
 ## How many contracts the rig can work at once. One machine, one contract: a

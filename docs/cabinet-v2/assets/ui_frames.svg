@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="400" viewBox="0 0 1600 400">
+  <defs>
+    <linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#4a4640"/><stop offset=".25" stop-color="#242322"/><stop offset="1" stop-color="#0c0d0d"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="4"/></filter>
+  </defs>
+  <!-- CRT frame 640x400 -->
+  <g id="crt_frame">
+    <rect x="8" y="8" width="624" height="384" rx="34" fill="url(#m)" stroke="#6b645a" stroke-width="8"/>
+    <rect x="31" y="31" width="578" height="338" rx="23" fill="#07100b" stroke="#111815" stroke-width="10"/>
+    <path d="M65 51h510" stroke="#d6a64a" stroke-width="2" opacity=".25" filter="url(#glow)"/>
+  </g>
+  <!-- telemetry frame 320x400 -->
+  <g id="telemetry_frame" transform="translate(640)">
+    <rect x="8" y="8" width="304" height="384" rx="17" fill="url(#m)" stroke="#5a554d" stroke-width="7"/>
+    <g fill="#090b0a" stroke="#34322f" stroke-width="4">
+      <rect x="28" y="28" width="264" height="75" rx="7"/><rect x="28" y="118" width="264" height="75" rx="7"/>
+      <rect x="28" y="208" width="264" height="75" rx="7"/><rect x="28" y="298" width="264" height="75" rx="7"/>
+    </g>
+  </g>
+  <!-- paper card 320x400 -->
+  <g id="paper_card" transform="translate(960)">
+    <path d="M17 10h286l8 12-6 30 7 39-5 45 5 52-8 37 7 44-6 49 7 69-13 13H18L8 383l6-48-6-52 7-43-6-42 7-51-6-51 8-38-7-37z" fill="#c7b68e" stroke="#493f30" stroke-width="6"/>
+    <path d="M39 76h242M39 310h242" stroke="#6b5a40" stroke-width="3" stroke-dasharray="8 7" opacity=".7"/>
+    <circle cx="40" cy="40" r="9" fill="#493f30"/><rect x="61" y="31" width="175" height="17" fill="#493f30" opacity=".75"/>
+  </g>
+  <!-- generic 9-slice panel 320x400; margins 32 -->
+  <g id="panel_9slice" transform="translate(1280)">
+    <rect x="8" y="8" width="304" height="384" rx="17" fill="#111312" stroke="#4a4640" stroke-width="8"/>
+    <rect x="32" y="32" width="256" height="336" rx="8" fill="#080a09" stroke="#252824" stroke-width="4"/>
+    <g fill="#817567" stroke="#0a0a0a" stroke-width="3"><circle cx="25" cy="25" r="6"/><circle cx="295" cy="25" r="6"/><circle cx="25" cy="375" r="6"/><circle cx="295" cy="375" r="6"/></g>
+  </g>
+</svg>
+

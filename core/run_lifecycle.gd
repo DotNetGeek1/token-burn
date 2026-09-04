@@ -149,6 +149,10 @@ func apply_run_location(
 	if not dwelling_costs.has(location):
 		return
 	var stats: Dictionary = dwelling_costs[location]
+	# The room is worth a set of cabinet tiers (the pack's migration table). A
+	# fresh run in the garage opens with garage-tier systems; a run that moves
+	# up keeps anything it had already bought above what the new room gives.
+	CabinetSystems.raise_to_dwelling(state, location)
 	var rent_multiplier: float = float(state.economy.get("rent_multiplier", 1.0))
 	state.economy["round_rent"] = float(
 		stats.get("rent", state.economy.get("round_rent", 0.0))
@@ -159,11 +163,10 @@ func apply_run_location(
 		state.economy["cash"] = float(stats["starting_cash"]) * float(
 			state.economy.get("cash_multiplier", 1.0)
 		)
-	# A bigger room takes longer to cook. Heat is measured against this rather
-	# than a fixed hundred, so moving up buys headroom as well as floor space.
-	state.compute["heat_capacity"] = float(
-		stats.get("heat_capacity", state.compute.get("heat_capacity", 100.0))
-	)
+	# A bigger cooling loop takes longer to cook. Heat is measured against this
+	# rather than a fixed hundred, so a higher tier buys headroom as well as
+	# cooling. Read from the Cooling Loop tier, floored by the room's own row.
+	state.compute["heat_capacity"] = CabinetSystems.capacity(state, "cooling", "heat_capacity")
 	if grant_starter_rig:
 		_grant_location_starter_rig(sim, state, stats)
 	state.compute["cooling"] = ComputeSystem.derive_cooling(state)

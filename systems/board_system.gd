@@ -274,9 +274,9 @@ func derived_slot_count(run_state: RunState, content_db: Node) -> int:
 	return derived_supported_capacity(run_state, content_db)
 
 
-## How many stages the room will back without complaining. Location sets the
-## floor; monitors, desks, perks and meta unlocks still add. Overflow is
-## anything past this number.
+## How many stages the cabinet will back without complaining. The Workflow
+## Backplane tier sets the baseline; monitors, desks, perks and meta unlocks
+## still add. Overflow is anything past this number.
 func derived_supported_capacity(run_state: RunState, content_db: Node) -> int:
 	var board: Dictionary = run_state.build.get("board", {})
 	var meta_bonus: int = int(board.get("meta_slot_bonus", 0))
@@ -293,14 +293,24 @@ func derived_supported_capacity(run_state: RunState, content_db: Node) -> int:
 	return clampi(baseline + meta_bonus + perk_bonus + upgrade_bonus, 1, ceiling)
 
 
+## The baseline the board starts from: the bays the run's backplane tier gives
+## it (with the legacy `supported_stages` row as a floor while it exists — see
+## CabinetSystems). With overflow switched off the board stays at the fixed
+## default it has always had.
 static func location_supported_capacity(run_state: RunState, content_db: Node = null) -> int:
 	if content_db == null or not FeatureFlags.is_enabled("workflow_overflow_enabled"):
 		return DEFAULT_SLOT_COUNT
-	var table: Dictionary = Dictionary(
-		Dictionary(content_db.balance.get("job_scaling", {})).get("board", {})
-	).get("supported_stages", {})
-	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
-	return maxi(1, int(table.get(dwelling, DEFAULT_SLOT_COUNT)))
+	return maxi(1, int(CabinetSystems.capacity(run_state, "backplane", "bays", content_db)))
+
+
+## The workflows the run's Control Rack tier gives it before perks, upgrades
+## and meta unlocks add theirs.
+static func location_workflow_capacity(run_state: RunState, content_db: Node = null) -> int:
+	return clampi(
+		int(CabinetSystems.capacity(run_state, "control", "workflows", content_db)),
+		DEFAULT_WORKFLOW_CAPACITY,
+		MAX_WORKFLOW_COUNT
+	)
 
 
 static func overflow_config(content_db: Node = null) -> Dictionary:
@@ -357,12 +367,15 @@ func derived_workflow_capacity(run_state: RunState, content_db: Node) -> int:
 		run_state, content_db, "build.workflow_capacity"
 	))
 	return clampi(
-		DEFAULT_WORKFLOW_CAPACITY + meta_bonus + perk_bonus + upgrade_bonus,
+		location_workflow_capacity(run_state, content_db) + meta_bonus + perk_bonus + upgrade_bonus,
 		1,
 		MAX_WORKFLOW_COUNT
 	)
 
 
+## A save from before meta bonuses were tracked separately stored only the
+## total. Whatever the total cannot be explained by — the cabinet's own
+## baseline, perks, upgrades — is attributed to permanent unlocks.
 func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> void:
 	var board: Dictionary = run_state.build.get("board", {})
 	if not board.has("meta_slot_bonus"):
@@ -372,7 +385,7 @@ func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> voi
 			run_state, content_db, "build.board.slot_count"
 		))
 		board["meta_slot_bonus"] = maxi(
-			0, stored_slots - DEFAULT_SLOT_COUNT - perk_slots - upgrade_slots
+			0, stored_slots - location_supported_capacity(run_state, content_db) - perk_slots - upgrade_slots
 		)
 		run_state.build["board"] = board
 	if not run_state.build.has("meta_workflow_bonus"):
@@ -383,7 +396,7 @@ func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> voi
 		))
 		run_state.build["meta_workflow_bonus"] = maxi(
 			0,
-			stored_capacity - DEFAULT_WORKFLOW_CAPACITY \
+			stored_capacity - location_workflow_capacity(run_state, content_db) \
 				- perk_capacity_bonus - upgrade_capacity_bonus
 		)
 

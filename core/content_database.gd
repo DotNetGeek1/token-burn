@@ -8,6 +8,10 @@ var upgrades: Array[UpgradeDefinition] = []
 var events: Array[EventDefinition] = []
 var modules: Array[ModuleDefinition] = []
 var balance: Dictionary = {}
+## The five tiered cabinet systems (`content/upgrades/cabinet_systems.json`):
+## tier values, costs, generation thresholds and the dwelling migration table.
+## Read through `CabinetSystems`.
+var cabinet_systems: Dictionary = {}
 var comparisons: Array = []
 var rarity_weights: Dictionary = {}
 var synergies: Array = []
@@ -496,10 +500,15 @@ func _load_upgrades() -> void:
 		upgrade.tags = PackedStringArray(Array(entry.get("tags", [])))
 		upgrade.recurring_cost_delta = float(entry.get("recurring_cost_delta", 0.0))
 		upgrade.hardware_key = str(entry.get("hardware_key", ""))
-		upgrade.dwelling_key = str(entry.get("dwelling_key", ""))
 		upgrade.component_key = str(entry.get("component_key", ""))
 		upgrade.requires_hardware = str(entry.get("requires_hardware", ""))
-		upgrade.requires_dwelling = str(entry.get("requires_dwelling", ""))
+		var system_gate: Variant = entry.get("requires_system", {})
+		var gates: Dictionary = {}
+		if system_gate is Dictionary:
+			for system_id in Dictionary(system_gate).keys():
+				gates[str(system_id)] = int(Dictionary(system_gate)[system_id])
+		upgrade.requires_system = gates
+		upgrade.requires_chapter = str(entry.get("requires_chapter", ""))
 		upgrade.requires_upgrade = str(entry.get("requires_upgrade", ""))
 		upgrade.repeatable = bool(entry.get("repeatable", false))
 		upgrade.cost_growth = float(entry.get("cost_growth", 1.35))
@@ -592,6 +601,7 @@ func _load_balance() -> void:
 	balance["difficulty_profiles"] = _load_json_dict("res://content/balance/difficulty_profiles.json")
 	balance["job_demands"] = _load_json_dict("res://content/balance/job_demands.json")
 	balance["pacing_targets"] = _load_json_dict("res://content/balance/pacing_targets.json")
+	cabinet_systems = _load_json_dict("res://content/upgrades/cabinet_systems.json")
 	rarity_weights = _load_json_dict("res://content/balance/rarity_weights.json")
 	comparisons = _load_json_array("res://content/balance/comparisons.json")
 	synergies = _load_json_array("res://content/balance/synergies.json")
@@ -608,7 +618,7 @@ const KNOWN_EFFECT_OPERATIONS := [
 ]
 ## Category enums recognised by `Simulation`/`UpgradeSystem` when installing
 ## an upgrade. Anything else is a typo that would silently fail to install.
-const KNOWN_UPGRADE_CATEGORIES := ["hardware", "component", "dwelling"]
+const KNOWN_UPGRADE_CATEGORIES := ["hardware", "component"]
 ## Module categories the Burn Board and draft affinity already understand.
 const KNOWN_MODULE_CATEGORIES := [
 	"prompt", "context", "model", "agent", "cache", "test", "hardware", "deploy",
@@ -669,11 +679,9 @@ func collect_validation_errors() -> Array[String]:
 				errors.append("upgrade '%s' references missing component_key '%s'" % [upgrade.id, upgrade.component_key])
 			if not hardware_curves.has(upgrade.requires_hardware):
 				errors.append("upgrade '%s' fits missing host hardware '%s'" % [upgrade.id, upgrade.requires_hardware])
-		if upgrade.category == "dwelling" and upgrade.dwelling_key != "":
-			if not dwelling_costs.has(upgrade.dwelling_key):
-				errors.append("upgrade '%s' references missing dwelling_key '%s'" % [upgrade.id, upgrade.dwelling_key])
-		if upgrade.requires_dwelling != "" and not dwelling_costs.has(upgrade.requires_dwelling):
-			errors.append("upgrade '%s' requires missing dwelling '%s'" % [upgrade.id, upgrade.requires_dwelling])
+		if upgrade.requires_chapter != "" and not dwelling_costs.has(upgrade.requires_chapter):
+			errors.append("upgrade '%s' requires missing chapter '%s'" % [upgrade.id, upgrade.requires_chapter])
+		_validate_system_gate(errors, "upgrade '%s'" % upgrade.id, upgrade.requires_system)
 		if upgrade.requires_upgrade != "" and not _upgrades_by_id.has(upgrade.requires_upgrade):
 			errors.append("upgrade '%s' requires missing upgrade '%s'" % [upgrade.id, upgrade.requires_upgrade])
 		for effect in upgrade.effects:
@@ -892,7 +900,173 @@ func collect_validation_errors() -> Array[String]:
 			])
 	_validate_module_market_tuning(errors)
 	_validate_ascension_contracts(errors)
+	_validate_cabinet_systems(errors)
 	return errors
+
+
+## A `requires_system` gate names cabinet systems `cabinet_systems.json` knows
+## and asks for a tier inside its tier range; anything else could never be met.
+func _validate_system_gate(errors: Array[String], owner: String, gate: Dictionary) -> void:
+	if gate.is_empty():
+		return
+	var systems: Array = []
+	for entry in Array(cabinet_systems.get("systems", [])):
+		if entry is Dictionary:
+			systems.append(str(Dictionary(entry).get("id", "")))
+	var range_value: Variant = cabinet_systems.get("tier_range", [1, 4])
+	var lo: int = 1
+	var hi: int = 4
+	if range_value is Array and Array(range_value).size() == 2:
+		lo = int(Array(range_value)[0])
+		hi = int(Array(range_value)[1])
+	for system_id in gate.keys():
+		if not (str(system_id) in systems):
+			errors.append("%s requires unknown cabinet system '%s'" % [owner, str(system_id)])
+			continue
+		var tier: int = int(gate[system_id])
+		if tier < lo or tier > hi:
+			errors.append("%s requires %s tier %d outside %d..%d" % [owner, str(system_id), tier, lo, hi])
+
+
+## `cabinet_systems.json` is the source of every capacity the board, the rig
+## and the Market read, so a malformed row fails at load: ids unique and
+## covering the migration order, every tier table exactly tier_range long,
+## costs one shorter than that and non-negative, generation thresholds strictly
+## ascending, and the dwelling tables naming only rooms `dwelling_costs` knows.
+func _validate_cabinet_systems(errors: Array[String]) -> void:
+	var data: Dictionary = cabinet_systems
+	if data.is_empty():
+		errors.append("cabinet_systems content is missing")
+		return
+	var range_value: Variant = data.get("tier_range", null)
+	var lo: int = 1
+	var hi: int = 4
+	if not range_value is Array or Array(range_value).size() != 2:
+		errors.append("cabinet_systems.tier_range must be [min, max]")
+	else:
+		lo = int(Array(range_value)[0])
+		hi = int(Array(range_value)[1])
+		if lo < 1 or hi < lo:
+			errors.append("cabinet_systems.tier_range %s is not a valid range" % str(range_value))
+	var tier_count: int = maxi(1, hi - lo + 1)
+	var systems: Variant = data.get("systems", null)
+	var system_ids: Array = []
+	if not systems is Array or Array(systems).is_empty():
+		errors.append("cabinet_systems.systems must be a non-empty array")
+	else:
+		for entry in Array(systems):
+			if not entry is Dictionary:
+				errors.append("cabinet_systems.systems has a non-object entry")
+				continue
+			var system: Dictionary = entry
+			var id: String = str(system.get("id", ""))
+			if id == "":
+				errors.append("cabinet system has an empty id")
+				continue
+			if id in system_ids:
+				errors.append("duplicate cabinet system id '%s'" % id)
+			system_ids.append(id)
+			if str(system.get("name", "")).strip_edges() == "":
+				errors.append("cabinet system '%s' has an empty name" % id)
+			var tier_names: Variant = system.get("tier_names", null)
+			if not tier_names is Array or Array(tier_names).size() != tier_count:
+				errors.append("cabinet system '%s' needs %d tier_names" % [id, tier_count])
+			var values: Variant = system.get("tier_values", null)
+			if not values is Dictionary or Dictionary(values).is_empty():
+				errors.append("cabinet system '%s' has no tier_values" % id)
+			else:
+				for stat_key in Dictionary(values).keys():
+					var column: Variant = Dictionary(values)[stat_key]
+					if not column is Array or Array(column).size() != tier_count:
+						errors.append("cabinet system '%s' tier_values.%s needs %d entries" % [
+							id, str(stat_key), tier_count,
+						])
+						continue
+					var previous: float = -INF
+					for value in Array(column):
+						if not (value is int or value is float):
+							errors.append("cabinet system '%s' tier_values.%s has a non-numeric entry" % [
+								id, str(stat_key),
+							])
+							break
+						if float(value) < previous:
+							errors.append("cabinet system '%s' tier_values.%s must not decrease" % [
+								id, str(stat_key),
+							])
+							break
+						previous = float(value)
+			var costs: Variant = system.get("cost", null)
+			if not costs is Array or Array(costs).size() != tier_count - 1:
+				errors.append("cabinet system '%s' needs %d cost entries (tiers %d..%d)" % [
+					id, tier_count - 1, lo + 1, hi,
+				])
+			else:
+				for cost in Array(costs):
+					if not (cost is int or cost is float) or float(cost) < 0.0:
+						errors.append("cabinet system '%s' has a negative or non-numeric cost" % id)
+						break
+	var order: Variant = data.get("migration_value_order", null)
+	if not order is Array or Array(order).is_empty():
+		errors.append("cabinet_systems.migration_value_order is missing")
+	else:
+		for entry in Array(order):
+			if str(entry) not in system_ids:
+				errors.append("cabinet_systems.migration_value_order names unknown system '%s'" % str(entry))
+		for id in system_ids:
+			if id not in Array(order):
+				errors.append("cabinet_systems.migration_value_order is missing system '%s'" % id)
+	var thresholds: Variant = data.get("generation_thresholds", null)
+	if not thresholds is Array or Array(thresholds).is_empty():
+		errors.append("cabinet_systems.generation_thresholds is missing")
+	else:
+		var last_sum: int = -1
+		for entry in Array(thresholds):
+			if not entry is Dictionary:
+				errors.append("cabinet_systems.generation_thresholds has a non-object entry")
+				continue
+			var min_sum: int = int(Dictionary(entry).get("min_sum", -1))
+			if str(Dictionary(entry).get("name", "")).strip_edges() == "":
+				errors.append("cabinet_systems generation at min_sum %d has no name" % min_sum)
+			if min_sum <= last_sum:
+				errors.append("cabinet_systems.generation_thresholds must ascend (min_sum %d after %d)" % [
+					min_sum, last_sum,
+				])
+			last_sum = min_sum
+	var dwelling_costs: Dictionary = balance.get("dwelling_costs", {})
+	var order_size: int = Array(order).size() if order is Array else system_ids.size()
+	var migration: Variant = data.get("migration_from_dwelling", null)
+	if not migration is Dictionary or Dictionary(migration).is_empty():
+		errors.append("cabinet_systems.migration_from_dwelling is missing")
+	else:
+		for dwelling in Dictionary(migration).keys():
+			if not dwelling_costs.has(str(dwelling)):
+				errors.append("cabinet_systems.migration_from_dwelling names unknown dwelling '%s'" % str(dwelling))
+			var row: Variant = Dictionary(migration)[dwelling]
+			if not row is Array or Array(row).size() != order_size:
+				errors.append("cabinet_systems.migration_from_dwelling.%s needs %d tiers" % [str(dwelling), order_size])
+				continue
+			for value in Array(row):
+				if int(value) < lo or int(value) > hi:
+					errors.append("cabinet_systems.migration_from_dwelling.%s has tier %s outside %d..%d" % [
+						str(dwelling), str(value), lo, hi,
+					])
+					break
+		for dwelling in dwelling_costs.keys():
+			if not Dictionary(migration).has(str(dwelling)):
+				errors.append("cabinet_systems.migration_from_dwelling has no row for dwelling '%s'" % str(dwelling))
+	var caps: Variant = data.get("chapter_max_tier", null)
+	if not caps is Dictionary or Dictionary(caps).is_empty():
+		errors.append("cabinet_systems.chapter_max_tier is missing")
+	else:
+		for dwelling in Dictionary(caps).keys():
+			if not dwelling_costs.has(str(dwelling)):
+				errors.append("cabinet_systems.chapter_max_tier names unknown dwelling '%s'" % str(dwelling))
+			var cap: int = int(Dictionary(caps)[dwelling])
+			if cap < lo or cap > hi:
+				errors.append("cabinet_systems.chapter_max_tier.%s is outside %d..%d" % [str(dwelling), lo, hi])
+		for dwelling in dwelling_costs.keys():
+			if not Dictionary(caps).has(str(dwelling)):
+				errors.append("cabinet_systems.chapter_max_tier has no entry for dwelling '%s'" % str(dwelling))
 
 
 func _validate_module_market_tuning(errors: Array[String]) -> void:

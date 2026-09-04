@@ -22,8 +22,7 @@ func _init(harness: UiHarness, test_case: TestCase) -> void:
 	_case = test_case
 
 
-## ConsoleTable.Row or VenueTile whose `.meta` matches. Returns the row itself
-## or the tile; `press` resolves a tile to its inner surface button.
+## ConsoleTable.Row or CabinetTile whose `.meta` matches.
 func row(meta) -> Control:
 	var scene: Node = _scene()
 	if scene == null:
@@ -38,9 +37,9 @@ func command(text: String) -> Control:
 	var wanted: String = _norm(text)
 	if wanted == "":
 		return null
-	# Venues print a disabled key-hint row with the same verb as the real
-	# action (jobs: ACCEPT). Prefer an enabled match so press() hits the
-	# contract sheet, not the legend.
+	# A disabled key can carry the same verb as the live action (a shelf tab
+	# and its commit both read BUY). Prefer an enabled match so press() hits
+	# the thing that does something, not the legend.
 	var candidates: Array[Control] = []
 	var by_menu: Control = _find_menu_row(scene, wanted)
 	if by_menu != null:
@@ -94,6 +93,13 @@ func press(control) -> void:
 	# usable rect; only the hover assertion is skipped.
 	if DisplayServer.get_name() != "headless":
 		var hovered: Control = viewport.gui_get_hovered_control()
+		if not _hover_hits(hovered, target):
+			# A real pointer resting over the window can land its own motion
+			# after ours (the window appearing under it, a focus change); one
+			# more synthetic move settles which of the two the GUI believes.
+			viewport.push_input(motion)
+			await _harness.get_tree().process_frame
+			hovered = viewport.gui_get_hovered_control()
 		_case.assert_true(
 			_hover_hits(hovered, target),
 			"Hover missed %s (got %s)" % [_describe(target), _describe(hovered)]
@@ -207,33 +213,11 @@ func assert_overlay_hidden(fragment) -> void:
 	)
 
 
-## Room-mode venues put a tap-catcher over a panel that is across the room.
-## A press there means "let me read this", not the row underneath.
-func lean_if_needed(panel_or_tile) -> void:
-	var target: Node = panel_or_tile
-	if target != null and not target.has_method("far_off"):
-		var parent: Node = target.get_parent()
-		while parent != null:
-			if parent.has_method("far_off"):
-				target = parent
-				break
-			parent = parent.get_parent()
-	if target != null and target.has_method("far_off") and target.far_off():
-		await press(target)
-
-
 func _scene() -> Node:
 	return _harness.current_scene()
 
 
 func _press_target(control: Control) -> Control:
-	# VenueTile / VenuePanel take the press on an inner surface button. The
-	# panel's own filter may be STOP, but the thing that receives the click
-	# is the child.
-	if control is VenueTile or control is VenuePanel:
-		for child in control.get_children():
-			if child is Button and child.is_visible_in_tree():
-				return child
 	return control
 
 
@@ -269,7 +253,7 @@ func _audit_buttons(root: Node, audit_name: String) -> void:
 		):
 			var rect: Rect2 = button.get_global_rect()
 			if rect.size.x > MIN_HIT and rect.size.y > MIN_HIT:
-				# A tile below the fold of a VenueBoard is supposed to be
+				# A tile below the fold of a shelf is supposed to be
 				# scrolled to, not on the glass already.
 				_case.assert_true(
 					_centre_in_viewport(button, VIEWPORT_SLOP) or _inside_scroll(button),
@@ -306,7 +290,7 @@ func _find_row(node: Node, meta) -> Control:
 		return null
 	if node is ConsoleTable.Row and _meta_matches(node.meta, meta):
 		return node
-	if node is VenueTile and _meta_matches(node.meta, meta):
+	if node is CabinetTile and _meta_matches(node.meta, meta):
 		return node
 	for child in node.get_children():
 		var found: Control = _find_row(child, meta)
@@ -375,7 +359,10 @@ func _find_game_card(node: Node, wanted: String) -> Control:
 func _collect_tiles(node: Node, found: Array) -> void:
 	if node is CanvasItem and not node.is_visible_in_tree():
 		return
-	if node is VenueTile:
+	# The glass carries two kinds of pickable thing: the shelf tiles the
+	# Market, Modules and Perks tabs print, and the paper contract cards on
+	# the CONTRACTS wire.
+	if node is CabinetTile or node is ContractCard:
 		found.append(node)
 		return
 	for child in node.get_children():

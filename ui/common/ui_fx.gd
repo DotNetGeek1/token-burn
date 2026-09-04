@@ -13,6 +13,35 @@ extends RefCounted
 ## into a hard-edged square. Everything here assigns the stops as arrays instead,
 ## where the mapping is explicit.
 
+## The project setting that turns motion down for players who ask for it; the
+## profile's own toggle (Maintenance → Settings) overrides it once set.
+const REDUCED_MOTION_SETTING := "token_burn/accessibility/reduced_motion"
+
+
+## Whether the player has asked for reduced motion: the hold ring becomes a
+## plain fill, the maintenance zoom a crossfade, the install reveal a fade,
+## and the CRT never shakes. The profile setting wins when it has been set;
+## otherwise the project setting `token_burn/accessibility/reduced_motion`.
+static func reduced_motion() -> bool:
+	var meta: Node = _meta_progress()
+	if meta != null and meta.has_method("reduced_motion_setting"):
+		var from_profile: Variant = meta.call("reduced_motion_setting")
+		if from_profile != null:
+			return bool(from_profile)
+	if ProjectSettings.has_setting(REDUCED_MOTION_SETTING):
+		return bool(ProjectSettings.get_setting(REDUCED_MOTION_SETTING, false))
+	return false
+
+
+static func _meta_progress() -> Node:
+	var loop: MainLoop = Engine.get_main_loop()
+	if not (loop is SceneTree):
+		return null
+	var root: Window = (loop as SceneTree).root
+	if root == null:
+		return null
+	return root.get_node_or_null("MetaProgress")
+
 
 static func ramp(offsets: Array, colors: Array) -> Gradient:
 	var gradient := Gradient.new()

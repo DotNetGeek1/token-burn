@@ -25,11 +25,16 @@ const INK_DIM := Color(0.30, 0.23, 0.15)
 const INK_GREEN := Color(0.12, 0.36, 0.16)
 const INK_RED := Color(0.56, 0.13, 0.10)
 
-const FONT_TINY := 9
-const FONT_SMALL := 11
-const FONT_BODY := 13
-const FONT_HEAD := 16
+## Type sizes at the 1280x720 baseline. Body copy targets 16 px there and is
+## never set below 12 (spec 03); captions are engraved labels, not copy, and
+## may sit a little under that.
+const FONT_TINY := 10
+const FONT_SMALL := 12
+const FONT_BODY := 16
+const FONT_HEAD := 20
 const FONT_DRUM := 30
+## The floor for anything that is body copy.
+const FONT_MIN_BODY := 12
 
 
 ## A line of readout. Fixed pitch, one colour, no wrap.

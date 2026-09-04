@@ -300,7 +300,7 @@ static func cooling_remedy(sim: Node, shortfall: float) -> String:
 			best = upgrade
 			best_cooling = cooling
 	if best == null:
-		return "Nothing on the Cooling shelf reaches this yet — take the next property up first."
+		return "Nothing on the Cooling shelf reaches this yet — raise the Cooling Loop on the SYSTEMS shelf first."
 	var units: int = int(ceil(shortfall / best_cooling))
 	if units <= 1:
 		return "A %s from the Market's Cooling shelf would cover it." % best.name

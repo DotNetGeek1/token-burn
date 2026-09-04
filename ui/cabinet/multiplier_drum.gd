@@ -37,7 +37,7 @@ func _ready() -> void:
 func _fit() -> void:
 	var drum: int = clampi(int(size.y * 0.42), 14, 44)
 	_value.add_theme_font_size_override("font_size", drum)
-	var tiny: int = clampi(int(size.y * 0.10), 7, 11)
+	var tiny: int = clampi(int(size.y * 0.10), 8, 13)
 	_sub.add_theme_font_size_override("font_size", tiny)
 	_caption.add_theme_font_size_override("font_size", tiny)
 

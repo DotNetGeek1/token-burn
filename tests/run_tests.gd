@@ -106,13 +106,16 @@ func _collect_scripts(dir_path: String, scripts: Array[String]) -> void:
 func _run_test_script(path: String) -> void:
 	# Announced before it runs, so a suite that hangs or crashes names itself.
 	print("  Running %s..." % path)
+	# A script that fails to parse still comes back from load() as a resource,
+	# just one that cannot be instantiated. That has to fail the suite loudly
+	# with its path, not slip through as "nothing to run".
 	var script: GDScript = load(path)
-	if script == null:
+	if script == null or not script.can_instantiate():
 		_failed += 1
-		push_error("  FAIL  could not load %s" % path)
+		push_error("  FAIL  could not load or parse %s" % path)
 		return
 	var test: Variant = script.new()
-	if not test is TestCase:
+	if test == null or not test is TestCase:
 		_failed += 1
 		push_error("  FAIL  %s is not a TestCase" % path)
 		return

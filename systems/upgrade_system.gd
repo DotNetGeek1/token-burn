@@ -130,14 +130,17 @@ static func installed_key(upgrade: UpgradeDefinition) -> String:
 	return ""
 
 
-## Whether the run has the thing this upgrade sits on top of: premises at least
-## as serious as it needs, or the machine it bolts onto. A rack names the smallest room that can
-## hold it, and since a run never moves, that is really a statement about which
-## chapter of the campaign the rack belongs to.
+## Whether the run has the thing this upgrade sits on top of: the cabinet
+## system tiers it names (a rack wants the power bus that gives it floor space,
+## a plant wants the cooling loop it feeds), the chapter of the campaign it
+## belongs to, or the machine it bolts onto.
 static func prerequisites_met(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
-	if upgrade.requires_dwelling != "":
-		var have: int = dwelling_tier(str(run_state.build.get("dwelling", "")), content_db)
-		if have < dwelling_tier(upgrade.requires_dwelling, content_db):
+	for system_id in upgrade.requires_system.keys():
+		if CabinetSystems.tier(run_state, str(system_id), content_db) < int(upgrade.requires_system[system_id]):
+			return false
+	if upgrade.requires_chapter != "":
+		var have: int = chapter_rank(str(run_state.build.get("dwelling", "")), content_db)
+		if have < chapter_rank(upgrade.requires_chapter, content_db):
 			return false
 	if upgrade.requires_upgrade != "":
 		if not (upgrade.requires_upgrade in run_state.build.get("upgrades", [])):
@@ -148,7 +151,9 @@ static func prerequisites_met(run_state: RunState, upgrade: UpgradeDefinition, c
 	return true
 
 
-static func dwelling_tier(key: String, content_db: Node) -> int:
+## Where a chapter sits in the campaign order (`economy.infrastructure_tiers`),
+## so a chapter gate can be compared with the run's own chapter.
+static func chapter_rank(key: String, content_db: Node) -> int:
 	var tiers: Dictionary = content_db.balance.get("economy", {}).get("infrastructure_tiers", {})
 	return int(Dictionary(tiers.get("dwelling", {})).get(key, 0))
 
@@ -182,15 +187,65 @@ static func hardware_slots_used(run_state: RunState, content_db: Node) -> int:
 	return used
 
 
+## Floor space comes from the Power Bus tier, floored by the chapter table
+## (see CabinetSystems).
 static func hardware_slots_total(run_state: RunState, content_db: Node) -> int:
-	return int(_location_stats(run_state, content_db).get("hardware_slots", 0))
+	return int(CabinetSystems.capacity(run_state, "power", "hardware_slots", content_db))
 
 
-## What the run's location keeps cool on its own, before anything is installed.
-## Read from the location every time rather than banked into a running total, so
-## it can only ever count once however often the rig is recalculated.
+## What the cabinet's Cooling Loop keeps cool on its own, before anything is
+## installed. Read from the tier every time rather than banked into a running
+## total, so it can only ever count once however often the rig is recalculated.
 static func location_cooling(run_state: RunState, content_db: Node) -> float:
-	return float(_location_stats(run_state, content_db).get("cooling_capacity", 0.0))
+	return CabinetSystems.capacity(run_state, "cooling", "cooling_capacity", content_db)
+
+
+## Buys the next tier of one cabinet system. Every refusal comes back with the
+## Market's own words for it (see `CabinetSystems.can_upgrade`); a success
+## reports the tier reached, what was paid, and every capacity that moved as
+## `delta[stat] = {before, after}`. The caller recalculates the rig: this only
+## writes the tier and the two compute figures that are read off it directly.
+func upgrade_cabinet_system(run_state: RunState, system_id: String, economy_system: EconomySystem) -> Dictionary:
+	var verdict: Dictionary = CabinetSystems.can_upgrade(run_state, system_id)
+	var result: Dictionary = {
+		"ok": false,
+		"reason": str(verdict.get("reason", "")),
+		"system_id": system_id,
+		"tier": CabinetSystems.tier(run_state, system_id),
+		"previous_tier": CabinetSystems.tier(run_state, system_id),
+		"cost": float(verdict.get("cost", -1.0)),
+		"effect": "",
+		"delta": {},
+	}
+	if not bool(verdict.get("ok", false)):
+		return result
+	var cost: float = float(verdict.get("cost", 0.0))
+	if not economy_system.purchase(run_state, cost, "cabinet_system:%s" % system_id):
+		result["reason"] = "NEED %s MORE" % NumberFormat.format_cash(
+			ceilf(cost - float(run_state.economy.get("cash", 0.0)))
+		)
+		return result
+	var before: Dictionary = CabinetSystems.stat_snapshot(run_state)
+	var previous: int = CabinetSystems.tier(run_state, system_id)
+	var reached: int = previous + 1
+	CabinetSystems.set_tier(run_state, system_id, reached)
+	# Heat capacity and cooling are the two figures kept on `compute` rather than
+	# derived on every read, so a cooling upgrade has to write them here.
+	run_state.compute["heat_capacity"] = CabinetSystems.capacity(run_state, "cooling", "heat_capacity")
+	run_state.compute["cooling"] = ComputeSystem.derive_cooling(run_state)
+	var after: Dictionary = CabinetSystems.stat_snapshot(run_state)
+	var delta: Dictionary = {}
+	for stat_key in after.keys():
+		if float(after[stat_key]) != float(before.get(stat_key, 0.0)):
+			delta[stat_key] = {"before": float(before.get(stat_key, 0.0)), "after": float(after[stat_key])}
+	result["ok"] = true
+	result["reason"] = ""
+	result["tier"] = reached
+	result["previous_tier"] = previous
+	result["cost"] = cost
+	result["effect"] = CabinetSystems.effect_text(run_state, system_id, previous, reached)
+	result["delta"] = delta
+	return result
 
 
 ## Cooling from kit the run has bought, summed from what is actually installed.
@@ -205,12 +260,7 @@ static func installed_cooling(run_state: RunState, content_db: Node) -> float:
 	return total
 
 
-static func _location_stats(run_state: RunState, content_db: Node) -> Dictionary:
-	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
-	return Dictionary(content_db.balance.get("dwelling_costs", {}).get(dwelling, {}))
-
-
-## The dwelling only has so much floor, and every machine standing on it counts,
+## The cabinet only has so much floor, and every machine standing on it counts,
 ## including the second and third of the same model.
 static func hardware_space_full(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
 	var curves: Dictionary = content_db.balance.get("hardware_curves", {})
@@ -277,10 +327,10 @@ func install_carried(
 	run_state: RunState, upgrade_id: String, content_db: Node, effect_resolver: EffectResolver
 ) -> bool:
 	var upgrade: UpgradeDefinition = content_db.get_upgrade(upgrade_id)
-	if upgrade == null or upgrade.category == "dwelling":
+	if upgrade == null:
 		return false
-	# Floor space is the one gate that still applies: it belongs to the new room
-	# rather than to the kit, and every location has at least as much as the last.
+	# Floor space is the one gate that still applies: it belongs to the new
+	# chapter's cabinet rather than to the kit, and capacities never decrease.
 	if hardware_space_full(run_state, upgrade, content_db):
 		return false
 	run_state.economy["recurring_costs_base"] = (
@@ -332,11 +382,6 @@ func can_purchase(run_state: RunState, upgrade_id: String, content_db: Node) -> 
 ## Every refusal that is not about cash, shared by the check and the purchase so
 ## the Market can never offer a button the sim would decline.
 func _passes_gates(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
-	# Premises are a chapter of the campaign, not stock. They still exist as
-	# content — the location a run happens in is described by one — but no run
-	# can buy its way from one to another.
-	if upgrade.category == "dwelling":
-		return false
 	if is_maxed(run_state, upgrade):
 		return false
 	if not upgrade.repeatable and upgrade.id in run_state.build["upgrades"]:

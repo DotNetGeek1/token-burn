@@ -1,49 +1,63 @@
 class_name WorkflowKeys
 extends Control
 
-## The column of four keys under the abort lever: one per workflow the run can
-## hold. The active workflow's key is lit amber, owned ones phosphor, the next
+## The workflow selectors in the backplane header: a row of four keys, one per
+## workflow the run can hold, with the active workflow's name printed beside
+## them. The active workflow's key is lit amber, owned ones phosphor, the next
 ## free one reads "+" and builds a new pipeline, and keys past the run's
 ## workflow capacity are dead.
 
 signal workflow_selected(index: int)
 
 const KEYS := 4
-## The plate paints the four keys as squares on a pitch; each key's face is
-## this much of the pitch, the rest is the rail between them.
-const KEY_OF_PITCH := 0.68
+## The gap between keys in the header row, as a fraction of the key size.
+const ROW_GAP := 0.18
 
 var _keys: Array[Button] = []
+var _name: Label = null
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for index in range(KEYS):
 		var key: Button = CabinetStyle.key(str(index + 1), CabinetStyle.PHOSPHOR, CabinetStyle.FONT_SMALL)
-		# The key itself is painted on the plate; the button is only the light
-		# in it, so it must never grow past the painted square to fit its digit.
 		key.clip_text = true
 		key.pressed.connect(_on_key.bind(index))
 		add_child(key)
 		_keys.append(key)
+	_name = CabinetStyle.mono("", CabinetStyle.FONT_SMALL, CabinetStyle.AMBER)
+	_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_name)
 	resized.connect(_layout)
+	_layout()
 
 
-## One button per painted square: the region is the column's bounding box and
-## the squares sit on an even pitch inside it.
 func _layout() -> void:
-	var pitch: float = size.y / (KEYS - 1 + KEY_OF_PITCH)
-	var height: float = pitch * KEY_OF_PITCH
+	if _name == null or size.x <= 0.0 or size.y <= 0.0:
+		return
+	_name.visible = true
+	var key_size: float = size.y
+	var gap: float = key_size * ROW_GAP
+	# Four keys must fit before the name; shrink them on a rail too narrow.
+	var needed: float = KEYS * key_size + (KEYS - 1) * gap
+	if needed > size.x * 0.6:
+		key_size = (size.x * 0.6) / (KEYS + (KEYS - 1) * ROW_GAP)
+		gap = key_size * ROW_GAP
 	for index in range(KEYS):
 		var key: Button = _keys[index]
-		key.position = Vector2(0.0, index * pitch)
-		key.size = Vector2(size.x, height)
-		key.add_theme_font_size_override("font_size", clampi(int(height * 0.6), 6, 14))
+		key.position = Vector2(index * (key_size + gap), (size.y - key_size) * 0.5)
+		key.size = Vector2(key_size, key_size)
+		key.add_theme_font_size_override("font_size", clampi(int(key_size * 0.5), 8, 18))
+	var name_x: float = KEYS * (key_size + gap) + gap
+	_name.position = Vector2(name_x, 0.0)
+	_name.size = Vector2(maxf(0.0, size.x - name_x), size.y)
+	_name.add_theme_font_size_override("font_size", clampi(int(size.y * 0.42), 10, 16))
 
 
-## The light in a painted key: a wash of the accent over the square and a
-## hairline of it round the bevel. Nothing here has a margin, so the button
-## stays the size of the square it sits on.
+## The light in a key: a wash of the accent over the square and a hairline of
+## it round the bevel. Nothing here has a margin, so the button stays the size
+## of the square it sits on.
 static func _key_style(accent: Color, lit: bool, active: bool, state: String) -> StyleBoxFlat:
 	var fill: float = 0.30 if active else (0.10 if lit else 0.0)
 	match state:
@@ -60,6 +74,16 @@ static func _key_style(accent: Color, lit: bool, active: bool, state: String) ->
 	return box
 
 
+## The header key: the same light, over a dark key face so it reads on the rail.
+static func _row_key_style(accent: Color, lit: bool, active: bool, state: String) -> StyleBoxFlat:
+	var box: StyleBoxFlat = _key_style(accent, lit, active, state)
+	var face: Color = Color(0.06, 0.055, 0.05, 0.95)
+	box.bg_color = face.lerp(Color(accent.r, accent.g, accent.b, 1.0), box.bg_color.a)
+	box.border_color = Color(accent.r, accent.g, accent.b, 0.9 if active else (0.55 if lit else 0.2))
+	box.set_corner_radius_all(3)
+	return box
+
+
 func refresh() -> void:
 	var count: int = Simulation.workflow_count()
 	var capacity: int = Simulation.workflow_capacity()
@@ -73,7 +97,7 @@ func refresh() -> void:
 		key.text = "+" if creatable else str(index + 1)
 		var accent: Color = CabinetStyle.AMBER if index == active else (CabinetStyle.PHOSPHOR if owned else CabinetStyle.GREY)
 		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-			key.add_theme_stylebox_override(state, _key_style(accent, owned or creatable, index == active, state))
+			key.add_theme_stylebox_override(state, _row_key_style(accent, owned or creatable, index == active, state))
 		key.add_theme_color_override("font_color", CabinetStyle.AMBER if index == active else CabinetStyle.WHITE)
 		key.add_theme_color_override("font_disabled_color", Color(CabinetStyle.GREY.r, CabinetStyle.GREY.g, CabinetStyle.GREY.b, 0.45))
 		var workflow: Dictionary = Simulation.workflows()[index] if owned else {}
@@ -81,6 +105,10 @@ func refresh() -> void:
 			"Workflow %d: %s" % [index + 1, str(workflow.get("name", ""))] if owned
 			else ("Build a new workflow" if creatable else "")
 		)
+	var active_workflow: Dictionary = Simulation.active_workflow()
+	var shown_name: String = str(active_workflow.get("name", "")).to_upper()
+	_name.text = shown_name if shown_name != "" else ("NO WORKFLOW" if count == 0 else "WORKFLOW %d" % (active + 1))
+	_name.add_theme_color_override("font_color", CabinetStyle.AMBER if count > 0 else CabinetStyle.GREY)
 
 
 func _on_key(index: int) -> void:

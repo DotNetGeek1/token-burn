@@ -17,7 +17,34 @@ func play(harness: UiHarness) -> void:
 	pass
 
 
-## Dismiss the investor phone if it is ringing over the venue.
+## Spins frames until `predicate` returns true or `timeout_msec` passes.
+## Returns whether it was met.
+func wait_until(harness: UiHarness, predicate: Callable, timeout_msec: int = 4000) -> bool:
+	var deadline: int = Time.get_ticks_msec() + timeout_msec
+	while Time.get_ticks_msec() < deadline:
+		if bool(predicate.call()):
+			return true
+		if not harness.is_inside_tree():
+			return false
+		await harness.get_tree().process_frame
+	return bool(predicate.call())
+
+
+## Waits for the cabinet's maintenance camera to finish moving either way.
+func settle_camera(harness: UiHarness) -> void:
+	var shell: Node = harness.current_scene()
+	if shell == null or not shell.has_method("maintenance_layer"):
+		await harness.settle()
+		return
+	var layer: Variant = shell.maintenance_layer()
+	if layer == null:
+		await harness.settle()
+		return
+	await wait_until(harness, func() -> bool: return not bool(layer.is_transitioning()))
+	await harness.settle()
+
+
+## Dismiss the investor phone if it is ringing over the cabinet.
 func dismiss_investor(harness: UiHarness) -> void:
 	var deadline: int = Time.get_ticks_msec() + 8000
 	while SceneRouter.investor_busy() and Time.get_ticks_msec() < deadline:
@@ -37,26 +64,29 @@ func dismiss_investor(harness: UiHarness) -> void:
 		await harness.settle()
 
 
+## Takes the first offer on the wire through the glass: the CONTRACTS tab,
+## a card on the ON THE WIRE shelf, and the commit button reading ACCEPT.
 func accept_first_job(harness: UiHarness) -> String:
 	await dismiss_investor(harness)
-	if SceneRouter.current != "jobs":
-		await harness.goto_route("jobs")
-	harness.driver.audit_screen("jobs", "jobs")
-	var tile: Control = harness.driver.first_tile()
-	assert_true(tile != null, "Jobs venue has a contract tile")
-	if tile == null:
-		return ""
-	await harness.driver.lean_if_needed(tile)
-	await harness.driver.press(tile)
-	var job_id: String = ""
-	if tile is VenueTile:
-		job_id = str(tile.meta)
-	await harness.driver.press_command("ACCEPT")
-	# Accepting a contract walks the player back to the desk.
 	if SceneRouter.current != SceneRouter.DESK:
 		await harness.go_desk()
-	else:
+	var shell: Node = harness.current_scene()
+	if shell != null and shell.has_method("switch_tab"):
+		shell.switch_tab("contracts")
 		await harness.settle()
+	harness.driver.audit_screen("contracts", "desk")
+	var tile: Control = harness.driver.first_tile()
+	assert_true(tile != null, "The CONTRACTS tab has a contract card on the wire")
+	if tile == null:
+		return ""
+	await harness.driver.press(tile)
+	var job_id: String = ""
+	if tile is ContractCard:
+		job_id = str(Dictionary(tile.job()).get("id", ""))
+	elif tile is CabinetTile:
+		job_id = str(tile.meta)
+	await harness.driver.press_command("ACCEPT")
+	await harness.settle()
 	return job_id
 
 

@@ -28,9 +28,135 @@ Perks, jobs, upgrades, and events must describe behaviour through reusable data 
 
 The simulation should be authoritative. The UI observes state and submits player actions but does not contain economic logic.
 
-Venue UI has a separate shared layout contract covering painted rooms, handset
-lean-in, console fallback, projective native surfaces, and flat web surfaces.
-See [Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md).
+The whole UI is one scene, the Burn Cabinet (`res://ui/cabinet/burn_cabinet.tscn`).
+Its layout contract is in [section 2a](#2a-burn-cabinet-shell) below; the
+earlier per-venue painted-room contract is retired and kept only as history in
+[Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md).
+
+## 2a. Burn Cabinet shell
+
+`ui/cabinet/burn_cabinet.gd` is a coordinator: it builds the instruments,
+wires them up and keeps the deck honest. Geometry belongs to `CabinetLayout`,
+idle readings to `CabinetReadouts`, round-end paperwork and the title to
+`CabinetFlow`, and the batch in flight to `BurnDirector`.
+
+```text
+BurnCabinet
+├── Backdrop
+├── ChassisArt                 cover-crop, decorative only
+├── SafeArea
+│   ├── MaintenanceWall        hidden until the maintenance camera
+│   ├── OperationGrid
+│   │   ├── AbortRail          AbortLever
+│   │   ├── MainColumn
+│   │   │   ├── CrtFrame       9-slice bezel + CabinetScreen (tabs)
+│   │   │   ├── CommandDeck    Override, CommitButton, Cooldown, LEDs
+│   │   │   └── WorkflowBackplane  WorkflowKeys header + ModuleDock grid
+│   │   └── TelemetryRail      MultiplierDrum, HeatMeter, SystemStatus, BurnFeed
+│   └── MaintenanceLayer       menu, five system mounts, caption; hidden by default
+└── OverlayRoot                debrief, bills, angels, run end, help, title
+```
+
+### Layout profiles
+
+`presentation/cabinet_layout_profiles.json` carries three profiles chosen by
+the window's aspect and width, tried in order:
+
+| Profile | Selects when | Bays | Telemetry |
+|---|---|---|---|
+| `wide` | aspect ≥ 1.65 and width ≥ 1100 px | 10 × 1 | vertical rail |
+| `compact` | aspect ≥ 1.35 (or a 16:9 window under 1100 px) | 5 × 2 | vertical rail |
+| `tablet` | aspect < 1.35 | 5 × 2 | horizontal strip |
+
+Each profile gives the coarse regions — abort rail, CRT, telemetry, command
+deck, backplane — as `[x, y, w, h]` fractions of the **safe area**: the
+viewport minus the display's own safe-area insets minus a 16 px inset. The
+same file holds the 9-slice frame fitting rules, the dock and deck
+proportions, the maintenance camera (zoom scale, pivot, duration, menu, caption
+and the five `mount_*` rects, with per-profile overrides) and the acceptance
+constraints the viewport playtest asserts (minimum touch 48 px, 44 px at
+854×480; body font ≥ 12 px; CRT ≥ 65 % of the safe width and ≥ 50 % of its
+height).
+
+Art decorates containers. Nothing reads geometry off a painted image, so an
+art layer can be regenerated without touching a rect.
+
+### Asset pipeline
+
+Every cabinet layer is generated, style-locked to one shared prompt preamble,
+then post-processed by `tools/asset_generator/cabinet_v2_post.py` (crop to
+canvas, knock openings out to alpha, slice strips into cells) and
+`tools/extract_generated_alpha.gd`. Output lives in `presentation/cabinet/v2/`
+and every file is registered in the `cabinet_v2` block of
+`presentation/asset_catalog.json` (paths, 9-slice lips, cell indices) and read
+through `AssetCatalog`:
+
+- `chassis_backdrop.png`, `maintenance_wall.png` — 1920×1080 backdrops that
+  cover-crop.
+- `crt_bezel.png`, `telemetry_frame.png`, `deck_plate.png`,
+  `backplane_rail.png`, `panel_9slice.png` — 9-slice frames mounted by
+  `CabinetFrame`.
+- `commit_idle/armed/danger/busy.png` — the commit button's faces.
+- `abort_lever_channel.png`, `abort_lever_handle.png`, `bay_shutter.png`.
+- `systems/<system>_t1..t4.png` — one square tile per system per tier; tier N
+  replaces tier N−1 on a fixed maintenance mount.
+
+Selected, target and active bay states are code-drawn outlines so they read in
+grayscale. Install FX are code (`ui/common/ui_fx.gd`) with an `install` sound
+cue.
+
+### Commit button and tab contract
+
+`ui/cabinet/cabinet_tab.gd` defines `CabinetTab.primary_action()`, the one
+contract between a CRT tab and the physical button:
+
+```text
+{ label, enabled, sub, tone: normal|danger, confirm: press|hold, hold_seconds, pressed }
+```
+
+`CommitButton` (`ui/cabinet/commit_button.gd`) has five states — `idle`
+(shutter, nothing picked), `armed` (one press fires), `danger` (hazard frame,
+hold `hold_seconds` while a ring fills; cancels on release, pointer exit or
+focus loss), `busy` (`WORKING` during a batch; never skips) and `blocked`
+(dark face plus the reason: `NEED $240 MORE`, `MARKET CLOSED`). The shell
+listens to `committed`, not `pressed`. Shared blocker strings live on
+`CabinetTab` so every tab says the same thing for the same reason.
+
+### Maintenance view
+
+`ui/cabinet/maintenance_layer.gd` is the cabinet's second camera. The
+`OperationGrid` scales down about a pivot over the maintenance wall; the layer
+shows Resume / Settings / Help / Records / Save & Quit, the five system mounts
+with the owned tier's tile, the generation caption and a read-only inspection
+readout (`NAME · TIER N · <stats>`). System back walks blocking paper →
+maintenance → non-run tab → run tab, and from the run tab opens maintenance;
+it never leaves the cabinet. `show_install()` plays the tier swap after a
+Market purchase.
+
+### Cabinet systems data
+
+`content/upgrades/cabinet_systems.json` (loaded and validated by
+`ContentDatabase`) declares the five systems with `tier_names`, `tier_values`
+per stat, per-tier `cost`, the `generation_thresholds`, the
+`migration_from_dwelling` table and `chapter_max_tier`.
+`systems/cabinet_systems.gd` is the only place a tier becomes a number:
+
+- `BoardSystem` reads `backplane.bays` and `control.workflows`.
+- `UpgradeSystem.hardware_slots_total` reads `power.hardware_slots`;
+  `location_cooling` reads `cooling.cooling_capacity`; `heat_capacity` is
+  written from `cooling.heat_capacity`.
+- `ComputeSystem` adds `compute.base_token_rate` to the hardware curves.
+- `UpgradeSystem.upgrade_cabinet_system()` charges cash, raises the tier and
+  returns the before/after delta for the reveal.
+
+`content/balance/dwelling_costs.json` is the chapter table. `RunLifecycle.apply_run_location`
+reads `rent`, `starting_cash`, `starting_hardware` and the chapter key itself
+(`build.dwelling`) from it. Its `hardware_slots`, `cooling_capacity` and
+`heat_capacity` columns survive as a per-chapter **floor** under the tier table
+(`CabinetSystems.chapter_floor`): the tier is the primary source of every
+capacity, but the three late chapters (Datacentre, Grid, Moon) out-size tier 4
+(40/80/160 slots against 16; 5,280/36,000/216,000 cooling against 1,248), and
+the floor is what keeps their numbers. Capacities never decrease on migration.
 
 ## 3. Core state model
 
@@ -58,12 +184,25 @@ RunState
 │   ├── perks
 │   ├── hardware
 │   ├── upgrades
+│   ├── cabinet_systems   {compute, cooling, power, backplane, control} tiers 1–4
+│   ├── dwelling          the campaign chapter the run is staked in
 │   └── status_effects
 └── statistics
     ├── lifetime_tokens
     ├── failed_jobs
     └── absurdity_metrics
 ```
+
+### Save versions
+
+`RunState.SAVE_VERSION` is 23. `_migrate_to_v23` derives
+`build.cabinet_systems` from the save's `build.dwelling` through the
+`migration_from_dwelling` table, clamps every tier to the tier range, and
+never loses capacity: a tier is raised until it covers the bays, workflows and
+floor the save was demonstrably using. The dwelling key is kept in
+`build.migration_debug` for one version. Fixtures for all seven chapters live
+in `tests/fixtures/saves/dwelling_<key>.json` and are replayed by
+`test_save_migration_fixtures.gd`.
 
 ## 4. Effect system
 
@@ -249,7 +388,6 @@ Use custom resources for:
 - `EffectDefinition`
 - `UpgradeDefinition`
 - `EventDefinition`
-- `DwellingDefinition`
 - `HardwareDefinition`
 - `BalanceProfile`
 
@@ -260,10 +398,13 @@ balance/
 ├── economy.json
 ├── job_scaling.json
 ├── rarity_weights.json
-├── dwelling_costs.json
+├── dwelling_costs.json        # per chapter: rent, starting_cash, starting_hardware
 ├── hardware_curves.json
 └── difficulty_profiles.json
 ```
+
+Cabinet system tiers, costs and capacities are content, not balance:
+`content/upgrades/cabinet_systems.json`.
 
 Example:
 
@@ -355,23 +496,24 @@ token-burn/
 │   ├── compute_system.gd
 │   ├── heat_system.gd
 │   ├── board_system.gd
+│   ├── cabinet_systems.gd           # five tiered systems -> capacities, generation
 │   ├── workflow_mastery_system.gd   # one-shot contract completion training
 │   ├── perk_system.gd               # loadout, tag density, synergies
 │   └── progression_system.gd
 ├── content/
 │   ├── jobs/
 │   ├── perks/
-│   ├── upgrades/
+│   ├── upgrades/                    # incl. cabinet_systems.json
 │   ├── events/
 │   └── balance/
 ├── ui/
-│   ├── operations/
-│   ├── jobs/
-│   ├── build/
-│   ├── market/
+│   ├── cabinet/                     # burn_cabinet.tscn shell, tabs, commit button, maintenance
+│   ├── common/
+│   ├── screens/                     # overlays: debrief, bills, angels, run end
 │   └── debug/
 ├── presentation/
-│   ├── office/
+│   ├── cabinet/v2/                  # generated cabinet layers, registered in asset_catalog.json
+│   ├── cabinet_layout_profiles.json
 │   ├── effects/
 │   └── audio/
 └── tests/

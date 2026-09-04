@@ -1,0 +1,228 @@
+{
+  "pending_choices": [],
+  "phase": "ROUND_PREP",
+  "round_end_pending": false,
+  "run_state": {
+    "ascension": {
+      "baseline_tokens": 0.0,
+      "contract_id": "ascension.regional_provider",
+      "deadline_round": 12,
+      "quality_count": 0,
+      "quality_sum": 0.0,
+      "status": "active",
+      "tokens_burned": 0.0
+    },
+    "build": {
+      "board": {
+        "active_workflow": 0,
+        "meta_slot_bonus": 0,
+        "slot_count": 7
+      },
+      "draft_state": {
+        "rerolls": 0,
+        "sequence": 0
+      },
+      "dwelling": "office_unit",
+      "hardware": [
+        "used_laptop",
+        "gpu_rack"
+      ],
+      "meta_workflow_bonus": 0,
+      "modules": [
+        "op.prompt",
+        "op.cheap_model",
+        "op.unit_tests"
+      ],
+      "perk_inventory": [],
+      "perk_liabilities": [],
+      "perks": [],
+      "purchased_upgrade_counts": {},
+      "status_effects": [],
+      "upgrade_counts": {
+        "upgrade.gpu_rack": 1
+      },
+      "upgrade_levels": {
+        "upgrade.gpu_rack": 1
+      },
+      "upgrades": [],
+      "workflow_capacity": 2,
+      "workflows": [
+        {
+          "gain_ledger": [],
+          "id": "workflow.1",
+          "name": "House Style",
+          "output_mult": 1.0,
+          "quality_mult": 1.0,
+          "slots": [
+            "op.prompt",
+            "op.cheap_model",
+            "op.unit_tests",
+            "",
+            "",
+            "",
+            ""
+          ],
+          "thermal_mult": 1.0
+        }
+      ]
+    },
+    "business": {
+      "active_job": {},
+      "active_jobs": [],
+      "focused_job_id": "",
+      "job_board_seq": 0,
+      "job_board_stamp": "1.0",
+      "job_offers": [
+        {
+          "board_rules": [],
+          "bug_chance": 0.04,
+          "complications": [
+            {
+              "label": "Keyword Stuffing"
+            }
+          ],
+          "deadline_days": 3.0,
+          "deadline_prompts": 7,
+          "definition_id": "job.seo_blog_spam",
+          "demands": [
+            "demand.thrift"
+          ],
+          "description": "Keyword density matters more than sentences do.",
+          "fit": "bread_and_butter",
+          "id": "job.seo_blog_spam.r1.i0",
+          "name": "Ghostwrite 20 SEO Articles",
+          "quality_threshold": 48.0,
+          "revision_risk": 0.04,
+          "reward": 570.0,
+          "rig_matched": true,
+          "scope_creep_pct": 0.02,
+          "tags": [
+            "copy",
+            "marketing",
+            "low_stakes"
+          ],
+          "tier": 0,
+          "token_requirement": 7459334.95995705,
+          "unmet_demands": 0,
+          "windfall": false
+        }
+      ],
+      "job_queue": [],
+      "module_market": {
+        "location": "bedroom",
+        "rerolls": 0,
+        "round": 1,
+        "sequence": 1,
+        "stock": [
+          "op.launch_party",
+          "op.speculative_decoding",
+          "op.crunch_mode"
+        ]
+      },
+      "reputation": 10.0
+    },
+    "calendar": {
+      "deadline_progress": 0.0,
+      "prompt": 1,
+      "round": 4
+    },
+    "compute": {
+      "cooling": 366.0,
+      "efficiency": 1.0,
+      "efficiency_base": 1.0,
+      "heat": 0.0,
+      "heat_capacity": 200.0,
+      "instability": 0.0,
+      "local_capacity": 53000000.0,
+      "local_rate": 53000000.0,
+      "meta_cooling": 0.0,
+      "power_draw": 2065.0,
+      "prompt_rate": 1000000.0,
+      "rate_modifiers": [],
+      "token_rate": 53000000.0
+    },
+    "depth": {
+      "affixes": [],
+      "baseline_tokens": 0.0,
+      "level": 0,
+      "pending_picks": [],
+      "requirement_mult": 1.0,
+      "score_mult": 1.0,
+      "stacks": {},
+      "status": "",
+      "tokens_needed": 0.0
+    },
+    "economy": {
+      "cash": 9725.0,
+      "cash_multiplier": 1.0,
+      "costs_this_round": 0.0,
+      "debt": 0.0,
+      "income": 0.0,
+      "last_round_costs": 0.0,
+      "pending_bills": [],
+      "power_base_cost_per_prompt": 10.0,
+      "power_cost_per_prompt": 113.25,
+      "recurring_costs": 50.0,
+      "recurring_costs_base": 50.0,
+      "rent_multiplier": 1.0,
+      "rent_unpaid_streak": 0,
+      "round_rent": 3200.0
+    },
+    "flags": {
+      "ascension_tier": 0,
+      "depth_complete": false,
+      "depth_complete_pending": false,
+      "difficulty": "normal",
+      "draft_kind": "",
+      "fire_risk": false,
+      "investor_beats": {},
+      "legacy_banked": false,
+      "location_completed": false,
+      "loss_reason": "",
+      "next_location": "",
+      "outcome": "",
+      "post_victory": false,
+      "post_victory_phase": "",
+      "victory": false
+    },
+    "save_version": 22,
+    "statistics": {
+      "absurdity_metrics": {},
+      "angel_offers_declined": 0,
+      "angel_offers_taken": 0,
+      "bugs_created": 0,
+      "bugs_fixed": 0,
+      "cascades_triggered": 0,
+      "clean_completions": 0,
+      "clean_one_shot_completions": 0,
+      "completed_jobs": 0,
+      "cool_completions": 0,
+      "depth_reached": 0,
+      "depth_score": 0.0,
+      "failed_jobs": 0,
+      "faults_suffered": 0,
+      "hardware_sold": 0,
+      "hidden_bugs_created": 0,
+      "hidden_bugs_revealed": 0,
+      "hidden_bugs_shipped": 0,
+      "hot_one_shot_completions": 0,
+      "jobs_accepted": 0,
+      "last_job_reward": 0.0,
+      "lifetime_overkill": 0.0,
+      "lifetime_tokens": 0.0,
+      "max_heat_ratio": 0.0,
+      "max_instability": 0.0,
+      "modules_drafted": 0,
+      "one_shot_completions": 0,
+      "overkill_2x_completions": 0,
+      "peak_cash": 0.0,
+      "peak_debt": 0.0,
+      "peak_overkill": 0.0,
+      "peak_prompt_tokens": 0.0,
+      "peak_token_rate": 0.0,
+      "stage_repeats": 0
+    }
+  },
+  "seed": 2202,
+  "version": 2
+}

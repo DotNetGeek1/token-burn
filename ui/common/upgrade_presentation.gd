@@ -10,7 +10,6 @@ const GROUPS := {
 	"workspace": {"label": "Workspace", "color": "purple"},
 	"hardware": {"label": "Hardware", "color": "orange"},
 	"component": {"label": "Components", "color": "yellow"},
-	"dwelling": {"label": "Property", "color": "green"},
 }
 
 const GROUP_ORDER := ["hardware", "component", "cooling", "workspace"]
@@ -147,13 +146,18 @@ static func blockers(upgrade: UpgradeDefinition, affordable: bool) -> Array:
 
 
 ## Named after the thing the player has to get first, so a locked card reads as
-## the next step rather than as a dead one. Premises are the exception: the run
-## cannot move, so the card says which chapter this belongs to instead.
+## the next step rather than as a dead one: the cabinet system tier to buy from
+## the SYSTEMS shelf, or — for kit that belongs to a later chapter of the
+## campaign, which no run can buy its way into — the chapter it belongs to.
 static func prerequisite_text(upgrade: UpgradeDefinition) -> String:
 	if UpgradeSystem.prerequisites_met(Simulation.run_state, upgrade, ContentDatabase):
 		return ""
-	if upgrade.requires_dwelling != "":
-		return "Needs the %s or better" % _dwelling_name(upgrade.requires_dwelling)
+	for system_id in upgrade.requires_system.keys():
+		var needed: int = int(upgrade.requires_system[system_id])
+		if CabinetSystems.tier(Simulation.run_state, str(system_id), ContentDatabase) < needed:
+			return "Needs %s tier %d" % [CabinetSystems.system_name(str(system_id), ContentDatabase), needed]
+	if upgrade.requires_chapter != "":
+		return "Belongs to the %s chapter" % _chapter_name(upgrade.requires_chapter)
 	if upgrade.requires_hardware != "" and UpgradeSystem.installed_count(
 		Simulation.run_state, upgrade.requires_hardware
 	) <= 0:
@@ -164,8 +168,8 @@ static func prerequisite_text(upgrade: UpgradeDefinition) -> String:
 	return "Locked"
 
 
-static func _dwelling_name(key: String) -> String:
-	return key.replace("_", " ").capitalize()
+static func _chapter_name(key: String) -> String:
+	return MetaProgress.location_name(key)
 
 
 ## The machine a component bolts onto, named the way the Market names it.
@@ -204,8 +208,8 @@ static func cooling_shortfall(upgrade: UpgradeDefinition) -> Dictionary:
 	}
 
 
-## The dwelling has room for a limited amount of compute, and the sim enforces
-## it, so a bedroom cannot hold a GPU rack no matter how much cash is in hand.
+## The cabinet has room for a limited amount of compute, and the sim enforces
+## it, so a tier-1 power bus cannot hold a GPU rack no matter how much cash is in hand.
 static func hardware_space_full(upgrade: UpgradeDefinition) -> bool:
 	return UpgradeSystem.hardware_space_full(Simulation.run_state, upgrade, ContentDatabase)
 
@@ -221,11 +225,10 @@ static func component_capacity_reached(upgrade: UpgradeDefinition) -> bool:
 	return UpgradeSystem.component_capacity_reached(Simulation.run_state, upgrade, ContentDatabase)
 
 
-## Hardware slots the dwelling has, and how many are taken. Shown on the
+## Hardware slots the cabinet has, and how many are taken. Shown on the
 ## Hardware counter so "no space" has a number behind it.
 static func hardware_space() -> Dictionary:
 	return {
-		"dwelling": _dwelling_name(str(Simulation.run_state.build.get("dwelling", "bedroom"))),
 		"used": UpgradeSystem.hardware_slots_used(Simulation.run_state, ContentDatabase),
 		"total": UpgradeSystem.hardware_slots_total(Simulation.run_state, ContentDatabase),
 	}

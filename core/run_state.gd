@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 22
+const SAVE_VERSION := 23
 
 ## Upgrades that no longer exist in content. Migration refunds the original
 ## purchase total from this table rather than looking the defs up.
@@ -118,6 +118,10 @@ var build: Dictionary = {
 	"workflows": [],
 	"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
 	"dwelling": "bedroom",
+	## The five cabinet systems (compute, cooling, power, backplane, control),
+	## each at a tier 1..4. Capacities — bays, workflows, floor slots, cooling,
+	## heat capacity, base rate — are read from these through CabinetSystems.
+	"cabinet_systems": {"compute": 1, "cooling": 1, "power": 1, "backplane": 1, "control": 1},
 	"upgrade_levels": {},
 	## The one ledger of "how many of upgrade X does this run own", repeatable
 	## and one-off alike (a one-off sits in here at 1). `hardware`/`upgrades`/
@@ -211,9 +215,9 @@ var flags: Dictionary = {
 	## back by job scaling rather than re-reading the profile mid-run — so a
 	## difficulty change in the menu cannot reach into a run already going.
 	"difficulty": "normal",
-	## Set-piece investor calls already delivered this run. The desk is torn
-	## down on every venue trip, so this has to live on the run rather than
-	## on the shell that showed the phone.
+	## Set-piece investor calls already delivered this run. The shell can be
+	## torn down and rebuilt (a remount, a Continue), so this has to live on
+	## the run rather than on the shell that showed the phone.
 	"investor_beats": {},
 }
 
@@ -386,6 +390,12 @@ func from_dict(data: Dictionary) -> void:
 	ascension = _merge_section(_default_ascension(), data.get("ascension", {}))
 	depth = _merge_section(_default_depth(), data.get("depth", {}))
 	flags = _merge_section(_default_flags(), data.get("flags", {}))
+	# The merge fills a missing `cabinet_systems` with the all-tier-1 default,
+	# which would hide from the migration that the save never had one. A save
+	# without the block is derived from its dwelling instead (see v23).
+	var saved_build: Variant = data.get("build", {})
+	if not (saved_build is Dictionary and Dictionary(saved_build).has("cabinet_systems")):
+		build.erase("cabinet_systems")
 	_migrate(version)
 
 
@@ -468,6 +478,67 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_v21(from_version)
 	if from_version < 22:
 		_migrate_to_v22()
+	if from_version < 23:
+		_migrate_to_v23()
+	# Whatever version the save was, the tiers it carries are whole numbers
+	# inside the tier range, and every system is present.
+	CabinetSystems.ensure_state(self)
+
+
+## Dwellings stop being the source of capacity: the five cabinet systems are.
+## A save from before they existed is given the tiers its room was worth (the
+## pack's migration table), clamped to 1..4 with a warning if the table or the
+## save was odd, and never loses capacity on the way: a tier is raised until it
+## covers the bays, workflows and floor the save was demonstrably using. The
+## dwelling key is kept in `migration_debug` for one version so a bad
+## derivation can be traced. Nothing is charged or refunded.
+func _migrate_to_v23() -> void:
+	var dwelling: String = str(build.get("dwelling", ""))
+	build["migration_debug"] = {"dwelling": dwelling}
+	var stored: Variant = build.get("cabinet_systems", null)
+	if not stored is Dictionary or Dictionary(stored).is_empty():
+		build["cabinet_systems"] = CabinetSystems.derive_from_dwelling(dwelling)
+	CabinetSystems.ensure_state(self, true)
+	_raise_cabinet_tiers_to_cover_capacity()
+	compute["heat_capacity"] = maxf(
+		float(compute.get("heat_capacity", 100.0)),
+		CabinetSystems.capacity(self, "cooling", "heat_capacity")
+	)
+
+
+## The baseline a save was running on is what it stored less the bonuses that
+## still apply on top (meta unlocks, perks, upgrades). Each tier is raised until
+## it explains at least that much, so the derived capacity after migration is
+## never below the stored one.
+func _raise_cabinet_tiers_to_cover_capacity() -> void:
+	var board: Variant = build.get("board", {})
+	if board is Dictionary:
+		var stored_slots: int = int(Dictionary(board).get("slot_count", 0))
+		if stored_slots > 0:
+			var slot_bonus: int = (
+				int(Dictionary(board).get("meta_slot_bonus", 0))
+				+ BoardSystem.active_perk_grant_total(self, ContentDatabase, "board_slots")
+				+ int(UpgradeSystem.additive_effect_total(self, ContentDatabase, "build.board.slot_count"))
+			)
+			_raise_cabinet_tier_until("backplane", "bays", stored_slots - slot_bonus)
+	var stored_workflows: int = int(build.get("workflow_capacity", 0))
+	if stored_workflows > 0:
+		var workflow_bonus: int = (
+			int(build.get("meta_workflow_bonus", 0))
+			+ BoardSystem.active_perk_grant_total(self, ContentDatabase, "workflow_capacity")
+			+ int(UpgradeSystem.additive_effect_total(self, ContentDatabase, "build.workflow_capacity"))
+		)
+		_raise_cabinet_tier_until("control", "workflows", stored_workflows - workflow_bonus)
+	_raise_cabinet_tier_until(
+		"power", "hardware_slots", UpgradeSystem.hardware_slots_used(self, ContentDatabase)
+	)
+
+
+func _raise_cabinet_tier_until(system_id: String, stat_key: String, needed: int) -> void:
+	var top: int = CabinetSystems.max_tier()
+	while CabinetSystems.capacity(self, system_id, stat_key) < float(needed) \
+			and CabinetSystems.tier(self, system_id) < top:
+		CabinetSystems.set_tier(self, system_id, CabinetSystems.tier(self, system_id) + 1)
 
 
 ## Workflows become trained engines: each layout keeps run-long OUTPUT / QUALITY
@@ -952,6 +1023,7 @@ func _default_build() -> Dictionary:
 		"workflows": [],
 		"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
 		"dwelling": "bedroom",
+		"cabinet_systems": CabinetSystems.default_tiers(),
 		"upgrade_levels": {},
 		"upgrade_counts": {},
 		"purchased_upgrade_counts": {},

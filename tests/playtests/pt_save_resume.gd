@@ -1,11 +1,11 @@
 extends PlaytestCase
 
-## Quits to title from the menu mid-run and resumes through CONTINUE. The
-## rebuilt shell has to show the same round and the same cash — a continue
-## that silently starts a new game, or one that loads the developer's real
-## save, is the failure this guards. Isolation already pointed SaveManager
-## at the scratch file; this persona turns autosave back on and writes
-## there itself, because _autosave is private and isolate() had it off.
+## Save & Quit from the maintenance menu mid-run, then resume through the
+## title's CONTINUE. The rebuilt shell has to show the same round and the
+## same cash — a continue that silently starts a new game, or one that loads
+## the developer's real save, is the failure this guards. Isolation already
+## pointed SaveManager at the scratch file; this persona turns autosave back
+## on so SAVE & QUIT writes there itself.
 
 
 const SEED := 17
@@ -20,26 +20,35 @@ func play(harness: UiHarness) -> void:
 	Simulation.start_work()
 	assert_true(Simulation.is_work_running(), "The saved run has an active burn session")
 
-	var saved_round: int = int(Simulation.run_state.calendar.get("round", 1))
-	var saved_cash: float = float(Simulation.run_state.economy.get("cash", 0.0))
-	# Accepting a contract already autosaves when the flag is on. Write
-	# explicitly anyway so the title's CONTINUE has something to read even
-	# if that path did not fire.
-	SaveManager.save_run(
-		Simulation.run_state,
-		"IN_ROUND",
-		Simulation.run_seed,
-		Simulation.pending_choices
-	)
-	assert_true(SaveManager.has_save(), "A scratch save exists before quitting")
-
 	await dismiss_investor(harness)
-	await harness.goto_route("menu")
-	driver.audit_screen("menu", "menu")
-	await driver.press_command("QUIT TO TITLE")
-	await _wait_for_desk(harness)
+	var shell: Node = harness.current_scene()
+	assert_true(shell != null and shell.has_method("enter_maintenance"), "The cabinet is up")
+	if shell == null:
+		return
+	await driver.press_command("maint")
+	await settle_camera(harness)
+	assert_true(bool(shell.is_maintenance()), "MAINT opens the maintenance menu")
+	driver.audit_screen("maintenance", "desk")
+	var layer: MaintenanceLayer = shell.maintenance_layer()
+	var quit_key: Button = layer.menu_key("quit") if layer != null else null
+	assert_true(quit_key != null and quit_key.is_visible_in_tree(), "The menu carries SAVE & QUIT")
+	if quit_key == null:
+		return
+	await driver.press(quit_key)
+	await _wait_title_shown(harness)
 
-	assert_true(SaveManager.has_save(), "QUIT TO TITLE left the scratch save")
+	assert_true(SaveManager.has_save(), "SAVE & QUIT wrote the scratch save")
+	# What CONTINUE has to bring back is what SAVE & QUIT wrote, read from the
+	# file itself: the live run keeps ticking (power is metered) right up to
+	# the moment the save lands.
+	var saved: Dictionary = SaveManager.load_run()
+	var saved_state: Dictionary = Dictionary(saved.get("run_state", {}))
+	var saved_round: int = int(Dictionary(saved_state.get("calendar", {})).get("round", 0))
+	var saved_cash: float = float(Dictionary(saved_state.get("economy", {})).get("cash", -1.0))
+	assert_eq(str(saved.get("phase", "")), "IN_ROUND", "SAVE & QUIT wrote the run mid-round")
+	assert_true(saved_round >= 1, "The save carries a round")
+	assert_eq(SceneRouter.current, SceneRouter.DESK, "SAVE & QUIT never leaves the cabinet route")
+	assert_false(bool(shell.is_maintenance()), "The title comes down over a closed maintenance view")
 	var continue_row: Control = await _wait_title_continue(harness)
 	assert_true(continue_row != null, "Title shows CONTINUE when a save exists")
 	if continue_row != null:
@@ -61,8 +70,7 @@ func play(harness: UiHarness) -> void:
 		driver.command("BURN") != null,
 		"CONTINUE returns a run with pending work directly to the burn button"
 	)
-	var shell: Node = harness.current_scene()
-	if shell != null and shell.has_method("current_tab"):
+	if shell.has_method("current_tab"):
 		assert_eq(str(shell.current_tab()), "run", "CONTINUE lands on the run tab")
 		# The other screens are tabs on the same glass; going out to one and
 		# back must not lose the pending work behind the button.
@@ -73,6 +81,18 @@ func play(harness: UiHarness) -> void:
 		await harness.settle()
 		assert_true(driver.command("BURN") != null, "Coming back to the run tab reaches the burn button")
 	driver.audit_screen("desk", "desk")
+
+
+func _wait_title_shown(harness: UiHarness) -> void:
+	var deadline: int = Time.get_ticks_msec() + 8000
+	while Time.get_ticks_msec() < deadline:
+		if _title_visible(harness):
+			break
+		await harness.get_tree().process_frame
+	# Title's cursor blink is a looping tween; settle() would sit on the
+	# deadline. Frames are enough for the menu to print.
+	for _frame in 8:
+		await harness.get_tree().process_frame
 
 
 func _wait_title_continue(harness: UiHarness) -> Control:
@@ -109,13 +129,3 @@ func _title_visible(harness: UiHarness) -> bool:
 		if node is CanvasItem and node.is_visible_in_tree():
 			return true
 	return false
-
-
-func _wait_for_desk(harness: UiHarness) -> void:
-	var deadline: int = Time.get_ticks_msec() + 8000
-	while SceneRouter.current != SceneRouter.DESK and Time.get_ticks_msec() < deadline:
-		await harness.get_tree().process_frame
-	# Title's cursor blink is a looping tween; settle() would sit on the
-	# deadline. Frames are enough for the desk to mount and the menu to print.
-	for _frame in 8:
-		await harness.get_tree().process_frame

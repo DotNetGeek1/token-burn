@@ -75,6 +75,60 @@ static func sell_hardware(sim: Node, hardware_key: String) -> bool:
 	return true
 
 
+# --- Cabinet systems ---------------------------------------------------------
+
+## Buys the next tier of one cabinet system (compute, cooling, power,
+## backplane, control). Returns the UpgradeSystem result — `ok`, the Market's
+## `reason` when refused, the tier reached and every capacity that moved — so
+## the SYSTEMS shelf can print the reveal without asking again.
+static func upgrade_cabinet_system(sim: Node, system_id: String) -> Dictionary:
+	if not market_open(sim):
+		return {
+			"ok": false,
+			"reason": "MARKET CLOSED",
+			"system_id": system_id,
+			"tier": CabinetSystems.tier(sim.run_state, system_id),
+			"previous_tier": CabinetSystems.tier(sim.run_state, system_id),
+			"cost": CabinetSystems.next_tier_cost(sim.run_state, system_id),
+			"effect": "",
+			"delta": {},
+		}
+	var result: Dictionary = sim.upgrade_system().upgrade_cabinet_system(
+		sim.run_state, system_id, sim.economy_system()
+	)
+	if not bool(result.get("ok", false)):
+		return result
+	# A wider backplane or control rack only takes effect once the board is
+	# resized to match; a new compute or cooling tier changes the rig's rate.
+	sim.board_system().ensure_board(sim.run_state, ContentDatabase)
+	sim.compute_system().recalculate(
+		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
+	)
+	EventBus.emit_event(EventBus.EVENT_CABINET_SYSTEM_UPGRADED, {
+		"system_id": system_id, "tier": int(result.get("tier", 0)),
+	})
+	sim._autosave()
+	return result
+
+
+static func cabinet_system_tiers(sim: Node) -> Dictionary:
+	return CabinetSystems.tiers(sim.run_state)
+
+
+static func cabinet_generation(sim: Node) -> Dictionary:
+	return CabinetSystems.generation(sim.run_state)
+
+
+## Everything a SYSTEMS row needs about one system; when the Market is closed
+## the row is still described, only the button is dead.
+static func cabinet_system_next(sim: Node, system_id: String) -> Dictionary:
+	var info: Dictionary = CabinetSystems.next_tier_info(sim.run_state, system_id)
+	if not market_open(sim) and bool(info.get("can_upgrade", false)):
+		info["can_upgrade"] = false
+		info["reason"] = "MARKET CLOSED"
+	return info
+
+
 # --- Module market -----------------------------------------------------------
 
 static func _module_market_tuning() -> Dictionary:

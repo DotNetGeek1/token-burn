@@ -79,7 +79,9 @@ func _layout() -> void:
 	_glyph.custom_minimum_size = Vector2.ONE * glyph_size
 	_glyph.size = Vector2.ONE * glyph_size
 	_glyph.position = window.position + Vector2((window.size.x - glyph_size) * 0.5, window.size.y * 0.12)
-	var font: int = clampi(int(window.size.x * 0.11), 7, 13)
+	# The name may wrap to a second line on a narrow cartridge; it is never let
+	# down below 9 px, where it stops being a name.
+	var font: int = clampi(int(window.size.x * 0.11), 9, 13)
 	_name.add_theme_font_size_override("font_size", font)
 	_name.position = window.position + Vector2(window.size.x * 0.05, window.size.y * 0.48)
 	_name.size = Vector2(window.size.x * 0.9, window.size.y * 0.48)
@@ -104,7 +106,7 @@ func set_module(id: String) -> void:
 		_glyph.texture = null
 		return
 	_name.text = module.name.to_upper()
-	_badge.text = str(module.badge).to_upper()
+	_badge.text = Simulation.get_module_badge(id).to_upper()
 	_badge.add_theme_color_override("font_color", AssetCatalog.rarity_color(module.rarity))
 	_glyph.texture = AssetCatalog.cabinet_module_glyph(module.category)
 	_glyph.modulate = tint
@@ -113,6 +115,10 @@ func set_module(id: String) -> void:
 
 func set_selected(selected: bool) -> void:
 	_outline.visible = selected
+
+
+func is_selected() -> bool:
+	return _outline.visible
 
 
 func _on_input(event: InputEvent) -> void:

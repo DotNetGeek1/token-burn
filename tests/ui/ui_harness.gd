@@ -5,7 +5,7 @@ extends Node
 ##
 ## Going anywhere is a `change_scene` now, and that frees `current_scene`. The
 ## playtest runner nulls that pointer in its own `_ready` so this node — a child
-## of the runner, not of the desk — survives every venue the persona walks into.
+## of the runner, not of the desk — survives every rebuild of the cabinet.
 ## Isolation is a scratch profile and autosave off: a playtest must never write
 ## the developer's real `profile.json` or savegame.
 
@@ -85,6 +85,16 @@ func goto_route(route: String) -> void:
 	await _wait_for_route(route)
 
 
+## Shows one tab of the cabinet's glass (`run`, `contracts`, `modules`,
+## `market`, `perks`; the old desk-tab and route names are accepted too) and
+## waits for the shell to redraw it.
+func goto_tab(tab_name: String) -> void:
+	if SceneRouter.current != SceneRouter.DESK:
+		await go_desk()
+	SceneRouter.open_desk_tab(tab_name)
+	await settle()
+
+
 func go_desk() -> void:
 	if SceneRouter.current == SceneRouter.DESK:
 		await settle()
@@ -97,7 +107,7 @@ func set_viewport(size: Vector2i) -> void:
 	get_window().size = size
 	get_tree().root.content_scale_size = size
 	await settle()
-	# Every console screen recomputes from the new millimetre scale; a venue
+	# Every console screen recomputes from the new millimetre scale; a screen
 	# that is already up has to be told, or the audit measures the old layout.
 	get_tree().call_group("console_screens", "fit_console")
 	var scene: Node = current_scene()

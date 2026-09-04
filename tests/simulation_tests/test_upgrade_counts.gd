@@ -80,11 +80,13 @@ func _test_carriable_rig_reads_the_unified_ledger() -> void:
 	var shop: Dictionary = _shop()
 	_buy(shop, "upgrade.custom_desktop")
 	var counts: Dictionary = UpgradeSystem.upgrade_counts(shop["state"])
+	# A premises row from a pre-Phase-6 save: no longer content, so it cannot
+	# be part of the rig either.
 	counts["upgrade.garage"] = 1
 	shop["state"].build["upgrade_counts"] = counts
 	var levels: Dictionary = UpgradeSystem.carriable_rig_levels(shop["state"], ContentDatabase)
 	assert_true(levels.has("upgrade.custom_desktop"), "Hardware carries forward")
-	assert_false(levels.has("upgrade.garage"), "A dwelling is a chapter, not part of the rig")
+	assert_false(levels.has("upgrade.garage"), "A retired premises row is a chapter, not part of the rig")
 
 
 ## Pre-inventory-unification saves have the same facts spread across

@@ -7,8 +7,6 @@ extends PlaytestCase
 func play(harness: UiHarness) -> void:
 	await harness.boot(41)
 	await _pause_autosaves_mid_burn(harness)
-	await _system_back_from_venue(harness)
-	await _system_back_steps_out_of_lean(harness)
 	await _system_back_closes_desk_overlay(harness)
 	await _system_back_returns_to_run_tab(harness)
 	await _system_back_opens_menu_from_desk(harness)
@@ -40,29 +38,6 @@ func _pause_autosaves_mid_burn(harness: UiHarness) -> void:
 		"Pause save keeps the live cash"
 	)
 	Simulation.autosave_enabled = false
-
-
-func _system_back_from_venue(harness: UiHarness) -> void:
-	if SceneRouter.current != SceneRouter.DESK:
-		await harness.go_desk()
-	await harness.goto_route("jobs")
-	assert_eq(SceneRouter.current, "jobs", "Jobs is the current route")
-	SceneRouter.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
-	await _wait_for_route(harness, SceneRouter.DESK)
-	assert_eq(SceneRouter.current, SceneRouter.DESK, "System back leaves Jobs for the desk")
-	assert_true(SceneRouter.visible_route_ok(), "Desk is visible after system back")
-
-
-func _system_back_steps_out_of_lean(harness: UiHarness) -> void:
-	await harness.goto_route("jobs")
-	var venue: Node = harness.current_scene()
-	assert_true(venue != null and venue.has_method("handle_system_back"), "Jobs is a venue")
-	venue._leaning_on = "board"
-	SceneRouter.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
-	await harness.settle()
-	assert_eq(SceneRouter.current, "jobs", "System back while leant in stays on Jobs")
-	assert_eq(str(venue._leaning_on), "", "System back clears the lean-in")
-	await harness.go_desk()
 
 
 func _system_back_closes_desk_overlay(harness: UiHarness) -> void:
@@ -99,9 +74,23 @@ func _system_back_returns_to_run_tab(harness: UiHarness) -> void:
 func _system_back_opens_menu_from_desk(harness: UiHarness) -> void:
 	if SceneRouter.current != SceneRouter.DESK:
 		await harness.go_desk()
+	# The cabinet owns its own menu now: back from the bare run tab opens the
+	# maintenance view in place, and a second back resumes. The route never
+	# changes.
+	var shell: Node = harness.current_scene()
 	SceneRouter.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
-	await _wait_for_route(harness, "menu")
-	assert_eq(SceneRouter.current, "menu", "System back from a bare desk opens the menu")
+	await settle_camera(harness)
+	assert_true(
+		shell != null and shell.has_method("is_maintenance") and bool(shell.is_maintenance()),
+		"System back from a bare desk opens the maintenance view"
+	)
+	assert_eq(SceneRouter.current, SceneRouter.DESK, "Maintenance stays on the desk route")
+	SceneRouter.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	await settle_camera(harness)
+	assert_true(
+		shell != null and not bool(shell.is_maintenance()),
+		"A second system back resumes from maintenance"
+	)
 	await harness.go_desk()
 
 
@@ -115,11 +104,3 @@ func _resume_recovers_blank_shell(harness: UiHarness) -> void:
 	SceneRouter.notification(MainLoop.NOTIFICATION_APPLICATION_RESUMED)
 	await harness.settle()
 	assert_true(SceneRouter.visible_route_ok(), "Resume remounts a visible route")
-
-
-func _wait_for_route(harness: UiHarness, route: String) -> void:
-	var deadline: int = Time.get_ticks_msec() + 8000
-	while SceneRouter.current != route and Time.get_ticks_msec() < deadline:
-		await harness.get_tree().process_frame
-	for _frame in 4:
-		await harness.get_tree().process_frame

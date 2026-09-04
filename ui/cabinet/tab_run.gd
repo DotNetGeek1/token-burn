@@ -118,13 +118,9 @@ func _ready() -> void:
 	_burn_keys.add_theme_constant_override("separation", 4)
 	_burn_keys.visible = false
 	column.add_child(_burn_keys)
-	var kill: Button = CabinetStyle.key("KILL", CabinetStyle.RED)
-	kill.pressed.connect(func() -> void: shell.call("on_kill"))
-	_burn_keys.add_child(kill)
-	var skip: Button = CabinetStyle.key("SKIP", CabinetStyle.AMBER)
-	skip.pressed.connect(func() -> void: shell.call("on_skip"))
-	_burn_keys.add_child(skip)
-	var burning_note: Label = CabinetStyle.mono("BATCH RUNNING — KILL STOPS AFTER THIS STAGE, SKIP SHOWS THE RESULT", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
+	# The batch's controls are not keys on this tab: the lever kills (a held
+	# pull, since it throws work away) and SKIP sits in the CRT's corner.
+	var burning_note: Label = CabinetStyle.mono("BATCH RUNNING — HOLD THE LEVER TO KILL AFTER THIS STAGE · SKIP SHOWS THE RESULT", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
 	burning_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_burn_keys.add_child(burning_note)
 
@@ -287,8 +283,7 @@ func _refresh_keys(job: Dictionary, working: bool) -> void:
 		_add_key("YOLO", CabinetStyle.RED, func() -> void: shell.call("on_yolo"))
 	var matches: Array = Simulation.workflow_matches(job) if not job.is_empty() else []
 	if matches.size() >= 2:
-		_add_key("ROUTE", CabinetStyle.PHOSPHOR, func() -> void: shell.call("on_route_workflow"))
-	_add_key("FULL EDITOR", CabinetStyle.GREY, func() -> void: SceneRouter.open_workflows())
+		_add_key("ROUTE", CabinetStyle.PHOSPHOR, func() -> void: shell.call("on_cycle_workflow"))
 
 
 func _add_key(text: String, accent: Color, pressed: Callable) -> void:

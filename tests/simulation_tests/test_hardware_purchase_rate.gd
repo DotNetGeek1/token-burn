@@ -24,6 +24,11 @@ func _make_sim(run_seed: int = 601, location: String = "garage") -> Node:
 	# garage comes with would otherwise be folded into the delta.
 	sim.apply_run_location(sim.run_state, location, false)
 	sim.run_state.economy["cash"] = 500_000.0
+	# Settle the room's own numbers (the garage's Compute Stack tier adds a base
+	# rate) so a purchase delta measures the machine and nothing else.
+	sim.compute_system().recalculate(
+		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
+	)
 	return sim
 
 

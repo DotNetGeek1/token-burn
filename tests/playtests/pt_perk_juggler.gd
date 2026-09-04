@@ -1,13 +1,13 @@
 extends PlaytestCase
 
-## Takes every angel offer, then equips, benches and swaps on the build
-## bench up to the cap. The UI's enabled action rows have to agree with
-## Simulation.perk_capacity() — a FIT that lights up on a full loadout, or a
-## BENCH that stays grey on a card that can leave, is the bug this guards.
+## Takes every angel offer, then fits, benches and swaps on the PERKS tab up
+## to the cap. The commit button has to agree with Simulation.perk_capacity()
+## — a FIT that lights up on a full rack, or a BENCH that stays grey on a card
+## that can leave, is the bug this guards.
 ##
 ## Angels auto-fit when there is a slot. The juggler only has work on the
-## bench once the loadout is full, which is why a cap hit benches one
-## before fitting another.
+## bench once the rack is full, which is why a cap hit benches one before
+## fitting another.
 
 
 const SEED := 13
@@ -33,78 +33,105 @@ func play(harness: UiHarness) -> void:
 			await _walk_skip_overlays(harness)
 		if Simulation.phase == Simulation.Phase.RUN_END:
 			break
-		await _juggle_build(harness)
+		await _juggle_perks(harness)
 
 
 func _take_work_if_any(harness: UiHarness) -> void:
 	await dismiss_investor(harness)
-	if SceneRouter.current != "jobs":
-		await harness.goto_route("jobs")
-	if harness.driver.first_tile() == null:
-		harness.driver.audit_screen("jobs", "jobs")
+	if Array(Simulation.run_state.business.get("job_offers", [])).is_empty():
 		return
 	await accept_first_job(harness)
 
 
-func _juggle_build(harness: UiHarness) -> void:
-	if not SceneRouter.has_route("build"):
-		return
+## The PERKS tab: pick a card, read the commit. FIT on a bench card, BENCH on
+## a fitted one, each enabled exactly when the simulation says so.
+func _juggle_perks(harness: UiHarness) -> void:
 	await dismiss_investor(harness)
-	await harness.goto_route("build")
-	harness.driver.audit_screen("build", "build")
+	var shell: Node = harness.current_scene()
+	if shell == null or not shell.has_method("switch_tab"):
+		return
+	shell.switch_tab("perks")
+	await harness.settle()
+	harness.driver.audit_screen("perks", "desk")
+	var tab: Node = _perks_tab(shell)
+	assert_true(tab != null and tab.has_method("select_perk"), "The PERKS tab is up and exposes select_perk")
+	if tab == null:
+		return
 
 	var capacity: Dictionary = Simulation.perk_capacity()
 	var cap: int = int(capacity.get("cap", 0))
-	var equipped: Array = Array(Simulation.run_state.build.get("perks", []))
-	if equipped.size() >= cap and cap > 0:
-		await _bench_one(harness)
-		await _equip_from_bench(harness)
+	var fitted: Array = Array(Simulation.run_state.build.get("perks", []))
+	if fitted.size() >= cap and cap > 0:
+		await _bench_one(harness, shell, tab)
+		await _fit_from_bench(harness, shell, tab)
 	else:
-		await _equip_from_bench(harness)
+		await _fit_from_bench(harness, shell, tab)
 
 	_assert_loadout()
+	shell.switch_tab("run")
+	await harness.settle()
 
 
-func _bench_one(harness: UiHarness) -> void:
-	var fitted: Control = harness.driver.command("FITTED")
-	if fitted != null:
-		await harness.driver.press(fitted)
-	var tile: Control = harness.driver.first_tile()
-	if tile == null:
+func _bench_one(harness: UiHarness, shell: Node, tab: Node) -> void:
+	var fitted: Array = Array(Simulation.run_state.build.get("perks", []))
+	if fitted.is_empty():
 		return
-	await harness.driver.lean_if_needed(tile)
-	await harness.driver.press(tile)
-	await _press_enabled_action(harness, ["UNEQUIP", "BENCH"])
+	var perk_id: String = str(fitted[0])
+	assert_true(bool(tab.call("select_perk", perk_id)), "A fitted perk can be picked on the rack")
+	shell.refresh_all()
+	await harness.settle()
+	await _commit_agrees(harness, "BENCH", Simulation.can_bench_perk(perk_id))
 
 
-func _equip_from_bench(harness: UiHarness) -> void:
-	var bench: Control = harness.driver.command("ON THE BENCH")
-	if bench != null:
-		await harness.driver.press(bench)
-	var tile: Control = _first_unequipped_tile(harness)
-	if tile == null:
+func _fit_from_bench(harness: UiHarness, shell: Node, tab: Node) -> void:
+	var fitted: Array = Array(Simulation.run_state.build.get("perks", []))
+	var bench: String = ""
+	for perk_id in Array(Simulation.run_state.build.get("perk_inventory", [])):
+		if not (str(perk_id) in fitted):
+			bench = str(perk_id)
+			break
+	if bench == "":
 		return
-	await harness.driver.lean_if_needed(tile)
-	await harness.driver.press(tile)
-	# The sheet says FIT IT / SWAP FOR …, not EQUIP. Try the brief's verbs
-	# and the ones the sign actually prints.
-	await _press_enabled_action(harness, ["EQUIP", "FIT", "SWAP", "BENCH"])
+	assert_true(bool(tab.call("select_perk", bench)), "A benched perk can be picked")
+	shell.refresh_all()
+	await harness.settle()
+	await _commit_agrees(harness, "FIT", Simulation.can_equip_perk(bench))
 
 
-func _first_unequipped_tile(harness: UiHarness) -> Control:
-	var equipped: Array = Array(Simulation.run_state.build.get("perks", []))
-	for tile in harness.driver.tiles():
-		if tile is VenueTile and not (str(tile.meta) in equipped):
-			return tile
+## The commit reads `verb`, is enabled exactly when the simulation allows the
+## move, and a press does the move.
+func _commit_agrees(harness: UiHarness, verb: String, allowed: bool) -> void:
+	var button: Control = harness.driver.command(verb)
+	assert_true(button != null, "The commit button reads %s for the picked perk" % verb)
+	if button == null:
+		return
+	var enabled: bool = bool(button.call("is_enabled")) if button.has_method("is_enabled") else not (button as BaseButton).disabled
+	assert_eq(enabled, allowed, "%s is enabled exactly when perk_capacity allows it" % verb)
+	if not enabled:
+		return
+	var before: int = Array(Simulation.run_state.build.get("perks", [])).size()
+	await harness.driver.press(button)
+	var after: int = Array(Simulation.run_state.build.get("perks", [])).size()
+	assert_eq(after, before + (1 if verb == "FIT" else -1), "%s moved one perk" % verb)
+
+
+func _perks_tab(shell: Node) -> Node:
+	var screen: CabinetScreen = _find_first(shell, func(node: Node) -> bool: return node is CabinetScreen) as CabinetScreen
+	if screen == null:
+		return null
+	return screen.active_tab()
+
+
+func _find_first(node: Node, predicate: Callable) -> Node:
+	if node == null:
+		return null
+	if bool(predicate.call(node)):
+		return node
+	for child in node.get_children():
+		var found: Node = _find_first(child, predicate)
+		if found != null:
+			return found
 	return null
-
-
-func _press_enabled_action(harness: UiHarness, verbs: Array) -> void:
-	for verb in verbs:
-		var action: Control = harness.driver.command(str(verb))
-		if action != null and action is BaseButton and not action.disabled:
-			await harness.driver.press(action)
-			return
 
 
 func _assert_loadout() -> void:
@@ -148,13 +175,6 @@ func _walk_skip_overlays(harness: UiHarness) -> void:
 		):
 			return
 		await harness.settle()
-
-
-func _wait_for_desk(harness: UiHarness) -> void:
-	var deadline: int = Time.get_ticks_msec() + 8000
-	while SceneRouter.current != SceneRouter.DESK and Time.get_ticks_msec() < deadline:
-		await harness.get_tree().process_frame
-	await harness.settle()
 
 
 func _wait_for_overlay(harness: UiHarness) -> void:

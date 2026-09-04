@@ -171,120 +171,9 @@ static func _board_rect(dwelling: String, group: String, key: String) -> Rect2:
 	return _rect_from(Array(Dictionary(group_data)[key]))
 
 
-## A venue: one of the places the player goes to that is not the desk.
-##
-## Same idea as a room, and authored the same way. The picture is the place, and
-## the panels hanging in it are blank in the art so the live screen is printed
-## into them: the market's stock board is a board on a wall, not a table
-## floating over a photograph. Rects are fractions of the picture, which is
-## drawn at the design aspect, so a region lands on the panel it was measured
-## off whatever the window is doing.
-static func venue_art(venue: String) -> Texture2D:
-	var path: String = str(_venue_scene(venue).get("art", ""))
-	if path.is_empty() or not ResourceLoader.exists(path):
-		return null
-	var loaded: Variant = load(path)
-	return loaded if loaded is Texture2D else null
-
-
-## Where a named panel is painted in the venue. Empty when the picture does not
-## carry one, which the venue reads as "this place has nothing to say there".
-##
-## The venue pictures are shot against one panel template, so the rects live once
-## under venue_defaults and a venue only names the ones its own picture moved.
-static func venue_region(venue: String, key: String) -> Rect2:
-	var own: Variant = _venue_scene(venue).get("regions")
-	if own is Dictionary and Dictionary(own).has(key):
-		return _rect_from(Array(Dictionary(own)[key]))
-	var shared: Variant = _venue_defaults().get("regions")
-	if shared is Dictionary and Dictionary(shared).has(key):
-		return _rect_from(Array(Dictionary(shared)[key]))
-	return Rect2()
-
-
-## The photographed face of a venue panel, as top-left, top-right,
-## bottom-right, bottom-left viewport fractions. A rect still supplies focus and
-## fallback layout; the plane is what lets the live panel follow the furniture.
-static func venue_plane(venue: String, key: String) -> PackedVector2Array:
-	var planes: Variant = _venue_scene(venue).get("planes")
-	if not planes is Dictionary or not Dictionary(planes).has(key):
-		return PackedVector2Array()
-	var corners: Array = Array(Dictionary(planes)[key])
-	if corners.size() != 4:
-		return PackedVector2Array()
-	var quad := PackedVector2Array()
-	for corner in corners:
-		var point: Array = Array(corner)
-		if point.size() != 2:
-			return PackedVector2Array()
-		quad.append(Vector2(float(point[0]), float(point[1])))
-	return quad
-
-
-## Largest axis-aligned rectangle inside a convex quadrilateral, in the same
-## fraction space the corners were authored in. Empty when the points do not
-## enclose a rectangle.
-##
-## Native venues warp a live panel onto the photographed plane. The Web
-## Compatibility renderer cannot, so the axis-aligned fallback has to sit inside
-## the writing surface rather than on the bounding box — otherwise the top rail
-## and the brick below the board receive controls.
-static func inscribed_rect(corners: PackedVector2Array) -> Rect2:
-	if corners.size() != 4:
-		return Rect2()
-	var left: float = maxf(corners[0].x, corners[3].x)
-	var right: float = minf(corners[1].x, corners[2].x)
-	var top: float = maxf(corners[0].y, corners[1].y)
-	var bottom: float = minf(corners[2].y, corners[3].y)
-	if right - left < 0.0001 or bottom - top < 0.0001:
-		return Rect2()
-	return Rect2(left, top, right - left, bottom - top)
-
-
-## Where an unwarped live panel may sit. Prefers the inscribed writing surface
-## of a measured plane and falls back to the authored bounding region.
-static func venue_axis_aligned_region(venue: String, key: String) -> Rect2:
-	var inner: Rect2 = inscribed_rect(venue_plane(venue, key))
-	if inner.size.x > 0.0 and inner.size.y > 0.0:
-		return inner
-	return venue_region(venue, key)
-
-
-static func _venue_defaults() -> Dictionary:
-	_ensure_loaded()
-	var defaults: Variant = _data.get("venue_defaults")
-	return defaults if defaults is Dictionary else {}
-
-
-static func venue_keys() -> Array:
-	_ensure_loaded()
-	var scenes: Variant = _data.get("venue_scenes")
-	return Dictionary(scenes).keys() if scenes is Dictionary else []
-
-
-static func _venue_scene(venue: String) -> Dictionary:
-	_ensure_loaded()
-	var scenes: Variant = _data.get("venue_scenes")
-	if not scenes is Dictionary:
-		return {}
-	var table: Dictionary = scenes
-	return Dictionary(table[venue]) if table.has(venue) else {}
-
-
-## The Burn Cabinet: one painted chassis with every well, socket and button left
-## blank, and the live game drawn into rects authored beside it. Same idea as a
-## room, measured the same way — fractions of the plate, which is drawn at the
-## design aspect so a region lands on the well it was measured off.
-static func cabinet_art() -> Texture2D:
-	var path: String = str(_cabinet().get("art", ""))
-	if path.is_empty() or not ResourceLoader.exists(path):
-		return null
-	var loaded: Variant = load(path)
-	return loaded if loaded is Texture2D else null
-
-
-## Cutout art the cabinet mounts onto its glass: the paper job tag, the module
-## cartridge frame.
+## The Burn Cabinet's cutout art and glyphs: the pieces the shell mounts onto
+## its glass (the paper job tag, the module cartridge and bay frames) and the
+## bold glyphs it tints. Geometry lives in the layout profiles, never here.
 static func cabinet_texture(key: String) -> Texture2D:
 	var textures: Variant = _cabinet().get("textures")
 	if not textures is Dictionary or not Dictionary(textures).has(key):
@@ -326,44 +215,101 @@ static func cabinet_stamp(icon_key: String) -> Texture2D:
 	return glyph if glyph != null else stat_icon(icon_key)
 
 
-## Where a named well of the cabinet sits, as a fraction of the plate. Empty when
-## the plate does not carry that well.
-static func cabinet_region(key: String) -> Rect2:
-	var regions: Variant = _cabinet().get("regions")
-	if not regions is Dictionary or not Dictionary(regions).has(key):
-		return Rect2()
-	return _rect_from(Array(Dictionary(regions)[key]))
-
-
-## A well painted off square: its top-left, top-right and bottom-left glass
-## corners as fractions of the plate, so the readout can be sheared to fit.
-## Empty for wells that are plain rectangles.
-static func cabinet_quad(key: String) -> PackedVector2Array:
-	var quads: Variant = _cabinet().get("quads")
-	if not quads is Dictionary or not Dictionary(quads).has(key):
-		return PackedVector2Array()
-	var corners := PackedVector2Array()
-	for raw in Array(Dictionary(quads)[key]):
-		var pair: Array = Array(raw)
-		if pair.size() >= 2:
-			corners.append(Vector2(float(pair[0]), float(pair[1])))
-	return corners if corners.size() == 3 else PackedVector2Array()
-
-
-## The module dock's sockets, in bay order, as fractions of the plate.
-static func cabinet_sockets() -> Array[Rect2]:
-	var sockets: Array[Rect2] = []
-	for raw in Array(_cabinet().get("sockets", [])):
-		var rect: Rect2 = _rect_from(Array(raw))
-		if rect.size.x > 0.0 and rect.size.y > 0.0:
-			sockets.append(rect)
-	return sockets
-
-
 static func _cabinet() -> Dictionary:
 	_ensure_loaded()
 	var section: Variant = _data.get("cabinet")
 	return section if section is Dictionary else {}
+
+
+## The layered cabinet (v2): a kit of full-bleed backdrops, 9-slice frames the
+## shell stretches around live containers, commit button states, the abort
+## lever in two parts, the locked-bay shutter and one tile per cabinet system
+## tier. Geometry lives in the layout profiles, never in these pictures.
+##
+## Standalone pictures: `chassis`, `maintenance_wall`, `bay_shutter`,
+## `lever_channel`, `lever_handle`. Frames and states have their own accessors.
+static func cabinet_v2_texture(key: String) -> Texture2D:
+	var section: Dictionary = _cabinet_v2()
+	var path: String = ""
+	var textures: Variant = section.get("textures")
+	if textures is Dictionary and Dictionary(textures).has(key):
+		path = str(Dictionary(textures)[key])
+	elif section.has(key) and section[key] is String:
+		path = str(section[key])
+	if path.is_empty():
+		return null
+	return _load_texture(path, "cabinet v2 texture")
+
+
+## A 9-slice frame: `crt_bezel`, `telemetry_frame`, `deck_plate`,
+## `backplane_rail`, `panel`. Returns `{texture: Texture2D, margins: Array}`
+## where `margins` is `[left, top, right, bottom]` in texture pixels, ready for
+## NinePatchRect.patch_margin_* or StyleBoxTexture.texture_margin_*. Empty when
+## the kit has no frame under that key.
+static func cabinet_v2_frame(key: String) -> Dictionary:
+	var frames: Variant = _cabinet_v2().get("frames")
+	if not frames is Dictionary or not Dictionary(frames).has(key):
+		return {}
+	var entry: Dictionary = Dictionary(Dictionary(frames)[key])
+	var texture: Texture2D = _load_texture(str(entry.get("texture", "")), "cabinet v2 frame")
+	if texture == null:
+		return {}
+	var margins: Array[int] = []
+	for raw in Array(entry.get("margins", [])):
+		margins.append(int(raw))
+	while margins.size() < 4:
+		margins.append(margins[-1] if not margins.is_empty() else 0)
+	return {"texture": texture, "margins": margins}
+
+
+## The commit button's face for one state: `idle`, `armed`, `danger`, `busy`.
+## Unknown states fall back to `idle` so the button never loses its housing.
+static func cabinet_commit_texture(state: String) -> Texture2D:
+	var states: Variant = _cabinet_v2().get("commit")
+	if not states is Dictionary:
+		return null
+	var table: Dictionary = states
+	var key: String = state.to_lower()
+	if not table.has(key):
+		key = "idle"
+	if not table.has(key):
+		return null
+	return _load_texture(str(table[key]), "cabinet commit state")
+
+
+## The mount tile for one cabinet system at one tier (1-4). Tiers outside the
+## range clamp to the nearest painted one; unknown systems return null.
+static func cabinet_system_tile(system_id: String, tier: int) -> Texture2D:
+	var systems: Variant = _cabinet_v2().get("systems")
+	if not systems is Dictionary or not Dictionary(systems).has(system_id):
+		return null
+	var tiles: Array = Array(Dictionary(systems)[system_id])
+	if tiles.is_empty():
+		return null
+	var index: int = clampi(tier, 1, tiles.size()) - 1
+	return _load_texture(str(tiles[index]), "cabinet system tile")
+
+
+## Which systems the v2 kit paints tiles for, in catalog order.
+static func cabinet_system_ids() -> Array:
+	var systems: Variant = _cabinet_v2().get("systems")
+	return Dictionary(systems).keys() if systems is Dictionary else []
+
+
+static func _cabinet_v2() -> Dictionary:
+	_ensure_loaded()
+	var section: Variant = _data.get("cabinet_v2")
+	return section if section is Dictionary else {}
+
+
+static func _load_texture(path: String, what: String) -> Texture2D:
+	if path.is_empty():
+		return null
+	if not ResourceLoader.exists(path):
+		push_warning("AssetCatalog: missing %s %s" % [what, path])
+		return null
+	var loaded: Variant = load(path)
+	return loaded if loaded is Texture2D else null
 
 
 static func investor_texture(key: String) -> Texture2D:
@@ -532,8 +478,6 @@ static func rarity_color(rarity: String) -> Color:
 
 static func category_icon(category: String) -> Texture2D:
 	match category.to_lower():
-		"dwelling":
-			return nav_icon("office")
 		"hardware", "component":
 			return get_texture("category_icons", "hardware")
 		"local":

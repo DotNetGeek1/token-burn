@@ -6,7 +6,28 @@
 
 This turns the late-game review into work against the current files: state fields, events, heat/instability equations, `BoardSystem` / `EffectResolver` changes, and a first cascade content batch.
 
-The early game stays as it is. Bedroom and garage are a tutorial. The genre shift starts at GPU Rack.
+The early game stays as it is. The Bedroom and Garage chapters are a tutorial. The genre shift starts at GPU Rack.
+
+> **Cabinet v2 note (Sep 2026).** Since this plan was written the game moved
+> onto the Burn Cabinet (see `docs/cabinet-v2`). Where the plan says
+> "dwelling" or "room", read **campaign chapter**; where it reads a capacity
+> from `content/balance/dwelling_costs.json` (floor slots, cooling, heat
+> capacity), that number now comes from the run's **cabinet system tier**
+> (`content/upgrades/cabinet_systems.json`, `systems/cabinet_systems.gd`:
+> Power Bus → hardware slots, Cooling Loop → cooling and heat capacity,
+> Workflow Backplane → bays, Control Rack → workflows, Compute Stack → base
+> rate). `dwelling_costs.json` still owns rent, starting cash and starting
+> hardware per chapter, and its slot/cooling/heat columns remain a per-chapter
+> floor under the tier table (`CabinetSystems.chapter_floor`), so the
+> Datacentre/Grid/Moon ambient rows below (15k/120k/700k cooling) still hold:
+> those chapters out-size tier 4 and keep their room numbers.
+> The chapter still caps the highest tier the Market
+> sells (Bedroom/Garage 2, Office/Warehouse 3, Datacentre onward 4), so
+> "tier ≥ 2 from GPU Rack" gates still line up with the Office chapter. The
+> burn UI files named below (`ui/board/*`) were replaced by
+> `ui/cabinet/burn_director.gd`, `ui/cabinet/burn_feed.gd` and the telemetry
+> rail (`heat_meter.gd`, `multiplier_drum.gd`, `system_status.gd`); the
+> per-wave "owned files" lists should be read with that substitution.
 
 ---
 
@@ -32,9 +53,9 @@ Items 1 and 2 were assumed already done. On current `main` they are not. Adjacen
 
 `content/balance/economy.json` still sets `gain_per_power: 0.06` and `cooling_factor: 0.25` — the exact pairing the review used.
 
-Starter-room ambient heat per prompt, before extra coolers (same arithmetic as the review):
+Starter ambient heat per prompt for each chapter's opening rig and Cooling Loop tier, before extra coolers (same arithmetic as the review; the cooling column is the tier the chapter opens with, which for Bedroom–Warehouse equals the old room row):
 
-| Location | Starter machine | Power | Location cooling | Ambient Δheat |
+| Chapter | Starter machine | Power | Cooling Loop | Ambient Δheat |
 |---|---|---:|---:|---:|
 | Bedroom | used laptop | 65 | 16 | −0.1 |
 | Garage | custom desktop | 350 | 120 | −9 |
@@ -45,6 +66,8 @@ Starter-room ambient heat per prompt, before extra coolers (same arithmetic as t
 | Moon | industrial campus | 2M | 700k | −55,000 |
 
 Overclock still authors `+18` pipeline heat (`content/modules/modules.json`, `op.overclock`). On the moon that is noise next to −55,000 ambient.
+
+The Datacentre, Private grid and Moon rows above were measured against the room cooling values in `dwelling_costs.json`. Those chapters open at Cooling Loop tier 3–4, whose authored values (`cabinet_systems.json`: 336 / 1,248) are far smaller, but the chapter's own column stays in force as a floor (`CabinetSystems.chapter_floor`), so the rows above still describe the live numbers. If the 0.A sweep decides to author the late chapters' cooling into the tier table instead (e.g. per-chapter tier values), re-derive the three late rows at that point.
 
 What *is* already in place, and must be kept:
 
@@ -75,7 +98,7 @@ None of that is a burn spectacle log.
 ### Items 3–5 — still open, as expected
 
 - Late compute `max_level` is 2 (`content/upgrades/upgrades.json`). `test_upgrade_counts.gd` `_test_major_machine_caps_and_grandfathered_fleets` encodes that as law. `docs/GAME_DESIGN.md` still documents fleet caps.
-- Floor space already exists (`dwelling_costs.json` 2 / 4 / 8 / 16 / 40 / 80 / 160) and is the right soft cap. Power cost and recurring cost already scale. They never get to matter because `max_level` stops the shop first.
+- Floor space already exists (Power Bus tier: 2 / 4 / 8 / 16 hardware slots, `cabinet_systems.json`) and is the right soft cap; a chapter's opening tier hands the room its slots, and the player buys the rest tier by tier. Power cost and recurring cost already scale. They never get to matter because `max_level` stops the shop first.
 - Offer count now equals `ComputeSystem.job_slots()`. There is no advertising/demand layer.
 - Parallel lanes already exist: `ComputeSystem.job_slots()` = floor machines used.
 - Contract risk flattens in `content/balance/job_scaling.json`: bug chance 12% and scope creep 5% from warehouse onward.
@@ -90,7 +113,7 @@ None of that is a burn spectacle log.
 
 1. Do not replace workflows, perks, modules, or the resolver.
 2. Do not rescale live postings off `token_rate`. `test_job_scaling.gd` `_test_upgrades_are_not_matched_by_the_work` stays. One-shotting old work is the jackpot, not the default late contract.
-3. Bedroom and garage numbers stay inside current test tolerances. No new meters on the tutorial HUD.
+3. Bedroom and Garage chapter numbers stay inside current test tolerances. No new meters on the tutorial telemetry rail.
 4. Instability, cascade, and depth stay gated until GPU Rack / warehouse / post-Moon as specified. Feature-flag anything that can ship half-finished (`config/feature_flags.json`, ADR-003).
 5. Do not start with thirty new modules. Four cascade pieces after the systems work.
 
@@ -109,7 +132,7 @@ systems/heat_system.gd
 core/simulation_preview.gd
 core/simulation.gd                    # only if it inlines ambient maths
 content/balance/economy.json          # heat block
-content/balance/dwelling_costs.json   # only if a chapter’s starter load is still ice-cold after the formula change
+content/upgrades/cabinet_systems.json # cooling tier values, only if a chapter’s starter load is still ice-cold after the formula change
 tests/simulation_tests/test_heat.gd
 tests/simulation_tests/test_late_game_heat.gd
 tests/simulation_tests/test_early_game_heat_rate.gd
@@ -189,7 +212,7 @@ fire_risk = heat_ratio >= 1.0     # Wave 2 moves this to catastrophe_ratio
 | Moon, one campus, stock cooling | bar still moves; Overclock is ≥ 5% of the bar | late safety inversion is gone |
 | Moon, many campuses, stock cooling | redline without matching cooling | 47 campuses is a thermal problem, not a `MAX_LEVEL` problem |
 
-Do not retune `dwelling_costs.json` cooling unless the formula alone cannot hit the office / moon rows. If you do retune, keep bedroom 16 / garage 120.
+Do not retune the Cooling Loop tier values in `cabinet_systems.json` unless the formula alone cannot hit the office / moon rows. If you do retune, keep Desk Fan (tier 1) at 16 and Radiator (tier 2) at 97, which is what the Bedroom and Garage chapters open with.
 
 #### Tests
 
@@ -210,8 +233,9 @@ Do not retune `dwelling_costs.json` cooling unless the formula alone cannot hit 
 
 ```text
 core/burn_spectacle.gd                # new: beats from preview + trace + combos
-ui/board/burn_board_screen.gd         # _animate_batch walks beats
-ui/board/laptop_screen.gd             # only if a slam / multiplier line needs a hook
+ui/cabinet/burn_director.gd           # _animate_batch walks beats
+ui/cabinet/burn_feed.gd               # the beat log over the telemetry rail
+ui/cabinet/multiplier_drum.gd         # only if a slam / multiplier line needs a hook
 ui/common/ui_sound.gd                 # pitch climb on cascade beats
 tests/simulation_tests/test_burn_spectacle.gd
 ```
@@ -295,8 +319,8 @@ Changes:
 
 Rewrite `_test_major_machine_caps_and_grandfathered_fleets`:
 
-- A third GPU rack is allowed when the room has a free floor slot and the player can pay.
-- A third rack is refused when the floor is full (`hardware_space_full`).
+- A third GPU rack is allowed when the Power Bus has a free floor slot and the player can pay.
+- A third rack is refused when the floor is full (`hardware_space_full`); the fix is a Power Bus tier, not a new room.
 - Legacy over-count fleets still load and can be sold.
 
 Add a moon test: buying past two industrial campuses is legal; `heat_outlook` / `ambient_delta` goes positive without extra cooling.
@@ -359,8 +383,8 @@ core/state/compute_state.gd
 core/run_lifecycle.gd                 # persist / reset
 content/balance/economy.json          # heat bands
 content/events/events.json            # optional fault copy
-ui/board/burn_board_screen.gd         # heat meter: “redlined” / “fault”
-ui/board/heat_gauge.gd                # band colours
+ui/cabinet/system_status.gd           # status ledger: “redlined” / “fault”
+ui/cabinet/heat_meter.gd              # band colours
 tests/simulation_tests/test_instability.gd
 tests/simulation_tests/test_heat.gd   # fire threshold move
 ```
@@ -520,7 +544,7 @@ Do not write more than this batch until a playable warehouse run has produced a 
 
 ## Wave 4 — Overkill and the post-Moon depth ladder
 
-Moon stays the last *authored chapter*. After it, the leash comes off. Do not add a new dwelling.
+Moon stays the last *authored chapter*. After it, the leash comes off. Do not add a new chapter, and do not add a fifth system tier.
 
 ### 4.A Overkill
 
@@ -531,7 +555,7 @@ core/work_session.gd                  # on complete
 core/run_score.gd
 core/run_state.gd                     # statistics
 systems/job_system.gd                 # optional rarity bias
-ui/board/burn_board_screen.gd         # slam “412% OVERKILL”
+ui/cabinet/burn_director.gd           # slam “412% OVERKILL”
 ui/screens/session_summary.gd / run_end.gd
 tests/simulation_tests/test_overkill.gd
 ```
@@ -687,13 +711,13 @@ One PR per wave, in order. Do not bundle 47 campuses with a new module pack.
 
 ## What this plan deliberately does not do
 
-- New chapters after the moon (no Mars, no Dyson).
+- New chapters after the moon (no Mars, no Dyson), and no tier 5 on any cabinet system.
 - Live-scaling old jobs to the current token rate.
 - Removing one-shots of leftover early contracts.
 - A second effect language. Cascade is a `BoardSystem` fold plus existing repeats.
 - Instant-run-end at 100% heat.
 - Changing resolver guard limits.
-- Rewriting the tutorial HUD.
+- Rewriting the tutorial-chapter telemetry rail.
 
 ---
 

@@ -205,117 +205,11 @@
       "workstation_bay": [0.14, 0.06, 0.72, 0.93]
     }
   },
-  "venue_defaults": {
-    "regions": {
-      "index": [0.018, 0.049, 0.163, 0.559],
-      "board": [0.387, 0.146, 0.439, 0.615],
-      "signage": [0.852, 0.104, 0.094, 0.472],
-      "hints": [0.106, 0.842, 0.140, 0.150],
-      "notice": [0.848, 0.743, 0.082, 0.125]
-    }
-  },
-  "venue_scenes": {
-    "market": {
-      "art": "res://presentation/venues/venue_market_no_signage.png",
-      "regions": {
-        "index": [0.033, 0.000, 0.167, 0.607],
-        "board": [0.389, 0.085, 0.430, 0.685],
-        "hints": [0.127, 0.884, 0.155, 0.115],
-        "notice": [0.841, 0.741, 0.107, 0.153]
-      },
-      "planes": {
-        "index": [[0.033, 0.000], [0.200, 0.034], [0.199, 0.583], [0.033, 0.607]],
-        "board": [[0.389, 0.144], [0.814, 0.085], [0.819, 0.770], [0.389, 0.722]],
-        "hints": [[0.127, 0.893], [0.275, 0.884], [0.282, 0.998], [0.128, 0.999]],
-        "notice": [[0.854, 0.741], [0.948, 0.773], [0.938, 0.892], [0.841, 0.856]]
-      }
-    },
-    "jobs": {
-      "art": "res://presentation/venues/venue_jobs_no_signage.png",
-      "regions": {
-        "index": [0.031, 0.065, 0.075, 0.509],
-        "board": [0.319, 0.165, 0.433, 0.477],
-        "hints": [0.075, 0.862, 0.154, 0.138],
-        "notice": [0.855, 0.592, 0.069, 0.079]
-      },
-      "planes": {
-        "index": [[0.031, 0.065], [0.106, 0.115], [0.104, 0.555], [0.043, 0.574]],
-        "board": [[0.319, 0.165], [0.752, 0.165], [0.752, 0.642], [0.319, 0.642]],
-        "hints": [[0.075, 0.862], [0.229, 0.870], [0.229, 1.075], [0.075, 1.064]],
-        "notice": [[0.859, 0.592], [0.924, 0.607], [0.914, 0.670], [0.855, 0.657]]
-      }
-    },
-    "build": {
-      "art": "res://presentation/venues/venue_build_no_signage.png",
-      "regions": {
-        "index": [0.076, 0.071, 0.075, 0.391],
-        "board": [0.323, 0.118, 0.381, 0.569],
-        "hints": [0.000, 0.000, 0.000, 0.000],
-        "notice": [0.842, 0.605, 0.088, 0.135]
-      },
-      "planes": {
-        "index": [[0.077, 0.071], [0.151, 0.116], [0.149, 0.462], [0.076, 0.455]],
-        "board": [[0.323, 0.118], [0.704, 0.118], [0.704, 0.687], [0.323, 0.687]],
-        "notice": [[0.842, 0.606], [0.930, 0.605], [0.930, 0.740], [0.843, 0.740]]
-      }
-    },
-    "workflows": {
-      "art": "res://presentation/venues/venue_workflows_whiteboard_v2.png",
-      "regions": {
-        "board": [0.265, 0.096, 0.626, 0.608]
-      },
-      "planes": {
-        "board": [[0.265, 0.160], [0.891, 0.096], [0.889, 0.704], [0.265, 0.660]]
-      }
-    },
-    "menu": {
-      "art": "res://presentation/venues/venue_menu.png",
-      "regions": {
-        "index": [0.008, 0.040, 0.148, 0.400],
-        "board": [0.412, 0.185, 0.298, 0.470],
-        "signage": [0.900, 0.072, 0.084, 0.360],
-        "notice": [0.900, 0.485, 0.058, 0.115],
-        "hints": [0.094, 0.630, 0.146, 0.240]
-      }
-    },
-    "legacy": {
-      "art": "res://presentation/venues/venue_legacy.png",
-      "regions": {
-        "index": [0.048, 0.040, 0.128, 0.390],
-        "board": [0.418, 0.135, 0.276, 0.435],
-        "signage": [0.892, 0.040, 0.092, 0.420],
-        "notice": [0.848, 0.458, 0.086, 0.205],
-        "hints": [0.036, 0.870, 0.136, 0.120]
-      }
-    },
-    "achievements": {
-      "art": "res://presentation/venues/venue_achievements.png",
-      "regions": {
-        "index": [0.010, 0.070, 0.152, 0.492],
-        "board": [0.458, 0.172, 0.320, 0.470],
-        "signage": [0.850, 0.130, 0.070, 0.340],
-        "notice": [0.860, 0.482, 0.070, 0.166],
-        "hints": [0.098, 0.740, 0.142, 0.100]
-      }
-    },
-    "terms": {
-      "art": "res://presentation/venues/venue_terms.png",
-      "regions": {
-        "index": [0.018, 0.055, 0.208, 0.440],
-        "board": [0.442, 0.135, 0.340, 0.435],
-        "signage": [0.882, 0.140, 0.092, 0.350],
-        "notice": [0.888, 0.520, 0.070, 0.130],
-        "hints": [0.108, 0.840, 0.140, 0.150]
-      }
-    }
-  },
   "cabinet": {
-    "art": "res://presentation/cabinet/cabinet_plate.png",
     "textures": {
       "job_card": "res://presentation/cabinet/job_card_paper.png",
       "cartridge": "res://presentation/cabinet/module_cartridge.png",
-      "bay_frame": "res://presentation/cabinet/module_bay_frame.png",
-      "dock_panel": "res://presentation/cabinet/module_dock_panel.png"
+      "bay_frame": "res://presentation/cabinet/module_bay_frame.png"
     },
     "glyphs": {
       "model": "res://presentation/cabinet/glyphs/model.png",
@@ -334,46 +228,81 @@
       "heat": "res://presentation/cabinet/glyphs/heat.png",
       "target": "res://presentation/cabinet/glyphs/target.png",
       "lock": "res://presentation/cabinet/glyphs/lock.png"
+    }
+  },
+  "cabinet_v2": {
+    "chassis": "res://presentation/cabinet/v2/chassis_backdrop.png",
+    "maintenance_wall": "res://presentation/cabinet/v2/maintenance_wall.png",
+    "frames": {
+      "crt_bezel": {
+        "texture": "res://presentation/cabinet/v2/crt_bezel.png",
+        "margins": [110, 110, 110, 120]
+      },
+      "telemetry_frame": {
+        "texture": "res://presentation/cabinet/v2/telemetry_frame.png",
+        "margins": [72, 72, 72, 80]
+      },
+      "deck_plate": {
+        "texture": "res://presentation/cabinet/v2/deck_plate.png",
+        "margins": [96, 96, 96, 96]
+      },
+      "backplane_rail": {
+        "texture": "res://presentation/cabinet/v2/backplane_rail.png",
+        "margins": [96, 96, 96, 96]
+      },
+      "panel": {
+        "texture": "res://presentation/cabinet/v2/panel_9slice.png",
+        "margins": [64, 64, 64, 64]
+      }
     },
-    "regions": {
-      "header": [0.360, 0.000, 0.300, 0.075],
-      "sticker_left": [0.055, 0.090, 0.060, 0.110],
-      "lever": [0.045, 0.262, 0.066, 0.245],
-      "lever_label": [0.048, 0.262, 0.060, 0.045],
-      "lever_channel": [0.048, 0.305, 0.058, 0.200],
-      "lever_handle": [0.048, 0.305, 0.058, 0.170],
-      "lever_legend": [0.048, 0.5095, 0.060, 0.0275],
-      "workflow_keys": [0.0605, 0.542, 0.0175, 0.152],
-      "screen": [0.158, 0.102, 0.494, 0.385],
-      "multiplier": [0.674, 0.153, 0.122, 0.081],
-      "heat": [0.674, 0.311, 0.122, 0.066],
-      "next_action": [0.674, 0.426, 0.122, 0.057],
-      "feed": [0.845, 0.068, 0.148, 0.183],
-      "status": [0.911, 0.311, 0.073, 0.169],
-      "sticker_right": [0.845, 0.365, 0.045, 0.135],
-      "override_plate": [0.153, 0.533, 0.174, 0.076],
-      "led_left": [0.3505, 0.5715, 0.0105, 0.0145],
-      "burn_button": [0.403, 0.515, 0.195, 0.082],
-      "led_right": [0.6295, 0.5715, 0.0095, 0.0135],
-      "cooldown_plate": [0.658, 0.533, 0.164, 0.076],
-      "dock": [0.130, 0.640, 0.720, 0.240],
-      "dock_panel": [0.126, 0.636, 0.728, 0.258]
+    "textures": {
+      "bay_shutter": "res://presentation/cabinet/v2/bay_shutter.png",
+      "lever_channel": "res://presentation/cabinet/v2/abort_lever_channel.png",
+      "lever_handle": "res://presentation/cabinet/v2/abort_lever_handle.png"
     },
-    "quads": {
-      "feed": [[0.845, 0.068], [0.993, 0.078], [0.845, 0.251]]
+    "lever": {
+      "channel": "res://presentation/cabinet/v2/abort_lever_channel.png",
+      "handle": "res://presentation/cabinet/v2/abort_lever_handle.png",
+      "channel_slot": [0.431, 0.072, 0.135, 0.855]
     },
-    "sockets": [
-      [0.1517, 0.6643, 0.0944, 0.0717],
-      [0.2973, 0.6643, 0.0944, 0.0717],
-      [0.4428, 0.6643, 0.0944, 0.0717],
-      [0.5883, 0.6643, 0.0944, 0.0717],
-      [0.7339, 0.6643, 0.0944, 0.0717],
-      [0.1517, 0.7933, 0.0944, 0.0717],
-      [0.2973, 0.7933, 0.0944, 0.0717],
-      [0.4428, 0.7933, 0.0944, 0.0717],
-      [0.5883, 0.7933, 0.0944, 0.0717],
-      [0.7339, 0.7933, 0.0944, 0.0717]
-    ]
+    "commit": {
+      "idle": "res://presentation/cabinet/v2/commit_idle.png",
+      "armed": "res://presentation/cabinet/v2/commit_armed.png",
+      "danger": "res://presentation/cabinet/v2/commit_danger.png",
+      "busy": "res://presentation/cabinet/v2/commit_busy.png"
+    },
+    "systems": {
+      "compute": [
+        "res://presentation/cabinet/v2/systems/compute_t1.png",
+        "res://presentation/cabinet/v2/systems/compute_t2.png",
+        "res://presentation/cabinet/v2/systems/compute_t3.png",
+        "res://presentation/cabinet/v2/systems/compute_t4.png"
+      ],
+      "cooling": [
+        "res://presentation/cabinet/v2/systems/cooling_t1.png",
+        "res://presentation/cabinet/v2/systems/cooling_t2.png",
+        "res://presentation/cabinet/v2/systems/cooling_t3.png",
+        "res://presentation/cabinet/v2/systems/cooling_t4.png"
+      ],
+      "power": [
+        "res://presentation/cabinet/v2/systems/power_t1.png",
+        "res://presentation/cabinet/v2/systems/power_t2.png",
+        "res://presentation/cabinet/v2/systems/power_t3.png",
+        "res://presentation/cabinet/v2/systems/power_t4.png"
+      ],
+      "backplane": [
+        "res://presentation/cabinet/v2/systems/backplane_t1.png",
+        "res://presentation/cabinet/v2/systems/backplane_t2.png",
+        "res://presentation/cabinet/v2/systems/backplane_t3.png",
+        "res://presentation/cabinet/v2/systems/backplane_t4.png"
+      ],
+      "control": [
+        "res://presentation/cabinet/v2/systems/control_t1.png",
+        "res://presentation/cabinet/v2/systems/control_t2.png",
+        "res://presentation/cabinet/v2/systems/control_t3.png",
+        "res://presentation/cabinet/v2/systems/control_t4.png"
+      ]
+    }
   },
   "investor": {
     "portrait": "res://presentation/investor/angel_portrait.png",

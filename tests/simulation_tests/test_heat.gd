@@ -107,7 +107,7 @@ func _test_purchase_warning() -> void:
 	sim.start_run(502)
 	assert_true(sim.upgrade_heat_warning("upgrade.gpu_rack") != "", "Bedroom warns about the rack")
 	assert_eq(sim.upgrade_heat_warning("upgrade.portable_ac"), "", "Cooling hardware carries no heat warning")
-	assert_eq(sim.upgrade_heat_warning("upgrade.garage"), "", "Dwellings carry no hardware heat warning")
+	assert_eq(sim.upgrade_heat_warning("upgrade.second_desk"), "", "Workspace upgrades carry no hardware heat warning")
 	var gpu: Dictionary = ContentDatabase.balance.get("hardware_curves", {}).get("gpu_rack", {})
 	var extra_power: float = float(gpu.get("power_draw", 0.0))
 	var current_tier: Dictionary = sim.heat_outlook(extra_power, 0.0, 0)

@@ -2,39 +2,25 @@ extends Node
 
 ## Where the game is, and the only thing that knows how to change it.
 ##
-## Every screen that is not the desk — the market, the job board, the build
-## sheet, the workflows, the records — is a scene in its own right now rather
-## than a slab sliding over the room. They used to swap with `change_scene`,
-## which on web frees the whole current world while WebGL still has buffers
-## bound and kills the canvas. Screens are children of a host this autoload
-## owns, so the tree root never tears down. Normal navigation keeps each routed
-## screen alive once mounted and only hides/disables it; the web renderer never
-## has to destroy the live desk or venue render tree during a route change.
-## This also owns everything that has to outlive the screen it was started from:
-## the fade over the seam, the phone the investor rings on, the award splash,
-## and any round-end report that lands while the player is out of the room.
+## The game is one screen now — the Burn Cabinet — and everything the player
+## does happens on it: the CRT tabs, the maintenance view and its sheets. The
+## router still owns the host that screen lives under, because `change_scene`
+## on web frees the whole current world while WebGL still has buffers bound
+## and kills the canvas; the cabinet is mounted once and never torn down. It
+## also owns everything that has to outlive a boot of the shell: the fade over
+## the seam, the phone the investor rings on, the award splash, and any
+## round-end report that lands before a desk exists (tools booting cold).
 
 ## Emitted once the new scene is mounted, for anything tracking where the player
 ## is rather than driving where they go.
 signal route_changed(route: String)
 
-## The desk, with the room and the machine in it. Every other route is somewhere
-## the player has gone to and can come back from.
+## The desk: the Burn Cabinet. It is the only route; the table is kept so the
+## navigation code reads the same way it did when there were places to go.
 const DESK := "desk"
 
-## The desk is the Burn Cabinet now. The old room (`ui/main.tscn`) is kept on
-## disk and reachable by its own route while the cabinet is proven out.
 const ROUTES := {
 	DESK: "res://ui/cabinet/burn_cabinet.tscn",
-	"room": "res://ui/main.tscn",
-	"market": "res://ui/venues/venue_market.tscn",
-	"jobs": "res://ui/venues/venue_jobs.tscn",
-	"build": "res://ui/venues/venue_build.tscn",
-	"workflows": "res://ui/venues/venue_workflows.tscn",
-	"menu": "res://ui/venues/venue_menu.tscn",
-	"legacy": "res://ui/venues/venue_legacy.tscn",
-	"achievements": "res://ui/venues/venue_achievements.tscn",
-	"terms": "res://ui/venues/venue_terms.tscn",
 }
 
 ## Out fast and in slower: leaving is a decision the player already made, and
@@ -47,14 +33,13 @@ const FADE_IN_SECONDS := 0.22
 const LAYER_OVERLAY := 90
 const LAYER_FADE := 110
 
-## How far back `back()` can walk. The desk is always the floor of the stack, so
-## this only caps venue-to-venue chains.
+## How far back `back()` can walk. The desk is always the floor of the stack.
 const MAX_DEPTH := 8
 
 const INVESTOR_CALL := preload("res://ui/screens/investor_call.tscn")
 
-## Whether the shell has booted once already. `main.tscn` reads this to tell a
-## cold start (load the save, show the title) from coming back off a venue.
+## Whether the shell has booted once already. The cabinet reads this to tell a
+## cold start (load the save, show the title) from a remount.
 var booted: bool = false
 var current: String = DESK
 
@@ -62,11 +47,11 @@ var _stack: Array[String] = []
 var _switching: bool = false
 ## A goto that arrives while a fade is running is kept, not dropped. Dropping
 ## it is how a round-end walk-home plus a player tap left the fade up and the
-## next venue never mounted.
+## next screen never mounted.
 var _queued_route: String = ""
-## Reports that arrived while the desk genuinely did not exist (primarily tools
-## booting directly into a venue). In the normal game the cached desk remains
-## connected to the simulation and receives these itself while hidden.
+## Reports that arrived while the desk genuinely did not exist (tools booting
+## cold). In the normal game the cached desk remains connected to the
+## simulation and receives these itself.
 var _pending_flow: Array[Dictionary] = []
 var _theme: Theme = null
 var _fade: ColorRect = null
@@ -196,8 +181,7 @@ func goto(route: String) -> bool:
 		_queued_route = route
 		return true
 	if route == current:
-		# Asking for the screen you are already on is a request to leave it,
-		# which is how the notes on the whiteboard behaved as panel tabs.
+		# Asking for the screen you are already on is a request to leave it.
 		if route == DESK:
 			return true
 		back()
@@ -351,8 +335,8 @@ func _activate_screen(route: String, screen: Node) -> void:
 		_ask_shell("refresh_all")
 	elif screen.has_method("refresh"):
 		screen.call("refresh")
-	# A direct-to-venue tool can still produce reports before a desk has ever
-	# existed. Once the desk is active, replay that exceptional backlog.
+	# A tool can still produce reports before a desk has ever existed. Once
+	# the desk is active, replay that exceptional backlog.
 	if route == DESK and not _pending_flow.is_empty():
 		var queued: Array[Dictionary] = _pending_flow.duplicate()
 		_pending_flow.clear()
@@ -406,7 +390,7 @@ func _drain_queued_route() -> void:
 
 
 ## Android system back matches the visible back contract: overlays first, then
-## a venue lean-in, then the venue stack, then the desk's own back policy.
+## the desk's own back policy (paper, maintenance, the run tab).
 func handle_system_back() -> void:
 	if _switching:
 		return
@@ -467,44 +451,13 @@ func _assert_visible_route(context: String) -> void:
 
 # --- Named destinations ------------------------------------------------------
 #
-# The screens ask for a place by name and do not care where it is. Every one of
-# these is a venue now; what is left on the desk is the burn lab and the title,
-# which are not places and so walk the player home first.
-
-func open_market() -> void:
-	goto("market")
-
-
-func open_jobs() -> void:
-	goto("jobs")
-
-
-func open_build() -> void:
-	goto("build")
-
-
-func open_menu() -> void:
-	goto("menu")
-
-
-func open_workflows() -> void:
-	goto("workflows")
-
-
-func open_legacy() -> void:
-	goto("legacy")
-
-
-func open_achievements() -> void:
-	goto("achievements")
-
-
-func open_terms() -> void:
-	goto("terms")
-
+# What used to be places of their own — market, jobs, build, workflows, the
+# lobby, the records — are tabs and sheets on the cabinet now. What is left
+# here is the burn lab and the title, which are shown by the shell and so
+# walk the player home first when no desk is up.
 
 ## The burn lab is a debug tool rather than a place, so it stays a modal on the
-## desk and asking for it from a venue walks back to the desk first.
+## desk and asking for it walks back to the desk first.
 func open_burn_lab() -> void:
 	_request_on_desk("burn_lab")
 
@@ -513,9 +466,7 @@ func open_title() -> void:
 	_request_on_desk("title")
 
 
-## Every route that is not the desk is somewhere the player went to look at
-## something. Working — the machine, the contracts in flight — happens at the
-## desk, so anything that starts work comes home.
+## Shows a tab of the cabinet's glass; queued for the shell when no desk is up.
 func open_desk_tab(tab_name: String) -> void:
 	if current == DESK:
 		_ask_shell("switch_tab", tab_name)
@@ -545,15 +496,15 @@ func _request_on_desk(kind: String) -> void:
 
 # --- Reports that land while the player is out ------------------------------
 
-## A cached desk remains connected to the simulation while hidden, so in normal
-## gameplay it has already received the debrief/bills signals by the time the
-## router walks home. Pending copies are only required when no desk exists yet.
+## The desk is connected to the simulation from its first mount, so in normal
+## gameplay it receives the debrief/bills signals itself. Pending copies are
+## only required when no desk exists yet.
 func _connect_flow() -> void:
 	Simulation.work_session_finished.connect(_on_work_session_finished)
 	Simulation.round_statement_ready.connect(_on_round_statement_ready)
 	EventBus.achievement_unlocked.connect(_on_achievement_unlocked)
-	# Taking a contract and starting one are both done with the catalogue, so
-	# they hand the window back to the desk.
+	# Taking a contract and starting one both land on the glass that shows
+	# the work.
 	EventBus.job_accepted.connect(func(_id: String) -> void: open_desk_tab("work"))
 	EventBus.job_started.connect(func(_id: String) -> void: open_desk_tab("board"))
 	EventBus.run_ended.connect(_on_run_ended)
@@ -581,7 +532,7 @@ func _on_run_ended(_victory: bool) -> void:
 
 
 ## Awards are the one report that does not need the shell: the splash lives up
-## here, so it plays over a venue exactly as it plays over the room.
+## here, so it plays over the title exactly as it plays over the machine.
 func _on_achievement_unlocked(achievement_id: String) -> void:
 	if _splash != null:
 		_splash.enqueue(achievement_id)
@@ -624,7 +575,7 @@ func investor_busy() -> bool:
 
 
 ## Puts the phone down without the player pressing anything. For the screenshot
-## tool, which wants the room underneath a beat he insists on being present for.
+## tool, which wants the machine underneath a beat he insists on being present for.
 func hide_investor() -> void:
 	if _investor_call != null:
 		_investor_call.hide_overlay()

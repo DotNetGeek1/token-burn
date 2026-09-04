@@ -19,16 +19,17 @@ The target experience is closer to **Balatro-style build construction** than a r
 - **Engine:** Godot 4
 - **Primary platform:** Mobile in landscape orientation
 - **Secondary builds:** Desktop and web, with 1920×1080 as the supported desktop floor
-- **Visual style:** 2D interface with a small orthographic 2.5D office diorama
+- **Visual style:** one layered 2D machine, the Burn Cabinet, whose five systems visibly evolve as they are upgraded
 - **Simulation model:** Data-driven, deterministic, and testable without rendering
 - **Initial scope:** Local-only, no backend, no real AI API usage
 
 ## Documents
 
 - [Game Design Overview](GAME_DESIGN.md)
-- [Technical Architecture](TECHNICAL_ARCHITECTURE.md)
-- [Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md)
+- [Technical Architecture](TECHNICAL_ARCHITECTURE.md) — includes the Burn Cabinet shell, layout profiles and cabinet systems
+- [Burn Cabinet v2 handoff pack](cabinet-v2/README.md) — product direction, interaction spec, layout spec, systems, art manifest, acceptance tests
 - [UX and Production Plan](UX_AND_PRODUCTION.md)
+- [Venue Layout Architecture](VENUE_LAYOUT_ARCHITECTURE.md) — retired; historical note only
 - [Late-game escalation plan](plans/late-game-escalation.md)
 - [Android release build](ANDROID_RELEASE.md)
 - [Android device matrix](ANDROID_DEVICE_MATRIX.md)

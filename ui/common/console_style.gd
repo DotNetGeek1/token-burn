@@ -148,7 +148,7 @@ static func crt_overlay() -> ColorRect:
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var material := ShaderMaterial.new()
-	material.shader = load("res://ui/board/crt_screen.gdshader")
+	material.shader = load("res://ui/common/crt_screen.gdshader")
 	material.set_shader_parameter("phosphor", PHOSPHOR)
 	overlay.material = material
 	return overlay

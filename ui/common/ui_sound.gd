@@ -33,6 +33,9 @@ const CUES := {
 	# Terminal keystroke. Fires several times a second while output streams, so it
 	# has to be very quiet and very short.
 	"key": [1500.0, 1350.0, 0.016, "square", 0.05],
+	# A part seating in the maintenance view: a short metallic drop with a bit
+	# of grit, distinct from the shop's BUY.
+	"install": [1400.0, 300.0, 0.22, "square", 0.24],
 }
 
 ## Cues made of several notes in a row rather than one swept tone. An award needs

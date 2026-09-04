@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "tier_range": [1, 4],
+  "systems": [
+    {
+      "id": "compute",
+      "name": "Compute Stack",
+      "tier_names": ["Exposed Board", "GPU Cage", "Accelerator Stack", "Impossible Core"],
+      "tier_values": {
+        "base_token_rate": [0, 2000000, 20000000, 200000000]
+      },
+      "cost": [3000, 15000, 60000],
+      "visual_mount": "system_compute",
+      "design_note": "Adds a flat base token rate on top of the hardware curves. Tier 1 is 0 because today's bedroom baseline (1M/prompt) is entirely the starter laptop, which stays a hardware row during the compatibility phase; leaving tier 1 at zero keeps every bedroom number exactly as it is. Each higher tier is worth 40% of the machine its chapter is staked with (custom_desktop 5M -> 2M, gpu_rack 50M -> 20M, compute_cluster 500M -> 200M), so the stack is a noticeable bonus but hardware remains the main throughput source until Phase 6 consolidates the rows."
+    },
+    {
+      "id": "cooling",
+      "name": "Cooling Loop",
+      "tier_names": ["Desk Fan", "Radiator", "Liquid Manifold", "Phase Cooler"],
+      "tier_values": {
+        "cooling_capacity": [16, 97, 336, 1248],
+        "heat_capacity": [100, 140, 200, 280]
+      },
+      "cost": [2200, 11000, 48000],
+      "visual_mount": "system_cooling",
+      "design_note": "Tier values are the bedroom, garage, office and warehouse rows of dwelling_costs.json, so a migrated save keeps the room's numbers. Heat-state thresholds are ratios of heat_capacity and are untouched."
+    },
+    {
+      "id": "power",
+      "name": "Power Bus",
+      "tier_names": ["Household Lead", "Transformer", "Busbar Bank", "Unstable Core"],
+      "tier_values": {
+        "hardware_slots": [2, 4, 8, 16]
+      },
+      "cost": [2800, 14000, 55000],
+      "visual_mount": "system_power",
+      "design_note": "Absorbs the dwelling hardware-slot responsibility: the values are the bedroom, garage, office and warehouse floor plans. power_headroom is deliberately not modelled yet."
+    },
+    {
+      "id": "backplane",
+      "name": "Workflow Backplane",
+      "tier_names": ["3-Bay Rail", "5-Bay Rail", "7-Bay Rail", "10-Bay Rail"],
+      "tier_values": {
+        "bays": [3, 5, 7, 10]
+      },
+      "cost": [2000, 10000, 45000],
+      "visual_mount": "system_backplane",
+      "design_note": "Supported pipeline stages. Replaces job_scaling.board.supported_stages as the baseline; perk, upgrade and meta slot bonuses stay additive on top."
+    },
+    {
+      "id": "control",
+      "name": "Control Rack",
+      "tier_names": ["Single Selector", "Dual Selector", "Triple Selector", "Quad Selector"],
+      "tier_values": {
+        "workflows": [1, 2, 3, 4]
+      },
+      "cost": [1500, 8000, 40000],
+      "visual_mount": "system_control",
+      "design_note": "Saved workflow capacity. Replaces BoardSystem.DEFAULT_WORKFLOW_CAPACITY as the baseline; perk, upgrade and meta workflow bonuses stay additive on top."
+    }
+  ],
+  "stat_labels": {
+    "base_token_rate": "BASE RATE",
+    "cooling_capacity": "COOLING",
+    "heat_capacity": "HEAT CAP",
+    "hardware_slots": "HARDWARE SLOTS",
+    "bays": "BAYS",
+    "workflows": "WORKFLOWS"
+  },
+  "generation_thresholds": [
+    {"min_sum": 5, "name": "Improvised Cabinet"},
+    {"min_sum": 8, "name": "Spliced Rig"},
+    {"min_sum": 11, "name": "Token Furnace"},
+    {"min_sum": 15, "name": "Grid Eater"},
+    {"min_sum": 19, "name": "Impossible Engine"}
+  ],
+  "migration_value_order": ["compute", "cooling", "power", "backplane", "control"],
+  "migration_from_dwelling": {
+    "bedroom": [1, 1, 1, 1, 1],
+    "garage": [2, 2, 2, 2, 1],
+    "office_unit": [2, 2, 2, 2, 2],
+    "warehouse": [3, 3, 3, 3, 2],
+    "datacentre_campus": [3, 3, 3, 3, 3],
+    "private_power_grid": [4, 3, 4, 4, 3],
+    "moon_facility": [4, 4, 4, 4, 4]
+  },
+  "chapter_max_tier": {
+    "bedroom": 2,
+    "garage": 2,
+    "office_unit": 3,
+    "warehouse": 3,
+    "datacentre_campus": 4,
+    "private_power_grid": 4,
+    "moon_facility": 4
+  }
+}

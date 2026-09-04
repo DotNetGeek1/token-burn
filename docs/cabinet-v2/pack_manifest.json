@@ -1,0 +1,42 @@
+{
+  "name": "token-burn-cabinet-v2-pack",
+  "version": "1.0.0",
+  "source": {
+    "repository": "DotNetGeek1/token-burn",
+    "branch": "experimental/ui-redesign",
+    "commit": "e3d36af45933524013ad0abf69db1966d4cd783c"
+  },
+  "reference_images": [
+    "references/cabinet_gameplay_reference.png",
+    "references/cabinet_evolution_reference.png"
+  ],
+  "vector_assets": [
+    "assets/cabinet_chassis_16x9.svg",
+    "assets/commit_button_states.svg",
+    "assets/module_bay_states.svg",
+    "assets/cabinet_systems_tiers.svg",
+    "assets/ui_frames.svg",
+    "assets/maintenance_backdrop.svg"
+  ],
+  "preview_images": [
+    "previews/asset_contact_sheet.png",
+    "previews/cabinet_chassis_16x9.png",
+    "previews/cabinet_systems_tiers.png",
+    "previews/commit_button_states.png",
+    "previews/maintenance_backdrop.png",
+    "previews/module_bay_states.png",
+    "previews/ui_frames.png"
+  ],
+  "specification_order": [
+    "spec/00_CURRENT_BRANCH_AUDIT.md",
+    "spec/01_PRODUCT_DIRECTION.md",
+    "spec/02_CHANGE_MAP.md",
+    "spec/03_LAYOUT_AND_RESPONSIVE_SPEC.md",
+    "spec/04_INTERACTION_SPEC.md",
+    "spec/05_CABINET_SYSTEMS.md",
+    "spec/06_ART_ASSET_MANIFEST.md",
+    "spec/07_IMPLEMENTATION_PLAN.md",
+    "spec/08_ACCEPTANCE_TESTS.md"
+  ],
+  "entry_prompt": "CURSOR_PROMPT.md"
+}

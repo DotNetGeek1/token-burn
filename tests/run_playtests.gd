@@ -8,8 +8,8 @@ extends Node
 ##
 ## `change_scene` frees `current_scene`. This runner is that scene when Godot
 ## opens the .tscn, so `_ready` nulls the pointer at once. The node stays a
-## root sibling, the harness hangs off it, and the router can swap the desk
-## and every venue without taking the suite down with them.
+## root sibling, the harness hangs off it, and the router can rebuild the
+## cabinet without taking the suite down with it.
 ##
 ##     godot --headless res://tests/run_playtests.tscn
 ##     godot res://tests/run_playtests.tscn -- --shots --scale=8
@@ -22,7 +22,7 @@ func _ready() -> void:
 	print("Token Burn — playtests")
 	print("=".repeat(40))
 	# Before anything the router might load: we are no longer the current
-	# scene, so a venue change will not free this runner.
+	# scene, so a scene change will not free this runner.
 	get_tree().current_scene = null
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
@@ -45,8 +45,20 @@ func _ready() -> void:
 	var scripts: Array[String] = _discover_playtests(filter)
 	for path in scripts:
 		print("  Running %s..." % path)
+		# A persona whose script fails to parse comes back from load() as a
+		# resource that cannot be instantiated; count it as a failed suite with
+		# its path rather than crashing the runner on a null test.
 		var script: GDScript = load(path)
-		var test: PlaytestCase = script.new()
+		if script == null or not script.can_instantiate():
+			_failed += 1
+			push_error("  FAIL  could not load or parse %s" % path)
+			continue
+		var instance: Variant = script.new()
+		if instance == null or not instance is PlaytestCase:
+			_failed += 1
+			push_error("  FAIL  %s is not a PlaytestCase" % path)
+			continue
+		var test: PlaytestCase = instance
 		# Fresh driver per persona so asserts tally on that TestCase, not the
 		# dummy the harness built for itself.
 		harness.driver = UiDriver.new(harness, test)

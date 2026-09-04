@@ -283,21 +283,24 @@ func _validate_every_machine_can_be_cooled() -> void:
 		var power: float = float(Dictionary(curves.get(upgrade.hardware_key, {})).get("power_draw", 0.0))
 		if power <= 0.0:
 			continue
-		var dwelling: String = upgrade.requires_dwelling if upgrade.requires_dwelling != "" else "bedroom"
-		var have: float = _location_cooling(dwelling) + _cooling_of(upgrade)
+		var home: RunState = _home_chapter_state(upgrade)
+		assert_true(home != null, "Some chapter's fresh cabinet can take a %s" % upgrade.name)
+		if home == null:
+			continue
+		var dwelling: String = str(home.build.get("dwelling", ""))
+		var have: float = _location_cooling(home) + _cooling_of(upgrade)
 		var needed: float = (power + starting_draw) * gain_factor / cooling_factor
 		var shortfall: float = needed - have
 		if shortfall <= 0.0:
 			continue
 
-		var tier: int = UpgradeSystem.dwelling_tier(dwelling, ContentDatabase)
 		var repeatable_cooler: bool = false
 		var cheapest: float = -1.0
 		var cheapest_name: String = ""
 		for cooler in ContentDatabase.upgrades:
 			if not ("cooling" in Array(cooler.tags)):
 				continue
-			if UpgradeSystem.dwelling_tier(cooler.requires_dwelling, ContentDatabase) > tier:
+			if not UpgradeSystem.prerequisites_met(home, cooler, ContentDatabase):
 				continue
 			var per_unit: float = _cooling_of(cooler)
 			if per_unit <= 0.0:
@@ -348,6 +351,8 @@ func _test_validation_catches_synthetic_bad_content() -> void:
 	bad_upgrade.repeatable = true
 	bad_upgrade.cost_growth = 0.0
 	bad_upgrade.max_level = -1
+	bad_upgrade.requires_chapter = "houseboat"
+	bad_upgrade.requires_system = {"plumbing": 2, "power": 9}
 	var bad_effect := EffectDefinition.new()
 	bad_effect.operation = "explode"
 	bad_effect.target = "economy.does_not_exist"
@@ -378,6 +383,18 @@ func _test_validation_catches_synthetic_bad_content() -> void:
 		"Validation catches a negative max_level"
 	)
 	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("requires missing chapter 'houseboat'")),
+		"Validation catches a chapter gate naming a chapter the table does not have"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("requires unknown cabinet system 'plumbing'")),
+		"Validation catches a system gate naming a system that does not exist"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("requires power tier 9 outside")),
+		"Validation catches a system gate asking for a tier past the table"
+	)
+	assert_true(
 		errors.any(func(e: String) -> bool: return e.contains("unknown effect operation 'explode'")),
 		"Validation catches an unknown effect operation"
 	)
@@ -388,6 +405,75 @@ func _test_validation_catches_synthetic_bad_content() -> void:
 
 	var clean_errors: Array[String] = ContentDatabase.collect_validation_errors()
 	assert_true(clean_errors.is_empty(), "Removing the synthetic upgrade restores a clean validation pass")
+
+
+## `cabinet_systems.json` is what every capacity is read from, so the checks on
+## it have to bite: duplicate ids, short tier tables, thresholds out of order
+## and migration rows pointing at rooms the game does not have.
+func _test_validation_catches_bad_cabinet_systems() -> void:
+	var shipped: Dictionary = ContentDatabase.cabinet_systems
+	assert_true(not shipped.is_empty(), "Shipped cabinet_systems content loads")
+	assert_eq(Array(shipped.get("systems", [])).size(), 5, "Five cabinet systems ship")
+	assert_true(
+		ContentDatabase.collect_validation_errors().is_empty(),
+		"Shipped cabinet_systems passes validation"
+	)
+
+	var broken: Dictionary = shipped.duplicate(true)
+	var systems: Array = Array(broken.get("systems", []))
+	var duplicate: Dictionary = Dictionary(systems[0]).duplicate(true)
+	duplicate["tier_values"] = {"bays": [3, 5, 7]}
+	duplicate["cost"] = [2000, -1, 45000]
+	systems.append(duplicate)
+	broken["systems"] = systems
+	broken["generation_thresholds"] = [
+		{"min_sum": 5, "name": "Improvised Cabinet"},
+		{"min_sum": 11, "name": "Token Furnace"},
+		{"min_sum": 8, "name": "Spliced Rig"},
+	]
+	var migration: Dictionary = Dictionary(broken.get("migration_from_dwelling", {}))
+	migration["houseboat"] = [1, 1, 1, 1, 1]
+	migration["garage"] = [2, 2, 2, 9, 1]
+	broken["migration_from_dwelling"] = migration
+	var caps: Dictionary = Dictionary(broken.get("chapter_max_tier", {}))
+	caps["treehouse"] = 3
+	broken["chapter_max_tier"] = caps
+	ContentDatabase.cabinet_systems = broken
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.cabinet_systems = shipped
+
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("duplicate cabinet system id")),
+		"Validation catches a duplicate cabinet system id"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("tier_values.bays needs 4 entries")),
+		"Validation catches a tier table that is not tier_range long"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("negative or non-numeric cost")),
+		"Validation catches a negative tier cost"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("generation_thresholds must ascend")),
+		"Validation catches generation thresholds out of order"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("migration_from_dwelling names unknown dwelling 'houseboat'")),
+		"Validation catches a migration row for a dwelling that does not exist"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("migration_from_dwelling.garage has tier 9 outside 1..4")),
+		"Validation catches a migration tier outside the range"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("chapter_max_tier names unknown dwelling 'treehouse'")),
+		"Validation catches a chapter cap for a dwelling that does not exist"
+	)
+	assert_true(
+		ContentDatabase.collect_validation_errors().is_empty(),
+		"Restoring the shipped cabinet_systems restores a clean pass"
+	)
 
 
 ## A board rule BoardSystem does not recognise is ignored at the table, and a
@@ -536,9 +622,21 @@ func _test_effect_resolver_errors_on_unknown_operation() -> void:
 
 ## A run happens in one location and gets that location's cooling, once. Nothing
 ## from the chapters below it carries over, because it was never bought.
-func _location_cooling(key: String) -> float:
-	var dwellings: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
-	return float(Dictionary(dwellings.get(key, {})).get("cooling_capacity", 0.0))
+## The first chapter, in campaign order, whose fresh cabinet (the tiers the
+## migration table hands a run opening there, floored by the chapter table)
+## meets the machine's gates — where a player first sees it on the shelf.
+func _home_chapter_state(upgrade: UpgradeDefinition) -> RunState:
+	for location in MetaProgress.location_order():
+		var state := RunState.new()
+		state.build["dwelling"] = str(location)
+		CabinetSystems.raise_to_dwelling(state, str(location))
+		if UpgradeSystem.prerequisites_met(state, upgrade, ContentDatabase):
+			return state
+	return null
+
+
+func _location_cooling(state: RunState) -> float:
+	return CabinetSystems.capacity(state, "cooling", "cooling_capacity")
 
 
 func _cooling_of(upgrade: UpgradeDefinition) -> float:
@@ -626,19 +724,9 @@ func _validate_room_art() -> void:
 		)
 
 
+## The workstation stage art the rig ladder points at loads and keeps every
+## display rect on its picture.
 func _validate_workstation_art() -> void:
-	var workstation_scene: PackedScene = load("res://ui/board/burn_rig.tscn")
-	var workstation: Control = workstation_scene.instantiate()
-	assert_eq(
-		workstation.mouse_filter, Control.MOUSE_FILTER_IGNORE,
-		"Transparent workstation root does not block room furniture"
-	)
-	var bay: Control = workstation.get_node("Bay")
-	assert_eq(
-		bay.mouse_filter, Control.MOUSE_FILTER_IGNORE,
-		"Transparent workstation bay does not block the post-it navigation"
-	)
-	workstation.free()
 	var expected_screens: Array[int] = [1, 1, 2, 2, 3]
 	for stage_index in range(1, 6):
 		var data: Dictionary = AssetCatalog.rig_stage(stage_index)
@@ -672,6 +760,7 @@ func run() -> void:
 	_validate_workstation_art()
 	_test_shipped_content_passes_validation()
 	_test_validation_catches_synthetic_bad_content()
+	_test_validation_catches_bad_cabinet_systems()
 	_test_validation_catches_unknown_rules_and_capabilities()
 	_test_validation_catches_unknown_module_operation()
 	_test_validation_catches_module_gate_and_shape_errors()
@@ -682,9 +771,12 @@ func run() -> void:
 		if upgrade.category == "hardware" and upgrade.hardware_key != "":
 			var curves: Dictionary = ContentDatabase.balance.get("hardware_curves", {})
 			assert_true(curves.has(upgrade.hardware_key), "Hardware key '%s' resolves for %s" % [upgrade.hardware_key, upgrade.id])
-		if upgrade.category == "dwelling" and upgrade.dwelling_key != "":
-			var dwellings: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
-			assert_true(dwellings.has(upgrade.dwelling_key), "Dwelling key '%s' resolves for %s" % [upgrade.dwelling_key, upgrade.id])
+		assert_true(upgrade.category != "dwelling", "No premises row survives in upgrades.json (%s)" % upgrade.id)
+		if upgrade.requires_chapter != "":
+			var chapters: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
+			assert_true(chapters.has(upgrade.requires_chapter), "Chapter gate '%s' resolves for %s" % [upgrade.requires_chapter, upgrade.id])
+		for system_id in upgrade.requires_system.keys():
+			assert_true(str(system_id) in CabinetSystems.system_ids(), "System gate '%s' resolves for %s" % [str(system_id), upgrade.id])
 
 	for event_name in ContentDatabase.get_all_subscription_events():
 		assert_true(event_name in VALID_EVENTS, "Unknown subscription event: %s" % event_name)

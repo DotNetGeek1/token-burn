@@ -1,5 +1,7 @@
 # Token Burn — Module Expansion Implementation Brief
 
+> Historical brief. UI file references to `ui/venues/*` are superseded by the Burn Cabinet v2 (see `docs/cabinet-v2`); achievements and legacy summaries are now Records in the cabinet's Maintenance view, and the "location tier" gates map onto campaign chapters. The module catalogue design itself still applies.
+
 **Repository:** `DotNetGeek1/token-burn`  
 **Design target:** **120 total modules**  
 **Reviewed baseline:** commit `b01fd1d22fb9158eef37fc2bc6cd806cc45a010c` (`v0.7.2`)  

@@ -4,7 +4,9 @@
 
 You are a reckless vibe coder taking increasingly absurd contracts. Jobs pay cash and reputation, but consume tokens, time, electricity, and compute capacity.
 
-After each job, you reinvest in hardware, housing, cooling, Market modules, and strange rule-changing perks. The goal is to assemble a local build capable of processing ridiculous quantities of tokens without going bankrupt, overheating, missing deadlines, or being evicted.
+After each job, you reinvest in hardware, the cabinet's own systems, Market modules, and strange rule-changing perks. The goal is to assemble a local build capable of processing ridiculous quantities of tokens without going bankrupt, overheating, missing deadlines, or being evicted.
+
+Everything happens on one machine: the **Burn Cabinet**. Contracts, modules, the Market and the perk rack are tabs on its central CRT; the red commit button under the glass relabels itself to whatever the current tab does; and the cabinet itself visibly grows as its five systems are upgraded.
 
 ## 2. Core loop
 
@@ -14,7 +16,7 @@ After each job, you reinvest in hardware, housing, cooling, Market modules, and 
 4. Resolve complications such as bugs, scope creep, outages, and revisions.
 5. Get paid and gain reputation.
 6. Pay rent, electricity, debt, and other overhead.
-7. Take one free perk from the angel table (or decline), then buy modules and hardware in the Market and route contracts through trained workflows.
+7. Take one free perk from the angel table (or decline), then buy modules, hardware and cabinet system tiers in the Market and route contracts through trained workflows.
 8. Repeat until the run is won or collapses.
 
 ## 3. Primary resources
@@ -26,9 +28,9 @@ After each job, you reinvest in hardware, housing, cooling, Market modules, and 
 - **Capacity:** Number and size of jobs that can be processed concurrently.
 - **Heat:** Limits sustained local compute.
 - **Power:** Determines operating cost and hardware constraints.
-- **Space:** Limits hardware, cooling, and staff capacity.
+- **Space:** Limits hardware, cooling, and staff capacity. Floor slots come from the cabinet's Power Bus tier.
 - **Job slots:** How many contracts the installed machines can take at once.
-- **Reputation:** Opens stretch contracts on the band above the current location.
+- **Reputation:** Opens stretch contracts on the band above the current chapter.
 - **Workflow mastery:** Each named pipeline trains run-long OUTPUT, QUALITY, and THERMAL multipliers. Hardware sets the raw token rate; the workflow decides how obscene that output becomes.
 
 Mastery is scored once, the first time a contract's remaining tokens hit zero. Clean and cool are the whole contract's history: bugs created on any burn, and peak heat across every burn. Shipping or polishing after that cannot train the same contract again.
@@ -87,27 +89,66 @@ Players may eventually bid on contracts, trading a higher chance of winning work
 
 Hardware increases local throughput but raises power, heat, maintenance, and space requirements.
 
-Early desktops still cap at four copies so the bedroom and garage teach floor
+Early desktops still cap at four copies so the first two chapters teach floor
 space. From GPU Rack onward the shop does not invent a MAX_LEVEL: money, floor
-slots, electricity, cooling and instability are the limits. A bigger floor can
-hold more of the same machine and run more contracts in parallel. When a rig
-reaches the next compute era, the board keeps one familiar local posting and
-fills the rest from the rig's service tier. Existing postings never resize from
-the live token rate.
+slots, electricity, cooling and instability are the limits. A bigger Power Bus
+can hold more of the same machine and run more contracts in parallel. When a
+rig reaches the next compute era, the board keeps one familiar local posting
+and fills the rest from the rig's service tier. Existing postings never resize
+from the live token rate.
 
-### Dwelling
+### Cabinet systems
 
-- Bedroom
-- Shared flat
-- Studio apartment
-- Garage
-- Office unit
-- Warehouse
-- Data centre campus
-- Private power grid
-- Moon facility
+The machine the player sees is the Burn Cabinet, and the cabinet is built from
+five systems. Each is owned at a tier from 1 to 4, bought tier by tier from the
+Market's SYSTEMS shelf, and each tier is a visibly different part bolted onto
+the same mount (`content/upgrades/cabinet_systems.json`):
 
-Dwelling upgrades increase rack slots, cooling capacity, and allowable infrastructure while increasing rent.
+| System | What it governs | Tiers |
+|---|---|---|
+| Compute Stack | Flat base token rate on top of the hardware curves | Exposed Board → GPU Cage → Accelerator Stack → Impossible Core |
+| Cooling Loop | Passive cooling and heat capacity (the size of the heat bar) | Desk Fan → Radiator → Liquid Manifold → Phase Cooler |
+| Power Bus | Hardware floor slots | Household Lead → Transformer → Busbar Bank → Unstable Core |
+| Workflow Backplane | Module bays a pipeline can hold | 3-Bay Rail → 5-Bay Rail → 7-Bay Rail → 10-Bay Rail |
+| Control Rack | Saved workflow capacity | Single → Dual → Triple → Quad Selector |
+
+Rules:
+
+- A tier is only ever bought upward. Nothing sells a system back down and no
+  chapter change lowers a tier.
+- Perk, module, upgrade and meta bonuses stay additive on top of the tier
+  value. The tier is the baseline, not the ceiling.
+- The sum of the five tiers (5–20) names the cabinet's **generation**:
+  Improvised Cabinet, Spliced Rig, Token Furnace, Grid Eater, Impossible
+  Engine. The generation is presentation only; nothing reads a number back
+  out of it.
+- Buying a tier plays an install reveal: the camera pulls back to the
+  Maintenance view, the old part flickers out, the new part seats, and the
+  stat delta is printed. It is skippable and crossfades under reduced motion.
+
+### Campaign chapters
+
+The seven chapters — Bedroom, Garage, Office Unit, Warehouse, Data Centre
+Campus, Private Power Grid, Moon Facility — are where a run is staked, not a
+ladder of properties to buy. A run starts in one chapter, beats that chapter's
+ascension contract, and the next chapter unlocks for the next run. Nothing in
+a run buys the next room.
+
+A chapter sets:
+
+- **Rent** and the investor's **starting cash**.
+- The **starting hardware** the room comes with, so contracts are sized to a
+  rig the room expects rather than whatever the player happens to own.
+- The **starting system tiers**: a fresh Garage run opens with Garage-grade
+  systems; a run that had already bought higher keeps what it had.
+- The **maximum system tier** the Market will sell: Bedroom and Garage cap at
+  tier 2, Office Unit and Warehouse at tier 3, Data Centre Campus onward at
+  tier 4. A capped row explains itself (`NEXT CHAPTER UNLOCKS TIER 3`)
+  rather than disappearing.
+
+Cabinet systems are infrastructure. Modules and perks remain the strategic
+build: the systems decide how much of a pipeline the cabinet can hold and how
+hot it may run; the pipeline decides what happens to the tokens.
 
 ## 7. Perks
 
@@ -182,8 +223,8 @@ The final month presents a capstone contract. Winning unlocks a higher compute a
 - Agent rebellion
 - Accidental consciousness before invoicing
 
-Hardware fire remains immediate when a committed prompt reaches the room's heat
-capacity. Before BURN, including the first click of a queued session, the board
+Hardware fire remains immediate when a committed prompt reaches the Cooling
+Loop's heat capacity. Before BURN, including the first click of a queued session, the board
 shows current and projected heat (`HEAT 0% -> 118% / FIRE`). This is a warning,
 not a confirmation or safety interlock: knowingly committing the burn still
 loses the run.
@@ -192,6 +233,7 @@ loses the run.
 
 Permanent unlocks may include:
 
+- The next campaign chapter, and with it a higher system-tier cap
 - New job sectors
 - Starting hardware
 - New perks

@@ -419,9 +419,9 @@ func _test_rival_keystones_cannot_share_a_build() -> void:
 	sim.free()
 
 
-## The desk is unloaded on every venue trip. The halfway call used to live on
-## that scene, so coming back from the market rang Vince again. It belongs on
-## the run, which is what survives the trip — and a save, and a Continue.
+## The shell can be unloaded and rebuilt. The halfway call used to live on
+## that scene, so coming back to it rang Vince again. It belongs on the run,
+## which is what survives the rebuild — and a save, and a Continue.
 func _test_investor_halfway_call_survives_leaving_the_desk() -> void:
 	var sim := _make_sim()
 	sim.start_run(160)

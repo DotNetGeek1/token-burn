@@ -15,7 +15,7 @@ signal start_requested
 
 ## The rig's own monitor overlay, so the title's glass and the one the player
 ## works on during a run are the same piece of hardware.
-const CRT_SHADER := preload("res://ui/board/crt_screen.gdshader")
+const CRT_SHADER := preload("res://ui/common/crt_screen.gdshader")
 const TITLE_BACKGROUND := preload("res://presentation/title/boot_splash_background.png")
 
 const PHOSPHOR := ConsoleStyle.PHOSPHOR
@@ -350,12 +350,9 @@ func _entries() -> Array[Dictionary]:
 			"value": "ON" if MetaProgress.endless_enabled() else "OFF",
 		})
 	entries.append({
-		"id": "legacy", "label": "LEGACY", "value": "Permanent unlocks and records",
-	})
-	entries.append({
-		"id": "achievements",
-		"label": "TROPHY CABINET",
-		"value": "%d / %d earned" % [
+		"id": "records",
+		"label": "RECORDS",
+		"value": "Career, unlocks and %d / %d trophies" % [
 			MetaProgress.achievement_count(), ContentDatabase.achievements.size(),
 		],
 	})
@@ -674,10 +671,10 @@ func _activate(entry_id: String) -> void:
 		"endless":
 			MetaProgress.set_endless_enabled(not MetaProgress.endless_enabled())
 			refresh()
-		"legacy":
-			SceneRouter.open_legacy()
-		"achievements":
-			SceneRouter.open_achievements()
+		"records":
+			# The records sheet is paper on the cabinet's overlay root, which
+			# sits above the title the same way the help sheet does.
+			get_tree().call_group("main_ui", "open_records")
 		"burn_lab":
 			SceneRouter.open_burn_lab()
 		"delete_save":

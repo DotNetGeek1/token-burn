@@ -109,6 +109,24 @@ func _bench_ids() -> Array:
 
 
 func refresh() -> void:
+	var scrolls: Dictionary = capture_scroll(self)
+	_refresh_contents()
+	restore_scroll(self, scrolls)
+
+
+func selected_id() -> String:
+	return _selected
+
+
+## Picks a perk in either rack by id. Returns false when the run does not own it.
+func select_perk(perk_id: String) -> bool:
+	if not (perk_id in (_fitted_ids() + _bench_ids())):
+		return false
+	_pick(perk_id)
+	return true
+
+
+func _refresh_contents() -> void:
 	var capacity: Dictionary = Simulation.perk_capacity()
 	_capacity.text = "%d / %d FITTED · %d ON THE BENCH" % [int(capacity.get("active", 0)), int(capacity.get("cap", 0)), _bench_ids().size()]
 	var all: Array = _fitted_ids() + _bench_ids()
@@ -181,21 +199,26 @@ func _refresh_detail() -> void:
 func primary_action() -> Dictionary:
 	var perk: PerkDefinition = ContentDatabase.get_perk(_selected) if _selected != "" else null
 	if perk == null:
-		return {"label": "FIT", "enabled": false, "sub": "pick a perk", "pressed": Callable()}
+		return blocked_action("FIT", BLOCK_SELECT_ITEM)
+	var capacity: Dictionary = Simulation.perk_capacity()
 	var fitted: bool = _selected in _fitted_ids()
 	if fitted:
-		var can: bool = Simulation.can_bench_perk(_selected)
-		return {
-			"label": "BENCH", "enabled": can,
-			"sub": perk.name.to_lower() if can else Simulation.perk_bench_block_reason(_selected).to_lower(),
+		if not Simulation.can_bench_perk(_selected):
+			var reason: String = Simulation.perk_bench_block_reason(_selected).to_upper()
+			return blocked_action("BENCH", reason if reason != "" else "CANNOT BENCH")
+		return normalize_action({
+			"label": "BENCH", "enabled": true,
+			"sub": "%s · %d/%d LEFT FITTED" % [perk.name.to_upper(), maxi(0, int(capacity.get("active", 0)) - 1), int(capacity.get("cap", 0))],
 			"pressed": _toggle.bind(_selected, true),
-		}
-	var can_fit: bool = Simulation.can_equip_perk(_selected)
-	return {
-		"label": "FIT", "enabled": can_fit,
-		"sub": perk.name.to_lower() if can_fit else Simulation.perk_equip_block_reason(_selected).to_lower(),
+		})
+	if not Simulation.can_equip_perk(_selected):
+		var reason: String = Simulation.perk_equip_block_reason(_selected).to_upper()
+		return blocked_action("FIT", reason if reason != "" else "RACK FULL")
+	return normalize_action({
+		"label": "FIT", "enabled": true,
+		"sub": "%s · %d/%d FITTED" % [perk.name.to_upper(), int(capacity.get("active", 0)) + 1, int(capacity.get("cap", 0))],
 		"pressed": _toggle.bind(_selected, false),
-	}
+	})
 
 
 func _toggle(perk_id: String, fitted: bool) -> void:

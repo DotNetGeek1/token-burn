@@ -8,6 +8,15 @@ extends PanelContainer
 signal tab_changed(key: String)
 ## The live tab's selection moved; the shell re-reads the primary action.
 signal action_changed
+## The SKIP key in the glass's corner was pressed.
+signal skip_pressed
+## The MAINT key at the end of the tab strip was pressed.
+signal maintenance_pressed
+
+## The maintenance key's face. Plain text so it needs no art and so the
+## playtest driver finds it by its word; its colour, not a glyph, marks it as
+## a door rather than a tab.
+const MAINT_LABEL := "MAINT"
 
 var _strip: HBoxContainer = null
 var _host: Control = null
@@ -15,6 +24,8 @@ var _tabs: Dictionary = {}
 var _buttons: Dictionary = {}
 var _active: String = ""
 var _hint: Label = null
+var _skip: Button = null
+var _maint: Button = null
 
 
 func _ready() -> void:
@@ -37,6 +48,31 @@ func _ready() -> void:
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(_hint)
+	# SKIP: only on the glass while a burn is playing back and can be jumped
+	# to its result. Sits in the top right, where the hint is, so it is never
+	# mistaken for a tab.
+	_skip = CabinetStyle.key("SKIP", CabinetStyle.AMBER, CabinetStyle.FONT_TINY)
+	_skip.name = "SkipKey"
+	_skip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_skip.tooltip_text = "Jump the playback to its result. The batch still commits in full."
+	_skip.visible = false
+	_skip.pressed.connect(func() -> void:
+		UiSound.play("tap")
+		skip_pressed.emit()
+	)
+	head.add_child(_skip)
+	# MAINT: the way into the maintenance view, the last entry in the strip. A
+	# door rather than a tab: pressing it never changes which screen is active.
+	_maint = CabinetStyle.tab(MAINT_LABEL)
+	_maint.name = "MaintKey"
+	_maint.add_theme_color_override("font_color", CabinetStyle.AMBER_DIM)
+	_maint.add_theme_color_override("font_focus_color", CabinetStyle.AMBER_DIM)
+	_maint.tooltip_text = "Maintenance: settings, help, records, save & quit."
+	_maint.pressed.connect(func() -> void:
+		UiSound.play("tap")
+		maintenance_pressed.emit()
+	)
+	head.add_child(_maint)
 	column.add_child(CabinetStyle.rule(CabinetStyle.AMBER, 0.3))
 	_host = Control.new()
 	_host.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -64,7 +100,8 @@ func add_tab(tab: CabinetTab) -> void:
 	_buttons[key] = button
 
 
-## A tab-strip entry that is a door rather than a screen: MENU, HELP.
+## A tab-strip entry that is a door rather than a screen (HELP, say). MENU is
+## not one any more: the MAINT key at the end of the strip is the way out.
 func add_door(title: String, pressed: Callable) -> void:
 	var button: Button = CabinetStyle.tab(title)
 	button.pressed.connect(func() -> void:
@@ -72,6 +109,24 @@ func add_door(title: String, pressed: Callable) -> void:
 		pressed.call()
 	)
 	_strip.add_child(button)
+
+
+## Shows or hides the SKIP key in the corner of the glass.
+func set_skippable(skippable: bool) -> void:
+	_skip.visible = skippable
+	_hint.visible = not skippable
+
+
+func is_skip_visible() -> bool:
+	return _skip.visible
+
+
+func skip_key() -> Button:
+	return _skip
+
+
+func maintenance_key() -> Button:
+	return _maint
 
 
 func has_tab(key: String) -> bool:

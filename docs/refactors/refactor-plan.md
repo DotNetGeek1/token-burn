@@ -1,5 +1,7 @@
 # Token Burn — Progression Refactor Plan
 
+> Historical plan, implemented. The chapter campaign it describes (one fixed location per run, ascension unlocks the next) is live. Superseded in one respect by the Burn Cabinet v2 (see `docs/cabinet-v2`): a chapter no longer supplies floor slots, cooling or heat capacity directly — those come from the run's five cabinet system tiers (`content/upgrades/cabinet_systems.json`), which the chapter seeds and caps. `dwelling_costs.json` keeps rent, starting cash and starting hardware, and its capacity columns remain a per-chapter floor under the tier table for the late chapters that out-size tier 4; the `requires_dwelling` gates discussed below were retargeted to system tiers or chapter.
+
 ## Goal
 
 Simplify Token Burn into a clear roguelike progression structure:

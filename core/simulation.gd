@@ -923,6 +923,15 @@ func get_module_description(module_id: String) -> String:
 	return ExpressionEvaluator.new().render_template(module.description_template, module.parameters)
 
 
+## The short badge a cartridge wears (`×1.8`, `+4 Q`), with its `{parameter}`
+## placeholders filled the same way the description's are.
+func get_module_badge(module_id: String) -> String:
+	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+	if module == null:
+		return ""
+	return ExpressionEvaluator.new().render_template(module.badge, module.parameters)
+
+
 ## Seeded from the run and the exact prompt, so a preview and the burn it
 ## previewed roll the same numbers.
 func _burn_rng() -> DeterministicRng:
@@ -1164,6 +1173,27 @@ func can_sell_hardware(hardware_key: String) -> bool:
 
 func sell_hardware(hardware_key: String) -> bool:
 	return MarketService.sell_hardware(self, hardware_key)
+
+
+## Cabinet systems: the five tiered systems the Market's SYSTEMS shelf sells.
+## `upgrade_cabinet_system` returns {ok, reason, tier, previous_tier, cost,
+## effect, delta}; `cabinet_system_next` a presentable row (name, tier,
+## next_tier_name, cost, effect, can_upgrade, reason).
+
+func upgrade_cabinet_system(system_id: String) -> Dictionary:
+	return MarketService.upgrade_cabinet_system(self, system_id)
+
+
+func cabinet_system_tiers() -> Dictionary:
+	return MarketService.cabinet_system_tiers(self)
+
+
+func cabinet_generation() -> Dictionary:
+	return MarketService.cabinet_generation(self)
+
+
+func cabinet_system_next(system_id: String) -> Dictionary:
+	return MarketService.cabinet_system_next(self, system_id)
 
 
 func module_market_stock() -> Array:
