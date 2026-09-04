@@ -22,8 +22,11 @@ signal route_changed(route: String)
 ## the player has gone to and can come back from.
 const DESK := "desk"
 
+## The desk is the Burn Cabinet now. The old room (`ui/main.tscn`) is kept on
+## disk and reachable by its own route while the cabinet is proven out.
 const ROUTES := {
-	DESK: "res://ui/main.tscn",
+	DESK: "res://ui/cabinet/burn_cabinet.tscn",
+	"room": "res://ui/main.tscn",
 	"market": "res://ui/venues/venue_market.tscn",
 	"jobs": "res://ui/venues/venue_jobs.tscn",
 	"build": "res://ui/venues/venue_build.tscn",

@@ -10,7 +10,7 @@ func play(harness: UiHarness) -> void:
 	await _system_back_from_venue(harness)
 	await _system_back_steps_out_of_lean(harness)
 	await _system_back_closes_desk_overlay(harness)
-	await _system_back_clears_room_focus(harness)
+	await _system_back_returns_to_run_tab(harness)
 	await _system_back_opens_menu_from_desk(harness)
 	await _resume_recovers_blank_shell(harness)
 
@@ -80,18 +80,20 @@ func _system_back_closes_desk_overlay(harness: UiHarness) -> void:
 	assert_eq(SceneRouter.current, SceneRouter.DESK, "Closing help stays on the desk")
 
 
-func _system_back_clears_room_focus(harness: UiHarness) -> void:
+func _system_back_returns_to_run_tab(harness: UiHarness) -> void:
 	if SceneRouter.current != SceneRouter.DESK:
 		await harness.go_desk()
+	# The cabinet has no room zoom; the equivalent depth is a tab other than
+	# the run. System back comes home to the run tab before it opens the menu.
 	var shell: Node = harness.current_scene()
-	assert_true(shell != null and shell.has_method("focus_room"), "Desk can lean in")
-	shell.focus_room("board")
+	assert_true(shell != null and shell.has_method("current_tab"), "Cabinet reports its tab")
+	shell.switch_tab("market")
 	await harness.settle()
-	assert_true(shell.room_focused_on("board"), "Desk is leant in on the board")
+	assert_eq(str(shell.current_tab()), "market", "Cabinet is showing the market tab")
 	SceneRouter.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
 	await harness.settle()
-	assert_false(shell.room_focused_on("board"), "System back clears room focus")
-	assert_eq(SceneRouter.current, SceneRouter.DESK, "Clearing focus stays on the desk")
+	assert_eq(str(shell.current_tab()), "run", "System back returns to the run tab")
+	assert_eq(SceneRouter.current, SceneRouter.DESK, "Coming home to the run tab stays on the desk")
 
 
 func _system_back_opens_menu_from_desk(harness: UiHarness) -> void:

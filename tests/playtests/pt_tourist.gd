@@ -27,16 +27,20 @@ func play(harness: UiHarness) -> void:
 		await harness.set_viewport(size)
 		await harness.go_desk()
 		driver.audit_screen("desk-%s" % size.x, "desk")
-		# Use the actual room post-its, not the router API, before the broader
-		# venue audit. A transparent workstation layer once covered these buttons
-		# and direct navigation could not reveal that regression.
-		for post_it_route in ["jobs", "build", "market", "terms", "menu"]:
-			await driver.press_command(post_it_route)
-			assert_eq(
-				SceneRouter.current, post_it_route,
-				"The %s post-it opens its venue at %dpx" % [post_it_route, size.x]
+		# Use the actual tab strip on the cabinet's glass, not the shell API,
+		# before the broader venue audit. An overlay that covers the strip
+		# would pass direct navigation and still leave the player stuck.
+		var shell: Node = harness.current_scene()
+		for tab_key in ["contracts", "modules", "market", "perks", "run"]:
+			await driver.press_command(tab_key)
+			assert_true(
+				shell != null and shell.has_method("current_tab") and str(shell.current_tab()) == tab_key,
+				"The %s tab comes up on the glass at %dpx" % [tab_key, size.x]
 			)
-			await harness.go_desk()
+			assert_eq(SceneRouter.current, "desk", "The %s tab stays on the cabinet at %dpx" % [tab_key, size.x])
+		await driver.press_command("menu")
+		assert_eq(SceneRouter.current, "menu", "The MENU door opens the menu at %dpx" % size.x)
+		await harness.go_desk()
 		for route in routes:
 			await dismiss_investor(harness)
 			if not SceneRouter.has_route(route):

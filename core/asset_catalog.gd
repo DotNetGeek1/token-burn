@@ -271,6 +271,101 @@ static func _venue_scene(venue: String) -> Dictionary:
 	return Dictionary(table[venue]) if table.has(venue) else {}
 
 
+## The Burn Cabinet: one painted chassis with every well, socket and button left
+## blank, and the live game drawn into rects authored beside it. Same idea as a
+## room, measured the same way — fractions of the plate, which is drawn at the
+## design aspect so a region lands on the well it was measured off.
+static func cabinet_art() -> Texture2D:
+	var path: String = str(_cabinet().get("art", ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	var loaded: Variant = load(path)
+	return loaded if loaded is Texture2D else null
+
+
+## Cutout art the cabinet mounts onto its glass: the paper job tag, the module
+## cartridge frame.
+static func cabinet_texture(key: String) -> Texture2D:
+	var textures: Variant = _cabinet().get("textures")
+	if not textures is Dictionary or not Dictionary(textures).has(key):
+		return null
+	var path: String = str(Dictionary(textures)[key])
+	if path.is_empty() or not ResourceLoader.exists(path):
+		push_warning("AssetCatalog: missing cabinet texture %s" % path)
+		return null
+	var loaded: Variant = load(path)
+	return loaded if loaded is Texture2D else null
+
+
+## The cabinet's own bold glyphs: one per module category, one per contract
+## sector stamp. Solid white on alpha, made to be tinted and read at 16px, which
+## the hairline SVG icons of the rooms were not. Falls back to those when the
+## cabinet has no glyph under that key.
+static func cabinet_glyph(key: String) -> Texture2D:
+	var glyphs: Variant = _cabinet().get("glyphs")
+	if glyphs is Dictionary and Dictionary(glyphs).has(key.to_lower()):
+		var path: String = str(Dictionary(glyphs)[key.to_lower()])
+		if ResourceLoader.exists(path):
+			var loaded: Variant = load(path)
+			if loaded is Texture2D:
+				return loaded
+	return null
+
+
+## A module's glyph on the cabinet, by category.
+static func cabinet_module_glyph(category: String) -> Texture2D:
+	var glyph: Texture2D = cabinet_glyph(category)
+	return glyph if glyph != null else module_icon(category)
+
+
+## A contract's stamp on the cabinet, by the sector's stat icon name.
+static func cabinet_stamp(icon_key: String) -> Texture2D:
+	var glyph: Texture2D = cabinet_glyph(icon_key)
+	if glyph == null:
+		glyph = cabinet_glyph("target")
+	return glyph if glyph != null else stat_icon(icon_key)
+
+
+## Where a named well of the cabinet sits, as a fraction of the plate. Empty when
+## the plate does not carry that well.
+static func cabinet_region(key: String) -> Rect2:
+	var regions: Variant = _cabinet().get("regions")
+	if not regions is Dictionary or not Dictionary(regions).has(key):
+		return Rect2()
+	return _rect_from(Array(Dictionary(regions)[key]))
+
+
+## A well painted off square: its top-left, top-right and bottom-left glass
+## corners as fractions of the plate, so the readout can be sheared to fit.
+## Empty for wells that are plain rectangles.
+static func cabinet_quad(key: String) -> PackedVector2Array:
+	var quads: Variant = _cabinet().get("quads")
+	if not quads is Dictionary or not Dictionary(quads).has(key):
+		return PackedVector2Array()
+	var corners := PackedVector2Array()
+	for raw in Array(Dictionary(quads)[key]):
+		var pair: Array = Array(raw)
+		if pair.size() >= 2:
+			corners.append(Vector2(float(pair[0]), float(pair[1])))
+	return corners if corners.size() == 3 else PackedVector2Array()
+
+
+## The module dock's sockets, in bay order, as fractions of the plate.
+static func cabinet_sockets() -> Array[Rect2]:
+	var sockets: Array[Rect2] = []
+	for raw in Array(_cabinet().get("sockets", [])):
+		var rect: Rect2 = _rect_from(Array(raw))
+		if rect.size.x > 0.0 and rect.size.y > 0.0:
+			sockets.append(rect)
+	return sockets
+
+
+static func _cabinet() -> Dictionary:
+	_ensure_loaded()
+	var section: Variant = _data.get("cabinet")
+	return section if section is Dictionary else {}
+
+
 static func investor_texture(key: String) -> Texture2D:
 	return get_texture("investor", key)
 

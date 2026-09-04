@@ -309,6 +309,72 @@
       }
     }
   },
+  "cabinet": {
+    "art": "res://presentation/cabinet/cabinet_plate.png",
+    "textures": {
+      "job_card": "res://presentation/cabinet/job_card_paper.png",
+      "cartridge": "res://presentation/cabinet/module_cartridge.png",
+      "bay_frame": "res://presentation/cabinet/module_bay_frame.png",
+      "dock_panel": "res://presentation/cabinet/module_dock_panel.png"
+    },
+    "glyphs": {
+      "model": "res://presentation/cabinet/glyphs/model.png",
+      "prompt": "res://presentation/cabinet/glyphs/prompt.png",
+      "context": "res://presentation/cabinet/glyphs/context.png",
+      "agent": "res://presentation/cabinet/glyphs/agent.png",
+      "test": "res://presentation/cabinet/glyphs/test.png",
+      "cache": "res://presentation/cabinet/glyphs/cache.png",
+      "hardware": "res://presentation/cabinet/glyphs/hardware.png",
+      "deploy": "res://presentation/cabinet/glyphs/deploy.png",
+      "quality": "res://presentation/cabinet/glyphs/quality.png",
+      "reputation": "res://presentation/cabinet/glyphs/reputation.png",
+      "cash": "res://presentation/cabinet/glyphs/cash.png",
+      "agents": "res://presentation/cabinet/glyphs/agents.png",
+      "power": "res://presentation/cabinet/glyphs/power.png",
+      "heat": "res://presentation/cabinet/glyphs/heat.png",
+      "target": "res://presentation/cabinet/glyphs/target.png",
+      "lock": "res://presentation/cabinet/glyphs/lock.png"
+    },
+    "regions": {
+      "header": [0.360, 0.000, 0.300, 0.075],
+      "sticker_left": [0.055, 0.090, 0.060, 0.110],
+      "lever": [0.045, 0.262, 0.066, 0.245],
+      "lever_label": [0.048, 0.262, 0.060, 0.045],
+      "lever_channel": [0.048, 0.305, 0.058, 0.200],
+      "lever_handle": [0.048, 0.305, 0.058, 0.170],
+      "lever_legend": [0.048, 0.5095, 0.060, 0.0275],
+      "workflow_keys": [0.0605, 0.542, 0.0175, 0.152],
+      "screen": [0.158, 0.102, 0.494, 0.385],
+      "multiplier": [0.674, 0.153, 0.122, 0.081],
+      "heat": [0.674, 0.311, 0.122, 0.066],
+      "next_action": [0.674, 0.426, 0.122, 0.057],
+      "feed": [0.845, 0.068, 0.148, 0.183],
+      "status": [0.911, 0.311, 0.073, 0.169],
+      "sticker_right": [0.845, 0.365, 0.045, 0.135],
+      "override_plate": [0.153, 0.533, 0.174, 0.076],
+      "led_left": [0.3505, 0.5715, 0.0105, 0.0145],
+      "burn_button": [0.403, 0.515, 0.195, 0.082],
+      "led_right": [0.6295, 0.5715, 0.0095, 0.0135],
+      "cooldown_plate": [0.658, 0.533, 0.164, 0.076],
+      "dock": [0.130, 0.640, 0.720, 0.240],
+      "dock_panel": [0.126, 0.636, 0.728, 0.258]
+    },
+    "quads": {
+      "feed": [[0.845, 0.068], [0.993, 0.078], [0.845, 0.251]]
+    },
+    "sockets": [
+      [0.1517, 0.6643, 0.0944, 0.0717],
+      [0.2973, 0.6643, 0.0944, 0.0717],
+      [0.4428, 0.6643, 0.0944, 0.0717],
+      [0.5883, 0.6643, 0.0944, 0.0717],
+      [0.7339, 0.6643, 0.0944, 0.0717],
+      [0.1517, 0.7933, 0.0944, 0.0717],
+      [0.2973, 0.7933, 0.0944, 0.0717],
+      [0.4428, 0.7933, 0.0944, 0.0717],
+      [0.5883, 0.7933, 0.0944, 0.0717],
+      [0.7339, 0.7933, 0.0944, 0.0717]
+    ]
+  },
   "investor": {
     "portrait": "res://presentation/investor/angel_portrait.png",
     "phone_frame": "res://presentation/investor/phone_frame.png"

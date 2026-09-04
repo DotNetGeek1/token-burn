@@ -17,12 +17,12 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 config/name="Token Burn"
 config/description="Roguelike economic engine-builder about burning absurd quantities of AI tokens."
 config/version="0.7.2"
-run/main_scene="res://ui/main.tscn"
+run/main_scene="res://ui/cabinet/burn_cabinet.tscn"
+config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/bg_color=Color(0.0118, 0.0275, 0.0235, 1)
 boot_splash/image="res://presentation/title/boot_splash.png"
 config/icon="res://icon.svg"
-config/quit_on_go_back=false
 
 [autoload]
 
@@ -45,7 +45,6 @@ window/dpi/allow_hidpi.web=false
 
 [editor_plugins]
 
-; Local-only; addons/* is gitignored. Release exports must not require this.
 enabled=PackedStringArray("res://addons/godot_mcp_server/plugin.cfg")
 
 [gui]

@@ -9,7 +9,6 @@ extends PlaytestCase
 
 
 const SEED := 17
-const ConsoleMetrics := preload("res://ui/common/console_metrics.gd")
 
 
 func play(harness: UiHarness) -> void:
@@ -60,40 +59,19 @@ func play(harness: UiHarness) -> void:
 	)
 	assert_true(
 		driver.command("BURN") != null,
-		"CONTINUE returns a run with pending work directly to the burn board"
+		"CONTINUE returns a run with pending work directly to the burn button"
 	)
 	var shell: Node = harness.current_scene()
-	if shell != null:
-		shell.switch_tab("office")
+	if shell != null and shell.has_method("current_tab"):
+		assert_eq(str(shell.current_tab()), "run", "CONTINUE lands on the run tab")
+		# The other screens are tabs on the same glass; going out to one and
+		# back must not lose the pending work behind the button.
+		shell.switch_tab("market")
 		await harness.settle()
-		var open_board: Control = driver.command("OPEN BOARD")
-		var console: WorkstationConsole = shell.find_child("PrimaryConsole", true, false)
-		assert_true(open_board != null, "The resumed operation still offers OPEN BOARD")
-		assert_true(console != null, "The resumed operation has a primary console")
-		if open_board != null and console != null:
-			assert_true(
-				console._should_lean_in(true, true),
-				"A compact mobile console captures the first tap while across the room"
-			)
-			var bay_zoom: float = ConsoleMetrics.focus_zoom(shell._focus_rect("workstation"))
-			console._on_lean_in_pressed()
-			await harness.settle()
-			assert_true(
-				shell.room_focused_on("workstation"),
-				"The first mobile tap focuses the workstation"
-			)
-			assert_true(
-				shell._focus_full_zoom > bay_zoom,
-				"Mobile focus targets the smaller live glass instead of the whole bay"
-			)
-			assert_false(
-				console._should_lean_in(true, true),
-				"The lean-in catcher releases commands after the workstation is focused"
-			)
-			await driver.press(open_board)
-			assert_true(driver.command("BURN") != null, "OPEN BOARD reaches the burn screen")
-			shell.clear_room_focus()
-			await harness.settle()
+		assert_true(driver.command("BUY") != null, "The resumed operation still offers the market")
+		shell.switch_tab("run")
+		await harness.settle()
+		assert_true(driver.command("BURN") != null, "Coming back to the run tab reaches the burn button")
 	driver.audit_screen("desk", "desk")
 
 
