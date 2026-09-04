@@ -12,6 +12,7 @@ var _left: Label = null
 var _right: Label = null
 var _lit: int = -1
 var _hot: bool = false
+var _enabled: bool = true
 var _tap := TapGesture.new()
 
 
@@ -89,9 +90,11 @@ func set_readings(caption: String, left: String, right: String, lit: int, enable
 	_right.add_theme_color_override("font_color", (CabinetStyle.RED if caption.to_upper() == "OVERRIDE" else CabinetStyle.PHOSPHOR) if lit == 1 else CabinetStyle.PHOSPHOR_DIM)
 	modulate.a = 1.0 if enabled else 0.55
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if enabled else Control.CURSOR_ARROW
+	_enabled = enabled
 
 
 func _on_input(event: InputEvent) -> void:
 	if _tap.feed(event):
-		pressed.emit()
+		if _enabled:
+			pressed.emit()
 		accept_event()

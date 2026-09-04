@@ -194,7 +194,7 @@ func layout() -> void:
 		_place(_mounts[system_id], "mount_%s" % system_id)
 	var caption_h: float = _caption_plate.size.y
 	_caption.add_theme_font_size_override("font_size", clampi(int(caption_h * 0.28), CabinetStyle.FONT_SMALL, CabinetStyle.FONT_HEAD))
-	if _open and _grid != null:
+	if _open and not _transitioning and _grid != null:
 		_apply_zoom(1.0)
 
 
