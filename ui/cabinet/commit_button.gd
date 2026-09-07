@@ -143,8 +143,12 @@ func _layout() -> void:
 		return
 	_face.position = Vector2.ZERO
 	_face.size = size
-	var housing_w: float = minf(size.x, size.y * FACE_CANVAS_ASPECT) * HOUSING_OF_CANVAS
-	var glass := Rect2(Vector2((size.x - housing_w) * 0.5, size.y * 0.12), Vector2(housing_w, size.y * 0.76))
+	var face: Rect2 = _face_rect()
+	var housing_w: float = face.size.x * HOUSING_OF_CANVAS
+	var glass := Rect2(
+		Vector2(face.position.x + (face.size.x - housing_w) * 0.5, face.position.y + face.size.y * 0.12),
+		Vector2(housing_w, face.size.y * 0.76)
+	)
 	_label.position = glass.position
 	_label.size = Vector2(glass.size.x, glass.size.y * 0.66)
 	_label.pivot_offset = _label.size * 0.5
@@ -160,16 +164,34 @@ func _layout() -> void:
 	_overlay.queue_redraw()
 
 
+## Where the face art actually lands inside the button: the texture keeps its
+## canvas aspect and centres (STRETCH_KEEP_ASPECT_CENTERED), so a button wider
+## or taller than the canvas leaves empty margins the lettering must not use.
+func _face_rect() -> Rect2:
+	var aspect: float = FACE_CANVAS_ASPECT
+	var texture: Texture2D = _face.texture if _face != null else null
+	if texture != null and texture.get_height() > 0:
+		aspect = float(texture.get_width()) / float(texture.get_height())
+	var drawn_h: float = minf(size.y, size.x / aspect)
+	var drawn := Vector2(drawn_h * aspect, drawn_h)
+	return Rect2((size - drawn) * 0.5, drawn)
+
+
 ## The word wants 22–30 px at the baseline deck; a long one (BURN AGAIN) is let
-## down in size until it fits the housing rather than clipped at its edge.
+## down in size until it fits the housing rather than clipped at its edge. Tall
+## glyphs are fitted against the glass height too, so the word never spills off
+## the housing when the button is narrower than the face's canvas.
 func _fit_label() -> void:
-	if _label == null or _label.size.x <= 0.0:
+	if _label == null or _label.size.x <= 0.0 or _label.size.y <= 0.0:
 		return
-	var target: int = clampi(int(size.y * 0.40), 14, 44)
+	var target: int = clampi(int(_label.size.y * 0.80), 14, 44)
 	var font: Font = _label.get_theme_font("font")
 	var fitted: int = target
 	if font != null and _label.text != "":
-		while fitted > 12 and font.get_string_size(_label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, fitted).x > _label.size.x * 0.96:
+		while fitted > 12 and (
+			font.get_string_size(_label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, fitted).x > _label.size.x * 0.96
+			or font.get_height(fitted) > _label.size.y
+		):
 			fitted -= 1
 	_label.add_theme_font_size_override("font_size", fitted)
 
@@ -180,9 +202,9 @@ func _fit_label() -> void:
 ## is not legible at all, and a long sub eliding its tail (`... · OPENS THE R…`)
 ## still leads with what matters.
 func _fit_sub() -> void:
-	if _sub == null or _sub.size.x <= 0.0:
+	if _sub == null or _sub.size.x <= 0.0 or _sub.size.y <= 0.0:
 		return
-	var target: int = clampi(int(size.y * 0.2), 8, 14)
+	var target: int = clampi(int(_sub.size.y * 0.8), 8, 14)
 	var font: Font = _sub.get_theme_font("font")
 	var fitted: int = target
 	if font != null and _sub.text != "":

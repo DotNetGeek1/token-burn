@@ -431,7 +431,7 @@ func _layout_deck() -> void:
 	var pad: float = clampf(area.y * 0.05, 1.0, 6.0)
 	var min_touch: float = _layout_profile.min_touch_px()
 	var button_h: float = maxf(area.y - 2.0 * pad, minf(min_touch, area.y))
-	var button_w: float = minf(area.x * float(tuning.get("commit_of_width", 0.34)), button_h * float(tuning.get("commit_aspect", 2.05)))
+	var button_w: float = minf(area.x * float(tuning.get("commit_of_width", 0.34)), button_h * float(tuning.get("commit_aspect", CommitButton.FACE_CANVAS_ASPECT)))
 	button_w = maxf(button_w, min_touch)
 	_commit_button.size = Vector2(button_w, button_h)
 	_commit_button.position = Vector2((area.x - button_w) * 0.5, (area.y - button_h) * 0.5)
@@ -932,6 +932,9 @@ func _on_bay_pressed(slot: int) -> void:
 		return
 	var armed: String = _tab_modules.armed_module_id
 	if armed != "":
+		if Simulation.is_work_running():
+			UiSound.play("error")
+			return
 		_tab_modules.seat(armed, slot)
 		_dock.select_slot(slot)
 		_tab_modules.set_dock_slot(slot)
