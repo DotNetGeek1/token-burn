@@ -179,8 +179,8 @@ func capture(shot_name: String) -> void:
 	print("captured %s -> %s" % [safe, path])
 
 
-## Visible ConsoleOverlay whose node name or script path contains the fragment
-## (session_summary, month_statement, angel_investors, run_end).
+## Visible overlay whose node name or script path contains the fragment
+## (month_statement, angel_investors, run_end).
 func overlay(name_fragment: String) -> Control:
 	var needle: String = name_fragment.to_lower()
 	var scene: Node = current_scene()

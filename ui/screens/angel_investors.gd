@@ -1,4 +1,4 @@
-extends ConsoleOverlay
+extends PhoneOverlay
 
 ## The round's free perk draft. Once the bills have cleared, the investor puts
 ## three perks on the table and expects to be thanked for one of them — or for
@@ -9,37 +9,38 @@ extends ConsoleOverlay
 ## his patter rather than a different fictional fund on each one. On a landscape
 ## panel the offers sit side by side as columns rather than stacked.
 ##
-## The shell around them is the console, because the standing — what is in the
-## bank, what is due, how many perks are active — is the machine's reckoning and
-## reads like it. The offers themselves are not: something handed to you across
-## a table is a physical object, so those stay as cards.
+## The shell around them is his handset — the same phone the call comes in on —
+## with the standing (perks held, what is in the bank, what is due) as a row of
+## chips under his name. The offers themselves are something handed to you
+## across a table, a physical object, so those stay as cards.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
-## Three cards side by side plus the gaps between them. Wider than an overlay
-## of printed lines would ever want, but the offers are the content here.
+## Three cards side by side plus the gaps between them. Wider than a handset of
+## printed lines would ever want, but the offers are the content here.
 const TABLE_WIDTH := 1040.0
 ## Narrower than this and a card is a column of two words per line, so the
 ## table stacks instead.
 const CARD_MIN_WIDTH := 300.0
+const CARD_SEPARATION := 12
+const CHIP_SEPARATION := 6
 
-var _pitch: Label = null
-var _board_label: Label = null
-var _bills_label: Label = null
-var _scroll: ScrollContainer = null
+var _standing: HFlowContainer = null
 var _cards_list: GridContainer = null
-var _sheet: ConsoleSheet = null
+var _sheet: DecisionSheet = null
 
 
 func _ready() -> void:
 	super._ready()
-	setup("His Table")
+	set_kicker("HIS TABLE")
+	setup(InvestorVoice.investor_name())
+	set_context("Pick one perk. Nothing here has a price.")
 	# Free or not, which one he is handing over is a decision, and a stray tap
 	# on the room behind should not answer it.
 	dismiss_on_scrim = false
 	set_closable(false)
 	max_width = TABLE_WIDTH
 	_build_body()
-	_sheet = ConsoleSheet.new()
+	_sheet = DecisionSheet.new()
 	add_child(_sheet)
 	Simulation.work_session_finished.connect(_maybe_show)
 	EventBus.reward_calculated.connect(_maybe_show)
@@ -48,29 +49,25 @@ func _ready() -> void:
 func _build_body() -> void:
 	var column: VBoxContainer = content()
 
-	_pitch = ConsoleStyle.paragraph("", ConsoleStyle.FONT_SMALL, ConsoleStyle.PHOSPHOR)
-	column.add_child(_pitch)
+	_standing = HFlowContainer.new()
+	_standing.add_theme_constant_override("h_separation", CHIP_SEPARATION)
+	_standing.add_theme_constant_override("v_separation", CHIP_SEPARATION)
+	_standing.alignment = FlowContainer.ALIGNMENT_CENTER
+	_standing.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_standing.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_standing)
 
-	_board_label = ConsoleStyle.paragraph("")
-	column.add_child(_board_label)
-
-	_bills_label = ConsoleStyle.paragraph("")
-	column.add_child(_bills_label)
-
-	column.add_child(ConsoleStyle.rule(0.22))
-
-	_scroll = ScrollContainer.new()
-	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll.resized.connect(_fit_columns)
-	column.add_child(_scroll)
+	column.add_child(PhoneRows.rule())
 
 	_cards_list = GridContainer.new()
 	_cards_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cards_list.columns = 1
-	_cards_list.add_theme_constant_override("h_separation", 12)
-	_cards_list.add_theme_constant_override("v_separation", 12)
-	_scroll.add_child(_cards_list)
+	_cards_list.add_theme_constant_override("h_separation", CARD_SEPARATION)
+	_cards_list.add_theme_constant_override("v_separation", CARD_SEPARATION)
+	column.add_child(_cards_list)
+	# The body is as wide as the phone lets it be, and that decides how many
+	# offers sit in a row.
+	column.resized.connect(_fit_columns)
 
 
 func _maybe_show(_payload: Variant = null) -> void:
@@ -88,32 +85,19 @@ func show_choices() -> void:
 	open()
 
 
-## `ConsoleOverlay.open` calls this, and so does every redraw while the table is
+## `PhoneOverlay.open` calls this, and so does every redraw while the table is
 ## up — taking one offer off it leaves the rest standing.
 func refresh() -> void:
 	if _cards_list == null:
 		return
-	_refresh_header_line()
+	setup(InvestorVoice.investor_name())
+	_refresh_standing()
 	_deal_cards()
 	set_actions([{
-		"index": "",
 		"headline": "TAKE NOTHING",
+		"secondary": true,
 		"pressed": _on_decline,
-	}], true)
-	_apply_body_metrics()
-
-
-func fit_console() -> void:
-	super.fit_console()
-	_apply_body_metrics()
-
-
-func _apply_body_metrics() -> void:
-	if _pitch == null:
-		return
-	var scale: float = console_scale()
-	_pitch.add_theme_font_size_override("font_size", ConsoleMetrics.font_tiny(scale))
-	_fit_columns()
+	}])
 
 
 ## Offers read as columns when the table is wide enough to lay them out that
@@ -122,14 +106,10 @@ func _apply_body_metrics() -> void:
 func _fit_columns() -> void:
 	if _cards_list == null:
 		return
-	var available: float = _scroll.size.x
+	var available: float = content().size.x
 	if available <= 1.0:
 		return
-	_cards_list.columns = _column_count(
-		available,
-		Simulation.pending_choices.size(),
-		console_scale()
-	)
+	_cards_list.columns = _column_count(available, Simulation.pending_choices.size())
 	var stretch_row: bool = _cards_list.columns > 1
 	_cards_list.size_flags_vertical = (
 		Control.SIZE_EXPAND_FILL if stretch_row else Control.SIZE_FILL
@@ -141,10 +121,8 @@ func _fit_columns() -> void:
 			)
 
 
-func _column_count(
-	available: float, choice_count: int, scale: float
-) -> int:
-	var fits: int = maxi(1, int(available / (CARD_MIN_WIDTH * scale)))
+func _column_count(available: float, choice_count: int) -> int:
+	var fits: int = maxi(1, int(available / CARD_MIN_WIDTH))
 	return clampi(mini(maxi(1, choice_count), fits), 1, 2)
 
 
@@ -215,24 +193,23 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 	_sheet.action_confirmed.connect(_accept.bind(offer_id))
 
 
-func _refresh_header_line() -> void:
+## The standing, as chips: how many perks he already has you carrying, what is
+## in the bank, and what the next bills come to.
+func _refresh_standing() -> void:
+	for child in _standing.get_children():
+		_standing.remove_child(child)
+		child.queue_free()
 	var perks: Dictionary = Simulation.perk_capacity()
 	var outlook: Dictionary = Simulation.bills_outlook()
-	_pitch.text = "%s: PICK ONE PERK FREE  ·  PERKS %d/%d  ·  BANK %s  ·  BILLS %s" % [
-		InvestorVoice.investor_name().to_upper(),
-		int(perks.get("owned", 0)),
-		int(perks.get("cap", 0)),
-		NumberFormat.format_cash(float(outlook.get("cash", 0.0))),
-		NumberFormat.format_cash(float(outlook.get("due", 0.0))),
-	]
-	_pitch.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_pitch.clip_text = true
-	_pitch.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_board_label.text = ""
-	_board_label.visible = false
-	_bills_label.text = ""
-	_bills_label.visible = false
-	set_context("NOTHING HERE HAS A PRICE")
+	_standing.add_child(UiChip.create(
+		"PERKS %d/%d" % [int(perks.get("owned", 0)), int(perks.get("cap", 0))], "perk"
+	))
+	_standing.add_child(UiChip.create(
+		"BANK %s" % NumberFormat.format_cash(float(outlook.get("cash", 0.0))), "money"
+	))
+	_standing.add_child(UiChip.create(
+		"BILLS %s" % NumberFormat.format_cash(float(outlook.get("due", 0.0))), "warning"
+	))
 
 
 func _accept(offer_id: String) -> void:

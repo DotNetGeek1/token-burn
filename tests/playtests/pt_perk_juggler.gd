@@ -151,9 +151,6 @@ func _assert_loadout() -> void:
 
 func _walk_skip_overlays(harness: UiHarness) -> void:
 	await _wait_for_overlay(harness)
-	if _overlay_up(harness, "session_summary"):
-		await walk_round_flow(harness)
-		return
 	var deadline: int = Time.get_ticks_msec() + ROUND_FLOW_DEADLINE_MSEC
 	while Time.get_ticks_msec() < deadline:
 		await dismiss_investor(harness)
@@ -181,8 +178,7 @@ func _wait_for_overlay(harness: UiHarness) -> void:
 	var deadline: int = Time.get_ticks_msec() + 4000
 	while Time.get_ticks_msec() < deadline:
 		if (
-			_overlay_up(harness, "session_summary")
-			or _overlay_up(harness, "month_statement")
+			_overlay_up(harness, "month_statement")
 			or _overlay_up(harness, "angel_investors")
 			or Simulation.phase == Simulation.Phase.RUN_END
 			or Simulation.phase == Simulation.Phase.ROUND_PREP

@@ -75,8 +75,7 @@ func _close_round(harness: UiHarness) -> void:
 		await walk_round_flow(harness)
 		return
 	# There is no skip-round button. Ending the round in the sim still lands
-	# the rent; the shell then owes the bills (and maybe angels) without a
-	# debrief, because no session ran.
+	# the rent; the shell then owes the bills (and maybe angels).
 	Simulation.debug_end_round()
 	await harness.go_desk()
 	await _walk_overlays_if_any(harness)
@@ -84,17 +83,13 @@ func _close_round(harness: UiHarness) -> void:
 
 func _walk_overlays_if_any(harness: UiHarness) -> void:
 	await _wait_for_overlay(harness)
-	if _overlay_up(harness, "session_summary"):
-		# A real session ran: the helper's debrief-then-bills order applies.
-		await walk_round_flow(harness)
-		return
 	if not (
 		_overlay_up(harness, "month_statement")
 		or _overlay_up(harness, "angel_investors")
 	):
 		return
-	# Skip-round path: bills arrive with no debrief. walk_round_flow would
-	# fail that order assert, so the persona dismisses what actually showed.
+	# The persona dismisses whatever actually showed rather than asserting an
+	# order: a skip-round may bring out angels with no bills before them.
 	var deadline: int = Time.get_ticks_msec() + ROUND_FLOW_DEADLINE_MSEC
 	while Time.get_ticks_msec() < deadline:
 		await dismiss_investor(harness)
@@ -207,8 +202,7 @@ func _wait_for_overlay(harness: UiHarness) -> void:
 	var deadline: int = Time.get_ticks_msec() + 4000
 	while Time.get_ticks_msec() < deadline:
 		if (
-			_overlay_up(harness, "session_summary")
-			or _overlay_up(harness, "month_statement")
+			_overlay_up(harness, "month_statement")
 			or _overlay_up(harness, "angel_investors")
 			or _overlay_up(harness, "run_end")
 			or Simulation.phase == Simulation.Phase.RUN_END
@@ -223,9 +217,6 @@ func _wait_for_run_end(harness: UiHarness) -> void:
 	while Time.get_ticks_msec() < deadline:
 		await dismiss_investor(harness)
 		if _overlay_up(harness, "month_statement"):
-			await harness.driver.press_command("CONTINUE")
-			continue
-		if _overlay_up(harness, "session_summary"):
 			await harness.driver.press_command("CONTINUE")
 			continue
 		if _overlay_up(harness, "run_end"):

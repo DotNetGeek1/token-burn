@@ -316,6 +316,10 @@ func _find_button_text(node: Node, wanted: String) -> Control:
 		return null
 	if node is Button and not node is ConsoleMenuRow and _norm(node.text) == wanted:
 		return node
+	# GameButton prints its verb on a label it mounts as an internal child, so
+	# neither Button.text nor a get_children() walk sees it; ask the button.
+	if node is GameButton and _norm(node.headline) == wanted:
+		return node
 	for child in node.get_children():
 		var found: Control = _find_button_text(child, wanted)
 		if found != null:
@@ -370,6 +374,8 @@ func _collect_tiles(node: Node, found: Array) -> void:
 
 
 func _button_label_contains(button: Button, wanted: String) -> bool:
+	if button is GameButton and _norm(button.headline).contains(wanted):
+		return true
 	for child in button.get_children():
 		if _label_contains(child, wanted):
 			return true

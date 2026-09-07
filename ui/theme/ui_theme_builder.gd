@@ -521,6 +521,23 @@ static func card_style(accent_key: String = "") -> StyleBox:
 	return style
 
 
+## A handset, not a card: a dark moulded case with a machined bezel, held up in
+## front of the room. It carries no colour of its own — like every other piece
+## of hardware in the room, the only light on the object comes from what is
+## printed on its screen. Shared by the investor call and every `PhoneOverlay`.
+static func phone_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.055, 0.065, 0.070, 0.98)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.16, 0.19, 0.20)
+	# A handset really is a rounded object, but only just: enough to read as
+	# moulded plastic, not enough to read as one of the old rounded cards.
+	style.set_corner_radius_all(14)
+	style.shadow_color = Color(0, 0, 0, 0.6)
+	style.shadow_size = 22
+	return style
+
+
 ## Same card surface but given an explicit colour, for job sectors and other
 ## data-driven accents that are not palette keys.
 static func card_style_accent(accent: Color) -> StyleBoxFlat:

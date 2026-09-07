@@ -37,7 +37,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process(false)
 	add_to_group("flow_overlay")
-	phone.add_theme_stylebox_override("panel", _phone_style())
+	phone.add_theme_stylebox_override("panel", UiThemeBuilder.phone_style())
 	continue_button.pressed.connect(_on_continue)
 	backdrop.gui_input.connect(_on_backdrop_input)
 	var persona: Dictionary = InvestorVoice.persona()
@@ -52,23 +52,6 @@ func _ready() -> void:
 	call_state.add_theme_color_override("font_color", ConsoleStyle.PHOSPHOR)
 	subject_label.add_theme_color_override("font_color", ConsoleStyle.DANGER)
 	body_label.add_theme_font_override("font", UiThemeBuilder.body_font())
-
-
-## A handset, not a card: a dark moulded case with a machined bezel, held up in
-## front of the room. It carries no colour of its own — like every other piece
-## of hardware in the room, the only light on the object comes from what is
-## printed on its screen.
-func _phone_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.055, 0.065, 0.070, 0.98)
-	style.set_border_width_all(2)
-	style.border_color = Color(0.16, 0.19, 0.20)
-	# A handset really is a rounded object, but only just: enough to read as
-	# moulded plastic, not enough to read as one of the old rounded cards.
-	style.set_corner_radius_all(14)
-	style.shadow_color = Color(0, 0, 0, 0.6)
-	style.shadow_size = 22
-	return style
 
 
 ## Rings the player. `context` may name the `variant` and the `seed` outright;

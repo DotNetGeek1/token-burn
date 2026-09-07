@@ -24,17 +24,15 @@ func _desktop_table(harness: UiHarness, table: Control) -> void:
 	await harness.set_viewport(UiHarness.VIEW_DESKTOP)
 	assert_true(table.visible, "The investor table stays open during desktop reflow")
 	assert_eq(table._cards_list.columns, 2, "Desktop offers give the cards two wide columns")
-	assert_true(not table._board_label.visible, "All supporting copy is folded into one line")
-	assert_true(
-		"BILLS" in table._pitch.text,
-		"The compact status line keeps the important bill warning"
-	)
-	assert_true("PERK" in table._pitch.text.to_upper(), "Header says the free pick is a perk")
-	assert_true(table._inline_actions.visible, "Secondary actions share one footer line")
-	assert_eq(table._action_rows.size(), 1, "Only TAKE NOTHING remains as a secondary action")
-	assert_eq(table._action_rows[0].index_label, "", "Inline actions omit numbered prefixes")
-	assert_eq(table._action_rows[0].value_text, "", "Inline actions omit explanatory descriptions")
-	assert_eq(table._action_rows[0].headline, "TAKE NOTHING", "Decline remains available")
+	# The standing is a row of chips under his name, not a mono ticker.
+	var standing: String = _chip_text(table._standing)
+	assert_true("BILLS" in standing, "The standing chips keep the important bill warning")
+	assert_true("PERK" in standing, "Header says the free pick is a perk")
+	assert_true(table._footer.visible, "Secondary actions share one footer line")
+	assert_eq(table._action_buttons.size(), 1, "Only TAKE NOTHING remains as a secondary action")
+	assert_eq(table._action_buttons[0].headline, "TAKE NOTHING", "Decline remains available")
+	assert_eq(table._action_buttons[0].sub_text, "", "Footer keys omit explanatory descriptions")
+	assert_true(not table._close_button.visible, "The table has no CLOSE key: a perk is a decision")
 
 	var cards: Array[Node] = table._cards_list.get_children()
 	assert_eq(cards.size(), 3, "The investor still deals three choices")
@@ -61,7 +59,7 @@ func _mobile_table(harness: UiHarness, table: Control) -> void:
 	await harness.set_viewport(Vector2i(2048, 921))
 	assert_eq(table._cards_list.columns, 2, "A wide handset gets two offer columns")
 	assert_eq(
-		table._column_count(1800.0, 3, 2.6),
+		table._column_count(1800.0 / 2.6, 3),
 		2,
 		"A high-resolution handset has room for two physically readable cards"
 	)
@@ -75,3 +73,18 @@ func _mobile_table(harness: UiHarness, table: Control) -> void:
 		table._cards_list.size_flags_vertical == Control.SIZE_EXPAND_FILL,
 		"The two-column card grid receives the screen's main content area"
 	)
+
+
+## Every label under the chip row, upper-cased and joined, so the asserts can
+## read the standing the way the player does.
+func _chip_text(root: Node) -> String:
+	var parts: Array[String] = []
+	_collect_labels(root, parts)
+	return " ".join(parts).to_upper()
+
+
+func _collect_labels(node: Node, out: Array[String]) -> void:
+	if node is Label:
+		out.append(str(node.text))
+	for child in node.get_children():
+		_collect_labels(child, out)

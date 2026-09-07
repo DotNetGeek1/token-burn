@@ -4,7 +4,7 @@ extends PlaytestCase
 ## so the persona ends each empty slate in the sim and lets rent land the
 ## way a player who sat on their hands would still be charged. The loss
 ## path has to reach TITLE SCREEN with every report overlay gone — a
-## session_summary or run_end left standing over the title is a player
+## month_statement or run_end left standing over the title is a player
 ## stuck on a company that no longer exists.
 
 
@@ -60,16 +60,13 @@ func play(harness: UiHarness) -> void:
 
 
 func _dismiss_bills_and_decline_angels(harness: UiHarness) -> void:
-	# A skip-round has no debrief. Taking an angel here would hand out cash
-	# and delay the eviction this persona exists to reach.
+	# Taking an angel here would hand out cash and delay the eviction this
+	# persona exists to reach.
 	await _wait_for_overlay(harness)
 	var deadline: int = Time.get_ticks_msec() + ROUND_FLOW_DEADLINE_MSEC
 	while Time.get_ticks_msec() < deadline:
 		await dismiss_investor(harness)
 		if _overlay_up(harness, "month_statement"):
-			await harness.driver.press_command("CONTINUE")
-			continue
-		if _overlay_up(harness, "session_summary"):
 			await harness.driver.press_command("CONTINUE")
 			continue
 		if _overlay_up(harness, "angel_investors"):
@@ -89,9 +86,6 @@ func _wait_for_run_end(harness: UiHarness) -> void:
 	while Time.get_ticks_msec() < deadline:
 		await dismiss_investor(harness)
 		if _overlay_up(harness, "month_statement"):
-			await harness.driver.press_command("CONTINUE")
-			continue
-		if _overlay_up(harness, "session_summary"):
 			await harness.driver.press_command("CONTINUE")
 			continue
 		if _overlay_up(harness, "run_end"):
@@ -121,7 +115,7 @@ func _title_visible(harness: UiHarness) -> bool:
 
 
 func _assert_reports_cleared(harness: UiHarness) -> void:
-	for fragment in ["session_summary", "month_statement", "angel_investors", "run_end"]:
+	for fragment in ["month_statement", "angel_investors", "run_end"]:
 		harness.driver.assert_overlay_hidden(fragment)
 	for overlay in harness.visible_overlays():
 		if overlay is Node and overlay.is_in_group("title_screen"):
@@ -132,11 +126,9 @@ func _assert_reports_cleared(harness: UiHarness) -> void:
 			str(script.resource_path).to_lower() if script != null else ""
 		)
 		assert_false(
-			name_text.contains("session_summary")
-			or name_text.contains("month_statement")
+			name_text.contains("month_statement")
 			or name_text.contains("angel_investors")
 			or name_text.contains("run_end")
-			or script_path.contains("session_summary")
 			or script_path.contains("month_statement")
 			or script_path.contains("angel_investors")
 			or script_path.contains("run_end"),
@@ -155,8 +147,7 @@ func _wait_for_overlay(harness: UiHarness) -> void:
 	var deadline: int = Time.get_ticks_msec() + 4000
 	while Time.get_ticks_msec() < deadline:
 		if (
-			_overlay_up(harness, "session_summary")
-			or _overlay_up(harness, "month_statement")
+			_overlay_up(harness, "month_statement")
 			or _overlay_up(harness, "angel_investors")
 			or _overlay_up(harness, "run_end")
 			or Simulation.phase == Simulation.Phase.RUN_END

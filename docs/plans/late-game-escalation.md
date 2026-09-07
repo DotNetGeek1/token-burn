@@ -556,7 +556,7 @@ core/run_score.gd
 core/run_state.gd                     # statistics
 systems/job_system.gd                 # optional rarity bias
 ui/cabinet/burn_director.gd           # slam “412% OVERKILL”
-ui/screens/session_summary.gd / run_end.gd
+ui/screens/month_statement.gd / run_end.gd
 tests/simulation_tests/test_overkill.gd
 ```
 

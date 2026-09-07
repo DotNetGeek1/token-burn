@@ -79,12 +79,14 @@ func accept_first_job(harness: UiHarness) -> String:
 	assert_true(tile != null, "The CONTRACTS tab has a contract card on the wire")
 	if tile == null:
 		return ""
-	await harness.driver.press(tile)
+	# Read the card before pressing it: selecting a card redraws the wire,
+	# and the redraw can rebuild the cards, freeing this one.
 	var job_id: String = ""
 	if tile is ContractCard:
 		job_id = str(Dictionary(tile.job()).get("id", ""))
 	elif tile is CabinetTile:
 		job_id = str(tile.meta)
+	await harness.driver.press(tile)
 	await harness.driver.press_command("ACCEPT")
 	await harness.settle()
 	return job_id
@@ -123,32 +125,53 @@ func burn_until_session_over(harness: UiHarness) -> void:
 					continue
 			if not bool(Simulation.burn_batch().get("ok", false)):
 				break
+	# That one UI BURN started the spectacle, and the commit deck stays
+	# latched on WORKING until the director hands the machine back. The sim
+	# is already through the session; wait for the glass to catch up so the
+	# next thing the persona presses is not a deck reading BATCH IN FLIGHT.
+	await wait_for_deck_idle(harness)
 	await harness.settle()
 
 
-## Debrief → bills → angels, each dismissed by its own footer. These overlays
-## set dismiss_on_scrim false, so the driver must not shortcut via close().
+## Spins until the cabinet's commit button is no longer busy with a burn.
+func wait_for_deck_idle(harness: UiHarness) -> void:
+	var shell: Node = harness.current_scene()
+	if shell == null:
+		return
+	var commit: Node = _find_commit_button(shell)
+	if commit == null or not commit.has_method("is_busy"):
+		return
+	await wait_until(
+		harness, func() -> bool: return not bool(commit.call("is_busy")), BURN_DEADLINE_MSEC
+	)
+
+
+func _find_commit_button(node: Node) -> Node:
+	if node is CommitButton:
+		return node
+	for child in node.get_children():
+		var found: Node = _find_commit_button(child)
+		if found != null:
+			return found
+	return null
+
+
+## Bills → angels, each dismissed by its own footer. These overlays set
+## dismiss_on_scrim false, so the driver must not shortcut via close().
 func walk_round_flow(harness: UiHarness) -> void:
 	var deadline: int = Time.get_ticks_msec() + ROUND_FLOW_DEADLINE_MSEC
-	var saw_debrief: bool = false
 	var saw_bills: bool = false
 	while Time.get_ticks_msec() < deadline:
 		await dismiss_investor(harness)
 		if Simulation.phase == Simulation.Phase.RUN_END:
 			return
-		if _overlay_up(harness, "session_summary"):
-			saw_debrief = true
-			harness.driver.assert_overlay_visible("session_summary")
-			await harness.driver.press_command("CONTINUE")
-			continue
 		if _overlay_up(harness, "month_statement"):
 			saw_bills = true
-			assert_true(saw_debrief, "Bills arrived after the debrief")
 			harness.driver.assert_overlay_visible("month_statement")
 			await harness.driver.press_command("CONTINUE")
 			continue
 		if _overlay_up(harness, "angel_investors"):
-			assert_true(saw_bills or saw_debrief, "Angels arrived after the round reports")
+			assert_true(saw_bills, "Angels arrived after the bills")
 			harness.driver.assert_overlay_visible("angel_investors")
 			var take: Control = harness.driver.command("TAKE IT")
 			if take != null:

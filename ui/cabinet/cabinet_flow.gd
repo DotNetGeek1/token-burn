@@ -2,7 +2,7 @@ class_name CabinetFlow
 extends Node
 
 ## The paper on top of the machine, and when it comes out. The flow owns the
-## round-end paperwork (debrief → bills → angels), the run-end verdict, the
+## round-end paperwork (bills → angels), the run-end verdict, the
 ## title screen in front of a cold start, the investor's calls, the RUN tab's
 ## sheets (the contract brief, ship-or-abandon, YOLO) and the pending-flow
 ## entries the router hands over when it walks the player home. It also owns
@@ -19,7 +19,6 @@ extends Node
 
 const ANGEL_INVESTORS := preload("res://ui/screens/angel_investors.tscn")
 const RUN_END := preload("res://ui/screens/run_end.tscn")
-const ROUND_DEBRIEF := preload("res://ui/screens/session_summary.tscn")
 const BILLS_SCREEN := preload("res://ui/screens/month_statement.tscn")
 const BURN_LAB := preload("res://ui/debug/burn_lab.tscn")
 const TITLE_SCREEN := preload("res://ui/title/title_screen.tscn")
@@ -40,17 +39,15 @@ var _cabinet: Control = null
 var _overlay_root: Control = null
 
 # Paper on top of the machine
-var sheet: ConsoleSheet = null
+var sheet: DecisionSheet = null
 var angel_investors: Control = null
 var run_end: Control = null
-var round_debrief: Control = null
 var bills_screen: Control = null
 var burn_lab: Control = null
 var help: HelpOverlay = null
 var title_screen: Control = null
 
 var title_active: bool = true
-var _pending_statement: Dictionary = {}
 var _last_angel_phase: bool = false
 var _intro_call_shown: bool = false
 
@@ -67,20 +64,18 @@ func _init(cabinet: Control, overlay_root: Control) -> void:
 
 ## Instantiates the overlays into the overlay root.
 func build() -> void:
-	sheet = ConsoleSheet.new()
+	sheet = DecisionSheet.new()
 	_overlay_root.add_child(sheet)
 	angel_investors = ANGEL_INVESTORS.instantiate()
 	run_end = RUN_END.instantiate()
-	round_debrief = ROUND_DEBRIEF.instantiate()
 	bills_screen = BILLS_SCREEN.instantiate()
 	burn_lab = BURN_LAB.instantiate()
 	help = HelpOverlay.new()
-	for overlay in [angel_investors, round_debrief, bills_screen, run_end, burn_lab, help]:
+	for overlay in [angel_investors, bills_screen, run_end, burn_lab, help]:
 		if overlay == null:
 			push_error("BurnCabinet: failed to instantiate an overlay")
 			continue
 		_overlay_root.add_child(overlay)
-	round_debrief.continue_pressed.connect(_on_debrief_continue)
 	bills_screen.continue_pressed.connect(_on_bills_continue)
 
 
@@ -102,13 +97,13 @@ func refresh() -> void:
 	if title_active:
 		sync_overlay_input()
 		return
-	var report_open: bool = round_debrief.visible or bills_screen.visible
+	var report_open: bool = bills_screen.visible
 	var in_angel: bool = Simulation.phase == Simulation.Phase.ANGEL_ROUND
 	if in_angel and not _last_angel_phase and not report_open:
 		angel_investors.show_choices()
 	if not (in_angel and report_open):
 		_last_angel_phase = in_angel
-	if Simulation.phase == Simulation.Phase.RUN_END and not bills_screen.visible and _pending_statement.is_empty():
+	if Simulation.phase == Simulation.Phase.RUN_END and not bills_screen.visible:
 		_clear_stage_for(run_end)
 		run_end.show_from_state(
 			bool(Simulation.run_state.flags.get("victory", false)),
@@ -145,7 +140,7 @@ func register_overlay(overlay: Control) -> void:
 func _overlays() -> Array:
 	var all: Array = []
 	all.append_array(_registered)
-	all.append_array([sheet, help, round_debrief, bills_screen, angel_investors, run_end, burn_lab])
+	all.append_array([sheet, help, bills_screen, angel_investors, run_end, burn_lab])
 	return all
 
 
@@ -379,24 +374,13 @@ func _clear_sheet_handlers() -> void:
 
 # --- Round-end paperwork -----------------------------------------------------
 
+## The round's verdict no longer gets its own screen: the bills that follow
+## carry the session's figures and the investor's quip, so the session ending
+## only clears the table for them.
 func _on_work_session_finished(result: Dictionary) -> void:
 	var summary: Dictionary = result.get("summary", {})
 	if not summary.is_empty() and Simulation.phase != Simulation.Phase.RUN_END:
 		angel_investors.hide_overlay()
-		round_debrief.show_summary(summary)
-	refresh_requested.emit()
-
-
-func _on_debrief_continue() -> void:
-	if not _pending_statement.is_empty():
-		var statement: Dictionary = _pending_statement
-		_pending_statement = {}
-		bills_screen.show_statement(statement)
-		refresh_requested.emit()
-		return
-	if Simulation.phase == Simulation.Phase.ANGEL_ROUND:
-		angel_investors.show_choices()
-		_last_angel_phase = true
 	refresh_requested.emit()
 
 
@@ -404,10 +388,6 @@ func _on_bills_ready(statement: Dictionary) -> void:
 	if statement.is_empty():
 		return
 	angel_investors.hide_overlay()
-	if round_debrief.visible:
-		_pending_statement = statement
-		refresh_requested.emit()
-		return
 	bills_screen.show_statement(statement)
 	refresh_requested.emit()
 
