@@ -6,6 +6,57 @@ func run() -> void:
 		ContentDatabase.reload()
 	_test_offer_fit_uses_one_complete_workflow()
 	_test_gold_master_counts_as_testing()
+	_test_repeat_burns_start_the_drum_from_the_base()
+
+
+## Player report: "the multipliers are not starting on repeat, and sometimes the
+## multiplier goes down." Between burns the drum rests on the projected total,
+## so a second burn used to begin by tweening *down* to the first stage and
+## every drop inside the batch went unexplained. Every burn's spectacle has to
+## start from the workflow's base and account for each step of the drum.
+func _test_repeat_burns_start_the_drum_from_the_base() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(4242)
+	var offers: Array = sim.run_state.business.get("job_offers", [])
+	assert_true(offers.size() > 0, "A run opens with work")
+	sim.accept_job(str(Dictionary(offers[0]).get("id", "")))
+	sim.start_work()
+	for prompt in range(3):
+		var preview: Dictionary = sim.preview_burn()
+		assert_true(preview.get("ok", false), "Prompt %d previews" % prompt)
+		var beats: Array = Array(preview.get("spectacle", []))
+		assert_true(beats.size() >= 2, "Prompt %d has a spectacle" % prompt)
+		var base: float = float(Dictionary(sim.active_workflow()).get("output_mult", 1.0))
+		assert_almost_eq(
+			float(Dictionary(beats[0]).get("multiplier_before", -1.0)), base, 0.0005,
+			"Prompt %d: the drum starts from the workflow's own ×%.2f, not last burn's total" % [prompt, base]
+		)
+		assert_almost_eq(
+			float(Dictionary(beats[beats.size() - 1]).get("multiplier_after", -1.0)),
+			float(preview.get("output_mult", -2.0)),
+			0.0005,
+			"Prompt %d: and ends on the projected total" % prompt
+		)
+		for i in range(1, beats.size()):
+			var previous: Dictionary = beats[i - 1]
+			var current: Dictionary = beats[i]
+			assert_almost_eq(
+				float(current.get("multiplier_before", -1.0)),
+				float(previous.get("multiplier_after", -2.0)),
+				0.0005,
+				"Prompt %d: %s picks up where %s left the drum" % [
+					prompt, str(current.get("label", "")), str(previous.get("label", ""))
+				]
+			)
+			if float(current.get("multiplier_after", 0.0)) < float(current.get("multiplier_before", 0.0)) - 0.0005:
+				assert_true(
+					bool(current.get("falls", false)),
+					"Prompt %d: %s admits the drum fell" % [prompt, str(current.get("label", ""))]
+				)
+		var result: Dictionary = sim.burn_batch()
+		assert_true(result.get("ok", false), "Prompt %d commits" % prompt)
+	sim.free()
 
 
 func _test_offer_fit_uses_one_complete_workflow() -> void:

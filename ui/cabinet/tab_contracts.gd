@@ -228,12 +228,18 @@ func _refresh_detail() -> void:
 	detail_rows(_rows, rows)
 	var risk: String = JobSystem.production_risk_class(job)
 	var threshold: float = float(job.get("quality_threshold", 0.0))
+	# An offer shows the bar it will be judged by; a contract on the slate has
+	# work behind it, so it shows the verdict on that work against the bar.
+	var quality_row: Dictionary = {"stat": "Quality bar", "value": "%s / 10" % JobPresentation.quality_mark(threshold) if threshold > 0.0 else "unmarked"}
+	if _shelf == SLATE and threshold > 0.0:
+		var verdict: Dictionary = CabinetStyle.quality_readout(job)
+		quality_row = {"stat": "Quality", "value": str(verdict["text"]), "color": verdict["color"]}
 	var summary: Array = [
 		{"stat": "Reward", "value": NumberFormat.format_cash(float(job.get("reward", 0.0))), "role": "money"},
 		{"stat": "Pays for", "value": "%.1f rounds of bills" % (float(job.get("reward", 0.0)) / _round_cost)},
 		{"stat": "Tokens", "value": "%s BT" % NumberFormat.format(float(job.get("token_requirement", 0.0)))},
 		{"stat": "Deadline", "value": "%d prompts" % int(job.get("deadline_prompts", 0))},
-		{"stat": "Quality bar", "value": "%s / 10" % JobPresentation.quality_mark(threshold) if threshold > 0.0 else "unmarked"},
+		quality_row,
 		{"stat": "Risk tier", "value": risk, "color": CabinetStyle.risk_color(risk)},
 	]
 	var status: String = _status_line(job)

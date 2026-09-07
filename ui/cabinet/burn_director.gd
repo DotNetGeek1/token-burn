@@ -146,6 +146,7 @@ func _animate_batch(preview: Dictionary) -> void:
 	var beats: Array = preview.get("spectacle", [])
 	if beats.is_empty() and FeatureFlags.is_enabled("burn_spectacle_enabled"):
 		beats = BurnSpectacle.compile(preview, [])
+	_begin_batch_readout(preview, beats)
 	for beat in beats:
 		if not beat is Dictionary:
 			continue
@@ -168,24 +169,45 @@ func _animate_batch(preview: Dictionary) -> void:
 			stage_completed.emit(_stages_completed)
 
 
+## The drum starts the batch on the workflow's own multiplier — where the first
+## beat picks up — instead of the projected total it rests on between burns, so
+## the stages are seen to build the number rather than the drum falling to meet
+## them. The feed names the start so the climb has a floor to be read against.
+func _begin_batch_readout(preview: Dictionary, beats: Array) -> void:
+	if beats.is_empty() or not beats[0] is Dictionary:
+		return
+	var start: float = float(Dictionary(beats[0]).get("multiplier_before", 1.0))
+	var workflow_name: String = str(preview.get("workflow_name", "")).strip_edges().to_upper()
+	var label: String = "%s START" % workflow_name if workflow_name != "" else "START"
+	_drum.begin_batch(start, label)
+	_feed.push("%s  ×%.2f" % [label, start], CabinetStyle.PHOSPHOR_DIM)
+
+
 ## One beat on the cabinet: the drum spins, the stage's bay and strip cell light,
-## the feed prints a line, the heat bar nudges.
+## the feed prints a line, the heat bar nudges. A beat that drops the drum is
+## printed red with the ratio it cost, so an ignored demand or a quality stage's
+## output price is read as a cost rather than the multiplier misbehaving.
 func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned_before: float) -> void:
 	var kind: String = str(beat.get("kind", BurnSpectacle.KIND_STAGE))
 	var loud: bool = bool(beat.get("loud", false))
 	var label: String = str(beat.get("label", "")).to_upper()
 	var after: float = float(beat.get("multiplier_after", beat.get("progress_mult", 1.0)))
+	var falls: bool = bool(beat.get("falls", false))
 	var slot: int = int(beat.get("slot_index", -1))
 	if slot >= 0:
 		_dock.light_step(slot)
 		_tab_run.light_step(slot)
 	if kind == BurnSpectacle.KIND_FINAL:
-		_drum.show_beat(after, label)
+		_drum.show_beat(after, label, falls)
 		_feed.push("%s  %s BT" % [label, NumberFormat.format(float(beat.get("tokens", 0.0)))], CabinetStyle.AMBER)
 		_tab_run.show_beat_status(label, CabinetStyle.AMBER)
 	elif kind == BurnSpectacle.KIND_MASTERY:
 		_feed.push("WORKFLOW TRAINED  %s" % label, CabinetStyle.AMBER)
 		_tab_run.show_beat_status("WORKFLOW TRAINED", CabinetStyle.AMBER)
+	elif falls:
+		_drum.show_beat(after, label, true)
+		_feed.push("%s  ▼ ×%.2f" % [label, float(beat.get("ratio", 1.0))], CabinetStyle.RED)
+		_tab_run.show_beat_status(label, CabinetStyle.RED)
 	else:
 		_drum.show_beat(after, label)
 		_feed.push("%s  +%s" % [label, NumberFormat.format(float(beat.get("tokens_added", 0.0)))], CabinetStyle.AMBER if loud else CabinetStyle.PHOSPHOR)
@@ -193,7 +215,7 @@ func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned
 	_feed.set_live(true, "burn in progress", after)
 	if not job.is_empty():
 		var burned: float = burned_before + float(beat.get("tokens", 0.0))
-		_feed.push("PROGRESS %s / %s" % [NumberFormat.format(minf(burned, requirement)), NumberFormat.format(requirement)], CabinetStyle.PHOSPHOR_DIM)
+		_feed.push("TOKENS %s / %s" % [NumberFormat.format(minf(burned, requirement)), NumberFormat.format(requirement)], CabinetStyle.PHOSPHOR_DIM)
 	if loud:
 		UiSound.play("combo" if kind != BurnSpectacle.KIND_FINAL else "complete")
 		_proc_depth += 1

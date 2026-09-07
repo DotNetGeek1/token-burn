@@ -317,6 +317,67 @@ static func risk_level(risk: String) -> int:
 			return 2
 
 
+## The word the cabinet prints once a contract's quality has cleared its bar.
+const QUALITY_MET := "QUALITY MET"
+## ...and while it has not.
+const QUALITY_BELOW := "BELOW BAR"
+
+
+## One verdict on a contract's quality against the bar the client set, for
+## every place the cabinet prints it. The player could not tell from "6.4 / 10 ·
+## bar 6.0" whether the bar was cleared, so the readout says so outright:
+##
+##   met      "✓ QUALITY MET · 6.4 / 6.0"   in phosphor (the success colour)
+##   unmet    "6.4 / 6.0 · BELOW BAR"       in amber (the warning colour)
+##   unmarked "6.4 / 10"                    in dim phosphor: the client set no bar
+##
+## `quality` is what the client would receive now — the work as shipped, less
+## known bugs (`JobSystem.delivered_quality`) — never the pipeline's raw figure,
+## so the verdict is the one the fee is paid on. Returns
+## `{"text", "short", "color", "met", "marked"}`; `short` is the same verdict
+## cut to fit a card's ink ("✓ Q 6.4/6.0", "Q 6.4/6.0").
+static func quality_readout(job: Dictionary) -> Dictionary:
+	var quality: float = JobSystem.delivered_quality(job)
+	var threshold: float = float(job.get("quality_threshold", 0.0))
+	var mark: String = JobPresentation.quality_mark(quality)
+	var bar: String = JobPresentation.quality_mark(threshold)
+	if threshold <= 0.0:
+		return {
+			"text": "%s / 10" % mark,
+			"short": "Q %s" % mark,
+			"color": PHOSPHOR_DIM,
+			"met": true,
+			"marked": false,
+		}
+	var met: bool = quality >= threshold
+	if met:
+		var tick: String = check_glyph()
+		return {
+			"text": "%s %s · %s / %s" % [tick, QUALITY_MET, mark, bar],
+			"short": "%s Q %s/%s" % [tick, mark, bar],
+			"color": PHOSPHOR,
+			"met": true,
+			"marked": true,
+		}
+	return {
+		"text": "%s / %s · %s" % [mark, bar, QUALITY_BELOW],
+		"short": "Q %s/%s" % [mark, bar],
+		"color": AMBER,
+		"met": false,
+		"marked": true,
+	}
+
+
+## A tick mark the readout face can actually draw: the real glyph when the
+## fixed-pitch font carries it, "[x]" (the contracts brief's own check box) when
+## it does not, so a missing glyph never prints as a box.
+static func check_glyph() -> String:
+	var font: Font = UiThemeBuilder.mono_font()
+	if font != null and font.has_char(0x2713):
+		return "✓"
+	return "[x]"
+
+
 ## Fits a control to a fractional rect of `plate`, in pixels.
 static func fit(control: Control, plate: Rect2, fraction: Rect2) -> void:
 	control.position = plate.position + fraction.position * plate.size

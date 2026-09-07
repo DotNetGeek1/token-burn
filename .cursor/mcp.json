@@ -11,7 +11,8 @@
       "command": "npx",
       "args": ["-y", "godot-mcp-enhanced"],
       "env": {
-        "GODOT_PROJECT_PATH": "C:\\source\\token-burn"
+        "GODOT_PROJECT_PATH": "C:\\source\\token-burn",
+        "ALLOWED_PROJECT_PATHS": "C:\\source\\token-burn"
       }
     }
 

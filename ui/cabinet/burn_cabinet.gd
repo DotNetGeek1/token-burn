@@ -43,6 +43,9 @@ extends Control
 ## round-end paperwork (debrief → bills → angels), the title screen in front of
 ## a cold start.
 
+## The telemetry rail's default stretch ratios: drum, heat, status, feed.
+const TELEMETRY_SHARES := {"drum": 1.0, "heat": 0.8, "status": 1.7, "feed": 1.7}
+
 # The parts that are not instruments
 var _layout_profile: CabinetLayout = null
 var _readouts: CabinetReadouts = null
@@ -61,8 +64,14 @@ var _command_deck: CabinetFrame = null
 var _backplane: CabinetFrame = null
 var _telemetry: CabinetFrame = null
 var _telemetry_stack: BoxContainer = null
+## The rail's slots keyed `drum`, `heat`, `status`, `feed`, so a profile can
+## re-share the rail between them.
+var _telemetry_slots: Dictionary = {}
 var _backplane_header: Control = null
 var _dock_grid: Vector2i = Vector2i.ZERO
+## The layout profile the shell was last fitted to, so profile-bound tuning
+## (the dock's) is only re-read when it changes.
+var _fitted_profile: String = ""
 var _maintenance: MaintenanceLayer = null
 var _settings_sheet: MaintenanceSettingsSheet = null
 var _records_sheet: MaintenanceRecordsSheet = null
@@ -280,7 +289,7 @@ func _build_shell() -> void:
 	# Each instrument sits in a plain slot Control, so the stack shares the rail
 	# by ratio rather than by the instruments' own minimum sizes: a status
 	# panel with nine rows must not push the feed off the frame.
-	for entry in [[_drum, 1.0], [_heat, 0.8], [_status, 1.7], [_feed, 1.7]]:
+	for entry in [[_drum, "drum"], [_heat, "heat"], [_status, "status"], [_feed, "feed"]]:
 		var instrument: Control = entry[0]
 		var slot := Control.new()
 		slot.name = "%sSlot" % instrument.name
@@ -288,12 +297,23 @@ func _build_shell() -> void:
 		slot.clip_contents = true
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		slot.size_flags_stretch_ratio = float(entry[1])
+		slot.size_flags_stretch_ratio = float(TELEMETRY_SHARES[entry[1]])
 		instrument.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		slot.add_child(instrument)
 		_telemetry_stack.add_child(slot)
+		_telemetry_slots[entry[1]] = slot
 	_feed.visibility_changed.connect(_on_feed_visibility)
 	_on_feed_visibility()
+
+
+## How the rail is shared between its instruments when the profile does not
+## say: a profile with a `telemetry_shares` table (the handset, which gives the
+## ledger more of a taller rail) overrides these per instrument.
+func _apply_telemetry_shares() -> void:
+	var shares: Dictionary = _layout_profile.telemetry_shares()
+	for key in _telemetry_slots:
+		var slot: Control = _telemetry_slots[key]
+		slot.size_flags_stretch_ratio = maxf(0.05, float(shares.get(key, TELEMETRY_SHARES[key])))
 
 
 ## The feed's slot leaves the stack with it, so a collapsed feed takes no room.
@@ -401,6 +421,10 @@ func _layout() -> void:
 	_fit_region(_backplane, "backplane")
 	_fit_region(_telemetry, "telemetry")
 	_telemetry_stack.vertical = _layout_profile.telemetry_vertical()
+	_apply_telemetry_shares()
+	if _layout_profile.profile_name() != _fitted_profile:
+		_fitted_profile = _layout_profile.profile_name()
+		_dock.set_tuning(_layout_profile.dock_tuning())
 	var grid := Vector2i(_layout_profile.dock_columns(), _layout_profile.dock_rows())
 	if grid != _dock_grid:
 		_dock_grid = grid

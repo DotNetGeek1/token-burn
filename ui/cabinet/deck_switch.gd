@@ -32,22 +32,55 @@ func _ready() -> void:
 	resized.connect(_layout)
 
 
+## Below this many character widths across the plate the readings no longer fit
+## either side of the rocker, and the plate stacks instead.
+const STACK_CHARS := 16.0
+
+
 func _layout() -> void:
 	var font: int = clampi(int(size.y * 0.19), 8, 14)
 	for label in [_caption, _left, _right]:
 		label.add_theme_font_size_override("font_size", font)
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# The caption fills the band above the toggle; the readings flank the
-	# toggle at its height.
-	_caption.position = Vector2(size.x * 0.08, size.y * 0.04)
-	_caption.size = Vector2(size.x * 0.84, size.y * 0.27)
-	var knob: float = size.x * 0.48
-	var reach: float = size.x * 0.12
-	_left.position = Vector2(size.x * 0.06, size.y * 0.30)
-	_left.size = Vector2(knob - reach - size.x * 0.06, size.y * 0.42)
-	_right.position = Vector2(knob + reach, size.y * 0.30)
-	_right.size = Vector2(size.x * 0.94 - knob - reach, size.y * 0.42)
+	_caption.position = Vector2(0.0, size.y * 0.02)
+	_caption.size = Vector2(size.x, size.y * 0.27)
+	if _stacked():
+		# Caption, rocker, then only the live reading underneath: a narrow
+		# handset plate has no room for a word either side of the knob.
+		_left.position = Vector2(size.x * 0.04, size.y * 0.70)
+		_left.size = Vector2(size.x * 0.92, size.y * 0.28)
+		_left.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_right.position = _left.position
+		_right.size = _left.size
+		_right.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	else:
+		# The caption fills the band above the toggle; the readings flank the
+		# toggle at its height.
+		var knob: float = size.x * 0.48
+		var reach: float = size.x * 0.12
+		_left.position = Vector2(size.x * 0.06, size.y * 0.30)
+		_left.size = Vector2(knob - reach - size.x * 0.06, size.y * 0.42)
+		_left.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_right.position = Vector2(knob + reach, size.y * 0.30)
+		_right.size = Vector2(size.x * 0.94 - knob - reach, size.y * 0.42)
+		_right.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_show_readings()
 	queue_redraw()
+
+
+func _stacked() -> bool:
+	var font: int = clampi(int(size.y * 0.19), 8, 14)
+	return size.x < float(font) * 0.62 * STACK_CHARS
+
+
+## Stacked, only the live side's reading shows; flanking, both do.
+func _show_readings() -> void:
+	if _stacked():
+		_left.visible = _lit != 1
+		_right.visible = _lit == 1
+	else:
+		_left.visible = true
+		_right.visible = true
 
 
 ## The rocker between the readings: a dark slot with the knob thrown to the
@@ -55,9 +88,12 @@ func _layout() -> void:
 func _draw() -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
-	var reach: float = size.x * 0.12
+	var stacked: bool = _stacked()
+	var reach: float = size.x * (0.22 if stacked else 0.12)
 	var slot_h: float = clampf(size.y * 0.30, 10.0, 26.0)
-	var slot := Rect2(Vector2(size.x * 0.48 - reach, size.y * 0.51 - slot_h * 0.5), Vector2(reach * 2.0, slot_h))
+	var centre_x: float = size.x * (0.5 if stacked else 0.48)
+	var centre_y: float = size.y * (0.48 if stacked else 0.51)
+	var slot := Rect2(Vector2(centre_x - reach, centre_y - slot_h * 0.5), Vector2(reach * 2.0, slot_h))
 	var slot_box := StyleBoxFlat.new()
 	slot_box.bg_color = Color(0.05, 0.06, 0.06, 0.95)
 	slot_box.set_corner_radius_all(int(slot_h * 0.5))
@@ -88,6 +124,7 @@ func set_readings(caption: String, left: String, right: String, lit: int, enable
 	_right.text = right.to_upper()
 	_left.add_theme_color_override("font_color", CabinetStyle.PHOSPHOR if lit == 0 else CabinetStyle.PHOSPHOR_DIM)
 	_right.add_theme_color_override("font_color", (CabinetStyle.RED if caption.to_upper() == "OVERRIDE" else CabinetStyle.PHOSPHOR) if lit == 1 else CabinetStyle.PHOSPHOR_DIM)
+	_show_readings()
 	modulate.a = 1.0 if enabled else 0.55
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if enabled else Control.CURSOR_ARROW
 	_enabled = enabled

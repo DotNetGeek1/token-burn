@@ -11,16 +11,19 @@ extends Node
 ##     godot tools/screenshot.tscn -- market maintenance
 ##     godot tools/screenshot.tscn -- run phone
 ##
-## `phone` shrinks the window to a landscape handset, which is the compact
-## layout profile; every tab has two layouts and a shot of one proves nothing
-## about the other.
+## `phone` makes the window a landscape handset drawn at the physical factor
+## DisplayScale gives a 6–7" screen, which is the `handset` layout profile on a
+## canvas around 650×300; every tab has more than one layout and a shot of one
+## proves nothing about the others.
 
 ## Enough in hand that the market's shelves are not uniformly out of reach, which
 ## tells you nothing about the layout.
 const SHOP_FLOAT := 250000.0
 
-## The landscape handset target.
-const PHONE_SIZE := Vector2i(854, 480)
+## The landscape handset: a 19.5:9 panel at the base canvas's height, and the
+## factor it is drawn at (see UiHarness.PHONE_FACTOR).
+const PHONE_SIZE := Vector2i(1560, 720)
+const PHONE_FACTOR := 2.4
 
 ## More perks than the loadout can hold, so the perks tab has both a full rack
 ## and a bench to show.
@@ -48,7 +51,11 @@ class Walker:
 	func walk() -> void:
 		if phone:
 			DisplayServer.window_set_size(PHONE_SIZE)
+			DisplayScale.override_factor(PHONE_FACTOR)
 			await _settle(0.4)
+			print("screenshot: phone window %s, factor %.2f, canvas %s" % [
+				DisplayServer.window_get_size(), DisplayScale.factor(), get_viewport().get_visible_rect().size,
+			])
 		SceneRouter.booted = true
 		Simulation.start_run()
 		Simulation.run_state.economy["cash"] = SHOP_FLOAT

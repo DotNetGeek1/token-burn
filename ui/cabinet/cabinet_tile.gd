@@ -17,7 +17,14 @@ var _sub: Label = null
 var _note: Label = null
 var _figure: Label = null
 var _status: Label = null
+var _right: VBoxContainer = null
+var _sub_text: String = ""
+var _status_text: String = ""
 var _tap: TapGesture = TapGesture.new()
+
+## Under this width the right-hand column is folded into the sub-line, so the
+## name keeps enough room to read on a handset's narrow racks.
+const FOLD_WIDTH := 170.0
 
 
 ## Built in `_init` so a tile can be filled before it is put on the glass.
@@ -52,20 +59,41 @@ func _init() -> void:
 	_note = CabinetStyle.mono("", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR)
 	_note.visible = false
 	text.add_child(_note)
-	var right := VBoxContainer.new()
-	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	right.add_theme_constant_override("separation", 0)
-	row.add_child(right)
+	_right = VBoxContainer.new()
+	_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_right.add_theme_constant_override("separation", 0)
+	row.add_child(_right)
 	_figure = CabinetStyle.mono("", CabinetStyle.FONT_SMALL, CabinetStyle.PHOSPHOR)
 	_figure.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_keep_width(_figure)
-	right.add_child(_figure)
+	_right.add_child(_figure)
 	_status = CabinetStyle.mono("", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_keep_width(_status)
-	right.add_child(_status)
+	_right.add_child(_status)
 	gui_input.connect(_on_input)
+	resized.connect(_fold)
 	_restyle()
+
+
+## Narrow tiles fold the status into the sub-line and drop an empty figure
+## column, otherwise the fixed-width right column eats the name.
+func _fold() -> void:
+	var narrow: bool = size.x > 0.0 and size.x < FOLD_WIDTH
+	if narrow:
+		var parts: PackedStringArray = []
+		if _sub_text != "":
+			parts.append(_sub_text)
+		if _status_text != "":
+			parts.append(_status_text)
+		_sub.text = " · ".join(parts)
+		_status.visible = false
+		_right.visible = _figure.text != ""
+	else:
+		_sub.text = _sub_text
+		_status.visible = _status_text != ""
+		_right.visible = true
+	_sub.visible = _sub.text != ""
 
 
 ## The figure column keeps its width; the name column is what gives way. A
@@ -82,15 +110,14 @@ static func _keep_width(label: Label) -> void:
 func set_entry(entry: Dictionary) -> void:
 	meta = entry.get("meta")
 	_name.text = str(entry.get("name", ""))
-	_sub.text = str(entry.get("sub", ""))
-	_sub.visible = _sub.text != ""
+	_sub_text = str(entry.get("sub", ""))
+	_status_text = str(entry.get("status", ""))
 	_note.text = str(entry.get("note", ""))
 	_note.visible = _note.text != ""
 	_note.add_theme_color_override("font_color", Color(entry.get("note_color", CabinetStyle.PHOSPHOR)))
 	_figure.text = str(entry.get("figure", ""))
 	_figure.add_theme_color_override("font_color", Color(entry.get("figure_color", CabinetStyle.PHOSPHOR)))
-	_status.text = str(entry.get("status", ""))
-	_status.visible = _status.text != ""
+	_status.text = _status_text
 	_status.add_theme_color_override("font_color", Color(entry.get("status_color", CabinetStyle.PHOSPHOR_DIM)))
 	var icon: Variant = entry.get("icon")
 	_glyph.texture = icon if icon is Texture2D else null
@@ -100,6 +127,7 @@ func set_entry(entry: Dictionary) -> void:
 	_accent = Color(entry.get("accent", CabinetStyle.PHOSPHOR))
 	_glyph.modulate = Color(entry.get("icon_tint", _accent))
 	tooltip_text = str(entry.get("tooltip", ""))
+	_fold()
 	_restyle()
 
 

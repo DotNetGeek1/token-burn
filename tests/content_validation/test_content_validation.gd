@@ -166,6 +166,55 @@ func _validate_percent_parameters(source_id: String, parameters: Dictionary) -> 
 		)
 
 
+## Modules are about tokens. A `stage.progress_mult` is ×N tokens delivered to
+## the contract (`progress_tokens = base × token_mult × progress_mult`), so the
+## player copy says "tokens", never "progress" or "OUTPUT". The one exception
+## is the workflow-mastery stat, which is called OUTPUT everywhere else on the
+## cabinet ("trains +0.03 OUTPUT").
+func _validate_token_copy(module: ModuleDefinition) -> void:
+	var copy: Array[String] = [module.description_template, module.badge]
+	for combo in module.combos:
+		if combo is Dictionary:
+			copy.append(str(combo.get("description", "")))
+	for text in copy:
+		var scrubbed: String = text.replace("trains +{gain} OUTPUT", "")
+		assert_false(
+			scrubbed.contains("} progress") or scrubbed.contains("into progress")
+				or scrubbed.contains("progress multiplier") or scrubbed.contains("final progress"),
+			"Module %s copy says tokens, not progress: %s" % [module.id, text]
+		)
+		assert_false(scrubbed.contains("OUTPUT"), "Module %s copy says TOKENS, not OUTPUT: %s" % [module.id, text])
+		assert_false(text.contains("Q\u2192P"), "Module %s badge converts quality to tokens, not P: %s" % [module.id, text])
+	if module.token_multiplier() != 1.0:
+		assert_true(
+			module.description_template.to_lower().contains("tokens")
+				or module.description_template.contains("\u00d7"),
+			"Module %s scales tokens and its copy shows the multiplier" % module.id
+		)
+
+
+## The same rule for perks: a `batch.progress_mult` or `stage.progress_mult`
+## perk multiplies tokens, so its copy says "tokens". A perk may still say
+## OUTPUT when it trains the workflow-mastery stat (`mastery.*` targets).
+func _validate_perk_token_copy(perk: PerkDefinition) -> void:
+	var text: String = perk.description_template
+	assert_false(
+		text.contains("} progress") or text.contains("}× progress") or text.contains("into progress")
+			or text.contains("the progress") or text.contains("progress multiplier") or text.contains("final progress"),
+		"Perk %s copy says tokens, not progress: %s" % [perk.id, text]
+	)
+	if text.contains("OUTPUT"):
+		var trains_mastery: bool = false
+		for subscription in perk.subscriptions:
+			for effect in Array(subscription.get("effects", [])):
+				if effect is Dictionary and (
+					str(effect.get("target", "")).begins_with("mastery.")
+					or str(effect.get("value_from", "")).contains("output_")
+				):
+					trains_mastery = true
+		assert_true(trains_mastery, "Perk %s says OUTPUT only for the mastery stat, otherwise TOKENS: %s" % [perk.id, text])
+
+
 func _module_has_combo_effects(module: ModuleDefinition) -> bool:
 	for combo in module.combos:
 		if combo is Dictionary and Array(combo.get("effects", [])).size() > 0:
@@ -802,6 +851,7 @@ func run() -> void:
 		assert_false(rendered.contains("{"), "Module %s description resolves every parameter" % module.id)
 		_validate_percent_parameters(module.id, module.parameters)
 		_validate_combos(module, evaluator)
+		_validate_token_copy(module)
 		if module.id in EXPANSION_MODULE_IDS:
 			expansion_present += 1
 	if ContentDatabase.modules.size() >= 120:
@@ -818,6 +868,7 @@ func run() -> void:
 		_validate_percent_parameters(perk.id, perk.parameters)
 		var perk_text: String = evaluator.render_template(perk.description_template, perk.parameters)
 		assert_false(perk_text.contains("{"), "Perk %s description resolves every parameter" % perk.id)
+		_validate_perk_token_copy(perk)
 
 	assert_true(ContentDatabase.achievements.size() > 0, "Content loads the achievement catalogue")
 	# The Market shelf has to reward a long game as well as a first run, so every

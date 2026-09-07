@@ -70,6 +70,10 @@ static func select_profile_key(view: Vector2) -> String:
 			continue
 		if candidate.has("min_height_px") and view.y < float(candidate["min_height_px"]):
 			continue
+		if candidate.has("max_width_px") and view.x > float(candidate["max_width_px"]):
+			continue
+		if candidate.has("max_height_px") and view.y > float(candidate["max_height_px"]):
+			continue
 		return key
 	return fallback
 
@@ -95,7 +99,9 @@ func safe_rect() -> Rect2:
 func _compute_safe_rect(view: Vector2) -> Rect2:
 	var rect := Rect2(Vector2.ZERO, view)
 	rect = _apply_display_safe_area(rect, view)
-	var inset: float = float(constraints().get("safe_inset_px", 16))
+	# A handset canvas is only a few hundred pixels tall; its profile may keep
+	# a narrower margin than the desktop's sixteen.
+	var inset: float = float(_profile.get("safe_inset_px", constraints().get("safe_inset_px", 16)))
 	rect = rect.grow(-inset)
 	var edge: float = decorative_edge_px(rect)
 	if edge > 0.0:
@@ -211,9 +217,13 @@ func constraints() -> Dictionary:
 	return _section("constraints")
 
 
-## The smallest a touch target may be on this viewport, in pixels.
+## The smallest a touch target may be on this viewport, in design pixels. On a
+## handset canvas a design pixel is several screen pixels, so the profile's
+## own floor is smaller in number and larger on the glass.
 func min_touch_px() -> float:
 	var table: Dictionary = constraints()
+	if _profile.has("minimum_touch_px"):
+		return float(_profile["minimum_touch_px"])
 	var floor_px: float = float(table.get("minimum_touch_px", 48))
 	if _view.x <= 854.0 and _view.y <= 480.0:
 		floor_px = float(table.get("minimum_touch_px_at_854x480", 44))
@@ -221,13 +231,31 @@ func min_touch_px() -> float:
 
 
 ## Tuning tables for the parts that lay themselves out: the dock grid, the
-## deck, the lever.
+## deck, the lever. The shared table, with the profile's own overrides of the
+## same name laid over it.
 func dock_tuning() -> Dictionary:
-	return _section("dock")
+	return _tuning_for("dock")
 
 
 func deck_tuning() -> Dictionary:
-	return _section("deck")
+	return _tuning_for("deck")
+
+
+func _tuning_for(key: String) -> Dictionary:
+	var shared: Dictionary = _section(key).duplicate()
+	var own: Variant = _profile.get(key)
+	if own is Dictionary:
+		for entry in Dictionary(own):
+			shared[entry] = Dictionary(own)[entry]
+	return shared
+
+
+## How the telemetry rail is shared between its instruments, as stretch ratios
+## keyed `drum`, `heat`, `status`, `feed`. Empty when the profile keeps the
+## shell's defaults.
+func telemetry_shares() -> Dictionary:
+	var raw: Variant = _profile.get("telemetry_shares")
+	return Dictionary(raw) if raw is Dictionary else {}
 
 
 func lever_tuning() -> Dictionary:

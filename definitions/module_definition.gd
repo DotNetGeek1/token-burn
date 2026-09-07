@@ -83,6 +83,51 @@ func to_dict() -> Dictionary:
 	}
 
 
+## Effect targets that scale the tokens a batch delivers. `stage.progress_mult`
+## and `stage.token_mult` are both token multipliers: the board folds them into
+## `progress_tokens = base_tokens × token_mult × progress_mult`, so to the
+## player a ×1.5 on either is ×1.5 tokens.
+const TOKEN_MULTIPLIER_TARGETS: PackedStringArray = ["stage.progress_mult", "stage.token_mult"]
+
+
+## The module's unconditional token multiplier: every `multiply` slot effect on
+## a token target, folded together, with `$parameter` values resolved against
+## `parameters`. 1.0 means the module does not scale tokens outright (it may
+## still do so conditionally, through combos, or at finalizing). Rerolls and
+## conditional effects are left out because they have no single number.
+func token_multiplier() -> float:
+	var product: float = 1.0
+	for effect in slot_effects:
+		if not effect is Dictionary:
+			continue
+		if not Array(effect.get("conditions", [])).is_empty():
+			continue
+		if str(effect.get("operation", "add")) != "multiply":
+			continue
+		if not (str(effect.get("target", "")) in TOKEN_MULTIPLIER_TARGETS):
+			continue
+		var raw: Variant = effect.get("value", 1.0)
+		if raw is String and str(raw).begins_with("$"):
+			raw = parameters.get(str(raw).substr(1), 1.0)
+		if raw is int or raw is float:
+			product *= maxf(0.0, float(raw))
+	return product
+
+
+## Whether the module touches token output at all, conditionally or not, so
+## the bin can label it as a tokens card even when `token_multiplier()` is 1.
+func scales_tokens() -> bool:
+	for collection in [slot_effects, finalizing_effects, folded_effects]:
+		for effect in collection:
+			if not effect is Dictionary:
+				continue
+			var target: String = str(effect.get("target", ""))
+			if target in TOKEN_MULTIPLIER_TARGETS or target == "batch.progress_mult" \
+				or target == "stage.quality_to_progress" or target == "stage.next_multiplier":
+				return true
+	return false
+
+
 ## The modules this one pairs with, in either direction.
 func combo_partners() -> Array:
 	var partners: Array = []

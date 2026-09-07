@@ -63,10 +63,11 @@ func play(harness: UiHarness) -> void:
 			and absf(view.size.y - float(viewport_size.y)) <= CLIP_SLOP,
 			"%s viewport took the requested size (got %s)" % [label, view.size]
 		)
-		_assert_profile(shell, viewport_size, label)
+		var expected: Dictionary = EXPECTED_PROFILE.get(viewport_size, {})
+		_assert_profile(shell, expected, label)
 		_assert_crt(shell, view, label)
-		_assert_dock(shell, viewport_size, label)
-		_assert_commit_button(shell, viewport_size, label)
+		_assert_dock(shell, expected, label)
+		_assert_commit_button(shell, MIN_TOUCH_HANDSET if viewport_size == HANDSET else MIN_TOUCH, label)
 		_assert_no_clipping(shell, view, label)
 		harness.capture("cabinet-%s" % label)
 	await harness.set_viewport(UiHarness.VIEW_DESKTOP)
@@ -74,12 +75,12 @@ func play(harness: UiHarness) -> void:
 
 # --- Profile -----------------------------------------------------------------
 
-## The shell picks its layout profile from the window.
-func _assert_profile(shell: Node, viewport_size: Vector2i, label: String) -> void:
+## The shell picks its layout profile from the window. `expected` carries the
+## `profile` name and the dock `grid` the window must get.
+func _assert_profile(shell: Node, expected: Dictionary, label: String) -> void:
 	if not shell.has_method("layout_profile_name") or not shell.has_method("dock_grid"):
 		assert_true(false, "%s the shell exposes layout_profile_name() and dock_grid()" % label)
 		return
-	var expected: Dictionary = EXPECTED_PROFILE.get(viewport_size, {})
 	var profile: String = str(shell.call("layout_profile_name"))
 	var grid: Vector2i = shell.call("dock_grid")
 	assert_eq(profile, str(expected.get("profile", "")), "%s layout profile" % label)
@@ -124,7 +125,7 @@ func _assert_crt(shell: Node, view: Rect2, label: String) -> void:
 	print("    %s CRT %s -> %.1f%% x %.1f%% of viewport" % [label, crt.size, width_ratio * 100.0, height_ratio * 100.0])
 
 
-func _assert_dock(shell: Node, viewport_size: Vector2i, label: String) -> void:
+func _assert_dock(shell: Node, expected: Dictionary, label: String) -> void:
 	var dock: Control = _find_dock(shell)
 	assert_true(dock != null, "%s the module dock is mounted" % label)
 	if dock == null:
@@ -140,7 +141,6 @@ func _assert_dock(shell: Node, viewport_size: Vector2i, label: String) -> void:
 			if not bool(bay.get("covered")):
 				live_bays += 1
 	assert_true(live_bays > 0, "%s the dock shows at least one live bay (got %d)" % [label, live_bays])
-	var expected: Dictionary = EXPECTED_PROFILE.get(viewport_size, {})
 	if expected.has("grid"):
 		var grid: Vector2i = expected["grid"]
 		assert_eq(shown, grid.x * grid.y, "%s the dock shows a full %dx%d grid of bays" % [label, grid.x, grid.y])
@@ -159,14 +159,14 @@ func _assert_dock(shell: Node, viewport_size: Vector2i, label: String) -> void:
 			)
 
 
-func _assert_commit_button(shell: Node, viewport_size: Vector2i, label: String) -> void:
+## `minimum` is the touch floor in viewport (canvas) pixels the button must meet.
+func _assert_commit_button(shell: Node, minimum: float, label: String) -> void:
 	var button: Control = _find_commit_button(shell)
 	assert_true(button != null, "%s the commit button is mounted" % label)
 	if button == null:
 		return
 	assert_true(button.is_visible_in_tree(), "%s the commit button is visible" % label)
 	var bounds: Rect2 = _bounds(button)
-	var minimum: float = MIN_TOUCH_HANDSET if viewport_size == HANDSET else MIN_TOUCH
 	var touchable: bool = bounds.size.x >= minimum and bounds.size.y >= minimum
 	assert_true(
 		bounds.size.x > 0.0 and bounds.size.y > 0.0 and (touchable or not ENFORCE_MIN_TOUCH),
@@ -175,6 +175,62 @@ func _assert_commit_button(shell: Node, viewport_size: Vector2i, label: String) 
 	)
 	if not touchable:
 		print("    %s commit button %s is under the %dpx touch minimum" % [label, bounds.size, int(minimum)])
+	_assert_commit_lettering(button, label)
+
+
+## The word and the sub-line are printed on the lit pane of the face, and
+## must stay on it: a sub that ran onto the bezel below the glass was the
+## "extra info overflows the button" bug. Both Labels have to sit inside the
+## pane, the pane inside the button, and any line too long for the pane has
+## to clip to it rather than draw past it.
+func _assert_commit_lettering(button: Control, label: String) -> void:
+	if not button.has_method("glass_rect"):
+		assert_true(false, "%s the commit button reports its glass_rect()" % label)
+		return
+	var glass: Rect2 = button.call("glass_rect")
+	var own: Rect2 = Rect2(Vector2.ZERO, button.size)
+	assert_true(
+		glass.size.x > 0.0 and glass.size.y > 0.0 and own.grow(CLIP_SLOP).encloses(glass),
+		"%s the commit pane lies inside the button (pane %s, button %s)" % [label, glass, own.size]
+	)
+	var labels: Array[Label] = []
+	for child in button.get_children():
+		if child is Label:
+			labels.append(child)
+	assert_true(labels.size() >= 2, "%s the commit button prints a word and a sub-line" % label)
+	# The pane's own bevel gives the type a little grace at the smallest
+	# windows, where the word's floor and the sub's floor together stand a
+	# pixel or two taller than the pane.
+	var room: Rect2 = glass.grow(maxf(CLIP_SLOP, glass.size.y * 0.1))
+	var inks: Array[Rect2] = []
+	for index in range(mini(2, labels.size())):
+		var line: Label = labels[index]
+		var what: String = "word" if index == 0 else "sub-line"
+		var font: Font = line.get_theme_font("font")
+		var px: int = line.get_theme_font_size("font_size")
+		if font == null or line.text == "":
+			continue
+		# A Label's box is its font plus the theme's padding and may stand
+		# taller than the pane; what must land on the pane is the ink, which
+		# the Label centres in its box and clips to its width.
+		var ink_w: float = font.get_string_size(line.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, px).x
+		assert_true(
+			ink_w <= line.size.x + CLIP_SLOP or line.clip_text,
+			"%s the commit %s '%s' (%.0fpx of type in %.0fpx) clips to the pane rather than spilling"
+			% [label, what, line.text, ink_w, line.size.x]
+		)
+		var ink := Vector2(minf(ink_w, line.size.x), font.get_height(px))
+		var ink_rect := Rect2(line.position + (line.size - ink) * 0.5, ink)
+		assert_true(
+			room.encloses(ink_rect),
+			"%s the commit %s '%s' is printed on the pane (ink %s, pane %s)" % [label, what, line.text, ink_rect, glass]
+		)
+		inks.append(ink_rect)
+	if inks.size() == 2:
+		assert_true(
+			inks[0].end.y <= inks[1].position.y + CLIP_SLOP,
+			"%s the sub-line prints under the word, not over it (word %s, sub %s)" % [label, inks[0], inks[1]]
+		)
 
 
 ## Every interactive instrument must sit inside the viewport. Decorative

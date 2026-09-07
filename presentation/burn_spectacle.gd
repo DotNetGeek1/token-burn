@@ -29,6 +29,13 @@ const KIND_QUALITY_GATE := "quality_gate"
 const KIND_BUG_RISK := "bug_risk"
 const KIND_FINAL := "final"
 const KIND_MASTERY := "mastery"
+## A contract demand met or ignored, when its verdict moves the output
+## multiplier. The board applies these after the last stage, so without a beat
+## of their own the drum fell into SHIPPED with nothing on the feed to say why.
+const KIND_DEMAND := "demand"
+
+## Below this the drum is treated as having fallen on a beat.
+const FALL_EPSILON := 0.0005
 
 const CONSEQUENCE_SCOPE := "scope"
 const CONSEQUENCE_BUG := "bug"
@@ -55,13 +62,71 @@ static func compile(burn: Dictionary, traces: Array = []) -> Array:
 		return beats
 	var board_traces: Array = _board_traces(traces)
 	var stages: Array = burn.get("stages", [])
+	# The drum's reading is threaded through every beat so each one starts
+	# exactly where the last left it: a stage's `before` snapshot is taken after
+	# its own stage_resolved perks have already moved the batch, so reading the
+	# snapshots alone leaves silent gaps between stages.
+	var running: float = _starting_multiplier(burn)
+	var previous: Dictionary = {}
 	for stage in stages:
 		if not stage is Dictionary:
 			continue
-		beats.append_array(_stage_beats(burn, stage, board_traces))
-	beats.append_array(_closing_beats(burn, board_traces))
+		var stage_beats: Array = _stage_beats(burn, stage, board_traces, running, previous)
+		if not stage_beats.is_empty():
+			running = float(Dictionary(stage_beats[stage_beats.size() - 1]).get("multiplier_after", running))
+		beats.append_array(stage_beats)
+		previous = stage
+	beats.append_array(_closing_beats(burn, board_traces, running))
 	_cap_holds(beats)
 	return beats
+
+
+## Where the drum starts a batch: the workflow's own trained OUTPUT multiplier,
+## which is what the first stage's `before` snapshot carries. Not the projected
+## total the drum rests on between burns — starting there is what made a
+## repeat burn look like it began by falling.
+static func _starting_multiplier(burn: Dictionary) -> float:
+	for stage in burn.get("stages", []):
+		if stage is Dictionary:
+			var before: Dictionary = Dictionary(stage).get("before", {})
+			return float(before.get("output_mult", before.get("progress_mult", 1.0)))
+	return float(burn.get("output_mult", burn.get("progress_mult", 1.0)))
+
+
+## Mirrors `BoardSystem._scaled_multiplier`: a multiplier applied at partial
+## strength keeps its direction but shrinks its distance from 1.
+static func _scaled_multiplier(value: float, strength: float) -> float:
+	return maxf(0.0, 1.0 + (value - 1.0) * strength)
+
+
+## What one fold of `fields` at `strength` does to the combined OUTPUT reading.
+static func _fold_ratio(fields: Dictionary, strength: float) -> float:
+	return (
+		_scaled_multiplier(float(fields.get("progress_mult", 1.0)), strength)
+		* _scaled_multiplier(float(fields.get("token_mult", 1.0)), strength)
+	)
+
+
+## The share of a stage's jump that its repeat of the stage above produced,
+## reconstructed from the resolved stage fields the same way the board folds
+## them, so AGAIN! can own its own movement of the drum.
+static func _repeat_ratio(stage: Dictionary, previous: Dictionary) -> float:
+	if previous.is_empty():
+		return 1.0
+	var repeat: float = maxf(0.0, float(stage.get("repeated_previous", 0.0)))
+	var count: int = maxi(0, int(stage.get("repeat_count", 0)))
+	if repeat <= 0.0 or count <= 0:
+		return 1.0
+	var strength: float = (
+		repeat
+		* maxf(0.0, float(stage.get("repeat_strength", 1.0)))
+		* maxf(0.0, float(stage.get("multiplier", 1.0)))
+	)
+	var once: float = _fold_ratio(Dictionary(previous.get("stage", {})), strength)
+	var ratio: float = 1.0
+	for _fork in range(count):
+		ratio *= once
+	return ratio
 
 
 ## Completion mastery exists only after the authoritative burn commits, while
@@ -167,103 +232,196 @@ static func _format_percent(ratio: float) -> String:
 	return "%.1f%%" % (ratio * 100.0)
 
 
-static func _stage_beats(burn: Dictionary, stage: Dictionary, traces: Array) -> Array:
+## One stage's beats, walking the drum from `incoming` (what it reads as the
+## stage begins) to the stage's `after` snapshot. The stage's own fold (its
+## name, or its combos) moves the drum first; AGAIN! then takes the share its
+## repeat of the stage above produced; a cascade takes whatever is left. Perk
+## procs fired on this stage sit on the value already reached. Nothing here
+## re-derives the maths — the endpoints are the board's own snapshots — only
+## the split between beats is reconstructed.
+static func _stage_beats(
+	burn: Dictionary, stage: Dictionary, traces: Array, incoming: float, previous: Dictionary
+) -> Array:
 	var beats: Array = []
 	var after: Dictionary = stage.get("after", {})
-	var before: Dictionary = stage.get("before", {})
-	var progress_mult: float = float(after.get("output_mult", after.get("progress_mult", 1.0)))
-	var tokens: float = _running_tokens(burn, after)
-	var multiplier_before: float = float(
-		before.get("output_mult", before.get("progress_mult", 1.0))
-	)
-	var tokens_before: float = _running_tokens(burn, before)
+	var target: float = float(after.get("output_mult", after.get("progress_mult", 1.0)))
+	var base_tokens: float = float(burn.get("base_tokens", 0.0))
+	var target_tokens: float = _running_tokens(burn, after)
+	var tokens_before: float = maxf(0.0, base_tokens * incoming)
 	var combos: Array = stage.get("combos", [])
+	var dropped: bool = bool(stage.get("dropped", false))
 	var forked: bool = (
-		float(stage.get("repeated_previous", 0.0)) > 0.0
+		not dropped
+		and float(stage.get("repeated_previous", 0.0)) > 0.0
 		and int(stage.get("repeat_count", 0)) > 0
 		and int(stage.get("position", 0)) > 0
 	)
+	var cascaded: bool = bool(stage.get("cascaded", false))
 	var procs: Array = _named_procs(
 		_traces_for_chain(traces, "board.stage.%d.%s" % [
 			int(stage.get("slot_index", 0)), str(stage.get("module_id", "")),
 		]),
 		str(stage.get("module_id", ""))
 	)
-	if bool(stage.get("dropped", false)):
+	# Where the drum sits after the stage's own fold, before any repeat or
+	# cascade. Reconstructed forwards from the resolved fields when there is a
+	# fork or cascade to split the jump with; otherwise it is simply the target.
+	var own_after: float = target
+	var fork_after: float = target
+	if forked or cascaded:
+		own_after = incoming * _fold_ratio(Dictionary(stage.get("stage", {})), float(stage.get("multiplier", 1.0)))
+		fork_after = own_after * _repeat_ratio(stage, previous) if forked else own_after
+		if not cascaded:
+			# No cascade to absorb stage_folded effects: AGAIN! lands on the target.
+			fork_after = target
+	var own_tokens: float = maxf(0.0, base_tokens * own_after)
+	var fork_tokens: float = maxf(0.0, base_tokens * fork_after)
+	var reached: float = incoming
+	var reached_tokens: float = tokens_before
+	if dropped:
 		beats.append(_beat(
-			KIND_FAULT, "DROPPED", true, progress_mult, tokens, stage,
-			multiplier_before, tokens_before
+			KIND_FAULT, "DROPPED", true, target, target_tokens, stage, incoming, tokens_before
 		))
-	if not combos.is_empty():
-		for combo in combos:
-			var combo_name: String = str(combo.get("name", "")).strip_edges()
-			if combo_name == "":
-				continue
-			beats.append(_beat(
-				KIND_COMBO, combo_name.to_upper(), true, progress_mult, tokens, stage,
-				multiplier_before, tokens_before
-			))
+		reached = target
+		reached_tokens = target_tokens
+	for combo in combos:
+		var combo_name: String = str(combo.get("name", "")).strip_edges()
+		if combo_name == "":
+			continue
+		beats.append(_beat(
+			KIND_COMBO, combo_name.to_upper(), true, own_after, own_tokens, stage,
+			reached, reached_tokens
+		))
+		reached = own_after
+		reached_tokens = own_tokens
+	# A repeater or cascader whose own fold does nothing to the drum is named by
+	# its AGAIN!/CASCADE beat alone; otherwise the stage's own move gets a beat.
+	var own_moves: bool = absf(own_after - incoming) > FALL_EPSILON
+	if beats.is_empty() and (own_moves or not (forked or cascaded)):
+		var before_mult: float = maxf(0.01, incoming)
+		var jump: float = absf(own_after / before_mult - 1.0)
+		var loud: bool = jump >= LOUD_MULT_JUMP
+		var stage_label: String = str(stage.get("name", "stage")).to_upper()
+		# A repeater in the first bay has nothing above it to run again: say so,
+		# or the player waits for an AGAIN! that never comes.
+		if (
+			not dropped
+			and int(stage.get("position", 0)) == 0
+			and float(stage.get("repeated_previous", 0.0)) > 0.0
+			and int(stage.get("repeat_count", 0)) > 0
+		):
+			stage_label += "  NOTHING ABOVE TO REPEAT"
+		beats.append(_beat(
+			KIND_STAGE,
+			stage_label,
+			loud,
+			own_after,
+			own_tokens,
+			stage,
+			reached,
+			reached_tokens
+		))
+		reached = own_after
+		reached_tokens = own_tokens
 	if forked:
 		beats.append(_beat(
 			KIND_FORK, "AGAIN! ×%d" % int(stage.get("repeat_count", 1)),
-			true, progress_mult, tokens, stage, multiplier_before, tokens_before
+			true, fork_after, fork_tokens, stage, reached, reached_tokens
 		))
-	if bool(stage.get("cascaded", false)):
+		reached = fork_after
+		reached_tokens = fork_tokens
+	if cascaded:
 		beats.append(_beat(
-			KIND_CASCADE, "CASCADE", true, progress_mult, tokens, stage,
-			multiplier_before, tokens_before
+			KIND_CASCADE, "CASCADE", true, target, target_tokens, stage, reached, reached_tokens
 		))
+		reached = target
+		reached_tokens = target_tokens
+	# Whatever the snapshots hold that the split above did not reach (a
+	# stage_folded effect on a forked stage, say) belongs to the last beat
+	# that moved the drum, so the chain still ends on the board's number.
+	if absf(reached - target) > FALL_EPSILON and not beats.is_empty():
+		var last: Dictionary = beats[beats.size() - 1]
+		_retarget(last, target, target_tokens)
+		reached = target
+		reached_tokens = target_tokens
 	for proc in procs:
 		beats.append(_beat(
 			str(proc.get("kind", KIND_PERK)),
 			str(proc.get("label", "")),
 			true,
-			progress_mult,
-			tokens,
-			stage,
-			multiplier_before,
-			tokens_before
+			reached,
+			reached_tokens,
+			stage
 		))
-	if beats.is_empty():
-		var before_mult: float = maxf(0.01, multiplier_before)
-		var jump: float = absf(progress_mult / before_mult - 1.0)
-		var loud: bool = jump >= LOUD_MULT_JUMP
-		beats.append(_beat(
-			KIND_STAGE,
-			str(stage.get("name", "stage")).to_upper(),
-			loud,
-			progress_mult,
-			tokens,
-			stage,
-			multiplier_before,
-			tokens_before
-		))
-	if not beats.is_empty():
-		beats[beats.size() - 1]["closes_stage"] = true
+	beats[beats.size() - 1]["closes_stage"] = true
 	return beats
 
 
-static func _closing_beats(burn: Dictionary, traces: Array) -> Array:
+static func _retarget(beat: Dictionary, multiplier_after: float, tokens: float) -> void:
+	var before: float = float(beat.get("multiplier_before", multiplier_after))
+	beat["multiplier_after"] = multiplier_after
+	beat["progress_mult"] = multiplier_after
+	beat["tokens"] = tokens
+	beat["tokens_added"] = maxf(0.0, tokens - float(beat.get("tokens_before", tokens)))
+	beat["ratio"] = multiplier_after / before if before > 0.0 else 1.0
+	beat["falls"] = multiplier_after < before - FALL_EPSILON
+
+
+## Everything after the last stage, chained so the drum never moves without a
+## beat that owns the move. The board applies contract demands, then the
+## finalizing/finished perk events, then ships; the closing beats walk the
+## multiplier the same way from `running` (what the drum reads after the last
+## stage): demands take their authored ratios, the first named proc takes
+## whatever remains, and SHIPPED lands on the burn's real total.
+static func _closing_beats(burn: Dictionary, traces: Array, running: float) -> Array:
 	var beats: Array = []
-	var progress_mult: float = float(burn.get("output_mult", burn.get("progress_mult", 1.0)))
-	var tokens: float = maxf(0.0, float(burn.get("progress_tokens", 0.0)))
+	var final_mult: float = float(burn.get("output_mult", burn.get("progress_mult", 1.0)))
+	var final_tokens: float = maxf(0.0, float(burn.get("progress_tokens", 0.0)))
+	var base_tokens: float = maxf(0.0, float(burn.get("base_tokens", 0.0)))
+	var running_tokens: float = base_tokens * running if base_tokens > 0.0 else final_tokens
+	for demand in Array(burn.get("demands", [])):
+		if not demand is Dictionary:
+			continue
+		var ratio: float = float(Dictionary(demand.get("effects", {})).get("progress_mult", 1.0))
+		if absf(ratio - 1.0) < FALL_EPSILON:
+			continue
+		var met: bool = bool(demand.get("met", false))
+		var after: float = running * maxf(0.0, ratio)
+		var after_tokens: float = base_tokens * after if base_tokens > 0.0 else final_tokens
+		beats.append(_beat(
+			KIND_DEMAND,
+			"%s %s" % [str(demand.get("name", "DEMAND")).to_upper(), "MET" if met else "IGNORED"],
+			true, after, after_tokens, {}, running, running_tokens
+		))
+		running = after
+		running_tokens = after_tokens
 	if float(burn.get("quality_converted", 0.0)) > 0.0:
 		beats.append(_beat(
-			KIND_CONVERT, _convert_label(burn), true, progress_mult, tokens, {}
+			KIND_CONVERT, _convert_label(burn), true, running, running_tokens, {}
 		))
+	# Perks and synergies that fire on the batch events move the multiplier
+	# without an authored ratio in the burn: the first of them takes the whole
+	# remaining jump so the drum climbs (or falls) on a named beat.
 	for event_name in ["board.batch_finalizing", "board.batch_finished"]:
 		for proc in _named_procs(_traces_for_chain(traces, event_name), ""):
 			beats.append(_beat(
 				str(proc.get("kind", KIND_PERK)),
 				str(proc.get("label", "")),
 				true,
-				progress_mult,
-				tokens,
-				{}
+				final_mult,
+				final_tokens,
+				{},
+				running,
+				running_tokens
 			))
-	beats.append_array(_consequence_beats(burn, progress_mult, tokens))
-	beats.append_array(_mastery_beats(burn, progress_mult, tokens))
-	beats.append(_beat(KIND_FINAL, FINAL_LABEL, true, progress_mult, tokens, {}))
+			running = final_mult
+			running_tokens = final_tokens
+	# Verdict beats do not move the drum, so they sit on whatever it reads now.
+	beats.append_array(_consequence_beats(burn, running, running_tokens))
+	beats.append_array(_mastery_beats(burn, running, running_tokens))
+	# Anything still unaccounted for lands on SHIPPED itself, visibly, rather
+	# than being folded into a beat that claims the drum did not move.
+	beats.append(_beat(KIND_FINAL, FINAL_LABEL, true, final_mult, final_tokens, {}, running, running_tokens))
 	if not beats.is_empty():
 		beats[beats.size() - 1]["hold"] = FINALE_HOLD
 	return beats
@@ -332,12 +490,18 @@ static func _beat(
 		multiplier_before = progress_mult
 	if tokens_before < 0.0:
 		tokens_before = tokens
+	var ratio: float = progress_mult / multiplier_before if multiplier_before > 0.0 else 1.0
 	return {
 		"kind": kind,
 		"label": label,
 		"loud": loud,
 		"multiplier_before": multiplier_before,
 		"multiplier_after": progress_mult,
+		## What this beat multiplied the drum by, and whether that was a drop.
+		## A drop is intentional — a quality stage's output cost, an ignored
+		## demand — but the feed has to say so or it reads as a glitch.
+		"ratio": ratio,
+		"falls": progress_mult < multiplier_before - FALL_EPSILON,
 		"tokens_before": tokens_before,
 		"tokens_added": maxf(0.0, tokens - tokens_before),
 		"progress_mult": progress_mult,

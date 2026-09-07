@@ -11,7 +11,7 @@
       "prompt",
       "safe"
     ],
-    "description_template": "Honest work. \u00d7{progress} progress and +{quality} quality, free.",
+    "description_template": "Honest work. \u00d7{progress} tokens and +{quality} quality, free.",
     "parameters": {
       "progress": 1.25,
       "quality": 4,
@@ -24,7 +24,7 @@
         "after": [
           "op.prompt_library"
         ],
-        "description": "Straight after the Prompt Library: \u00d7{combo_progress} progress and +{combo_quality} quality on top.",
+        "description": "Straight after the Prompt Library: \u00d7{combo_progress} tokens and +{combo_quality} quality on top.",
         "effects": [
           {
             "operation": "multiply",
@@ -101,7 +101,7 @@
       "model",
       "risk"
     ],
-    "description_template": "\u00d7{progress} progress and +{bugs} bug, for ${cost} a batch.",
+    "description_template": "\u00d7{progress} tokens and +{bugs} bug, for ${cost} a batch.",
     "parameters": {
       "progress": 1.8,
       "bugs": 1,
@@ -156,7 +156,7 @@
       "quality",
       "expensive"
     ],
-    "description_template": "\u00d7{progress} progress and +{quality} quality. Bills ${cost} a batch.",
+    "description_template": "\u00d7{progress} tokens and +{quality} quality. Bills ${cost} a batch.",
     "parameters": {
       "progress": 1.4,
       "quality": 18,
@@ -308,7 +308,7 @@
       "bugs",
       "quality"
     ],
-    "description_template": "Reveals up to {reveal} hidden bugs and fixes up to {fix}. +{quality} quality, \u00d7{progress} progress, free.",
+    "description_template": "Reveals up to {reveal} hidden bugs and fixes up to {fix}. +{quality} quality, \u00d7{progress} tokens, free.",
     "parameters": {
       "reveal": 2,
       "fix": 2,
@@ -407,13 +407,13 @@
     "category": "deploy",
     "rarity": "uncommon",
     "starter": false,
-    "badge": "Q\u2192P",
+    "badge": "Q\u2192TOK",
     "tags": [
       "deploy",
       "risk",
       "positional"
     ],
-    "description_template": "Converts {convert_pct}% of this batch's quality straight into progress. Every bug written below it stays hidden.",
+    "description_template": "Converts {convert_pct}% of this batch's quality straight into tokens. Every bug written below it stays hidden.",
     "parameters": {
       "convert": 1.0,
       "convert_pct": 100,
@@ -427,7 +427,7 @@
           "op.launch_party",
           "op.tech_debt_collector"
         ],
-        "description": "Following another shortcut, the whole batch runs at \u00d7{combo_progress} progress.",
+        "description": "Following another shortcut, the whole batch runs at \u00d7{combo_progress} tokens.",
         "effects": [
           {
             "operation": "multiply",
@@ -461,7 +461,7 @@
       "test",
       "bugs"
     ],
-    "description_template": "Fixes up to {fix} visible bugs and adds +{quality} quality. Slows the batch to \u00d7{progress}.",
+    "description_template": "Fixes up to {fix} visible bugs and adds +{quality} quality. Slows the batch to \u00d7{progress} tokens.",
     "parameters": {
       "fix": 3,
       "quality": 5,
@@ -476,7 +476,7 @@
           "op.cheap_model",
           "op.stack_overflow"
         ],
-        "description": "Cheap output is easy to lint: +{combo_fix} more fixes and \u00d7{combo_progress} progress back.",
+        "description": "Cheap output is easy to lint: +{combo_fix} more fixes and \u00d7{combo_progress} tokens back.",
         "effects": [
           {
             "operation": "add",
@@ -544,7 +544,7 @@
       "risk",
       "local"
     ],
-    "description_template": "Usually \u00d7{throughput} OUTPUT for ${cost} and +{heat} heat. One chip in four is a dud and you get \u00d71.",
+    "description_template": "Usually \u00d7{throughput} TOKENS for ${cost} and +{heat} heat. One chip in four is a dud and you get \u00d71.",
     "parameters": {
       "throughput": 1.7,
       "cost": 8,
@@ -586,7 +586,7 @@
       "context",
       "scaling"
     ],
-    "description_template": "\u00d7{progress} progress and +{quality} quality for ${cost}, and \u00d7{long_bonus} again once the pipeline runs {long_stages} stages or more.",
+    "description_template": "\u00d7{progress} tokens and +{quality} quality for ${cost}, and \u00d7{long_bonus} again once the pipeline runs {long_stages} stages or more.",
     "parameters": {
       "progress": 1.3,
       "long_bonus": 1.4,
@@ -602,7 +602,7 @@
           "op.large_context",
           "op.whiteboard"
         ],
-        "description": "Somebody explained the repository first: \u00d7{combo_progress} progress on top.",
+        "description": "Somebody explained the repository first: \u00d7{combo_progress} tokens on top.",
         "effects": [
           {
             "operation": "multiply",
@@ -654,7 +654,7 @@
       "bugs",
       "quality"
     ],
-    "description_template": "Drags every hidden bug into the daylight and adds +{quality} quality, at \u00d7{progress} progress and ${cost} a batch. Fixes nothing; now you simply know.",
+    "description_template": "Drags every hidden bug into the daylight and adds +{quality} quality, at \u00d7{progress} tokens and ${cost} a batch. Fixes nothing; now you simply know.",
     "parameters": {
       "reveal": 99,
       "quality": 12,
@@ -756,7 +756,7 @@
       "safe",
       "positional"
     ],
-    "description_template": "\u00d7{progress} progress and +{quality} quality, or \u00d7{first_bonus} progress instead when it opens the pipeline.",
+    "description_template": "\u00d7{progress} tokens and +{quality} quality, or \u00d7{first_bonus} tokens instead when it opens the pipeline.",
     "parameters": {
       "progress": 1.3,
       "first_bonus": 1.7,
@@ -805,7 +805,7 @@
       "model",
       "economy"
     ],
-    "description_template": "\u00d7{progress} progress at ${cost} a batch, and the stage below it costs {discount_pct}% less.",
+    "description_template": "\u00d7{progress} tokens at ${cost} a batch, and the stage below it costs {discount_pct}% less.",
     "parameters": {
       "progress": 1.45,
       "cost": 18,
@@ -905,7 +905,7 @@
       "cooling",
       "conditional"
     ],
-    "description_template": "Reads the rig as the burn starts. Below {trip}% heat: \u00d7{progress} progress. At or above it the breaker trips and sheds {shed} heat instead. Heat this burn makes on its own arrives too late to count.",
+    "description_template": "Reads the rig as the burn starts. Below {trip}% heat: \u00d7{progress} tokens. At or above it the breaker trips and sheds {shed} heat instead. Heat this burn makes on its own arrives too late to count.",
     "parameters": {
       "trip": 70,
       "progress": 1.15,
@@ -944,13 +944,13 @@
     "category": "deploy",
     "rarity": "rare",
     "starter": false,
-    "badge": "Q\u2192P {convert_pct}%",
+    "badge": "Q\u2192TOK {convert_pct}%",
     "tags": [
       "deploy",
       "risk",
       "positional"
     ],
-    "description_template": "Converts {convert_pct}% of the batch's quality into progress for ${cost}, and buries {hidden} bug in the aftermath.",
+    "description_template": "Converts {convert_pct}% of the batch's quality into tokens for ${cost}, and buries {hidden} bug in the aftermath.",
     "parameters": {
       "convert": 0.6,
       "convert_pct": 60,
@@ -1020,7 +1020,7 @@
       "risk",
       "bugs"
     ],
-    "description_template": "Accepted answer, 2011, forty-one comments explaining why it is wrong. \u00d7{progress} progress, +{bugs} bugs, ${cost} a batch.",
+    "description_template": "Accepted answer, 2011, forty-one comments explaining why it is wrong. \u00d7{progress} tokens, +{bugs} bugs, ${cost} a batch.",
     "parameters": {
       "progress": 1.9,
       "bugs": 2,
@@ -1151,7 +1151,7 @@
       "risk",
       "economy"
     ],
-    "description_template": "Borrows against tomorrow at \u00d7{progress} progress and ${cost} a batch. Buries {hidden} bug as collateral.",
+    "description_template": "Borrows against tomorrow at \u00d7{progress} tokens and ${cost} a batch. Buries {hidden} bug as collateral.",
     "parameters": {
       "progress": 1.75,
       "hidden": 1,
@@ -1188,7 +1188,7 @@
       "risk",
       "bugs"
     ],
-    "description_template": "Breaks things on purpose so they cannot break by surprise. Reveals {reveal} hidden bugs, +{heat} heat, ${cost} a batch, and a progress multiplier somewhere between \u00d7{worst} and \u00d7{best}.",
+    "description_template": "Breaks things on purpose so they cannot break by surprise. Reveals {reveal} hidden bugs, +{heat} heat, ${cost} a batch, and a token multiplier somewhere between \u00d7{worst} and \u00d7{best}.",
     "parameters": {
       "reveal": 3,
       "heat": 6,
@@ -1233,13 +1233,13 @@
     "rarity": "uncommon",
     "starter": false,
     "unlock_achievement": "ach.bug_farm",
-    "badge": "Q\u2192P {convert_pct}%",
+    "badge": "Q\u2192TOK {convert_pct}%",
     "tags": [
       "deploy",
       "risk",
       "positional"
     ],
-    "description_template": "Did not read it. Felt right. Turns {convert_pct}% of quality into progress, adds +{quality} quality of its own, and hides {hidden} bug on the way out.",
+    "description_template": "Did not read it. Felt right. Turns {convert_pct}% of quality into tokens, adds +{quality} quality of its own, and hides {hidden} bug on the way out.",
     "parameters": {
       "convert": 0.45,
       "convert_pct": 45,
@@ -1277,7 +1277,7 @@
       "bugs",
       "quality"
     ],
-    "description_template": "Nobody is at fault, which is why it keeps happening. Reveals {reveal} and fixes {fix} bugs, +{quality} quality, \u00d7{progress} progress, ${cost} a batch.",
+    "description_template": "Nobody is at fault, which is why it keeps happening. Reveals {reveal} and fixes {fix} bugs, +{quality} quality, \u00d7{progress} tokens, ${cost} a batch.",
     "parameters": {
       "reveal": 4,
       "fix": 4,
@@ -1427,7 +1427,7 @@
       "quality",
       "expensive"
     ],
-    "description_template": "You trained your own. \u00d7{progress} progress, +{quality} quality, +{heat} heat, and an invoice of ${cost} a batch that you have stopped reading.",
+    "description_template": "You trained your own. \u00d7{progress} tokens, +{quality} quality, +{heat} heat, and an invoice of ${cost} a batch that you have stopped reading.",
     "parameters": {
       "progress": 2.4,
       "quality": 40,
@@ -1471,7 +1471,7 @@
       "risk",
       "positional"
     ],
-    "description_template": "It has read the pipeline and has notes. \u00d7{progress} progress here, \u00d7{boost} on the stage below it, +{heat} heat, ${cost} a batch, and {hidden} hidden bug it insists is a feature.",
+    "description_template": "It has read the pipeline and has notes. \u00d7{progress} tokens here, \u00d7{boost} on the stage below it, +{heat} heat, ${cost} a batch, and {hidden} hidden bug it insists is a feature.",
     "parameters": {
       "progress": 1.6,
       "boost": 2.2,
@@ -1540,7 +1540,7 @@
     ],
     "min_location_tier": 0,
     "badge": "\u00d7{progress}",
-    "description_template": "Keep the weights on disk. \u00d7{progress} OUTPUT and \u00d7{thermal} THERMAL for ${cost}.",
+    "description_template": "Keep the weights on disk. \u00d7{progress} TOKENS and \u00d7{thermal} THERMAL for ${cost}.",
     "parameters": {
       "progress": 1.15,
       "thermal": 1.1,
@@ -1576,7 +1576,7 @@
     ],
     "min_location_tier": 2,
     "badge": "\u00d7{progress}",
-    "description_template": "Inference at the edge. \u00d7{progress} progress, +{heat} heat.",
+    "description_template": "Inference at the edge. \u00d7{progress} tokens, +{heat} heat.",
     "parameters": {
       "progress": 1.35,
       "heat": 4
@@ -1641,7 +1641,7 @@
     ],
     "min_location_tier": 3,
     "badge": "\u00d7{progress}",
-    "description_template": "Store heat, spend it later. \u00d7{progress} progress on any burn the rig starts at or above {threshold_pct}% heat \u2014 you have to be redlined before the burn, not by it.",
+    "description_template": "Store heat, spend it later. \u00d7{progress} tokens on any burn the rig starts at or above {threshold_pct}% heat \u2014 you have to be redlined before the burn, not by it.",
     "parameters": {
       "progress": 1.4,
       "threshold": 0.9,
@@ -1703,7 +1703,7 @@
       "risk"
     ],
     "badge": "+{bugs} hidden",
-    "description_template": "Ship the core file too. +{bugs} hidden bugs, \u00d7{progress} progress.",
+    "description_template": "Ship the core file too. +{bugs} hidden bugs, \u00d7{progress} tokens.",
     "parameters": {
       "bugs": 1,
       "progress": 1.6
@@ -1855,11 +1855,12 @@
     ],
     "min_location_tier": 3,
     "badge": "Repeat {strength_pct}% \u00d7{forks}",
-    "description_template": "Each stage forks the one above at {strength_pct}% strength, {forks} times over.",
+    "description_template": "Each stage forks the one above at {strength_pct}% strength, {forks} times over. Its own stage runs \u00d7{progress} tokens.",
     "parameters": {
       "strength": 0.55,
       "strength_pct": 55,
-      "forks": 2
+      "forks": 2,
+      "progress": 0.85
     },
     "slot_effects": [
       {
@@ -1875,7 +1876,7 @@
       {
         "operation": "multiply",
         "target": "stage.progress_mult",
-        "value": 0.85
+        "value": "$progress"
       }
     ]
   },
@@ -1962,7 +1963,7 @@
     ],
     "min_location_tier": 2,
     "badge": "Crit \u00d7{crit}",
-    "description_template": "Above {threshold_pct}% heat, a {chance_pct}% chance the stage crits at \u00d7{crit} progress and +{heat} heat.",
+    "description_template": "Above {threshold_pct}% heat, a {chance_pct}% chance the stage crits at \u00d7{crit} tokens and +{heat} heat.",
     "parameters": {
       "threshold": 0.9,
       "threshold_pct": 90,
@@ -2021,7 +2022,7 @@
     ],
     "min_location_tier": 4,
     "badge": "\u00d7{survive}",
-    "description_template": "If the batch starts already past 100% heat and no stage drops, final progress \u00d7{survive}. A dropped stage instead \u00d7{fault}.",
+    "description_template": "If the batch starts already past 100% heat and no stage drops, final tokens \u00d7{survive}. A dropped stage instead \u00d7{fault}.",
     "parameters": {
       "survive": 10.0,
       "fault": 0.4
@@ -2067,7 +2068,7 @@
       "local"
     ],
     "badge": "\u00d7{progress}",
-    "description_template": "\u00d7{progress} OUTPUT, \u00d7{quality} QUALITY, \u00d7{thermal} THERMAL.",
+    "description_template": "\u00d7{progress} TOKENS, \u00d7{quality} QUALITY, \u00d7{thermal} THERMAL.",
     "parameters": {
       "progress": 1.45,
       "quality": 0.8,
@@ -2103,7 +2104,7 @@
       "risk"
     ],
     "badge": "\u00d7{progress}?",
-    "description_template": "\u00d7{progress} OUTPUT and +{heat} heat. {bug_pct}% chance of creating a bug.",
+    "description_template": "\u00d7{progress} TOKENS and +{heat} heat. {bug_pct}% chance of creating a bug.",
     "parameters": {
       "progress": 1.65,
       "heat": 6,
@@ -2148,7 +2149,7 @@
       "positional"
     ],
     "badge": "\u00d7{progress}",
-    "description_template": "\u00d7{progress} OUTPUT and +{heat} heat. Immediately after Large Context or The Monorepo: \u00d7{combo} instead.",
+    "description_template": "\u00d7{progress} TOKENS and +{heat} heat. Immediately after Large Context or The Monorepo: \u00d7{combo} instead.",
     "parameters": {
       "progress": 1.25,
       "combo": 1.55,
@@ -2162,7 +2163,7 @@
           "op.large_context",
           "op.monorepo"
         ],
-        "description": "The context is already in SRAM: \u00d7{combo} OUTPUT.",
+        "description": "The context is already in SRAM: \u00d7{combo} TOKENS.",
         "effects": [
           {
             "operation": "multiply",
@@ -2198,7 +2199,7 @@
       "local"
     ],
     "badge": "\u00d7{thermal} T",
-    "description_template": "\u00d7{progress} OUTPUT, \u00d7{quality} QUALITY, \u00d7{thermal} THERMAL.",
+    "description_template": "\u00d7{progress} TOKENS, \u00d7{quality} QUALITY, \u00d7{thermal} THERMAL.",
     "parameters": {
       "progress": 0.85,
       "quality": 1.15,
@@ -2234,7 +2235,7 @@
       "local"
     ],
     "badge": "75%",
-    "description_template": "Below {threshold_pct}% heat: \u00d7{progress} OUTPUT. Above it: \u00d7{thermal} THERMAL instead.",
+    "description_template": "Below {threshold_pct}% heat: \u00d7{progress} TOKENS. Above it: \u00d7{thermal} THERMAL instead.",
     "parameters": {
       "threshold": 0.75,
       "threshold_pct": 75,
@@ -2281,7 +2282,7 @@
       "safe"
     ],
     "badge": "CLEAN \u00d7{clean}",
-    "description_template": "If this burn created no bugs: \u00d7{clean} QUALITY. Otherwise \u00d7{dirty} OUTPUT.",
+    "description_template": "If this burn created no bugs: \u00d7{clean} QUALITY. Otherwise \u00d7{dirty} TOKENS.",
     "parameters": {
       "clean": 1.5,
       "dirty": 0.85
@@ -2399,7 +2400,7 @@
       "risk"
     ],
     "badge": "NEXT \u00d7{next}",
-    "description_template": "The stage below runs \u00d7{next} OUTPUT. If it creates a bug, add another hidden bug.",
+    "description_template": "The stage below runs \u00d7{next} TOKENS. If it creates a bug, add another hidden bug.",
     "parameters": {
       "next": 1.6,
       "hidden": 1
@@ -2430,7 +2431,7 @@
       "local"
     ],
     "badge": "ECC",
-    "description_template": "The stage below creates no hidden bugs, but runs \u00d7{progress} OUTPUT.",
+    "description_template": "The stage below creates no hidden bugs, but runs \u00d7{progress} TOKENS.",
     "parameters": {
       "progress": 0.9
     },
@@ -2461,7 +2462,7 @@
       "local"
     ],
     "badge": "\u2212{heat} H",
-    "description_template": "\u2212{heat} heat. If the burn started at or above {threshold_pct}% heat, the stage below gets \u00d7{next} OUTPUT.",
+    "description_template": "\u2212{heat} heat. If the burn started at or above {threshold_pct}% heat, the stage below gets \u00d7{next} TOKENS.",
     "parameters": {
       "heat": -12,
       "threshold": 0.7,
@@ -2500,7 +2501,7 @@
       "positional"
     ],
     "badge": "5+",
-    "description_template": "Pipeline has {long} or more stages: \u00d7{long_progress} OUTPUT. Otherwise \u00d7{short}.",
+    "description_template": "Pipeline has {long} or more stages: \u00d7{long_progress} TOKENS. Otherwise \u00d7{short}.",
     "parameters": {
       "long": 5,
       "long_progress": 1.6,
@@ -2546,7 +2547,7 @@
       "hardware"
     ],
     "badge": "\u00d7{progress}",
-    "description_template": "\u00d7{progress} OUTPUT, \u00d7{thermal} THERMAL, \u00d7{quality} QUALITY.",
+    "description_template": "\u00d7{progress} TOKENS, \u00d7{thermal} THERMAL, \u00d7{quality} QUALITY.",
     "parameters": {
       "progress": 1.35,
       "thermal": 1.25,
@@ -2630,7 +2631,7 @@
     "min_location_tier": 3,
     "draft_weight": 0.6,
     "badge": "\u00d7{progress}",
-    "description_template": "\u00d7{progress} OUTPUT and \u00d7{thermal} THERMAL. Already redlined: \u00d7{redline} OUTPUT instead.",
+    "description_template": "\u00d7{progress} TOKENS and \u00d7{thermal} THERMAL. Already redlined: \u00d7{redline} TOKENS instead.",
     "parameters": {
       "progress": 2.0,
       "thermal": 0.65,
@@ -2879,7 +2880,7 @@
       "output",
       "heat"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, \u00d7{quality} QUALITY, \u00d7{thermal} THERMAL.",
+    "description_template": "\u00d7{progress} TOKENS, \u00d7{quality} QUALITY, \u00d7{thermal} THERMAL.",
     "badge": "\u00d7{progress}",
     "parameters": {
       "progress": 1.25,
@@ -3014,7 +3015,7 @@
       "risk",
       "bugs"
     ],
-    "description_template": "OUTPUT rerolls \u00d70.8 / \u00d71.0 / \u00d71.5 / \u00d72.0. +{hidden} hidden bug.",
+    "description_template": "TOKENS rerolls \u00d70.8 / \u00d71.0 / \u00d71.5 / \u00d72.0. +{hidden} hidden bug.",
     "badge": "\u00d7?",
     "parameters": {
       "hidden": 1
@@ -3052,7 +3053,7 @@
       "quality",
       "safe"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, \u00d7{quality} QUALITY. A clean burn: \u00d7{clean} final OUTPUT.",
+    "description_template": "\u00d7{progress} TOKENS, \u00d7{quality} QUALITY. A clean burn: \u00d7{clean} final TOKENS.",
     "badge": "SOLVE",
     "parameters": {
       "progress": 0.9,
@@ -3160,7 +3161,7 @@
       "output",
       "quality"
     ],
-    "description_template": "\u00d7{progress} OUTPUT and +{quality} quality.",
+    "description_template": "\u00d7{progress} TOKENS and +{quality} quality.",
     "badge": "\u00d7{progress}",
     "parameters": {
       "progress": 1.3,
@@ -3219,7 +3220,7 @@
       "output",
       "positional"
     ],
-    "description_template": "\u00d7{progress} OUTPUT. Placed before a model, that model gets \u00d7{combo}.",
+    "description_template": "\u00d7{progress} TOKENS. Placed before a model, that model gets \u00d7{combo}.",
     "badge": "MoE",
     "parameters": {
       "progress": 1.2,
@@ -3238,7 +3239,7 @@
     "combos": [
       {
         "name": "Routed Expert",
-        "description": "Before a model family card: that stage gets \u00d7{combo} OUTPUT.",
+        "description": "Before a model family card: that stage gets \u00d7{combo} TOKENS.",
         "effects": [
           {
             "operation": "multiply",
@@ -3274,7 +3275,7 @@
       "risk",
       "bugs"
     ],
-    "description_template": "\u00d7{progress} OUTPUT and +{bugs} bug.",
+    "description_template": "\u00d7{progress} TOKENS and +{bugs} bug.",
     "badge": "\u00d7{progress}",
     "parameters": {
       "progress": 1.5,
@@ -3325,7 +3326,7 @@
       "test",
       "bugs"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, +{quality} quality, reveal {reveal} and fix {fix}.",
+    "description_template": "\u00d7{progress} TOKENS, +{quality} quality, reveal {reveal} and fix {fix}.",
     "badge": "JUDGE",
     "parameters": {
       "progress": 0.85,
@@ -3421,7 +3422,7 @@
       "output",
       "heat"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, \u00d7{thermal} THERMAL, \u00d7{quality} QUALITY.",
+    "description_template": "\u00d7{progress} TOKENS, \u00d7{thermal} THERMAL, \u00d7{quality} QUALITY.",
     "badge": "\u00d7{progress}",
     "parameters": {
       "progress": 1.45,
@@ -3460,7 +3461,7 @@
       "heat",
       "risk"
     ],
-    "description_template": "OUTPUT rerolls \u00d70.7 / \u00d71.4 / \u00d71.4 / \u00d71.8. +{heat} heat.",
+    "description_template": "TOKENS rerolls \u00d70.7 / \u00d71.4 / \u00d71.4 / \u00d71.8. +{heat} heat.",
     "badge": "\u00d7?",
     "parameters": {
       "heat": 6
@@ -3553,7 +3554,7 @@
       "risk",
       "bugs"
     ],
-    "description_template": "\u00d7{progress} OUTPUT and +{hidden} hidden bug. After Distilled Model: no hidden bug.",
+    "description_template": "\u00d7{progress} TOKENS and +{hidden} hidden bug. After Distilled Model: no hidden bug.",
     "badge": "\u00d7{progress}",
     "parameters": {
       "progress": 1.8,
@@ -3605,7 +3606,7 @@
       "heat",
       "expensive"
     ],
-    "description_template": "Under {long} stages: \u00d7{short_progress} OUTPUT, +{short_quality} quality. At {long}+: \u00d7{long_progress} OUTPUT, +{long_quality} quality. +{heat} heat, ${cost}.",
+    "description_template": "Under {long} stages: \u00d7{short_progress} TOKENS, +{short_quality} quality. At {long}+: \u00d7{long_progress} TOKENS, +{long_quality} quality. +{heat} heat, ${cost}.",
     "badge": "WORLD",
     "parameters": {
       "long": 6,
@@ -3690,7 +3691,7 @@
       "bugs",
       "quality"
     ],
-    "description_template": "Reveal {reveal}, +{quality} quality, \u00d7{progress} OUTPUT.",
+    "description_template": "Reveal {reveal}, +{quality} quality, \u00d7{progress} TOKENS.",
     "badge": "STATIC",
     "parameters": {
       "reveal": 1,
@@ -3727,7 +3728,7 @@
       "bugs",
       "quality"
     ],
-    "description_template": "Reveal {reveal}, fix {fix}, +{quality} quality, \u00d7{progress} OUTPUT.",
+    "description_template": "Reveal {reveal}, fix {fix}, +{quality} quality, \u00d7{progress} TOKENS.",
     "badge": "INT",
     "parameters": {
       "reveal": 2,
@@ -3952,7 +3953,7 @@
       "safe",
       "positional"
     ],
-    "description_template": "+{quality} quality. Next stage \u00d7{progress} OUTPUT and creates no hidden bugs.",
+    "description_template": "+{quality} quality. Next stage \u00d7{progress} TOKENS and creates no hidden bugs.",
     "badge": "CANARY",
     "parameters": {
       "quality": 6,
@@ -3991,7 +3992,7 @@
       "safe",
       "expensive"
     ],
-    "description_template": "Reveal and fix everything. \u00d7{quality} QUALITY, \u00d7{progress} OUTPUT, ${cost}.",
+    "description_template": "Reveal and fix everything. \u00d7{quality} QUALITY, \u00d7{progress} TOKENS, ${cost}.",
     "badge": "PROOF",
     "parameters": {
       "reveal": 999,
@@ -4148,7 +4149,7 @@
       "heat",
       "local"
     ],
-    "description_template": "\u00d7{progress} OUTPUT and +{heat} heat.",
+    "description_template": "\u00d7{progress} TOKENS and +{heat} heat.",
     "badge": "\u00d7{progress}",
     "parameters": {
       "progress": 1.4,
@@ -4181,7 +4182,7 @@
       "scaling",
       "local"
     ],
-    "description_template": "{long}+ stages: \u00d7{long_progress} OUTPUT and +{heat} heat. Otherwise \u00d7{short}.",
+    "description_template": "{long}+ stages: \u00d7{long_progress} TOKENS and +{heat} heat. Otherwise \u00d7{short}.",
     "badge": "CUDA",
     "parameters": {
       "long": 5,
@@ -4243,7 +4244,7 @@
       "heat",
       "local"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, next cost \u00d7{cost_mult}, +{heat} heat.",
+    "description_template": "\u00d7{progress} TOKENS, next cost \u00d7{cost_mult}, +{heat} heat.",
     "badge": "PIN",
     "parameters": {
       "progress": 1.15,
@@ -4283,7 +4284,7 @@
       "cooling",
       "local"
     ],
-    "description_template": "\u00d7{progress} OUTPUT and +{heat} heat. Below {cold_pct}% heat: \u00d7{thermal} THERMAL.",
+    "description_template": "\u00d7{progress} TOKENS and +{heat} heat. Below {cold_pct}% heat: \u00d7{thermal} THERMAL.",
     "badge": "HBM",
     "parameters": {
       "progress": 1.8,
@@ -4331,7 +4332,7 @@
       "heat",
       "local"
     ],
-    "description_template": "\u2212{cool} heat, \u00d7{progress} OUTPUT.",
+    "description_template": "\u2212{cool} heat, \u00d7{progress} TOKENS.",
     "badge": "FAN",
     "parameters": {
       "cool": -12,
@@ -4397,7 +4398,7 @@
       "expensive",
       "local"
     ],
-    "description_template": "\u2212{cool} heat, \u00d7{thermal} THERMAL, \u00d7{progress} OUTPUT, ${cost}.",
+    "description_template": "\u2212{cool} heat, \u00d7{thermal} THERMAL, \u00d7{progress} TOKENS, ${cost}.",
     "badge": "PHASE",
     "parameters": {
       "cool": -30,
@@ -4442,7 +4443,7 @@
       "output",
       "local"
     ],
-    "description_template": "Below {threshold_pct}% heat: \u00d7{cool_progress} OUTPUT. At or above: \u00d7{hot_progress} OUTPUT and \u00d7{thermal} THERMAL.",
+    "description_template": "Below {threshold_pct}% heat: \u00d7{cool_progress} TOKENS. At or above: \u00d7{hot_progress} TOKENS and \u00d7{thermal} THERMAL.",
     "badge": "THROT",
     "parameters": {
       "threshold": 0.8,
@@ -4506,7 +4507,7 @@
       "bugs",
       "local"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, +{heat} heat, +{hidden} hidden bug.",
+    "description_template": "\u00d7{progress} TOKENS, +{heat} heat, +{hidden} hidden bug.",
     "badge": "\u00d7{progress}",
     "parameters": {
       "progress": 2.2,
@@ -4546,7 +4547,7 @@
       "cooling",
       "local"
     ],
-    "description_template": "At or below {cold_pct}% heat: \u00d7{cold_progress} OUTPUT and +{quality} quality. Otherwise \u00d7{hot_progress} OUTPUT.",
+    "description_template": "At or below {cold_pct}% heat: \u00d7{cold_progress} TOKENS and +{quality} quality. Otherwise \u00d7{hot_progress} TOKENS.",
     "badge": "COLD",
     "parameters": {
       "cold": 0.25,
@@ -4755,7 +4756,7 @@
       "recursion",
       "quality"
     ],
-    "description_template": "Repeats the stage above at {repeat_pct}% strength. +{quality} quality, \u00d7{progress} OUTPUT.",
+    "description_template": "Repeats the stage above at {repeat_pct}% strength. +{quality} quality, \u00d7{progress} TOKENS.",
     "badge": "CRIT",
     "parameters": {
       "repeat": 0.6,
@@ -5013,7 +5014,7 @@
       "heat",
       "positional"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, \u00d7{thermal} THERMAL.",
+    "description_template": "\u00d7{progress} TOKENS, \u00d7{thermal} THERMAL.",
     "badge": "KV",
     "parameters": {
       "progress": 1.25,
@@ -5038,7 +5039,7 @@
     "combos": [
       {
         "name": "Long Context Cache",
-        "description": "After Large Context: another \u00d7{combo_progress} OUTPUT.",
+        "description": "After Large Context: another \u00d7{combo_progress} TOKENS.",
         "effects": [
           {
             "operation": "multiply",
@@ -5063,7 +5064,7 @@
       "safe",
       "risk"
     ],
-    "description_template": "Clean burn: \u00d7{clean} QUALITY. Dirty: \u00d7{dirty} OUTPUT.",
+    "description_template": "Clean burn: \u00d7{clean} QUALITY. Dirty: \u00d7{dirty} TOKENS.",
     "badge": "CANARY",
     "parameters": {
       "clean": 1.2,
@@ -5111,7 +5112,7 @@
       "safe",
       "expensive"
     ],
-    "description_template": "No hidden bugs remaining: \u00d7{bonus} OUTPUT and QUALITY. ${cost}.",
+    "description_template": "No hidden bugs remaining: \u00d7{bonus} TOKENS and QUALITY. ${cost}.",
     "badge": "B/G",
     "parameters": {
       "bonus": 1.15,
@@ -5165,7 +5166,7 @@
       "quality",
       "safe"
     ],
-    "description_template": "Reveal and fix hidden bugs, +{quality} quality, \u00d7{progress} OUTPUT.",
+    "description_template": "Reveal and fix hidden bugs, +{quality} quality, \u00d7{progress} TOKENS.",
     "badge": "ROLL",
     "parameters": {
       "reveal": 999,
@@ -5212,7 +5213,7 @@
       "bugs",
       "positional"
     ],
-    "description_template": "Last stage: \u00d7{last_progress} OUTPUT, +{heat} heat, +{hidden} hidden bug. Otherwise \u00d7{progress}.",
+    "description_template": "Last stage: \u00d7{last_progress} TOKENS, +{heat} heat, +{hidden} hidden bug. Otherwise \u00d7{progress}.",
     "badge": "FRI",
     "parameters": {
       "last_progress": 2.0,
@@ -5286,7 +5287,7 @@
       "positional",
       "risk"
     ],
-    "description_template": "First stage: \u00d7{first} OUTPUT but next \u00d7{next}. Otherwise \u00d7{progress}. +{heat} heat.",
+    "description_template": "First stage: \u00d7{first} TOKENS but next \u00d7{next}. Otherwise \u00d7{progress}. +{heat} heat.",
     "badge": "SING",
     "parameters": {
       "first": 0.5,
@@ -5353,7 +5354,7 @@
       "risk",
       "local"
     ],
-    "description_template": "Below {cool_pct}% heat: \u00d7{cool}. {cool_pct}\u2013{mid_pct}%: \u00d7{mid}. At/above redline: \u00d7{hot} OUTPUT but \u00d7{thermal} THERMAL.",
+    "description_template": "Below {cool_pct}% heat: \u00d7{cool}. {cool_pct}\u2013{mid_pct}%: \u00d7{mid}. At/above redline: \u00d7{hot} TOKENS but \u00d7{thermal} THERMAL.",
     "badge": "REDLINE",
     "parameters": {
       "cool": 0.5,
@@ -5435,7 +5436,7 @@
       "mastery",
       "safe"
     ],
-    "description_template": "\u00d7{progress} OUTPUT, +{quality} quality. Clean completion trains +{gain} QUALITY mastery.",
+    "description_template": "\u00d7{progress} TOKENS, +{quality} quality. Clean completion trains +{gain} QUALITY mastery.",
     "badge": "+Q MASTERY",
     "parameters": {
       "progress": 0.7,
@@ -5483,7 +5484,7 @@
       "mastery",
       "overkill"
     ],
-    "description_template": "\u00d7{progress} OUTPUT. One-shot trains +{gain} OUTPUT; 2\u00d7 overkill trains another +{overkill_gain}.",
+    "description_template": "\u00d7{progress} TOKENS. One-shot trains +{gain} OUTPUT; 2\u00d7 overkill trains another +{overkill_gain}.",
     "badge": "+OUT MASTERY",
     "parameters": {
       "progress": 1.2,

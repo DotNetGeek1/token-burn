@@ -4,10 +4,29 @@
   "notes": [
     "Seeded from docs/cabinet-v2/data/cabinet_regions_v2.json and tuned so the CRT clears the acceptance targets at every supported viewport.",
     "Region rects are [x, y, w, h] fractions of the safe area (viewport minus display safe-area insets minus safe_inset_px).",
-    "Profiles are tried in `order`; the first whose aspect and pixel constraints match wins. A 16:9 window narrower than wide.min_width_px falls through to compact, because ten bays in one row do not stay touchable below that width."
+    "Profiles are tried in `order`; the first whose aspect and pixel constraints match wins. A 16:9 window narrower than wide.min_width_px falls through to compact, because ten bays in one row do not stay touchable below that width.",
+    "Sizes are in design pixels of the canvas the shell is drawn on, not window pixels. On a handset DisplayScale raises the window's content_scale_factor until 12 px type is legible, which leaves a canvas around 650x300; `handset` is the profile for that canvas. It gives the CRT the top of the safe area with the telemetry rail beside it, and shares one bottom row between a paged four-bay dock and a deck tall enough to press.",
+    "A profile may override `safe_inset_px`, `minimum_touch_px`, `deck`, `dock` and `telemetry_shares` (the telemetry stack's stretch ratios) for its own shape."
   ],
-  "order": ["wide", "compact", "tablet"],
+  "order": ["handset", "wide", "compact", "tablet"],
   "profiles": {
+    "handset": {
+      "max_height_px": 419,
+      "abort_rail": [0.0, 0.0, 0.05, 0.70],
+      "crt": [0.06, 0.0, 0.69, 0.70],
+      "telemetry": [0.76, 0.0, 0.24, 0.70],
+      "telemetry_orientation": "vertical",
+      "telemetry_shares": {"drum": 0.8, "heat": 0.6, "status": 2.2, "feed": 1.6},
+      "backplane": [0.06, 0.715, 0.50, 0.285],
+      "command_deck": [0.575, 0.715, 0.425, 0.285],
+      "dock_columns": 4,
+      "dock_rows": 1,
+      "deck": {"commit_of_width": 0.38, "switch_of_width": 0.24, "led_of_height": 0.16},
+      "decorative_edge_max": 0.0,
+      "safe_inset_px": 8,
+      "minimum_touch_px": 40,
+      "type_scale": 1.0
+    },
     "wide": {
       "min_aspect": 1.65,
       "min_width_px": 1100,

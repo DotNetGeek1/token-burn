@@ -32,6 +32,41 @@ func run() -> void:
 	_test_reroll_fills_empty_slots()
 	_test_market_closed_during_angel()
 	_test_mixed_pending_choice_migration()
+	_test_modules_read_as_token_multipliers()
+
+
+## The shelf sells tokens: a module's headline figure is the multiplier it puts
+## on the batch's tokens, read straight off its unconditional slot effects.
+func _test_modules_read_as_token_multipliers() -> void:
+	var prompt: ModuleDefinition = ContentDatabase.get_module("op.prompt")
+	assert_true(prompt != null, "The starter prompt is in the catalogue")
+	assert_almost_eq(prompt.token_multiplier(), 1.25, 0.001, "Hand-Written Prompt is ×1.25 tokens")
+	assert_true(prompt.scales_tokens(), "A ×1.25 tokens card scales tokens")
+	var description: String = Simulation.get_module_description("op.prompt")
+	assert_true(description.contains("×1.25 tokens"), "Its copy reads as tokens: %s" % description)
+	assert_false(description.contains("progress"), "Its copy no longer says progress")
+
+	var synthetic := ModuleDefinition.new()
+	synthetic.id = "op.synthetic_tokens"
+	synthetic.parameters = {"progress": 1.5}
+	synthetic.slot_effects = [
+		{"operation": "multiply", "target": "stage.progress_mult", "value": "$progress"},
+		{"operation": "multiply", "target": "stage.token_mult", "value": 2.0},
+		{"operation": "multiply", "target": "stage.quality_mult", "value": 3.0},
+		{"operation": "add", "target": "stage.progress_mult", "value": 9.0},
+		{
+			"operation": "multiply", "target": "stage.progress_mult", "value": 10.0,
+			"conditions": [{"left": "$is_first_stage", "operator": "==", "right": true}],
+		},
+	]
+	assert_almost_eq(
+		synthetic.token_multiplier(), 3.0, 0.001,
+		"Progress and token multipliers fold together; quality, adds and conditional effects stay out"
+	)
+	var quality_only := ModuleDefinition.new()
+	quality_only.slot_effects = [{"operation": "add", "target": "stage.quality", "value": 8}]
+	assert_almost_eq(quality_only.token_multiplier(), 1.0, 0.001, "A quality card is ×1 tokens")
+	assert_false(quality_only.scales_tokens(), "And does not claim to scale tokens")
 
 
 func _sim(seed_value: int = 4242) -> Node:

@@ -28,6 +28,199 @@ func run() -> void:
 	_test_rising_bug_risk_is_a_loud_beat()
 	_test_stage_beats_show_combined_output()
 	_test_committed_mastery_compiles_gain_share_and_loss()
+	_test_beats_chain_without_gaps()
+	_test_first_beat_starts_from_the_workflow_base()
+	_test_a_falling_stage_is_marked_as_a_fall()
+	_test_unmet_demand_drop_is_named_before_shipped()
+	_test_met_demand_bonus_is_named()
+	_test_closing_synergy_carries_its_own_jump()
+	_test_again_owns_the_repeat_jump()
+
+
+## The repeat's share of a stage's jump belongs to AGAIN!, not to the beat
+## before it, so the drum is seen to move when the repeat fires.
+func _test_again_owns_the_repeat_jump() -> void:
+	var echo: Dictionary = _burn(["op.cheap_model", "op.echo_chamber"], 9309)
+	var beats: Array = BurnSpectacle.compile(echo, [])
+	var forks: Array = _beats_of(BurnSpectacle.KIND_FORK, beats)
+	assert_eq(forks.size(), 1, "Echo Chamber forks once")
+	var fork: Dictionary = forks[0]
+	assert_almost_eq(float(fork.get("multiplier_before", 0.0)), 1.8, 0.001, "AGAIN! starts on Cheap Model's ×1.80")
+	assert_almost_eq(float(fork.get("multiplier_after", 0.0)), 2.376, 0.001, "And climbs by the 40%% echo of it")
+	assert_false(bool(fork.get("falls", true)), "Which is not a fall")
+	var echo_stage_beats: int = 0
+	for beat in _beats_of(BurnSpectacle.KIND_STAGE, beats):
+		if str(Dictionary(beat).get("module_id", "")) == "op.echo_chamber":
+			echo_stage_beats += 1
+	assert_eq(echo_stage_beats, 0, "A repeater whose own fold does nothing is named by AGAIN! alone")
+
+	var split: Dictionary = _burn(["op.prompt", "op.fractal_split"], 9310)
+	var split_beats: Array = BurnSpectacle.compile(split, [])
+	_assert_chained(split_beats, "fractal split")
+	var split_stage: Dictionary = {}
+	for beat in _beats_of(BurnSpectacle.KIND_STAGE, split_beats):
+		if str(Dictionary(beat).get("module_id", "")) == "op.fractal_split":
+			split_stage = beat
+	assert_false(split_stage.is_empty(), "Fractal Split's own ×0.85 is its own beat")
+	assert_true(bool(split_stage.get("falls", false)), "Marked as the fall it is")
+	assert_almost_eq(float(split_stage.get("ratio", 0.0)), 0.85, 0.001, "By its authored ratio")
+	var split_fork: Dictionary = _beats_of(BurnSpectacle.KIND_FORK, split_beats)[0]
+	assert_true(
+		float(split_fork.get("multiplier_after", 0.0)) > float(split_fork.get("multiplier_before", 1.0e9)),
+		"And AGAIN! ×2 then climbs"
+	)
+
+
+## Every beat must pick up the multiplier exactly where the previous one left
+## it. A gap is a drum that jumps (or drops) with nothing on the feed to say why.
+func _assert_chained(beats: Array, context: String) -> void:
+	assert_true(beats.size() > 0, "%s: compiles beats" % context)
+	for i in range(1, beats.size()):
+		var previous: Dictionary = beats[i - 1]
+		var current: Dictionary = beats[i]
+		assert_almost_eq(
+			float(current.get("multiplier_before", -1.0)),
+			float(previous.get("multiplier_after", -2.0)),
+			0.0005,
+			"%s: beat %d (%s) starts where %s ended" % [
+				context, i, str(current.get("label", "")), str(previous.get("label", ""))
+			]
+		)
+		var falls: bool = (
+			float(current.get("multiplier_after", 0.0))
+			< float(current.get("multiplier_before", 0.0)) - 0.0005
+		)
+		assert_eq(
+			bool(current.get("falls", false)), falls,
+			"%s: beat %d (%s) flags its fall honestly" % [context, i, str(current.get("label", ""))]
+		)
+
+
+func _test_beats_chain_without_gaps() -> void:
+	var pipelines := [
+		["op.prompt", "op.cheap_model"],
+		["op.cheap_model", "op.echo_chamber"],
+		["op.prompt", "op.fractal_split"],
+		["op.prompt", "op.cheap_model", "op.unit_tests"],
+		["op.overclock", "op.rubber_duck", "op.token_cache"],
+	]
+	for pipe in pipelines:
+		var burn: Dictionary = _burn(pipe, 9301)
+		_assert_chained(BurnSpectacle.compile(burn, Array(burn.get("trace", []))), str(pipe))
+	var demanding: Dictionary = _burn(
+		["op.prompt", "op.cheap_model", "op.unit_tests"], 9302,
+		["demand.throughput", "demand.cooling"]
+	)
+	var beats: Array = BurnSpectacle.compile(demanding, Array(demanding.get("trace", [])))
+	_assert_chained(beats, "unmet demands")
+	var last: Dictionary = beats[beats.size() - 1]
+	assert_almost_eq(
+		float(last.get("multiplier_after", 0.0)),
+		float(demanding.get("output_mult", -1.0)),
+		0.0005,
+		"The chain ends on the burn's real output multiplier"
+	)
+
+
+func _test_first_beat_starts_from_the_workflow_base() -> void:
+	var plain: Dictionary = _burn(["op.prompt", "op.cheap_model"], 9303)
+	var beats: Array = BurnSpectacle.compile(plain, [])
+	assert_almost_eq(
+		float(Dictionary(beats[0]).get("multiplier_before", 0.0)), 1.0, 0.0005,
+		"An untrained workflow's first beat starts the drum at ×1.00"
+	)
+	assert_true(
+		float(Dictionary(beats[0]).get("multiplier_before", 0.0))
+		< float(plain.get("output_mult", 0.0)),
+		"So the drum climbs from the base rather than falling from the projected total"
+	)
+	var trained: Dictionary = _burn(["op.prompt", "op.cheap_model"], 9303, [], 1.3)
+	var trained_beats: Array = BurnSpectacle.compile(trained, [])
+	assert_almost_eq(
+		float(Dictionary(trained_beats[0]).get("multiplier_before", 0.0)), 1.3, 0.0005,
+		"A trained workflow's first beat starts from its earned OUTPUT multiplier"
+	)
+
+
+func _test_a_falling_stage_is_marked_as_a_fall() -> void:
+	var burn: Dictionary = _burn(["op.prompt", "op.cheap_model", "op.unit_tests"], 9304)
+	var beats: Array = BurnSpectacle.compile(burn, Array(burn.get("trace", [])))
+	var falling: Array = []
+	for beat in beats:
+		if bool(Dictionary(beat).get("falls", false)):
+			falling.append(beat)
+	assert_eq(falling.size(), 1, "Unit Tests' ×0.85 output cost is the one falling beat")
+	var fall: Dictionary = falling[0]
+	assert_eq(str(fall.get("module_id", "")), "op.unit_tests", "And it is pinned on the stage that cost it")
+	assert_almost_eq(float(fall.get("ratio", 0.0)), 0.85, 0.001, "The beat carries the ratio the drum fell by")
+
+
+func _test_unmet_demand_drop_is_named_before_shipped() -> void:
+	var burn: Dictionary = _burn(
+		["op.prompt", "op.cheap_model"], 9305, ["demand.throughput", "demand.cooling"]
+	)
+	var beats: Array = BurnSpectacle.compile(burn, [])
+	var demands: Array = _beats_of(BurnSpectacle.KIND_DEMAND, beats)
+	assert_eq(demands.size(), 2, "Each ignored demand that taxes output is its own beat")
+	var scale: Dictionary = demands[0]
+	assert_true("ABSURD SCALE" in str(scale.get("label", "")), "Named for the contract's demand")
+	assert_true("IGNORED" in str(scale.get("label", "")), "And says it was ignored")
+	assert_true(bool(scale.get("falls", false)), "Marked as a fall")
+	assert_almost_eq(float(scale.get("ratio", 0.0)), 0.6, 0.001, "Carrying the ×0.60 it costs")
+	assert_true(bool(scale.get("loud", false)), "Loud enough to read")
+	var stages: Array = _beats_of(BurnSpectacle.KIND_STAGE, beats)
+	var last_stage: Dictionary = stages[stages.size() - 1]
+	assert_almost_eq(
+		float(scale.get("multiplier_before", 0.0)),
+		float(last_stage.get("multiplier_after", -1.0)),
+		0.0005,
+		"The drop starts from where the last stage left the drum"
+	)
+	var final: Array = _beats_of(BurnSpectacle.KIND_FINAL, beats)
+	assert_eq(final.size(), 1, "One SHIPPED beat")
+	assert_almost_eq(
+		float(Dictionary(final[0]).get("multiplier_before", 0.0)),
+		float(Dictionary(final[0]).get("multiplier_after", -1.0)),
+		0.0005,
+		"SHIPPED no longer hides the drop inside itself"
+	)
+	assert_true(
+		int(beats.find(scale)) < int(beats.find(final[0])),
+		"The demand beat plays before SHIPPED"
+	)
+
+
+func _test_met_demand_bonus_is_named() -> void:
+	var burn: Dictionary = _burn(["op.overclock", "op.cheap_model"], 9306, ["demand.throughput"])
+	var beats: Array = BurnSpectacle.compile(burn, [])
+	var demands: Array = _beats_of(BurnSpectacle.KIND_DEMAND, beats)
+	assert_eq(demands.size(), 1, "A met demand that pays output is a beat too")
+	assert_true("MET" in str(Dictionary(demands[0]).get("label", "")), "Named as met")
+	assert_false(bool(Dictionary(demands[0]).get("falls", true)), "And it climbs")
+	assert_almost_eq(float(Dictionary(demands[0]).get("ratio", 0.0)), 1.1, 0.001, "By its ×1.10")
+	var quiet: Dictionary = _burn(["op.prompt", "op.unit_tests"], 9307, ["demand.testing"])
+	assert_eq(
+		_beats_of(BurnSpectacle.KIND_DEMAND, BurnSpectacle.compile(quiet, [])).size(), 0,
+		"A demand that only moves quality does not print a multiplier beat"
+	)
+
+
+func _test_closing_synergy_carries_its_own_jump() -> void:
+	var build := CanonicalTest.Build.new(
+		["op.prompt", "op.stack_overflow"],
+		["perk.vibe_check", "perk.bug_alchemy"],
+		9308
+	)
+	var burn: Dictionary = build.burn()
+	var beats: Array = BurnSpectacle.compile(burn, build.resolver.get_trace())
+	_assert_chained(beats, "vibe coding")
+	var synergies: Array = _beats_of(BurnSpectacle.KIND_SYNERGY, beats)
+	assert_true(synergies.size() > 0, "Vibe Coding is a beat")
+	assert_true(
+		float(Dictionary(synergies[0]).get("multiplier_after", 0.0))
+		> float(Dictionary(synergies[0]).get("multiplier_before", 1.0e9)),
+		"And the drum climbs on it rather than on SHIPPED"
+	)
 
 
 func _beats_of(kind: String, beats: Array) -> Array:
@@ -176,6 +369,10 @@ func _test_a_quiet_stage_stays_quiet() -> void:
 	assert_true(stages.size() > 0, "A lone echo still prints as a stage")
 	assert_false(bool(stages[0].get("loud", true)), "With nothing to fork it stays quiet")
 	assert_eq(_beats_of(BurnSpectacle.KIND_FORK, beats).size(), 0, "And does not claim a fork")
+	assert_true(
+		"NOTHING ABOVE TO REPEAT" in str(stages[0].get("label", "")),
+		"But it says why the repeat never started"
+	)
 
 
 func _test_compiler_does_not_rewrite_the_burn() -> void:
@@ -349,7 +546,9 @@ func _test_scope_consequence_explains_backward_progress() -> void:
 	)
 
 
-func _burn(module_ids: Array, seed_value: int) -> Dictionary:
+func _burn(
+	module_ids: Array, seed_value: int, demands: Array = [], trained_output: float = 1.0
+) -> Dictionary:
 	var board := BoardSystem.new()
 	var resolver := EffectResolver.new()
 	var state := RunState.new()
@@ -358,6 +557,10 @@ func _burn(module_ids: Array, seed_value: int) -> Dictionary:
 	var slots: Array = board.slots(state)
 	for i in range(slots.size()):
 		slots[i] = str(module_ids[i]) if i < module_ids.size() else ""
+	if trained_output != 1.0:
+		var workflows: Array = Array(state.build.get("workflows", []))
+		if not workflows.is_empty():
+			Dictionary(workflows[0])["output_mult"] = trained_output
 	var job := {
 		"id": "job.test",
 		"name": "Spectacle",
@@ -370,6 +573,7 @@ func _burn(module_ids: Array, seed_value: int) -> Dictionary:
 		"blocked_slots": 0,
 		"board_rules": [],
 		"tags": [],
+		"demands": demands.duplicate(),
 	}
 	var result: Dictionary = board.resolve_burn(
 		state, job, 1000.0, DeterministicRng.new(seed_value), resolver, [], -1

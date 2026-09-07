@@ -18,6 +18,11 @@ const SHOTS_DIR := "res://build/playtests"
 const VIEW_DESKTOP := Vector2i(1920, 1080)
 const VIEW_COMPACT_DESKTOP := Vector2i(1280, 720)
 const VIEW_HANDSET := Vector2i(854, 480)
+## A modern phone in landscape: a 19.5:9 panel at the base canvas's height,
+## and the physical factor DisplayScale measures for a 6–7" screen (the canvas
+## floor of 300 design pixels caps it). The canvas comes out at 650×300.
+const VIEW_PHONE_WINDOW := Vector2i(1560, 720)
+const PHONE_FACTOR := 2.4
 
 ## Fade out plus fade in, plus a little for the scene's first layout pass.
 ## Under `time_scale` 12 this is a few frames of wall clock.
@@ -104,8 +109,24 @@ func go_desk() -> void:
 
 
 func set_viewport(size: Vector2i) -> void:
+	# A desktop window: one canvas pixel per window pixel, no physical factor.
+	DisplayScale.override_factor(-1.0)
 	get_window().size = size
 	get_tree().root.content_scale_size = size
+	await _refit()
+
+
+## A handset: `window` in screen pixels, drawn at `factor`, so the canvas the
+## shell lays out on is the window over the factor — what DisplayScale gives a
+## phone whose pixels are too small to read at one-to-one.
+func set_handset_viewport(window: Vector2i = VIEW_PHONE_WINDOW, factor: float = PHONE_FACTOR) -> void:
+	get_window().size = window
+	get_tree().root.content_scale_size = window
+	DisplayScale.override_factor(factor)
+	await _refit()
+
+
+func _refit() -> void:
 	await settle()
 	# Every console screen recomputes from the new millimetre scale; a screen
 	# that is already up has to be told, or the audit measures the old layout.

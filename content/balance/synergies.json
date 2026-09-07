@@ -16,7 +16,7 @@
   {
     "name": "Vibe Coding",
     "perks": ["perk.vibe_check", "perk.bug_alchemy"],
-    "description": "Bugs are just vibes: every batch turns one more of them into progress.",
+    "description": "Bugs are just vibes: every batch turns one more of them into tokens.",
     "subscriptions": [{
       "event": "board.batch_finalizing",
       "priority": 28,
@@ -71,7 +71,7 @@
   {
     "name": "Heat Cult",
     "requires_tag_counts": [{"tags": ["heat", "risk"], "count": 3}],
-    "description": "Three heat or risk cards: burns that start above 85% heat run ×1.20 OUTPUT.",
+    "description": "Three heat or risk cards: burns that start above 85% heat run ×1.20 TOKENS.",
     "subscriptions": [{
       "event": "board.batch_started",
       "priority": 18,

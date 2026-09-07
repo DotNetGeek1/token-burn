@@ -29,6 +29,7 @@ var _lines: Array = []
 var _index: int = 0
 var _typed: float = 0.0
 var _typing: bool = false
+var _backdrop_tap: TapGesture = TapGesture.new()
 
 
 func _ready() -> void:
@@ -194,11 +195,12 @@ func _refresh_button() -> void:
 
 
 ## Anywhere on the dimmed room behind the phone works too: the first tap finishes
-## the line being typed, the next moves him on.
+## the line being typed, the next moves him on. A TapGesture, so the press that
+## arrives twice (real and emulated) advances once, and so the phone leaves on
+## the release rather than the press: hanging up on the press let the paired
+## release fall through to whatever the cabinet had under the finger.
 func _on_backdrop_input(event: InputEvent) -> void:
-	var tapped: bool = (event is InputEventMouseButton and event.pressed) \
-		or (event is InputEventScreenTouch and event.pressed)
-	if tapped:
+	if _backdrop_tap.feed(event):
 		_on_continue()
 
 

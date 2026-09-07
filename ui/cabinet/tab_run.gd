@@ -98,16 +98,20 @@ func _ready() -> void:
 
 	var grid := GridContainer.new()
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	grid.columns = 4
+	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 3)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(grid)
-	for key in ["status", "step", "value", "synergy", "heat", "risk", "expires", "next"]:
+	# QUALITY sits in the first row beside STATUS: whether the bar is cleared
+	# is the figure that decides between SHIP IT and one more batch.
+	for key in ["status", "quality", "value", "step", "synergy", "heat", "risk", "expires", "next"]:
 		var cell: Dictionary = stat_cell({
-			"status": "STATUS", "step": "CURRENT STEP", "value": "EST. VALUE", "synergy": "SYNERGY",
-			"heat": "HEAT AFTER BURN", "risk": "BUG RISK", "expires": "CONTRACT EXPIRES", "next": "NEXT BATCH",
+			"status": "STATUS", "quality": "QUALITY VS BAR", "step": "CURRENT STEP", "value": "EST. VALUE",
+			"synergy": "SYNERGY", "heat": "HEAT AFTER BURN", "risk": "BUG RISK", "expires": "CONTRACT EXPIRES",
+			"next": "NEXT BATCH",
 		}[key])
+		cell["value"].name = "%sValue" % key.capitalize()
 		grid.add_child(cell["cell"])
 		_stats[key] = cell["value"]
 
@@ -230,10 +234,13 @@ func _refresh_stats(job: Dictionary, working: bool, preview: Dictionary) -> void
 	var stage_count: int = int(preview.get("stage_count", Array(preview.get("stages", [])).size()))
 	_stat("step", "%d / %d" % [maxi(0, _lit + 1), maxi(stage_count, Simulation.board_slots().size())], CabinetStyle.PHOSPHOR)
 	if job.is_empty():
+		_stat("quality", "—", CabinetStyle.PHOSPHOR_DIM)
 		_stat("value", "—", CabinetStyle.PHOSPHOR_DIM)
 		_stat("risk", "—", CabinetStyle.PHOSPHOR_DIM)
 		_stat("expires", "—", CabinetStyle.PHOSPHOR_DIM)
 	else:
+		var verdict: Dictionary = CabinetStyle.quality_readout(job)
+		_stat("quality", str(verdict["text"]), verdict["color"])
 		var projected: float = float(job.get("reward", 0.0)) * JobSystem.projected_payout_multiplier(job)
 		_stat("value", NumberFormat.format_cash(projected), CabinetStyle.PHOSPHOR)
 		var risk: String = JobSystem.production_risk_class(job)
@@ -267,6 +274,17 @@ func _stat(key: String, text: String, color: Color) -> void:
 	var label: Label = _stats[key]
 	label.text = text
 	label.add_theme_color_override("font_color", color)
+
+
+## The value Label of one figure in the grid (`status`, `quality`, `value`,
+## `step`, `synergy`, `heat`, `risk`, `expires`, `next`), for the playtests.
+func stat_label(key: String) -> Label:
+	return _stats.get(key)
+
+
+## The job card on the bench.
+func card() -> ContractCard:
+	return _card
 
 
 ## The lesser commands under the figures: the brief, delivering, YOLO, the

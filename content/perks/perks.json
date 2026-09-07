@@ -308,7 +308,7 @@
     "rarity": "rare",
     "tags": ["board", "heat", "risk", "thermal_runaway"],
     "incompatible_ids": ["perk.thermal_paste"],
-    "description_template": "Start a burn with the rig already above {threshold_pct}% heat and the batch produces {multiplier}× progress.",
+    "description_template": "Start a burn with the rig already above {threshold_pct}% heat and the batch produces {multiplier}× tokens.",
     "parameters": {"threshold": 0.9, "threshold_pct": 90, "multiplier": 3.0},
     "subscriptions": [{
       "event": "board.batch_started",
@@ -323,7 +323,7 @@
     "rarity": "rare",
     "tags": ["board", "bugs"],
     "requires_tags": ["bugs"],
-    "description_template": "Turns {convert_pct}% of a batch's known bugs into raw progress.",
+    "description_template": "Turns {convert_pct}% of a batch's known bugs into raw tokens.",
     "parameters": {"convert": 0.3, "convert_pct": 30},
     "subscriptions": [{
       "event": "board.batch_finalizing",
@@ -363,7 +363,7 @@
     "name": "Middle Management",
     "rarity": "uncommon",
     "tags": ["board", "positional"],
-    "description_template": "The third stage of the pipeline gains ×{progress} progress and +{quality} quality.",
+    "description_template": "The third stage of the pipeline gains ×{progress} tokens and +{quality} quality.",
     "parameters": {"progress": 1.5, "quality": 8, "position": 2},
     "subscriptions": [{
       "event": "board.stage_resolved",
@@ -446,7 +446,7 @@
     "requires_tags": ["bugs"],
     "excludes_tags": ["test", "thermal_safety"],
     "incompatible_ids": ["perk.enterprise_grade"],
-    "description_template": "Every batch ships {extra_bugs} more hidden bugs and {progress_multiplier}× the progress.",
+    "description_template": "Every batch ships {extra_bugs} more hidden bugs and {progress_multiplier}× the tokens.",
     "parameters": {"extra_bugs": 2, "progress_multiplier": 1.8},
     "subscriptions": [
       {

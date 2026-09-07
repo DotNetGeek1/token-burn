@@ -15,6 +15,9 @@ signal page_pressed
 ## Where the paper sits inside the generated card texture, as fractions of the
 ## drawn card: the metal frame and the hanging tab are outside this.
 const PAPER := Rect2(0.11, 0.075, 0.78, 0.86)
+## Paper shorter than this (in pixels) drops the stamp and the RISK caption so
+## the figures still fit on it.
+const SHORT_PAPER_HEIGHT := 200.0
 
 var compact: bool = false
 var _paper: TextureRect = null
@@ -23,16 +26,24 @@ var _title: Label = null
 var _glyph: TextureRect = null
 var _target: Label = null
 var _reward: Label = null
+var _risk_caption: Label = null
 var _risk_row: HBoxContainer = null
 var _risk_holder: HBoxContainer = null
 var _risk_text: Label = null
 var _spec: Label = null
 var _progress: Label = null
+## The verdict on the work's quality against the client's bar, under the
+## progress line: "✓ Q 6.4/6.0" in green ink once met, red ink while not.
+var _quality: Label = null
 var _pager: Label = null
 var _selected: bool = false
 var _outline: Panel = null
 var _job: Dictionary = {}
 var _tap: TapGesture = TapGesture.new()
+## The pager's own gesture: it is a separate Control with its own press and
+## release, so sharing the card's would let one half-finished gesture on either
+## surface arm or swallow the other's.
+var _pager_tap: TapGesture = TapGesture.new()
 
 
 ## Built in `_init` so a card can be written before it is put on the glass.
@@ -76,7 +87,8 @@ func _init() -> void:
 	_spec = _field("")
 	_spec.add_theme_color_override("font_color", CabinetStyle.INK_DIM)
 
-	_body.add_child(CabinetStyle.caption("RISK", CabinetStyle.FONT_TINY, CabinetStyle.INK_DIM))
+	_risk_caption = CabinetStyle.caption("RISK", CabinetStyle.FONT_TINY, CabinetStyle.INK_DIM)
+	_body.add_child(_risk_caption)
 	_risk_row = HBoxContainer.new()
 	_risk_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_risk_row.add_theme_constant_override("separation", 6)
@@ -89,6 +101,9 @@ func _init() -> void:
 
 	_progress = CabinetStyle.mono("", CabinetStyle.FONT_TINY, CabinetStyle.INK)
 	_body.add_child(_progress)
+	_quality = CabinetStyle.mono("", CabinetStyle.FONT_TINY, CabinetStyle.INK_DIM)
+	_quality.name = "Quality"
+	_body.add_child(_quality)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -97,7 +112,9 @@ func _init() -> void:
 
 	_pager = CabinetStyle.mono("", CabinetStyle.FONT_TINY, CabinetStyle.INK_DIM)
 	_pager.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_pager.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Only a pager with something on it takes presses; blank, it lets them
+	# through to the card, so the foot of a single-lane card is not a dead strip.
+	_pager.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pager.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_pager.gui_input.connect(_on_pager_input)
 	_body.add_child(_pager)
@@ -126,8 +143,6 @@ func _layout() -> void:
 	var drawn: Vector2 = texture_size * scale
 	var origin: Vector2 = (size - drawn) * 0.5
 	var paper := Rect2(origin + PAPER.position * drawn, PAPER.size * drawn)
-	_body.position = paper.position
-	_body.size = paper.size
 	_outline.position = origin + Vector2(2, 2)
 	_outline.size = drawn - Vector2(4, 4)
 	# Ink is cut to the paper's width: ~10 characters of the fixed-pitch face
@@ -138,13 +153,23 @@ func _layout() -> void:
 	_title.custom_minimum_size = Vector2(0, small * 2.4)
 	for label in [_target, _reward]:
 		label.add_theme_font_size_override("font_size", small)
-	for label in [_spec, _risk_text, _progress, _pager]:
+	for label in [_spec, _risk_text, _progress, _quality, _pager]:
 		label.add_theme_font_size_override("font_size", tiny)
 	for child in _body.get_children():
-		if child is Label and child != _title and child not in [_target, _reward, _spec, _risk_text, _progress, _pager]:
+		if child is Label and child != _title and child not in [_target, _reward, _spec, _risk_text, _progress, _quality, _pager]:
 			child.add_theme_font_size_override("font_size", tiny)
 	_glyph.custom_minimum_size = Vector2.ONE * clampf(paper.size.x * 0.22, 14.0, 44.0)
+	# A short card (the glass of a handset) has no room for the stamp or the
+	# RISK caption over the pips: the figures come first.
+	var short_paper: bool = paper.size.y < SHORT_PAPER_HEIGHT
+	_glyph.visible = not short_paper
+	_risk_caption.visible = not short_paper
 	_body.add_theme_constant_override("separation", 1 if paper.size.y < 220.0 else 2)
+	# The body is sized after its ink: a container never shrinks under its
+	# children's minimum, so setting it before the type had shrunk left it at
+	# the old paper's height.
+	_body.position = paper.position
+	_body.size = paper.size
 
 
 func set_job(job: Dictionary, lane_index: int = 0, lane_count: int = 1) -> void:
@@ -157,7 +182,8 @@ func set_job(job: Dictionary, lane_index: int = 0, lane_count: int = 1) -> void:
 		_spec.text = "TAKE A CONTRACT"
 		_set_risk(0, "")
 		_progress.text = ""
-		_pager.text = ""
+		_quality.text = ""
+		_set_pager("")
 		return
 	var identity: Dictionary = JobPresentation.sector(job)
 	_title.text = str(job.get("name", "Contract")).to_upper()
@@ -173,6 +199,7 @@ func set_job(job: Dictionary, lane_index: int = 0, lane_count: int = 1) -> void:
 	if threshold > 0.0:
 		spec.append("Q%s" % JobPresentation.quality_mark(threshold))
 	_spec.text = " · ".join(spec)
+	_refresh_quality(job, threshold)
 	var risk: String = JobSystem.production_risk_class(job)
 	_set_risk(CabinetStyle.risk_level(risk), risk)
 	if compact:
@@ -184,7 +211,37 @@ func set_job(job: Dictionary, lane_index: int = 0, lane_count: int = 1) -> void:
 		# The figure leads so a narrow card trims the bar, never the number.
 		var filled: int = int(round(done * 8.0))
 		_progress.text = "%d%% %s%s" % [int(round(done * 100.0)), "▮".repeat(filled), "▯".repeat(8 - filled)]
-	_pager.text = "%d/%d ▸" % [lane_index + 1, lane_count] if lane_count > 1 and not compact else ""
+	_set_pager("%d/%d ▸" % [lane_index + 1, lane_count] if lane_count > 1 and not compact else "")
+
+
+## The quality verdict is only ink on a contract in hand: an offer has done no
+## work yet, and its bar is already on the spec line as `Q6.0`.
+func _refresh_quality(job: Dictionary, threshold: float) -> void:
+	if compact or threshold <= 0.0:
+		_quality.text = ""
+		_quality.visible = false
+		return
+	var verdict: Dictionary = CabinetStyle.quality_readout(job)
+	_quality.visible = true
+	_quality.text = str(verdict["short"])
+	_quality.add_theme_color_override(
+		"font_color", CabinetStyle.INK_GREEN if bool(verdict["met"]) else CabinetStyle.INK_RED
+	)
+
+
+## Whether the card is printing its quality as met. For the playtests.
+func quality_met_shown() -> bool:
+	return _quality.visible and _quality.text.begins_with(CabinetStyle.check_glyph())
+
+
+func _set_pager(text: String) -> void:
+	_pager.text = text
+	# A blank pager takes no room: on a short card the line is the difference
+	# between the figures fitting on the paper and running off it.
+	_pager.visible = text != ""
+	_pager.mouse_filter = Control.MOUSE_FILTER_STOP if text != "" else Control.MOUSE_FILTER_IGNORE
+	if text == "":
+		_pager_tap.cancel()
 
 
 ## The stat-icon name the sector table gives this contract, which is also the
@@ -223,8 +280,6 @@ func _on_input(event: InputEvent) -> void:
 
 
 func _on_pager_input(event: InputEvent) -> void:
-	if _pager.text == "":
-		return
-	if _tap.feed(event):
+	if _pager_tap.feed(event):
 		page_pressed.emit()
 		accept_event()

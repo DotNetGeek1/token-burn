@@ -50,6 +50,14 @@ const HOLD_CUE := "HOLD"
 const FACE_CANVAS_ASPECT := 2.4
 ## The housing as a fraction of the canvas width, so the lettering sits on it.
 const HOUSING_OF_CANVAS := 0.85
+## The lit window inside the housing, as fractions of the drawn face: the red
+## glass on the armed and danger faces, the shutter on idle and busy. Measured
+## off the kit's art (the pane runs x 0.17–0.83, y 0.19–0.71 of the canvas);
+## everything printed on the button has to land inside it, or it ends up on
+## the bezel in type too small to read.
+const GLASS_OF_FACE := Rect2(0.17, 0.19, 0.66, 0.52)
+## How the pane is split between the word and the sub-line under it.
+const WORD_OF_GLASS := 0.64
 
 var _face: TextureRect = null
 var _label: Label = null
@@ -91,6 +99,8 @@ func _ready() -> void:
 	_label.name = "Word"
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_label.clip_text = true
+	_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var font: Font = UiThemeBuilder.header_font()
 	if font != null:
@@ -144,20 +154,24 @@ func _layout() -> void:
 	_face.position = Vector2.ZERO
 	_face.size = size
 	var face: Rect2 = _face_rect()
-	var housing_w: float = face.size.x * HOUSING_OF_CANVAS
 	var glass := Rect2(
-		Vector2(face.position.x + (face.size.x - housing_w) * 0.5, face.position.y + face.size.y * 0.12),
-		Vector2(housing_w, face.size.y * 0.76)
+		face.position + GLASS_OF_FACE.position * face.size,
+		GLASS_OF_FACE.size * face.size
 	)
-	_label.position = glass.position
-	_label.size = Vector2(glass.size.x, glass.size.y * 0.66)
-	_label.pivot_offset = _label.size * 0.5
-	_fit_label()
-	# The sub may run the full width of the housing: it is one short line of
-	# small type, and the other tabs' subs already sit out to the housing edge.
-	_sub.position = Vector2(glass.position.x, glass.position.y + glass.size.y * 0.66)
-	_sub.size = Vector2(glass.size.x, glass.size.y * 0.32)
-	_fit_sub()
+	# The two lines are stacked by the height of their type, not by the height
+	# of their Labels: a Label cannot be made shorter than its font plus the
+	# theme's padding, so laying the boxes out edge to edge pushed the sub off
+	# the foot of the pane. The sub is sized first, to at most its share of the
+	# pane; the word takes what is left; the stack is centred on the pane.
+	var sub_font: Font = _sub.get_theme_font("font")
+	var sub_px: int = _fit_font(sub_font, _sub.text, glass.size.x * 0.98, glass.size.y * (1.0 - WORD_OF_GLASS), 8, 14)
+	var sub_h: float = sub_font.get_height(sub_px) if sub_font != null else glass.size.y * (1.0 - WORD_OF_GLASS)
+	var word_font: Font = _label.get_theme_font("font")
+	var word_px: int = _fit_font(word_font, _label.text, glass.size.x * 0.96, glass.size.y - sub_h, 12, 44)
+	var word_h: float = word_font.get_height(word_px) if word_font != null else glass.size.y - sub_h
+	var top: float = glass.position.y + (glass.size.y - (word_h + sub_h)) * 0.5
+	_place(_label, Rect2(glass.position.x, top, glass.size.x, word_h), word_px)
+	_place(_sub, Rect2(glass.position.x, top + word_h, glass.size.x, sub_h), sub_px)
 	_overlay.position = Vector2.ZERO
 	_overlay.size = size
 	_overlay.glass = glass
@@ -177,40 +191,43 @@ func _face_rect() -> Rect2:
 	return Rect2((size - drawn) * 0.5, drawn)
 
 
-## The word wants 22–30 px at the baseline deck; a long one (BURN AGAIN) is let
-## down in size until it fits the housing rather than clipped at its edge. Tall
-## glyphs are fitted against the glass height too, so the word never spills off
-## the housing when the button is narrower than the face's canvas.
-func _fit_label() -> void:
-	if _label == null or _label.size.x <= 0.0 or _label.size.y <= 0.0:
-		return
-	var target: int = clampi(int(_label.size.y * 0.80), 14, 44)
-	var font: Font = _label.get_theme_font("font")
-	var fitted: int = target
-	if font != null and _label.text != "":
-		while fitted > 12 and (
-			font.get_string_size(_label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, fitted).x > _label.size.x * 0.96
-			or font.get_height(fitted) > _label.size.y
-		):
-			fitted -= 1
-	_label.add_theme_font_size_override("font_size", fitted)
+## The lit pane the word and sub are printed on, in the button's own
+## coordinates. Playtests measure the labels against this.
+func glass_rect() -> Rect2:
+	return _overlay.glass if _overlay != null else Rect2()
 
 
-## The sub line (`$1.5K · LEFT $18.5K`) is let down one step at a time, to a
-## floor under the body minimum, before it is allowed to elide; a price cut off
-## at `$1...` reads as a different number. The floor is 8: below that the line
-## is not legible at all, and a long sub eliding its tail (`... · OPENS THE R…`)
-## still leads with what matters.
-func _fit_sub() -> void:
-	if _sub == null or _sub.size.x <= 0.0 or _sub.size.y <= 0.0:
-		return
-	var target: int = clampi(int(_sub.size.y * 0.8), 8, 14)
-	var font: Font = _sub.get_theme_font("font")
-	var fitted: int = target
-	if font != null and _sub.text != "":
-		while fitted > 8 and font.get_string_size(_sub.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, fitted).x > _sub.size.x * 0.98:
-			fitted -= 1
-	_sub.add_theme_font_size_override("font_size", fitted)
+## The largest size between `floor` and `ceiling` at which `text` in `font`
+## fits a box `max_w` wide and `max_h` tall. Starts from four fifths of the
+## height (the word wants 22–30 px at the baseline deck) and lets the type
+## down one step at a time: a long word (BURN AGAIN) shrinks rather than being
+## clipped at the pane's edge, and a sub (`$1.5K · LEFT $18.5K`) shrinks to
+## the floor before it is allowed to elide, because a price cut off at `$1…`
+## reads as a different number. The floor is 8 for the sub: below that the
+## line is not legible at all.
+func _fit_font(font: Font, line_text: String, max_w: float, max_h: float, floor_px: int, ceiling_px: int) -> int:
+	var fitted: int = clampi(int(max_h * 0.8), floor_px, ceiling_px)
+	if font == null or line_text == "":
+		return fitted
+	while fitted > floor_px and (
+		font.get_string_size(line_text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, fitted).x > max_w
+		or font.get_height(fitted) > max_h
+	):
+		fitted -= 1
+	return fitted
+
+
+## Prints a line at `px` centred on `slot`. The Label's box may come out taller
+## than the slot (its minimum is the font plus the theme's padding), so it is
+## centred on the slot rather than hung from its top: the ink lands on the slot
+## either way. Whatever still does not fit across is cut with an ellipsis (the
+## Labels clip), never drawn past the pane onto the bezel.
+func _place(line: Label, slot: Rect2, px: int) -> void:
+	line.add_theme_font_size_override("font_size", px)
+	line.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	line.size = slot.size
+	line.position = slot.position + (slot.size - line.size) * 0.5
+	line.pivot_offset = line.size * 0.5
 
 
 # --- State -------------------------------------------------------------------
@@ -336,8 +353,7 @@ func _apply() -> void:
 			sub_alpha = 0.85
 	_label.text = word
 	_sub.text = sub
-	_fit_label()
-	_fit_sub()
+	_layout()
 	var enabled: bool = _state == STATE_ARMED or _state == STATE_DANGER
 	disabled = not enabled
 	var texture: Texture2D = _faces.get(face_key)

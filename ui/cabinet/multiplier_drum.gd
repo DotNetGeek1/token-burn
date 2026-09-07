@@ -46,6 +46,7 @@ func _fit() -> void:
 ## with the workflow's own three multipliers under it.
 func set_projection(output_mult: float, quality_mult: float, thermal_mult: float, boosted: bool) -> void:
 	_show(output_mult, false)
+	_value.add_theme_color_override("font_color", CabinetStyle.AMBER)
 	var parts: PackedStringArray = ["Q ×%.2f" % quality_mult, "T ×%.2f" % thermal_mult]
 	if boosted:
 		parts.append("BOOST")
@@ -53,11 +54,24 @@ func set_projection(output_mult: float, quality_mult: float, thermal_mult: float
 	_sub.add_theme_color_override("font_color", CabinetStyle.AMBER if boosted else CabinetStyle.PHOSPHOR_DIM)
 
 
-## A beat in the batch: the drum spins from what it showed to what the stage made.
-func show_beat(multiplier_after: float, label: String) -> void:
-	_show(multiplier_after, true)
+## A batch is starting: the drum snaps back to the workflow's own multiplier so
+## the stages are seen to build it. Resting on the projected total and tweening
+## *down* to the first stage read as the multiplier never starting.
+func begin_batch(start_mult: float, label: String) -> void:
+	_show(start_mult, false)
+	_value.add_theme_color_override("font_color", CabinetStyle.AMBER)
 	_sub.text = label.to_upper()
-	_sub.add_theme_color_override("font_color", CabinetStyle.PHOSPHOR)
+	_sub.add_theme_color_override("font_color", CabinetStyle.PHOSPHOR_DIM)
+
+
+## A beat in the batch: the drum spins from what it showed to what the stage
+## made. A fall is deliberate (a stage's output cost, an ignored demand) and is
+## shown in red so it reads as a cost, not a glitch.
+func show_beat(multiplier_after: float, label: String, falls: bool = false) -> void:
+	_show(multiplier_after, true)
+	_value.add_theme_color_override("font_color", CabinetStyle.RED if falls else CabinetStyle.AMBER)
+	_sub.text = ("▼ " + label.to_upper()) if falls else label.to_upper()
+	_sub.add_theme_color_override("font_color", CabinetStyle.RED if falls else CabinetStyle.PHOSPHOR)
 
 
 func _show(value: float, animate: bool) -> void:

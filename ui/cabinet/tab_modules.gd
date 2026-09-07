@@ -297,9 +297,18 @@ func _refresh_detail() -> void:
 	_kicker.text = "%s · %s · %s" % [module.category.to_upper(), module.rarity.to_upper(), Simulation.get_module_badge(module_id).to_upper()]
 	_kicker.add_theme_color_override("font_color", AssetCatalog.rarity_color(module.rarity))
 	var rows: Array = [{"text": Simulation.get_module_description(module_id)}]
+	# What the card does to the batch's tokens, as one figure. A ×1.5 module is
+	# ×1.5 tokens delivered to the contract; cards that only scale tokens under
+	# a condition (position, heat, a clean burn) say so rather than print ×1.00.
+	var token_mult: float = module.token_multiplier()
+	if not is_equal_approx(token_mult, 1.0):
+		rows.append({"stat": "TOKENS", "value": "×%.2f PER BATCH" % token_mult})
+	elif module.scales_tokens():
+		rows.append({"stat": "TOKENS", "value": "CONDITIONAL"})
 	var combos: Array = module.combos
 	if not combos.is_empty():
 		rows.append({"text": "COMBOS"})
+		var evaluator := ExpressionEvaluator.new()
 		for combo in combos:
 			if not combo is Dictionary:
 				continue
@@ -312,7 +321,9 @@ func _refresh_detail() -> void:
 				"rule": str(combo.get("name", "Combo")),
 				"text": "%s%s" % [
 					("after " if combo.has("after") else "before ") + ", ".join(names) + ". " if not names.is_empty() else "",
-					str(combo.get("description", "")),
+					# Combo copy carries the same `{parameter}` placeholders as the
+					# description, so it is rendered the same way.
+					evaluator.render_template(str(combo.get("description", "")), module.parameters),
 				],
 			})
 	if armed_module_id == "" and dock_slot >= 0:
