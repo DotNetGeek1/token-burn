@@ -12,7 +12,7 @@ var _left: Label = null
 var _right: Label = null
 var _lit: int = -1
 var _hot: bool = false
-var _tap := TapGesture.new()
+var _tap: TapGesture = TapGesture.new()
 
 
 func _ready() -> void:

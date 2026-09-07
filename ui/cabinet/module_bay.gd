@@ -43,7 +43,7 @@ var _name: Label = null
 var _glyph: TextureRect = null
 var _bars_holder: CenterContainer = null
 var _note: Label = null
-var _tap := TapGesture.new()
+var _tap: TapGesture = TapGesture.new()
 var _pulse: Tween = null
 var _body: Rect2 = Rect2()
 

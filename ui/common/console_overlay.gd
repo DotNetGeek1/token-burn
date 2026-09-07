@@ -32,7 +32,7 @@ var _inline_actions: HBoxContainer = null
 var _close_row: ConsoleMenuRow = null
 var _action_rows: Array[ConsoleMenuRow] = []
 var _scale: float = 1.0
-var _scrim_tap := TapGesture.new()
+var _scrim_tap: TapGesture = TapGesture.new()
 ## Whether tapping the dimmed room behind the overlay dismisses it. Off for
 ## overlays that are a decision the player has to actually answer.
 var dismiss_on_scrim: bool = true

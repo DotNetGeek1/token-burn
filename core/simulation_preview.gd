@@ -1,8 +1,6 @@
 class_name SimulationPreview
 extends RefCounted
 
-const BurnSpectacle := preload("res://presentation/burn_spectacle.gd")
-
 ## Stateless foresight for the Burn Board and Market. Every method clones
 ## `RunState` or reads it without writing the live phase, RNG counters,
 ## signals, or saves. `sim` is the owning Simulation node, taken as a plain

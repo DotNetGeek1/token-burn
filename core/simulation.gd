@@ -49,20 +49,20 @@ var tuning: Dictionary = {
 	"event_probability_multiplier": 1.0,
 }
 
-var _job_system := JobSystem.new()
-var _economy_system := EconomySystem.new()
-var _compute_system := ComputeSystem.new()
-var _heat_system := HeatSystem.new()
-var _progression_system := ProgressionSystem.new()
-var _event_system := EventSystem.new()
-var _perk_system := PerkSystem.new()
-var _upgrade_system := UpgradeSystem.new()
-var _board_system := BoardSystem.new()
-var _depth_system := DepthSystem.new()
-var _ascension_system := AscensionSystem.new()
-var _achievement_system := AchievementSystem.new()
-var _work := WorkSession.new()
-var _life := RunLifecycle.new()
+var _job_system: JobSystem = JobSystem.new()
+var _economy_system: EconomySystem = EconomySystem.new()
+var _compute_system: ComputeSystem = ComputeSystem.new()
+var _heat_system: HeatSystem = HeatSystem.new()
+var _progression_system: ProgressionSystem = ProgressionSystem.new()
+var _event_system: EventSystem = EventSystem.new()
+var _perk_system: PerkSystem = PerkSystem.new()
+var _upgrade_system: UpgradeSystem = UpgradeSystem.new()
+var _board_system: BoardSystem = BoardSystem.new()
+var _depth_system: DepthSystem = DepthSystem.new()
+var _ascension_system: AscensionSystem = AscensionSystem.new()
+var _achievement_system: AchievementSystem = AchievementSystem.new()
+var _work: WorkSession = WorkSession.new()
+var _life: RunLifecycle = RunLifecycle.new()
 var last_round_statement: Dictionary = {}
 
 var queued_boost: bool:

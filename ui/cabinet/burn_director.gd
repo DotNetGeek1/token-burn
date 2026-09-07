@@ -14,8 +14,6 @@ extends Node
 ## A Node child of the cabinet: its timers come from the cabinet's tree and a
 ## playback in flight dies with the machine it was playing on.
 
-const BurnSpectacle := preload("res://presentation/burn_spectacle.gd")
-
 ## How finely a beat's hold is sliced so a kill or skip lands within a frame or two.
 const HOLD_SLICE := 0.05
 

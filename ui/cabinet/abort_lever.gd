@@ -35,8 +35,8 @@ var _progress: HoldBar = null
 var _channel: Rect2 = Rect2()
 var _handle_rect: Rect2 = Rect2()
 var _pulling: bool = false
-var _tap := TapGesture.new()
-var _hold := HoldGesture.new(HOLD_SECONDS)
+var _tap: TapGesture = TapGesture.new()
+var _hold: HoldGesture = HoldGesture.new(HOLD_SECONDS)
 var _armed: String = ""
 var _tuning: Dictionary = {}
 

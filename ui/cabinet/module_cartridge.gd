@@ -21,7 +21,7 @@ var _glyph: TextureRect = null
 var _name: Label = null
 var _badge: Label = null
 var _outline: Panel = null
-var _tap := TapGesture.new()
+var _tap: TapGesture = TapGesture.new()
 
 
 ## Built in `_init` so a cartridge can be loaded before it is put on the glass.

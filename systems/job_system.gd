@@ -1,8 +1,6 @@
 class_name JobSystem
 extends RefCounted
 
-const WorkflowMastery := preload("res://systems/workflow_mastery_system.gd")
-
 ## How many authored contracts a band needs before the board stops borrowing
 ## from the band below it. Under this a thin location shows the same posting
 ## three times, which reads as a bug rather than as a quiet week.
@@ -495,7 +493,7 @@ func run_burn(
 			run_state, job, lane_rng, messages, float(lane_burn.get("bug_chance_mult", 1.0)), mode
 		)
 		if mode == ResolveMode.COMMIT:
-			WorkflowMastery.evaluate(
+			WorkflowMasterySystem.evaluate(
 				run_state, job, lane_burn, remaining_before, effect_resolver, subscriptions,
 				lane_rng, mode
 			)

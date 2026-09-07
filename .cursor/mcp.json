@@ -6,6 +6,13 @@
       "env": {
         "DEBUG": "true"
       }
+    },
+    "godot-editor": {
+      "command": "npx",
+      "args": ["-y", "godot-mcp-enhanced"],
+      "env": {
+        "GODOT_PROJECT_PATH": "C:\\source\\token-burn"
+      }
     }
 
   }

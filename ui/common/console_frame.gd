@@ -11,12 +11,13 @@ var _title: Label = null
 var _context: Label = null
 var _content: VBoxContainer = null
 var _screen_name: String = "CONSOLE"
+var _version_text: String = ""
+var _clock_timer: Timer = null
 
 
 func _ready() -> void:
 	if _body == null:
 		_build()
-	set_process(true)
 
 
 func _build() -> void:
@@ -53,6 +54,13 @@ func _build() -> void:
 	_body.add_child(_content)
 
 	add_child(ConsoleStyle.crt_overlay())
+
+	_version_text = _read_version()
+	_clock_timer = Timer.new()
+	_clock_timer.wait_time = 1.0
+	_clock_timer.autostart = true
+	_clock_timer.timeout.connect(_refresh_title)
+	add_child(_clock_timer)
 	_refresh_title()
 
 
@@ -89,19 +97,15 @@ func content() -> VBoxContainer:
 	return _content
 
 
-func _process(_delta: float) -> void:
-	_refresh_title()
-
-
 func _refresh_title() -> void:
 	if _title == null:
 		return
 	var clock: Dictionary = Time.get_time_dict_from_system()
 	_title.text = "TOKEN_BURN %s · [ %s ] · %02d:%02d" % [
-		_version(), _screen_name, int(clock["hour"]), int(clock["minute"]),
+		_version_text, _screen_name, int(clock["hour"]), int(clock["minute"]),
 	]
 
 
-func _version() -> String:
+func _read_version() -> String:
 	var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
 	return "v%s" % (version if version != "" else "0.1.0")

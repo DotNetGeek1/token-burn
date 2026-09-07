@@ -32,7 +32,7 @@ var _pager: Label = null
 var _selected: bool = false
 var _outline: Panel = null
 var _job: Dictionary = {}
-var _tap := TapGesture.new()
+var _tap: TapGesture = TapGesture.new()
 
 
 ## Built in `_init` so a card can be written before it is put on the glass.

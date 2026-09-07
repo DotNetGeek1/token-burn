@@ -12,14 +12,21 @@ var _animating: bool = false
 var _literal: String = ""
 
 
+func _ready() -> void:
+	set_process(false)
+
+
 func set_value(value: float, animate: bool = true) -> void:
 	_literal = ""
 	_target_value = value
 	if not animate:
 		_display_value = value
+		_animating = false
+		set_process(false)
 		_refresh_text()
 		return
 	_animating = true
+	set_process(true)
 
 
 ## For readouts that are not a single number ("1/12"). The label then keeps the
@@ -27,22 +34,26 @@ func set_value(value: float, animate: bool = true) -> void:
 func set_literal(literal_text: String) -> void:
 	_literal = literal_text
 	_animating = false
+	set_process(false)
 	text = literal_text
 
 
 func skip_animation() -> void:
 	_display_value = _target_value
 	_animating = false
+	set_process(false)
 	_refresh_text()
 
 
 func _process(delta: float) -> void:
 	if not _animating:
+		set_process(false)
 		return
 	_display_value = lerpf(_display_value, _target_value, minf(1.0, delta * 8.0))
 	if absf(_display_value - _target_value) < 0.5:
 		_display_value = _target_value
 		_animating = false
+		set_process(false)
 	_refresh_text()
 
 

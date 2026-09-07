@@ -5,7 +5,7 @@ extends RefCounted
 
 const MAX_TRACE_ENTRIES := 500
 
-var _evaluator := ExpressionEvaluator.new()
+var _evaluator: ExpressionEvaluator = ExpressionEvaluator.new()
 var _trace: Array[Dictionary] = []
 var _guard: ChainGuard = null
 ## Subscription presentation extras (`source_kind`, `combo_name`) stacked for

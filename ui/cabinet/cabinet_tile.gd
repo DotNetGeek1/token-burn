@@ -17,7 +17,7 @@ var _sub: Label = null
 var _note: Label = null
 var _figure: Label = null
 var _status: Label = null
-var _tap := TapGesture.new()
+var _tap: TapGesture = TapGesture.new()
 
 
 ## Built in `_init` so a tile can be filled before it is put on the glass.

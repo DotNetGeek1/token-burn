@@ -16,6 +16,7 @@ var _card: ContractCard = null
 var _strip: HBoxContainer = null
 var _steps: HBoxContainer = null
 var _cells: Array[Control] = []
+var _glyph_rects: Array[TextureRect] = []
 var _step_labels: Array[Label] = []
 var _stats: Dictionary = {}
 var _keys: HBoxContainer = null
@@ -88,6 +89,7 @@ func _ready() -> void:
 		cell.add_child(glyph)
 		_strip.add_child(cell)
 		_cells.append(cell)
+		_glyph_rects.append(glyph)
 		var step: Label = CabinetStyle.mono(str(index + 1), CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
 		step.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		step.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -179,7 +181,7 @@ func _refresh_strip(preview: Dictionary) -> void:
 			continue
 		var module_id: String = str(slots[index])
 		var module: ModuleDefinition = ContentDatabase.get_module(module_id) if module_id != "" else null
-		var glyph: TextureRect = cell.get_node("Glyph")
+		var glyph: TextureRect = _glyph_rects[index]
 		var lit: bool = index == _lit
 		var tint: Color = CabinetStyle.category_color(module.category) if module != null else CabinetStyle.PHOSPHOR_DIM
 		glyph.texture = AssetCatalog.cabinet_module_glyph(module.category) if module != null else null
