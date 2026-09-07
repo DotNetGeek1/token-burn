@@ -50,7 +50,7 @@ func play(harness: UiHarness) -> void:
 	await _systems_shelf(harness, shell, screen, button)
 	await _contract_shape(harness, shell, screen)
 	await _blocked_states(harness, shell, screen, button)
-	await _sell_hold(harness, shell, screen, button)
+	await _retired_shelves(harness, shell, screen, button)
 	await _busy_during_burn(harness, shell, screen, button)
 	shell.switch_tab("run")
 	await harness.settle()
@@ -149,121 +149,17 @@ func _blocked_states(harness: UiHarness, shell: Node, screen: CabinetScreen, but
 		assert_true(str(reading["sub"]) != "", "MODULES with nothing armed carries a reason")
 
 
-## SELL is a danger action: it needs a hold, the hold shows progress, releasing
-## early cancels without selling, and holding through sells exactly once.
-func _sell_hold(harness: UiHarness, shell: Node, screen: CabinetScreen, button: Control) -> void:
+## Superseded shop and resale routes cannot be selected.
+func _retired_shelves(harness: UiHarness, shell: Node, screen: CabinetScreen, _button: Control) -> void:
 	shell.switch_tab("market")
 	await harness.settle()
 	var market: CabinetTab = screen.active_tab()
-	if market == null or not market.has_method("select_shelf"):
-		assert_true(false, "MARKET tab exposes select_shelf")
-		return
-	var sellable: String = _first_sellable()
-	if sellable == "":
-		sellable = _buy_something_sellable()
-		shell.refresh_all()
-		await harness.settle()
-	if sellable == "":
-		print("    market: nothing sellable on seed 101; SELL hold path not exercised")
-		return
-	assert_true(market.call("select_shelf", "rig"), "MARKET has a RIG shelf")
-	assert_true(market.call("select_item", sellable), "MARKET can pick %s on the rig shelf" % sellable)
-	shell.refresh_all()
-	await harness.settle()
-	var reading: Dictionary = _button_reading(button)
-	assert_eq(str(reading["label"]), "SELL", "A sellable rig item arms SELL")
-	assert_true(bool(reading["enabled"]), "SELL is enabled")
-	assert_eq(str(button.call("state")), "danger", "SELL takes the danger face")
-	assert_true(bool(button.call("requires_hold")), "SELL requires a hold")
-	assert_true(str(reading["sub"]).find("HOLD") >= 0 or str(button.call("action").get("sub", "")) != "", "SELL sub explains the consequence")
-	var hardware_before: int = Array(Simulation.run_state.build.get("hardware", [])).size()
-
-	# A plain press does not sell.
-	await harness.driver.press(button)
-	await harness.settle()
-	assert_eq(
-		Array(Simulation.run_state.build.get("hardware", [])).size(), hardware_before,
-		"A single press on SELL sells nothing"
-	)
-
-	# Press, wait a little, release early: progress was visible, nothing sold.
-	# The hold is measured in game seconds, so the harness's fast clock would
-	# finish it inside a frame; run this part at real speed.
-	var clock_before: float = Engine.time_scale
-	Engine.time_scale = 1.0
-	var viewport: Viewport = button.get_viewport()
-	var centre: Vector2 = button.get_global_rect().get_center()
-	var seen_progress: Array[float] = []
-	var on_progress := func(ratio: float) -> void: seen_progress.append(ratio)
-	button.connect("hold_progress", on_progress)
-	_push_mouse(viewport, centre, true)
-	var partial: float = float(button.call("hold_seconds")) * 0.35
-	var started: int = Time.get_ticks_msec()
-	while Time.get_ticks_msec() - started < int(partial * 1000.0):
-		await harness.get_tree().process_frame
-	assert_true(bool(button.call("is_holding")), "SELL is holding while the button is down")
-	assert_true(float(button.call("hold_ratio")) > 0.0 and float(button.call("hold_ratio")) < 1.0, "SELL hold shows partial progress")
-	harness.capture("commit-danger-hold")
-	_push_mouse(viewport, centre, false)
-	await harness.settle()
-	assert_false(bool(button.call("is_holding")), "Releasing cancels the hold")
-	assert_true(is_zero_approx(float(button.call("hold_ratio"))), "A cancelled hold resets its ring")
-	assert_eq(
-		Array(Simulation.run_state.build.get("hardware", [])).size(), hardware_before,
-		"An early release sells nothing"
-	)
-	assert_true(seen_progress.size() > 0 and seen_progress[seen_progress.size() - 1] == 0.0, "hold_progress reported the cancel as 0")
-
-	# Hold through: sells once.
-	var fired: Array[int] = [0]
-	var on_commit := func() -> void: fired[0] += 1
-	button.connect("committed", on_commit)
-	_push_mouse(viewport, centre, true)
-	var sold: bool = await wait_until(harness, func() -> bool:
-		return Array(Simulation.run_state.build.get("hardware", [])).size() < hardware_before
-	, int(float(button.call("hold_seconds")) * 1000.0) + 2500)
-	_push_mouse(viewport, centre, false)
-	await harness.settle()
-	assert_true(sold, "Holding SELL through the ring sells the item")
-	assert_eq(fired[0], 1, "The hold commits exactly once")
-	button.disconnect("committed", on_commit)
-	button.disconnect("hold_progress", on_progress)
-	Engine.time_scale = clock_before
-	# Selection is preserved where it still exists, else the shelf stays on RIG.
-	assert_eq(str(market.call("current_shelf")), "rig", "The RIG shelf stays up after a sale")
+	for key in ["rig", "hardware", "component", "cooling", "workspace"]:
+		assert_false(bool(market.call("select_shelf", key)), "Retired shelf is absent: " + key)
 
 
-func _first_sellable() -> String:
-	for row in UpgradePresentation.installed_inventory():
-		var key: String = str(Dictionary(row).get("key", ""))
-		if key != "" and Simulation.can_sell_hardware(key):
-			return key
-	return ""
 
 
-## A starter rig came with the run and cannot be sold; buy one machine through
-## the simulation (with a cash top-up that is taken back) so SELL has a target.
-func _buy_something_sellable() -> String:
-	if not Simulation.market_open():
-		return ""
-	var cash_before: float = float(Simulation.run_state.economy.get("cash", 0.0))
-	Simulation.run_state.economy["cash"] = cash_before + 1_000_000.0
-	var bought: String = ""
-	for upgrade in ContentDatabase.upgrades:
-		if upgrade.hardware_key == "" or upgrade.category == "component":
-			continue
-		if not Simulation.can_buy_upgrade(upgrade.id):
-			continue
-		if Simulation.buy_upgrade(upgrade.id):
-			bought = upgrade.hardware_key
-			break
-	Simulation.run_state.economy["cash"] = cash_before
-	if bought != "" and Simulation.can_sell_hardware(bought):
-		return bought
-	return _first_sellable()
-
-
-## Selected cards and cartridges under a tab, by their own `is_selected`.
 func _selected_tile_count(root: Node) -> int:
 	var count: Array[int] = [0]
 	_walk(root, func(node: Node) -> void:

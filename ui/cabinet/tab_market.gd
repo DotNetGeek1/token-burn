@@ -1,12 +1,7 @@
 class_name TabMarket
 extends CabinetTab
 
-## The shop on the glass. MODULES is a row of cartridges off the shelf; SYSTEMS
-## is the cabinet's five tiered systems, each showing only the tier it can buy
-## next; the hardware shelves are tiles grouped the way the old market grouped
-## them; RIG is what is already installed, sellable back. The big red button is
-## BUY, or UPGRADE on the systems shelf, or SELL on the rig shelf, or REROLL
-## when the restock line is picked.
+## The shop on the glass: five cabinet systems and module cartridges.
 
 ## A cabinet system went up a tier at this counter. The shell plays the
 ## install reveal off it; the tab knows nothing about the machine behind it.
@@ -14,13 +9,12 @@ signal system_upgraded(system_id: String, old_tier: int, new_tier: int)
 
 const MODULES := "modules"
 const SYSTEMS := "systems"
-const RIG := "rig"
 const RESTOCK := "restock"
 
 ## The painted tile of a system's next tier, as a row thumbnail.
 const SYSTEM_TILE_PX := 44.0
 
-var _shelf: String = MODULES
+var _shelf: String = SYSTEMS
 var _selected: String = ""
 var _strip: HBoxContainer = null
 var _shelf_buttons: Dictionary = {}
@@ -114,7 +108,7 @@ func refresh() -> void:
 	restore_scroll(self, scrolls)
 
 
-## The shelf currently up: MODULES, SYSTEMS, RIG or a hardware group key.
+## The shelf currently up: SYSTEMS or MODULES.
 func current_shelf() -> String:
 	return _shelf
 
@@ -150,46 +144,16 @@ func select_item(id: String) -> bool:
 	return true
 
 
-## Module shelf, the systems shelf, one shelf per hardware group the run can
-## still buy into, and the rig. Keys are stable so a picked shelf survives a
-## refresh; insertion order is strip order.
+## Stable shelf keys preserve selection after a purchase.
 func _shelves() -> Dictionary:
-	var shelves: Dictionary = {MODULES: [], SYSTEMS: []}
+	var shelves: Dictionary = {SYSTEMS: [], MODULES: []}
 	for module_id in Simulation.module_market_stock():
 		shelves[MODULES].append({"kind": "module", "id": str(module_id)})
 	shelves[MODULES].append({"kind": "restock", "id": RESTOCK})
 	for system_id in CabinetSystems.system_ids():
 		shelves[SYSTEMS].append({"kind": "system", "id": str(system_id)})
-	var state := Simulation.run_state
-	for upgrade in ContentDatabase.upgrades:
-		if not upgrade.repeatable:
-			if upgrade.id in state.build["upgrades"]:
-				continue
-			if upgrade.hardware_key != "" and upgrade.hardware_key in state.build["hardware"]:
-				continue
-		if upgrade.requires_upgrade != "" and not (upgrade.requires_upgrade in state.build["upgrades"]):
-			continue
-		var key: String = UpgradePresentation.group_key(upgrade)
-		if not shelves.has(key):
-			shelves[key] = []
-		shelves[key].append({"kind": "upgrade", "id": upgrade.id, "upgrade": upgrade})
-	for key in shelves:
-		if key == MODULES or key == SYSTEMS:
-			continue
-		shelves[key].sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-			return _quoted(a["upgrade"]) < _quoted(b["upgrade"])
-		)
-	var rig: Array = []
-	for row in UpgradePresentation.installed_inventory():
-		rig.append({"kind": "installed", "id": str(row.get("key", "")), "row": row})
-	shelves[RIG] = rig
 	return shelves
 
-
-func _quoted(upgrade: UpgradeDefinition) -> float:
-	return UpgradeSystem.quoted_cost(
-		Simulation.run_state, upgrade, UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-	)
 
 
 func _rebuild_strip(shelves: Dictionary) -> void:
@@ -198,12 +162,7 @@ func _rebuild_strip(shelves: Dictionary) -> void:
 		if child != _cash:
 			child.queue_free()
 	_shelf_buttons.clear()
-	var keys: Array = [MODULES]
 	for key in shelves:
-		if key != MODULES and key != RIG:
-			keys.append(key)
-	keys.append(RIG)
-	for key in keys:
 		var label: String = _shelf_label(key)
 		var button: Button = CabinetStyle.tab("%s %d" % [label, Array(shelves[key]).size() - (1 if key == MODULES else 0)])
 		button.add_theme_font_size_override("font_size", CabinetStyle.FONT_TINY)
@@ -220,9 +179,7 @@ func _shelf_label(key: String) -> String:
 			return "MODULES"
 		SYSTEMS:
 			return "SYSTEMS"
-		RIG:
-			return "RIG"
-	return UpgradePresentation.group_label(key).to_upper()
+	return key.to_upper()
 
 
 func _rebuild_shelf(shelves: Dictionary) -> void:
@@ -272,21 +229,13 @@ func _rebuild_shelf(shelves: Dictionary) -> void:
 		_row = column
 		for item in items:
 			var tile := CabinetTile.new()
-			var entry: Dictionary
-			match str(Dictionary(item)["kind"]):
-				"upgrade":
-					entry = _upgrade_entry(item)
-				"system":
-					entry = _system_entry(item)
-				_:
-					entry = _installed_entry(item)
-			tile.set_entry(entry)
+			tile.set_entry(_system_entry(item))
 			tile.set_selected(str(Dictionary(item)["id"]) == _selected)
 			tile.pressed.connect(func(meta: Variant) -> void: _pick(str(meta)))
 			column.add_child(tile)
 	_scroll.add_child(_row)
 	_empty.visible = items.is_empty()
-	_empty.text = "NOTHING INSTALLED" if _shelf == RIG else "SHELF CLEARED — NEW STOCK ARRIVES AS YOU PROGRESS"
+	_empty.text = "SHELF CLEARED"
 
 
 ## One cabinet system as a row: the next tier's painted tile, the system's
@@ -352,46 +301,6 @@ func _generation_line() -> String:
 	return "GENERATION %d · %s" % [int(generation.get("index", 0)) + 1, str(generation.get("name", "")).to_upper()]
 
 
-func _upgrade_entry(item: Dictionary) -> Dictionary:
-	var upgrade: UpgradeDefinition = item["upgrade"]
-	var level: int = UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id)
-	var cost: float = UpgradeSystem.quoted_cost(Simulation.run_state, upgrade, level)
-	var can_buy: bool = Simulation.can_buy_upgrade(upgrade.id)
-	var affordable: bool = float(Simulation.run_state.economy.get("cash", 0.0)) >= cost
-	var name: String = upgrade.name
-	if level > 0:
-		name = "%s ×%d" % [upgrade.name, level] if upgrade.category in ["hardware", "component"] else "%s Lv%d" % [upgrade.name, level]
-	return {
-		"meta": upgrade.id,
-		"name": name.to_upper(),
-		"sub": UpgradePresentation.effect_line(upgrade),
-		"figure": NumberFormat.format_cash(cost),
-		"figure_color": CabinetStyle.PHOSPHOR if affordable else CabinetStyle.RED,
-		"status": "OPEN" if can_buy else _blocked_status(upgrade, affordable),
-		"status_color": CabinetStyle.PHOSPHOR if can_buy else CabinetStyle.PHOSPHOR_DIM,
-		"icon": AssetCatalog.cabinet_glyph("hardware"),
-		"accent": UpgradePresentation.group_color(UpgradePresentation.group_key(upgrade)),
-		"tooltip": upgrade.description,
-	}
-
-
-func _installed_entry(item: Dictionary) -> Dictionary:
-	var row: Dictionary = item["row"]
-	var key: String = str(row.get("key", ""))
-	var can_sell: bool = Simulation.can_sell_hardware(key)
-	var rate: float = float(row.get("token_rate", 0.0))
-	return {
-		"meta": key,
-		"name": ("%s ×%d" % [str(row.get("name", key)), int(row.get("count", 1))]).to_upper(),
-		"sub": ("%s TOKENS / PROMPT" % NumberFormat.format_token_rate(rate)) if rate > 0.0 else "fitted",
-		"figure": NumberFormat.format_cash(float(row.get("refund", 0.0))),
-		"figure_color": CabinetStyle.PHOSPHOR if can_sell else CabinetStyle.PHOSPHOR_DIM,
-		"status": "SELLS FOR" if can_sell else "KEEPING IT",
-		"status_color": CabinetStyle.PHOSPHOR_DIM,
-		"icon": AssetCatalog.cabinet_glyph("hardware"),
-		"accent": CabinetStyle.GREY,
-		"tooltip": "" if can_sell else Simulation.hardware_sale_reason(key),
-	}
 
 
 func _restock_entry() -> Dictionary:
@@ -411,23 +320,6 @@ func _restock_entry() -> Dictionary:
 		"tooltip": "Redraws the shelf. Escalates until the next free restock.",
 	}
 
-
-func _blocked_status(upgrade: UpgradeDefinition, affordable: bool) -> String:
-	if UpgradeSystem.is_maxed(Simulation.run_state, upgrade):
-		return "MAX %d/%d" % [UpgradeSystem.upgrade_level(Simulation.run_state, upgrade.id), upgrade.max_level]
-	if UpgradePresentation.prerequisite_text(upgrade) != "":
-		return "LOCKED"
-	if UpgradePresentation.hardware_space_full(upgrade):
-		return "NO FLOOR SPACE"
-	if UpgradePresentation.component_capacity_reached(upgrade):
-		return "ALL FITTED"
-	if not UpgradePresentation.cooling_shortfall(upgrade).is_empty():
-		return "NEEDS COOLING"
-	if not affordable:
-		return "TOO DEAR"
-	if not Simulation.market_open():
-		return "CLOSED"
-	return "BLOCKED"
 
 
 func _selected_item() -> Dictionary:
@@ -482,36 +374,6 @@ func _refresh_detail() -> void:
 				{"stat": "Cost", "value": NumberFormat.format_cash(cost), "color": CabinetStyle.PHOSPHOR if cash >= cost else CabinetStyle.RED},
 				{"stat": "You have", "value": NumberFormat.format_cash(cash)},
 			])
-		"upgrade":
-			var upgrade: UpgradeDefinition = item["upgrade"]
-			var cost: float = _quoted(upgrade)
-			_title.text = upgrade.name.to_upper()
-			_kicker.text = UpgradePresentation.group_label(UpgradePresentation.group_key(upgrade)).to_upper()
-			_kicker.add_theme_color_override("font_color", CabinetStyle.PHOSPHOR_DIM)
-			var rows: Array = [{"text": upgrade.description}]
-			var effect: String = UpgradePresentation.effect_line(upgrade)
-			if effect != "":
-				rows.append({"rule": "EFFECT", "text": effect})
-			var affordable: bool = cash >= cost
-			for blocker in UpgradePresentation.blockers(upgrade, affordable):
-				rows.append({"warn": str(blocker)})
-			var warning: String = Simulation.purchase_bill_warning(cost)
-			if warning != "":
-				rows.append({"warn": warning})
-			var heat: String = Simulation.upgrade_heat_warning(upgrade.id)
-			if heat != "":
-				rows.append({"warn": heat})
-			detail_rows(_rows, rows)
-			var summary: Array = [
-				{"stat": "Cost", "value": NumberFormat.format_cash(cost), "color": CabinetStyle.PHOSPHOR if affordable else CabinetStyle.RED},
-				{"stat": "You have", "value": NumberFormat.format_cash(cash)},
-			]
-			if upgrade.recurring_cost_delta > 0.0:
-				summary.append({"stat": "Running cost", "value": "%s / round" % NumberFormat.format_cash(upgrade.recurring_cost_delta), "color": CabinetStyle.AMBER})
-			var curve: Dictionary = UpgradePresentation.curve(upgrade)
-			if float(curve.get("power_draw", 0.0)) > 0.0:
-				summary.append({"stat": "Draw", "value": "%dW" % int(curve["power_draw"])})
-			detail_rows(_summary, summary)
 		"system":
 			var id: String = str(item["id"])
 			var info: Dictionary = Simulation.cabinet_system_next(id)
@@ -547,23 +409,7 @@ func _refresh_detail() -> void:
 			if not maxed:
 				summary.append({"stat": "After", "value": NumberFormat.format_cash(cash - cost), "color": CabinetStyle.PHOSPHOR if cash >= cost else CabinetStyle.RED})
 			detail_rows(_summary, summary)
-		"installed":
-			var row: Dictionary = item["row"]
-			var key: String = str(row.get("key", ""))
-			_title.text = str(row.get("name", key)).to_upper()
-			_kicker.text = "INSTALLED ×%d" % int(row.get("count", 1))
-			_kicker.add_theme_color_override("font_color", CabinetStyle.PHOSPHOR_DIM)
-			var rows: Array = []
-			var reason: String = Simulation.hardware_sale_reason(key)
-			if reason != "":
-				rows.append({"warn": reason})
-			else:
-				rows.append({"text": "Sells back for part of its price. Its power draw and running cost leave with it."})
-			detail_rows(_rows, rows)
-			detail_rows(_summary, [
-				{"stat": "Refund", "value": NumberFormat.format_cash(float(row.get("refund", 0.0))), "role": "money"},
-				{"stat": "Draw", "value": "%dW" % int(row.get("power_draw", 0.0))},
-			])
+
 
 
 ## "16 COOLING · 100 HEAT CAP": what the fitted tier is worth right now.
@@ -615,31 +461,6 @@ func primary_action() -> Dictionary:
 				"sub": _spend_sub(cost, cash),
 				"pressed": _reroll,
 			})
-		"upgrade":
-			var upgrade: UpgradeDefinition = item["upgrade"]
-			var cost: float = _quoted(upgrade)
-			var can: bool = Simulation.can_buy_upgrade(upgrade.id)
-			if not can:
-				return blocked_action("BUY", _upgrade_block(upgrade, cost, cash))
-			return normalize_action({
-				"label": "BUY", "enabled": true,
-				"sub": _spend_sub(cost, cash),
-				"pressed": _buy_upgrade.bind(upgrade.id),
-			})
-		"installed":
-			var key: String = str(item["id"])
-			var can: bool = Simulation.can_sell_hardware(key)
-			if not can:
-				var reason: String = Simulation.hardware_sale_reason(key).to_upper()
-				return blocked_action("SELL", reason if reason != "" else "KEEPING IT")
-			# Selling is the one market action that cannot be undone at the
-			# same price, so it takes the hazard face and a hold.
-			return normalize_action({
-				"label": "SELL", "enabled": true,
-				"tone": TONE_DANGER, "confirm": CONFIRM_HOLD,
-				"sub": "%s BACK" % NumberFormat.format_cash(Simulation.hardware_sale_refund(key)),
-				"pressed": _sell.bind(key),
-			})
 	return blocked_action("BUY", BLOCK_SELECT_ITEM)
 
 
@@ -668,23 +489,6 @@ func _restock_block(cost: float, cash: float) -> String:
 	return "UNAVAILABLE"
 
 
-func _upgrade_block(upgrade: UpgradeDefinition, cost: float, cash: float) -> String:
-	if not Simulation.market_open():
-		return BLOCK_MARKET_CLOSED
-	if UpgradeSystem.is_maxed(Simulation.run_state, upgrade):
-		return "MAXED OUT"
-	if UpgradePresentation.prerequisite_text(upgrade) != "":
-		return "LOCKED · %s" % UpgradePresentation.prerequisite_text(upgrade).to_upper()
-	if UpgradePresentation.hardware_space_full(upgrade):
-		return "NO FLOOR SPACE"
-	if UpgradePresentation.component_capacity_reached(upgrade):
-		return "ALL FITTED"
-	if not UpgradePresentation.cooling_shortfall(upgrade).is_empty():
-		return "NEEDS COOLING"
-	if cost > cash:
-		return need_more_blocker(int(ceil(cost - cash)))
-	return "UNAVAILABLE"
-
 
 func _buy_module(id: String) -> void:
 	if Simulation.buy_module(id):
@@ -694,20 +498,6 @@ func _buy_module(id: String) -> void:
 		UiSound.play("error")
 
 
-func _buy_upgrade(id: String) -> void:
-	if Simulation.buy_upgrade(id):
-		UiSound.play("buy")
-		_after_trade()
-	else:
-		UiSound.play("error")
-
-
-func _sell(key: String) -> void:
-	if Simulation.sell_hardware(key):
-		UiSound.play("buy")
-		_after_trade()
-	else:
-		UiSound.play("error")
 
 
 func _reroll() -> void:

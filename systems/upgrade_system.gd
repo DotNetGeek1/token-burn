@@ -104,13 +104,13 @@ static func quoted_cost(run_state: RunState, upgrade: UpgradeDefinition, level: 
 	var cost: float = purchase_cost(upgrade, level)
 	if upgrade.category != "hardware" and upgrade.category != "component":
 		return cost
-	var discount: float = clampf(float(run_state.build.get("hardware_discount", 0.0)), 0.0, 0.9)
+	var discount: float = clampf(float(run_state.build.get("system_discount", 0.0)), 0.0, 0.9)
 	return cost * (1.0 - discount)
 
 
 static func consume_hardware_discount(run_state: RunState) -> void:
-	if float(run_state.build.get("hardware_discount", 0.0)) > 0.0:
-		run_state.build["hardware_discount"] = 0.0
+	if float(run_state.build.get("system_discount", 0.0)) > 0.0:
+		run_state.build["system_discount"] = 0.0
 
 
 static func is_maxed(run_state: RunState, upgrade: UpgradeDefinition) -> bool:
@@ -229,6 +229,7 @@ func upgrade_cabinet_system(run_state: RunState, system_id: String, economy_syst
 	var previous: int = CabinetSystems.tier(run_state, system_id)
 	var reached: int = previous + 1
 	CabinetSystems.set_tier(run_state, system_id, reached)
+	run_state.build["system_discount"] = 0.0
 	# Heat capacity and cooling are the two figures kept on `compute` rather than
 	# derived on every read, so a cooling upgrade has to write them here.
 	run_state.compute["heat_capacity"] = CabinetSystems.capacity(run_state, "cooling", "heat_capacity")
@@ -382,6 +383,8 @@ func can_purchase(run_state: RunState, upgrade_id: String, content_db: Node) -> 
 ## Every refusal that is not about cash, shared by the check and the purchase so
 ## the Market can never offer a button the sim would decline.
 func _passes_gates(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
+	if upgrade in content_db.legacy_upgrades:
+		return false
 	if is_maxed(run_state, upgrade):
 		return false
 	if not upgrade.repeatable and upgrade.id in run_state.build["upgrades"]:
@@ -400,7 +403,7 @@ func _passes_gates(run_state: RunState, upgrade: UpgradeDefinition, content_db: 
 ## The upgrade that installed a given machine or component, or null for kit the
 ## run began with.
 static func upgrade_for_installed(content_db: Node, key: String) -> UpgradeDefinition:
-	for upgrade in content_db.upgrades:
+	for upgrade in content_db.upgrades + content_db.legacy_upgrades:
 		if installed_key(upgrade) == key:
 			return upgrade
 	return null
@@ -440,7 +443,7 @@ static func sell_reason(run_state: RunState, key: String, content_db: Node) -> S
 ## A component with nowhere left to live if one of its hosts goes.
 static func _orphaned_component(run_state: RunState, host_key: String, content_db: Node) -> String:
 	var hosts_after: int = installed_count(run_state, host_key) - 1
-	for upgrade in content_db.upgrades:
+	for upgrade in content_db.upgrades + content_db.legacy_upgrades:
 		if upgrade.category != "component" or upgrade.requires_hardware != host_key:
 			continue
 		if installed_count(run_state, upgrade.component_key) > hosts_after:

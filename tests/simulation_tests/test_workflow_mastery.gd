@@ -410,7 +410,7 @@ func _test_blocked_benchmark_harness_does_not_discount_hardware() -> void:
 	blocked.job["tokens_remaining"] = 1.0
 	blocked.commit(1_000_000.0)
 	assert_almost_eq(
-		float(blocked.state.build.get("hardware_discount", 0.0)),
+		float(blocked.state.build.get("system_discount", 0.0)),
 		0.0,
 		0.001,
 		"A completion module in a blocked slot does not fire"
@@ -421,32 +421,18 @@ func _test_blocked_benchmark_harness_does_not_discount_hardware() -> void:
 	reached.job["tokens_remaining"] = 1.0
 	reached.commit(1_000_000.0)
 	assert_almost_eq(
-		float(reached.state.build.get("hardware_discount", 0.0)),
+		float(reached.state.build.get("system_discount", 0.0)),
 		0.1,
 		0.001,
-		"A reached Benchmark Harness discounts the next hardware purchase"
+		"A reached Benchmark Harness discounts the next system upgrade"
 	)
-	var hardware: UpgradeDefinition = null
-	for upgrade in ContentDatabase.upgrades:
-		if upgrade.category == "hardware":
-			hardware = upgrade
-			break
-	assert_true(hardware != null, "The catalog has hardware to discount")
-	if hardware != null:
-		var base: float = UpgradeSystem.purchase_cost(hardware, 0)
-		assert_almost_eq(
-			UpgradeSystem.quoted_cost(reached.state, hardware, 0),
-			base * 0.9,
-			0.01,
-			"The discount reaches the hardware quote"
-		)
-		UpgradeSystem.consume_hardware_discount(reached.state)
-		assert_almost_eq(
-			UpgradeSystem.quoted_cost(reached.state, hardware, 0),
-			base,
-			0.01,
-			"The one-shot discount is consumed"
-		)
+	var base: float = CabinetSystems.cost_of_tier("compute", 2)
+	assert_almost_eq(CabinetSystems.next_tier_cost(reached.state, "compute"), base * 0.9, 0.01, "Coupon discounts a system")
+	reached.state.economy["cash"] = 10000.0
+	var purchase: Dictionary = UpgradeSystem.new().upgrade_cabinet_system(reached.state, "compute", EconomySystem.new())
+	assert_true(bool(purchase.get("ok", false)), "Discounted system purchased")
+	assert_almost_eq(float(purchase.get("cost", 0.0)), base * 0.9, 0.01, "Charged the discounted quote")
+	assert_almost_eq(float(reached.state.build.get("system_discount", 0.0)), 0.0, 0.001, "Successful purchase consumes coupon")
 
 
 func _test_mastery_trace_names_its_workflow_and_evidence() -> void:
@@ -586,32 +572,18 @@ func _test_benchmark_harness_coupon_does_not_stack() -> void:
 		harness.state.business["focused_job_id"] = str(harness.job.get("id", ""))
 		harness.commit(1_000_000.0)
 	assert_almost_eq(
-		float(harness.state.build.get("hardware_discount", 0.0)),
+		float(harness.state.build.get("system_discount", 0.0)),
 		0.1,
 		0.001,
 		"A second clean one-shot does not stack another 10% coupon"
 	)
-	var hardware: UpgradeDefinition = null
-	for upgrade in ContentDatabase.upgrades:
-		if upgrade.category == "hardware":
-			hardware = upgrade
-			break
-	assert_true(hardware != null, "The catalog has hardware to discount")
-	if hardware != null:
-		var base: float = UpgradeSystem.purchase_cost(hardware, 0)
-		assert_almost_eq(
-			UpgradeSystem.quoted_cost(harness.state, hardware, 0),
-			base * 0.9,
-			0.01,
-			"The pending coupon stays a single 10% off"
-		)
-		UpgradeSystem.consume_hardware_discount(harness.state)
-		assert_almost_eq(
-			UpgradeSystem.quoted_cost(harness.state, hardware, 0),
-			base,
-			0.01,
-			"Buying hardware still consumes the coupon"
-		)
+	var base: float = CabinetSystems.cost_of_tier("compute", 2)
+	assert_almost_eq(CabinetSystems.next_tier_cost(harness.state, "compute"), base * 0.9, 0.01, "Coupon discounts a system")
+	harness.state.economy["cash"] = 10000.0
+	var purchase: Dictionary = UpgradeSystem.new().upgrade_cabinet_system(harness.state, "compute", EconomySystem.new())
+	assert_true(bool(purchase.get("ok", false)), "Discounted system purchased")
+	assert_almost_eq(float(purchase.get("cost", 0.0)), base * 0.9, 0.01, "Charged the discounted quote")
+	assert_almost_eq(float(harness.state.build.get("system_discount", 0.0)), 0.0, 0.001, "Successful purchase consumes coupon")
 
 
 func _test_completion_telemetry_records_once_on_commit() -> void:

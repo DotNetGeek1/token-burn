@@ -80,9 +80,9 @@ const VALID_MASTERY_TARGETS := [
 ]
 
 ## Completion effects may also write lasting run-state fields (Benchmark Harness
-## discounts the next hardware buy via build.hardware_discount).
+## discounts the next hardware buy via build.system_discount).
 const VALID_BUILD_TARGETS := [
-	"build.hardware_discount",
+	"build.system_discount",
 ]
 
 const EXPANSION_MODULE_IDS := [
@@ -358,8 +358,10 @@ func _test_validation_catches_synthetic_bad_content() -> void:
 	bad_effect.target = "economy.does_not_exist"
 	bad_upgrade.effects = [bad_effect]
 	ContentDatabase.upgrades.append(bad_upgrade)
+	ContentDatabase.upgrades.append(bad_upgrade)
 
 	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.upgrades.pop_back()
 	ContentDatabase.upgrades.pop_back()
 
 	assert_true(

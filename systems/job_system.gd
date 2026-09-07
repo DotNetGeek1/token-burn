@@ -95,7 +95,7 @@ func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Nod
 ## perks and throttles may change output without silently changing the market.
 static func rig_work_tier(run_state: RunState, content_db: Node) -> int:
 	var curves: Dictionary = content_db.balance.get("hardware_curves", {})
-	var tier: int = 0
+	var tier: int = CabinetSystems.work_tier(run_state, content_db)
 	for hardware_id in run_state.build.get("hardware", []):
 		var curve: Dictionary = Dictionary(curves.get(str(hardware_id), {}))
 		tier = maxi(tier, int(curve.get("work_tier", 0)))

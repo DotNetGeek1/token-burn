@@ -204,9 +204,10 @@ static func decorate_heat_outlook(burn: Dictionary, heat_before: float, run_stat
 	burn["crosses_throttle"] = before_ratio < throttle_ratio and after_ratio >= throttle_ratio
 	burn["crosses_fire_risk"] = before_ratio < fire_line and after_ratio >= fire_line
 	burn["crosses_catastrophe"] = before_ratio < catastrophe_line and after_ratio >= catastrophe_line
-	# Early rooms: catastrophe is 100%, so this stays the old FIRE flag.
-	# Late rooms: it means the 150% loss line, not the redline.
-	burn["crosses_fire"] = bool(burn["crosses_catastrophe"])
+	# `crosses_fire` is the compatibility flag consumed by the burn forecast.
+	# Keep it true for either the redline or the later catastrophe line; callers
+	# that need the distinction can use the two explicit fields above.
+	burn["crosses_fire"] = bool(burn["crosses_fire_risk"] or burn["crosses_catastrophe"])
 
 
 static func overclock_band_bonus(ratio: float, tier: int) -> float:

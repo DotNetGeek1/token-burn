@@ -167,8 +167,7 @@ func apply_run_location(
 	# rather than a fixed hundred, so a higher tier buys headroom as well as
 	# cooling. Read from the Cooling Loop tier, floored by the room's own row.
 	state.compute["heat_capacity"] = CabinetSystems.capacity(state, "cooling", "heat_capacity")
-	if grant_starter_rig:
-		_grant_location_starter_rig(sim, state, stats)
+	# Chapter throughput and draw are supplied by CabinetSystems.chapter_profiles.
 	state.compute["cooling"] = ComputeSystem.derive_cooling(state)
 	# The contract belongs to the location, so moving the run moves the contract
 	# with it. Nothing else can set it: a run measured against the chapter it is
@@ -200,43 +199,11 @@ func _grant_location_starter_rig(sim: Node, state: RunState, stats: Dictionary) 
 ## That second call is why a rung already standing is skipped rather than
 ## installed again.
 func _install_permanent_rig(sim: Node) -> void:
-	var installed: int = 0
-	sim.compute_system().recalculate(
-		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
-	)
 	for upgrade_id in MetaProgress.starting_rig():
 		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
-		if upgrade == null:
-			continue
-		# Permanent ownership does not make an industrial campus fit in a
-		# garage. The rung waits until the campaign reaches the premises it was
-		# authored for, just as a newly purchased copy would.
-		if not UpgradeSystem.prerequisites_met(sim.run_state, upgrade, ContentDatabase):
-			continue
-		if UpgradeSystem.installed_key(upgrade) in Array(sim.run_state.build.get("hardware", [])):
-			continue
-		var curve: Dictionary = Dictionary(
-			ContentDatabase.balance.get("hardware_curves", {}).get(upgrade.hardware_key, {})
-		)
-		var startup: Dictionary = sim.heat_outlook(
-			float(curve.get("power_draw", 0.0)),
-			UpgradeSystem.cooling_from(upgrade),
-			int(curve.get("work_tier", 0))
-		)
-		# A permanent unlock is never allowed to turn a cold chapter start into
-		# an already-cooking rig. Ambient ticks are a fraction of the bar, so
-		# skip on sustainability rather than on one prompt overflowing capacity.
-		if not bool(startup.get("sustainable", true)):
-			continue
-		if sim.upgrade_system().install_carried(
-			sim.run_state, str(upgrade_id), ContentDatabase, sim.effect_resolver
-		):
-			installed += 1
-			sim.compute_system().recalculate(
-				sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
-			)
-	if installed > 0:
-		sim.round_log.append("Your permanent rig is already racked: %d machine(s)." % installed)
+		if upgrade != null:
+			CabinetSystems.grant_permanent_upgrade(sim.run_state, upgrade)
+
 
 
 func start_run(sim: Node, p_seed: int = 0, difficulty_override: String = "") -> void:

@@ -66,7 +66,7 @@ func _test_one_machine_works_one_contract() -> void:
 
 func _test_a_second_machine_opens_a_second_lane() -> void:
 	var sim: Node = _sim(4102)
-	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "A desktop fits beside the laptop")
+	assert_true(bool(sim.upgrade_cabinet_system("power").get("ok", false)), "A desktop fits beside the laptop")
 	assert_eq(sim.job_slots(), 2, "Two machines on the floor is two job slots")
 	_load_two_contracts(sim)
 	var lanes: Array = sim.burn_lanes()
@@ -91,7 +91,7 @@ func _test_parallel_lanes_split_one_batch() -> void:
 	solo.free()
 
 	var pair: Node = _sim(4103)
-	assert_true(pair.buy_upgrade("upgrade.custom_desktop"), "Add a second machine")
+	assert_true(bool(pair.upgrade_cabinet_system("power").get("ok", false)), "Add a second machine")
 	# Match the solo rig's throughput so the comparison is about the split alone
 	# rather than about the desktop being a faster machine.
 	pair.run_state.compute["token_rate"] = float(solo_progress)
@@ -114,7 +114,7 @@ func _test_parallel_lanes_split_one_batch() -> void:
 ## to delivery instead of leaving one of them ageing in a queue.
 func _test_parallel_lanes_move_two_deadlines_at_once() -> void:
 	var sim: Node = _sim(4104)
-	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "Two machines on the floor")
+	assert_true(bool(sim.upgrade_cabinet_system("power").get("ok", false)), "Two machines on the floor")
 	_load_two_contracts(sim)
 	var before: Array = []
 	for job in sim.run_state.business["active_jobs"]:
@@ -133,7 +133,7 @@ func _test_parallel_lanes_move_two_deadlines_at_once() -> void:
 
 func _test_peak_prompt_tokens_sums_every_lane() -> void:
 	var sim: Node = _sim(4106)
-	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "Two machines on the floor")
+	assert_true(bool(sim.upgrade_cabinet_system("power").get("ok", false)), "Two machines on the floor")
 	_load_two_contracts(sim)
 	var lifetime_before: float = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
 	sim.run_state.statistics["peak_prompt_tokens"] = 0.0
@@ -166,7 +166,7 @@ func _test_peak_prompt_tokens_sums_every_lane() -> void:
 ## side by side.
 func _test_two_contracts_run_through_two_workflows_in_one_prompt() -> void:
 	var sim: Node = _sim(4105)
-	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "Two machines on the floor")
+	assert_true(bool(sim.upgrade_cabinet_system("power").get("ok", false)), "Two machines on the floor")
 	sim.run_state.build["meta_workflow_bonus"] = 1
 	var jobs: Array = _load_two_contracts(sim)
 	sim.run_state.build["modules"] = ["op.prompt", "op.cheap_model", "op.premium_model"]

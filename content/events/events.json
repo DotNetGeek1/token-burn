@@ -7,7 +7,29 @@
     "weight": 1.0,
     "conditions": [],
     "effects": [
-      {"operation": "multiply", "target": "compute.token_rate", "value": 0.7}
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.event.power_cut.throughput",
+          "name": "Power Cut",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "compute.recalculate",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {
+                  "operation": "multiply",
+                  "target": "compute.local_rate",
+                  "value": 0.7
+                }
+              ]
+            }
+          ]
+        }
+      }
     ]
   },
   {
@@ -18,7 +40,11 @@
     "weight": 0.9,
     "conditions": [],
     "effects": [
-      {"operation": "add", "target": "business.reputation", "value": 5}
+      {
+        "operation": "add",
+        "target": "business.reputation",
+        "value": 5
+      }
     ]
   },
   {
@@ -29,7 +55,11 @@
     "weight": 0.8,
     "conditions": [],
     "effects": [
-      {"operation": "add", "target": "compute.heat", "value": 25}
+      {
+        "operation": "add",
+        "target": "compute.heat",
+        "value": 25
+      }
     ]
   },
   {
@@ -40,7 +70,29 @@
     "weight": 1.0,
     "conditions": [],
     "effects": [
-      {"operation": "multiply", "target": "compute.token_rate", "value": 0.88},
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.event.scope_creep_email.throughput",
+          "name": "Scope Creep Email",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "compute.recalculate",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {
+                  "operation": "multiply",
+                  "target": "compute.local_rate",
+                  "value": 0.88
+                }
+              ]
+            }
+          ]
+        }
+      },
       {
         "operation": "spawn",
         "target": "build.status_effects",
@@ -54,7 +106,11 @@
               "priority": 0,
               "conditions": [],
               "effects": [
-                {"operation": "multiply", "target": "compute.efficiency", "value": 0.97}
+                {
+                  "operation": "multiply",
+                  "target": "compute.efficiency",
+                  "value": 0.97
+                }
               ]
             }
           ]
@@ -70,8 +126,34 @@
     "weight": 0.95,
     "conditions": [],
     "effects": [
-      {"operation": "add", "target": "compute.heat", "value": 18},
-      {"operation": "multiply", "target": "compute.token_rate", "value": 0.72}
+      {
+        "operation": "add",
+        "target": "compute.heat",
+        "value": 18
+      },
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.event.landlord_inspection.throughput",
+          "name": "Landlord Inspection",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "compute.recalculate",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {
+                  "operation": "multiply",
+                  "target": "compute.local_rate",
+                  "value": 0.72
+                }
+              ]
+            }
+          ]
+        }
+      }
     ]
   },
   {
@@ -82,7 +164,29 @@
     "weight": 0.85,
     "conditions": [],
     "effects": [
-      {"operation": "multiply", "target": "compute.efficiency_base", "value": 0.68},
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.event.viral_bug.efficiency",
+          "name": "Viral Bug",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "compute.recalculate",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {
+                  "operation": "multiply",
+                  "target": "compute.efficiency",
+                  "value": 0.68
+                }
+              ]
+            }
+          ]
+        }
+      },
       {
         "operation": "spawn",
         "target": "build.status_effects",
@@ -96,7 +200,11 @@
               "priority": 0,
               "conditions": [],
               "effects": [
-                {"operation": "add", "target": "compute.heat", "value": 4}
+                {
+                  "operation": "add",
+                  "target": "compute.heat",
+                  "value": 4
+                }
               ]
             }
           ]
@@ -111,11 +219,23 @@
     "trigger_event": "round.ended",
     "weight": 0.75,
     "conditions": [
-      {"left": "economy.cash", "operator": "<", "right": 350}
+      {
+        "left": "economy.cash",
+        "operator": "<",
+        "right": 350
+      }
     ],
     "effects": [
-      {"operation": "borrow", "target": "economy.cash", "value": 450},
-      {"operation": "add", "target": "business.reputation", "value": 4}
+      {
+        "operation": "borrow",
+        "target": "economy.cash",
+        "value": 450
+      },
+      {
+        "operation": "add",
+        "target": "business.reputation",
+        "value": 4
+      }
     ]
   },
   {
@@ -126,8 +246,16 @@
     "weight": 0.9,
     "conditions": [],
     "effects": [
-      {"operation": "add", "target": "economy.cash", "value": -140},
-      {"operation": "add", "target": "business.reputation", "value": 7}
+      {
+        "operation": "add",
+        "target": "economy.cash",
+        "value": -140
+      },
+      {
+        "operation": "add",
+        "target": "business.reputation",
+        "value": 7
+      }
     ]
   },
   {
@@ -138,7 +266,29 @@
     "weight": 1.0,
     "conditions": [],
     "effects": [
-      {"operation": "discount", "target": "compute.efficiency_base", "value": 0.15},
+      {
+        "operation": "spawn",
+        "target": "build.status_effects",
+        "value": {
+          "id": "status.event.slack_ping_storm.efficiency",
+          "name": "Slack Ping Storm",
+          "rounds": 2,
+          "subscriptions": [
+            {
+              "event": "compute.recalculate",
+              "priority": 0,
+              "conditions": [],
+              "effects": [
+                {
+                  "operation": "multiply",
+                  "target": "compute.efficiency",
+                  "value": 0.85
+                }
+              ]
+            }
+          ]
+        }
+      },
       {
         "operation": "spawn",
         "target": "build.status_effects",
@@ -152,7 +302,11 @@
               "priority": 5,
               "conditions": [],
               "effects": [
-                {"operation": "multiply", "target": "compute.efficiency", "value": 0.97}
+                {
+                  "operation": "multiply",
+                  "target": "compute.efficiency",
+                  "value": 0.97
+                }
               ]
             }
           ]
@@ -167,7 +321,11 @@
     "trigger_event": "round.ended",
     "weight": 0.85,
     "conditions": [
-      {"left": "economy.cash", "operator": ">=", "right": 200}
+      {
+        "left": "economy.cash",
+        "operator": ">=",
+        "right": 200
+      }
     ],
     "effects": [
       {
@@ -218,7 +376,11 @@
               "priority": 0,
               "conditions": [],
               "effects": [
-                {"operation": "trigger", "target": "", "value": "compute.recalculate"}
+                {
+                  "operation": "trigger",
+                  "target": "",
+                  "value": "compute.recalculate"
+                }
               ]
             }
           ]

@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 23
+const SAVE_VERSION := 24
 
 ## Upgrades that no longer exist in content. Migration refunds the original
 ## purchase total from this table rather than looking the defs up.
@@ -110,7 +110,8 @@ var build: Dictionary = {
 	"perk_inventory": [],
 	"perk_liabilities": [],
 	"draft_state": {"sequence": 0, "rerolls": 0},
-	"hardware": ["used_laptop"],
+	"hardware": [],
+	"system_discount": 0.0,
 	"upgrades": [],
 	"status_effects": [],
 	"modules": [],
@@ -480,6 +481,15 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_v22()
 	if from_version < 23:
 		_migrate_to_v23()
+	if from_version < 24:
+		CabinetSystems.absorb_legacy_rig(self)
+		build["system_discount"] = float(build.get("hardware_discount", 0.0))
+		build.erase("hardware_discount")
+		# Old event slowdowns were mistakenly installed for 999 prompts. Let the
+		# current prompt finish, then retire them; new events use round statuses.
+		for modifier in compute.get("rate_modifiers", []):
+			if modifier is Dictionary and str(modifier.get("source", "")) in ["event.power_cut", "event.scope_creep_email", "event.landlord_inspection"]:
+				modifier["prompts_remaining"] = mini(1, int(modifier.get("prompts_remaining", 1)))
 	# Whatever version the save was, the tiers it carries are whole numbers
 	# inside the tier range, and every system is present.
 	CabinetSystems.ensure_state(self)
@@ -1015,7 +1025,8 @@ func _default_build() -> Dictionary:
 		"perk_inventory": [],
 		"perk_liabilities": [],
 	"draft_state": {"sequence": 0, "rerolls": 0},
-		"hardware": ["used_laptop"],
+		"hardware": [],
+	"system_discount": 0.0,
 		"upgrades": [],
 		"status_effects": [],
 		"modules": [],

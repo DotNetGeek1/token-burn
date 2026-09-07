@@ -2362,7 +2362,7 @@
       "economy"
     ],
     "badge": "\u2212{discount_pct}% HW",
-    "description_template": "A clean one-shot grants {discount_pct}% off the next hardware purchase.",
+    "description_template": "A clean one-shot grants {discount_pct}% off the next system upgrade.",
     "parameters": {
       "discount": 0.1,
       "discount_pct": 10
@@ -2370,7 +2370,7 @@
     "completion_effects": [
       {
         "operation": "cap_min",
-        "target": "build.hardware_discount",
+        "target": "build.system_discount",
         "value": "$discount",
         "conditions": [
           {

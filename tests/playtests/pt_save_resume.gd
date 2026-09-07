@@ -76,7 +76,7 @@ func play(harness: UiHarness) -> void:
 		# back must not lose the pending work behind the button.
 		shell.switch_tab("market")
 		await harness.settle()
-		assert_true(driver.command("BUY") != null, "The resumed operation still offers the market")
+		assert_true(driver.command("UPGRADE") != null, "The resumed operation still offers system upgrades")
 		shell.switch_tab("run")
 		await harness.settle()
 		assert_true(driver.command("BURN") != null, "Coming back to the run tab reaches the burn button")

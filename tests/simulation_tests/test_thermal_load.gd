@@ -31,8 +31,8 @@ func _test_office_rack_is_warm() -> void:
 	var sim: Node = _sim_at("office_unit", 8802)
 	assert_true(HeatSystem.work_tier(sim.run_state) >= 2, "The office starts on a GPU rack")
 	assert_true(
-		HeatSystem.ambient_delta(sim.run_state) > 0.0,
-		"A stock office rack still produces a little ambient heat"
+		HeatSystem.ambient_delta(sim.run_state) <= 0.0,
+		"The office cooling system sustains its chapter draw"
 	)
 	sim.free()
 

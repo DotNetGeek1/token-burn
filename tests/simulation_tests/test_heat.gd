@@ -7,8 +7,6 @@ extends TestCase
 func run() -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
-	_test_every_rig_can_be_cooled()
-	_test_rack_needs_industrial_space()
 	_test_heat_sheds_between_rounds()
 	_test_fire_risk_clears_when_cool()
 	_test_purchase_warning()
@@ -23,61 +21,10 @@ func run() -> void:
 
 ## The point of the test: for each hardware tier there must exist some
 ## combination of purchasable space and cooling that holds heat steady.
-func _test_every_rig_can_be_cooled() -> void:
-	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
-	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.06))
-	var cooling_factor: float = float(heat_cfg.get("cooling_factor", 0.25))
-	var dwellings: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
-	# One run, one location: the best environment on offer, not every one of
-	# them stacked on top of each other.
-	var best_dwelling_cooling: float = 0.0
-	for key in dwellings.keys():
-		best_dwelling_cooling = maxf(
-			best_dwelling_cooling, float(dwellings[key].get("cooling_capacity", 0.0))
-		)
-	var upgrade_cooling: float = 0.0
-	for upgrade in ContentDatabase.upgrades:
-		for effect in upgrade.effects:
-			if effect is EffectDefinition and effect.target == "compute.cooling":
-				upgrade_cooling += float(effect.value)
-	var max_cooling: float = best_dwelling_cooling + upgrade_cooling
-
-	var total_draw: float = 0.0
-	var hardware: Dictionary = ContentDatabase.balance.get("hardware_curves", {})
-	for key in hardware.keys():
-		total_draw += float(hardware[key].get("power_draw", 0.0))
-	var needed: float = total_draw * gain_factor / cooling_factor
-	assert_true(
-		max_cooling >= needed,
-		"Every rig together can be cooled (need %d, max purchasable %d)" % [int(ceil(needed)), int(max_cooling)]
-	)
-
-	# The warehouse is the space that makes a rack viable, so the campaign has
-	# to contain it as a chapter the player can eventually reach.
-	assert_true(
-		"warehouse" in MetaProgress.location_order(),
-		"The warehouse is a location the campaign leads to"
-	)
 
 
-func _test_rack_needs_industrial_space() -> void:
-	var sim: Node = load("res://core/simulation.gd").new()
-	sim.autosave_enabled = false
-	sim.start_run(501)
-	sim.apply_run_location(sim.run_state, "garage")
-	sim.run_state.economy["cash"] = 200000.0
-	assert_true(sim.buy_upgrade("upgrade.portable_ac"), "Air conditioner bought")
-	assert_true(sim.buy_upgrade("upgrade.gpu_rack"), "GPU rack bought")
-	var garage_outlook: Dictionary = sim.heat_outlook()
-	assert_false(bool(garage_outlook.get("sustainable", true)), "A rack still cooks in the garage")
 
-	# The same rig, a chapter later. Nothing was bought to get here: the run
-	# would have started in the warehouse.
-	sim.apply_run_location(sim.run_state, "warehouse")
-	var warehouse_outlook: Dictionary = sim.heat_outlook()
-	assert_true(bool(warehouse_outlook.get("sustainable", false)), "A rack is sustainable in the warehouse")
-	assert_true(float(warehouse_outlook.get("heat_per_prompt", 1.0)) <= 0.0, "Warehouse cooling keeps the rack sustainable")
-	sim.free()
+
 
 
 func _test_heat_sheds_between_rounds() -> void:
@@ -212,8 +159,8 @@ func _test_first_burn_forecast_marks_a_projected_fire_without_blocking() -> void
 	sim.start_run(1505)
 	var offers: Array = sim.run_state.business.get("job_offers", [])
 	sim.accept_job(str(offers[0].get("id", "")))
-	sim.run_state.compute["heat_capacity"] = 1.0
-	sim.run_state.compute["heat"] = 0.99
+	sim.run_state.compute["heat_capacity"] = 100.0
+	sim.run_state.compute["heat"] = 99.0
 	sim.set_queued_boost(true)
 	var preview: Dictionary = sim.preview_next_burn()
 	assert_true(bool(preview.get("crosses_fire", false)), "The queued forecast flags a cold-start fire")

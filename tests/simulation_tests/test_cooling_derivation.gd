@@ -13,8 +13,6 @@ func run() -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
 	_test_a_location_contributes_its_cooling_exactly_once()
-	_test_buying_cooling_adds_exactly_what_the_card_promises()
-	_test_selling_cooling_takes_exactly_that_back()
 	_test_recalculating_never_changes_the_answer()
 	_test_save_and_load_does_not_duplicate_cooling()
 	_test_an_old_save_sheds_its_accumulated_cooling()
@@ -41,7 +39,7 @@ func _cooling(sim: Node) -> float:
 
 func _location_cooling(location: String) -> float:
 	return float(
-		ContentDatabase.balance.get("dwelling_costs", {}).get(location, {}).get("cooling_capacity", 0.0)
+		ContentDatabase.cabinet_systems.get("chapter_profiles", {}).get(location, {}).get("cooling_capacity", 0.0)
 	)
 
 
@@ -73,48 +71,15 @@ func _test_a_location_contributes_its_cooling_exactly_once() -> void:
 	warehouse.free()
 
 
-func _test_buying_cooling_adds_exactly_what_the_card_promises() -> void:
-	var sim: Node = _sim(8102, "garage")
-	var before: float = _cooling(sim)
-	var rig: UpgradeDefinition = ContentDatabase.get_upgrade("upgrade.immersion_cooling")
-	assert_true(sim.buy_upgrade("upgrade.immersion_cooling"), "The immersion rig is bought")
-	assert_almost_eq(
-		_cooling(sim),
-		before + UpgradeSystem.cooling_from(rig),
-		0.01,
-		"Cooling goes up by exactly what the card advertises"
-	)
-
-	assert_true(sim.buy_upgrade("upgrade.immersion_cooling"), "And a second one")
-	assert_almost_eq(
-		_cooling(sim),
-		before + UpgradeSystem.cooling_from(rig) * 2.0,
-		0.01,
-		"Two of them are worth twice one of them"
-	)
-	sim.free()
 
 
-func _test_selling_cooling_takes_exactly_that_back() -> void:
-	var sim: Node = _sim(8103, "garage")
-	var before: float = _cooling(sim)
-	assert_true(sim.buy_upgrade("upgrade.immersion_cooling"), "Buy a cooler")
-	assert_true(_cooling(sim) > before, "Which raises cooling")
-	assert_true(sim.sell_hardware("immersion_cooling"), "Then sell it again")
-	assert_almost_eq(
-		_cooling(sim),
-		before,
-		0.01,
-		"And cooling comes back to exactly where it started"
-	)
-	sim.free()
 
 
-## Recalculation happens every round, after every purchase and on every load.
-## A cooling figure that moved when nothing else did was the original bug.
+
+
 func _test_recalculating_never_changes_the_answer() -> void:
 	var sim: Node = _sim(8104, "office_unit")
-	assert_true(sim.buy_upgrade("upgrade.industrial_chiller"), "A chiller for the office")
+	assert_true(bool(sim.upgrade_cabinet_system("cooling").get("ok", false)), "A chiller for the office")
 	var settled: float = _cooling(sim)
 	for _i in range(5):
 		sim._compute_system.recalculate(
@@ -128,7 +93,7 @@ func _test_recalculating_never_changes_the_answer() -> void:
 
 func _test_save_and_load_does_not_duplicate_cooling() -> void:
 	var sim: Node = _sim(8105, "warehouse")
-	assert_true(sim.buy_upgrade("upgrade.chilled_water_plant"), "A cooling plant for the warehouse")
+	assert_true(bool(sim.upgrade_cabinet_system("cooling").get("ok", false)), "A cooling plant for the warehouse")
 	var before: float = _cooling(sim)
 	SaveManager.save_run(sim.run_state, "ROUND_PREP", sim.run_seed, sim.pending_choices, false)
 	sim.free()

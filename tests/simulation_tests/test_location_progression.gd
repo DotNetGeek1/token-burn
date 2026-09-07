@@ -124,7 +124,7 @@ func _test_a_run_starts_in_the_selected_location() -> void:
 	)
 	assert_almost_eq(
 		float(sim.run_state.compute.get("cooling", 0.0)),
-		float(garage.get("cooling_capacity", 0.0)) + _starter_rig_cooling(garage),
+		float(ContentDatabase.cabinet_systems.chapter_profiles.garage.cooling_capacity),
 		0.01,
 		"With the garage's cooling and the machine it comes with, and nothing stacked underneath"
 	)
@@ -260,7 +260,7 @@ func _test_a_new_run_after_a_win_starts_fresh_in_the_bedroom() -> void:
 	var sim: Node = _sim()
 	sim.start_run(7110)
 	sim.run_state.economy["cash"] = 5000000.0
-	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "The bedroom run buys a desktop")
+	assert_true(bool(sim.upgrade_cabinet_system("compute").get("ok", false)), "The bedroom run buys a desktop")
 	# Winning the chapter opens the garage for the run that won it.
 	sim.run_state.statistics["lifetime_tokens"] = 1e18
 	sim.run_state.ascension["quality_sum"] = 100.0
@@ -320,7 +320,7 @@ func _test_the_permanent_rig_arrives_on_every_fresh_run() -> void:
 	_force_chapter_win(sim)
 	assert_true(sim.advance_to_next_chapter(), "The win moves the company into the garage")
 	hardware = Array(sim.run_state.build.get("hardware", []))
-	assert_true("custom_desktop" in hardware, "The garage racks the earned desktop")
+	assert_true(int(UpgradeSystem.upgrade_counts(sim.run_state).get("upgrade.custom_desktop", 0)) > 0, "Garage inherits earned compute capacity")
 	assert_false("gpu_rack" in hardware, "The rack still cooks in the garage")
 
 	# The warehouse is the first room that can hold a rack without a separate
@@ -328,7 +328,7 @@ func _test_the_permanent_rig_arrives_on_every_fresh_run() -> void:
 	sim.apply_run_location(sim.run_state, "warehouse", false)
 	sim._install_permanent_rig()
 	assert_true(
-		"gpu_rack" in Array(sim.run_state.build.get("hardware", [])),
+		int(UpgradeSystem.upgrade_counts(sim.run_state).get("upgrade.gpu_rack", 0)) > 0,
 		"Where the earned GPU rack is finally racked"
 	)
 	sim.free()

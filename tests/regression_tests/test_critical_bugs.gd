@@ -39,7 +39,7 @@ func _test_hardware_upgrade() -> void:
 	sim.start_run(100)
 	sim.run_state.economy["cash"] = 5000.0
 	var rate_before: float = float(sim.run_state.compute.get("token_rate", 0.0))
-	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "Hardware upgrade purchases")
+	assert_true(bool(sim.upgrade_cabinet_system("compute").get("ok", false)), "Compute upgrade purchases")
 	sim._compute_system.recalculate(sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng)
 	var rate_after: float = float(sim.run_state.compute.get("token_rate", 0.0))
 	assert_true(rate_after > rate_before, "Hardware upgrade increases token rate")
@@ -50,9 +50,9 @@ func _test_double_purchase() -> void:
 	var sim := _make_sim()
 	sim.start_run(101)
 	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
-	assert_true(sim.buy_upgrade("upgrade.portable_ac"), "First purchase succeeds")
+	assert_true(bool(sim.upgrade_cabinet_system("cooling").get("ok", false)), "First purchase succeeds")
 	var cash_after_first: float = float(sim.run_state.economy.get("cash", 0.0))
-	assert_false(sim.buy_upgrade("upgrade.portable_ac"), "Second purchase rejected")
+	assert_false(bool(sim.upgrade_cabinet_system("cooling").get("ok", false)), "Second purchase rejected")
 	assert_eq(sim.run_state.economy.get("cash", 0.0), cash_after_first, "Cash not deducted twice")
 	assert_true(cash_after_first < cash_before, "First purchase cost cash")
 	sim.free()
@@ -63,10 +63,10 @@ func _test_second_monitor_widens_the_pipeline_editor() -> void:
 	sim.start_run(103)
 	sim.run_state.economy["cash"] = 5000.0
 	var slots_before: int = sim.board_slots().size()
-	assert_true(sim.buy_upgrade("upgrade.second_monitor"), "The second monitor can be bought")
+	assert_true(bool(sim.upgrade_cabinet_system("backplane").get("ok", false)), "The second monitor can be bought")
 	assert_eq(
 		sim.board_slots().size(),
-		slots_before + 1,
+		slots_before + 2,
 		"The pipeline editor immediately gains the slot the monitor promises"
 	)
 	sim.free()
@@ -193,8 +193,8 @@ func _test_market_purchase() -> void:
 	var sim := _make_sim()
 	sim.start_run(104)
 	sim.run_state.economy["cash"] = 10000.0
-	assert_true(sim.can_buy_upgrade("upgrade.portable_ac"), "Can buy during round prep")
-	assert_true(sim.buy_upgrade("upgrade.portable_ac"), "Market purchase succeeds in ROUND_PREP")
+	assert_true(bool(sim.cabinet_system_next("cooling").get("can_upgrade", false)), "Can buy during round prep")
+	assert_true(bool(sim.upgrade_cabinet_system("cooling").get("ok", false)), "Market purchase succeeds in ROUND_PREP")
 	sim.free()
 
 
@@ -483,7 +483,7 @@ func _test_duplicate_job_definitions_stay_independent() -> void:
 	assert_true(sim.accept_job(str(first.get("id", ""))), "First copy can be taken by instance id")
 	assert_true(sim.accept_job(str(second.get("id", ""))), "Second copy can be taken independently")
 	assert_eq(sim.run_state.business["job_queue"].size(), 2, "Both copies are on the slate")
-	assert_true(sim.buy_upgrade("upgrade.custom_desktop"), "A second machine opens a second lane")
+	assert_true(bool(sim.upgrade_cabinet_system("power").get("ok", false)), "A second machine opens a second lane")
 	sim.start_work()
 	var lanes: Array = sim.burn_lanes()
 	assert_eq(lanes.size(), 2, "Two copies can occupy two parallel lanes")

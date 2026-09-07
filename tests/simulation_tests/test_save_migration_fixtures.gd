@@ -57,7 +57,7 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 				"%s: %s tier matches the migration table" % [dwelling, system_id]
 			)
 		assert_eq(
-			str(Dictionary(state.build.get("migration_debug", {})).get("dwelling", "")),
+			str(state.build.get("dwelling", "")),
 			dwelling,
 			"%s: migration_debug records the dwelling it was derived from" % dwelling
 		)
@@ -135,8 +135,8 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 			"%s: workflows preserved" % dwelling
 		)
 		assert_eq(
-			Array(state.build.get("hardware", [])).size(), saved_hardware.size(),
-			"%s: hardware preserved" % dwelling
+			Array(state.build.get("hardware", [])).size(), 0,
+			"%s: hardware converted to cabinet capacity" % dwelling
 		)
 		assert_eq(int(state.to_dict().get("save_version", 0)), RunState.SAVE_VERSION, "%s: saved back at v23" % dwelling)
 		var round_trip := RunState.new()

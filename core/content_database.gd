@@ -5,6 +5,8 @@ extends Node
 var jobs: Array[JobDefinition] = []
 var perks: Array[PerkDefinition] = []
 var upgrades: Array[UpgradeDefinition] = []
+## Read-only definitions for save conversion and permanent unlock compatibility.
+var legacy_upgrades: Array[UpgradeDefinition] = []
 var events: Array[EventDefinition] = []
 var modules: Array[ModuleDefinition] = []
 var balance: Dictionary = {}
@@ -38,6 +40,7 @@ func reload() -> void:
 	jobs.clear()
 	perks.clear()
 	upgrades.clear()
+	legacy_upgrades.clear()
 	events.clear()
 	modules.clear()
 	synergies.clear()
@@ -490,7 +493,8 @@ func _load_perks() -> void:
 
 func _load_upgrades() -> void:
 	var data: Array = _load_json_array("res://content/upgrades/upgrades.json")
-	for entry in data:
+	var legacy: Array = _load_json_array("res://content/upgrades/legacy_hardware.json")
+	for entry in data + legacy:
 		var upgrade := UpgradeDefinition.new()
 		upgrade.id = str(entry.get("id", ""))
 		upgrade.name = str(entry.get("name", ""))
@@ -521,7 +525,10 @@ func _load_upgrades() -> void:
 			effect.value = effect_entry.get("value", 0.0)
 			effects.append(effect)
 		upgrade.effects = effects
-		upgrades.append(upgrade)
+		if entry in legacy:
+			legacy_upgrades.append(upgrade)
+		else:
+			upgrades.append(upgrade)
 		_upgrades_by_id[upgrade.id] = upgrade
 
 
@@ -938,6 +945,22 @@ func _validate_cabinet_systems(errors: Array[String]) -> void:
 	if data.is_empty():
 		errors.append("cabinet_systems content is missing")
 		return
+	var profiles: Variant = data.get("chapter_profiles", {})
+	if not profiles is Dictionary:
+		errors.append("cabinet_systems.chapter_profiles must be an object")
+	else:
+		for location in balance.get("economy", {}).get("location_order", []):
+			var profile: Variant = profiles.get(str(location), null)
+			if not profile is Dictionary:
+				errors.append("cabinet_systems.chapter_profiles missing " + str(location))
+				continue
+			for key in ["base_token_rate", "power_draw", "cooling_capacity", "heat_capacity", "cost_scale"]:
+				var value: Variant = profile.get(key, null)
+				if not (value is int or value is float) or not is_finite(float(value)) or float(value) <= 0.0:
+					errors.append("cabinet chapter %s needs positive finite %s" % [str(location), key])
+			var work: Variant = profile.get("work_tier", null)
+			if not (work is int or work is float) or float(work) != int(work) or int(work) < 0 or int(work) >= balance.get("economy", {}).get("location_order", []).size():
+				errors.append("cabinet chapter %s has invalid work_tier" % str(location))
 	var range_value: Variant = data.get("tier_range", null)
 	var lo: int = 1
 	var hi: int = 4
@@ -1124,6 +1147,16 @@ func _known_run_state_paths() -> Dictionary:
 				paths["%s.%s" % [section, key]] = true
 	for derived in EffectResolver.DERIVED_PATHS:
 		paths[derived] = true
+	# These are campaign-wide progression values stored in the build section.
+	# They are intentionally explicit because some fixtures are created before
+	# the latest RunState defaults are applied.
+	for cabinet_path in [
+		"build.system_discount",
+		"build.cabinet_systems",
+		"build.cabinet_legacy_floor",
+		"build.cabinet_permanent_grants",
+	]:
+		paths[cabinet_path] = true
 	return paths
 
 

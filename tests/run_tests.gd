@@ -21,8 +21,17 @@ func _ready() -> void:
 	# and must never write to their profile. Tests that want the meta layer turn
 	# it back on for themselves.
 	MetaProgress.enabled = false
+	var filter: String = ""
+	for arg in OS.get_cmdline_user_args():
+		if str(arg).begins_with("--filter="):
+			filter = str(arg).trim_prefix("--filter=")
 	for path in _discover_test_scripts():
-		_run_test_script(path)
+		if filter == "" or filter in path:
+			_run_test_script(path)
+	if filter != "":
+		print("Results: %d passed, %d failed" % [_passed, _failed])
+		get_tree().quit(_failed)
+		return
 	_run_legacy_tests()
 	_run_batch("random", 12)
 	# The builder plays the game the way the design assumes one is played: it

@@ -172,6 +172,8 @@ func run_campaign(
 				if outcome == "":
 					outcome = "ascended" if won else "lost"
 				_finalize_campaign_chapter(summary, sim, outcome)
+				if verbose:
+					print("    seed %d %s: %s at round %d" % [seed_start + run_index, str(sim.run_state.build.get("dwelling", "")), outcome, int(sim.run_state.calendar.get("round", 1))])
 				if not won or sim.next_location_unlocked() == "":
 					summary["outcomes"][outcome] = int(summary["outcomes"].get(outcome, 0)) + 1
 					finished = true
@@ -245,31 +247,11 @@ func _apply_profile(sim: Node, profile_id: String) -> void:
 
 func _install_profile_rig(sim: Node, profile_id: String) -> void:
 	var ranks: int = int(_profile(profile_id).get("starting_rig_ranks", 0))
-	sim._compute_system.recalculate(
-		sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
-	)
 	for index in range(mini(ranks, PROFILE_RIG.size())):
 		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(PROFILE_RIG[index])
-		if upgrade == null:
-			continue
-		if not UpgradeSystem.prerequisites_met(sim.run_state, upgrade, ContentDatabase):
-			continue
-		if UpgradeSystem.installed_key(upgrade) in Array(sim.run_state.build.get("hardware", [])):
-			continue
-		var curve: Dictionary = Dictionary(
-			ContentDatabase.balance.get("hardware_curves", {}).get(upgrade.hardware_key, {})
-		)
-		var startup: Dictionary = sim.heat_outlook(
-			float(curve.get("power_draw", 0.0)), UpgradeSystem.cooling_from(upgrade)
-		)
-		if not bool(startup.get("sustainable", true)):
-			continue
-		if sim._upgrade_system.install_carried(
-			sim.run_state, upgrade.id, ContentDatabase, sim.effect_resolver
-		):
-			sim._compute_system.recalculate(
-				sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
-			)
+		if upgrade != null:
+			CabinetSystems.grant_permanent_upgrade(sim.run_state, upgrade)
+
 
 
 func _new_chapter_metrics() -> Dictionary:
@@ -669,16 +651,12 @@ func _builder_shop(sim: Node) -> void:
 	# the purchase itself adds.
 	var reserve: float = float(sim.cost_forecast().get("fixed_due", 0.0)) * 2.0
 	var budget: float = maxf(0.0, float(sim.run_state.economy.get("cash", 0.0)) - reserve) * 0.5
-	var safety: int = 0
-	while safety < 40:
-		safety += 1
-		var pick: String = _builder_next_purchase(sim, budget)
-		if pick == "":
-			return
-		var cost: float = _cost_of(sim, pick)
-		if not sim.buy_upgrade(pick):
-			return
-		budget -= cost
+	for system_id in ["cooling", "compute", "power", "backplane", "control"]:
+		var info: Dictionary = CabinetSystems.can_upgrade(sim.run_state, system_id)
+		var cost: float = float(info.get("cost", -1.0))
+		if bool(info.get("ok", false)) and cost <= budget:
+			if bool(sim.upgrade_cabinet_system(system_id).get("ok", false)):
+				budget -= cost
 
 
 ## Deterministic Market shopper: one module per round, tag-overlap scored,

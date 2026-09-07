@@ -215,8 +215,108 @@ static func generation_for_sum(total: int, content_db: Node = null) -> Dictionar
 ## What the run's tier is worth for one stat, with the chapter table as a
 ## floor beneath it (see the class note).
 static func capacity(run_state: RunState, system_id: String, stat_key: String, content_db: Node = null) -> float:
-	var from_tier: float = tier_value(system_id, stat_key, tier(run_state, system_id, content_db), content_db)
-	return maxf(from_tier, chapter_floor(run_state, stat_key, content_db))
+	return capacity_at_tier(run_state, system_id, stat_key, tier(run_state, system_id, content_db), content_db)
+
+
+static func chapter_profile(run_state: RunState, content_db: Node = null) -> Dictionary:
+	var profiles: Dictionary = data(content_db).get("chapter_profiles", {})
+	return Dictionary(profiles.get(str(run_state.build.get("dwelling", "bedroom")), profiles.get("bedroom", {})))
+
+
+static func capacity_at_tier(run_state: RunState, system_id: String, stat_key: String, level: int, content_db: Node = null) -> float:
+	var value: float = tier_value(system_id, stat_key, level, content_db)
+	var profile: Dictionary = chapter_profile(run_state, content_db)
+	var entry_tier: int = int(derive_from_dwelling(str(run_state.build.get("dwelling", "bedroom")), content_db).get(system_id, 1))
+	if stat_key == "base_token_rate":
+		value = float(profile.get(stat_key, 1000000.0)) * value / maxf(1.0, tier_value(system_id, stat_key, entry_tier, content_db))
+	elif stat_key == "cooling_capacity" or stat_key == "heat_capacity":
+		# Chapter scale cannot mask a purchase: every tier adds 35% cooling and
+		# 15% heat headroom relative to that chapter's starting tier.
+		var step: float = 0.35 if stat_key == "cooling_capacity" else 0.15
+		value = float(profile.get(stat_key, value)) * (1.0 + step * float(level - 1)) / (1.0 + step * float(entry_tier - 1))
+	elif stat_key == "hardware_slots":
+		value = maxf(float([2, 4, 8, 16][clampi(level - 1, 0, 3)]), chapter_floor(run_state, stat_key, content_db))
+	else:
+		value = maxf(value, chapter_floor(run_state, stat_key, content_db))
+	return maxf(value, float(Dictionary(run_state.build.get("cabinet_legacy_floor", {})).get(stat_key, 0.0)))
+
+
+## Convert old kit once, preserving actual capacity and its standing bill.
+## Floors replace hardware contributions; they never stack with the new base.
+static func absorb_legacy_rig(run_state: RunState) -> void:
+	var hardware: Array = run_state.build.get("hardware", [])
+	if hardware.is_empty():
+		return
+	var floor_stats: Dictionary = Dictionary(run_state.build.get("cabinet_legacy_floor", {})).duplicate(true)
+	var rate: float = 0.0
+	var draw: float = 0.0
+	var lanes: int = 0
+	var work: int = 0
+	for key in hardware:
+		var curve: Dictionary = ContentDatabase.balance.get("hardware_curves", {}).get(str(key), {})
+		rate += float(curve.get("token_rate", 0.0))
+		draw += float(curve.get("power_draw", 0.0))
+		work = maxi(work, int(curve.get("work_tier", 0)))
+		if UpgradeSystem.occupies_floor(ContentDatabase.balance.get("hardware_curves", {}), str(key)):
+			lanes += 1
+	var old_bonus: Array = [0.0, 2000000.0, 20000000.0, 200000000.0]
+	floor_stats["base_token_rate"] = maxf(float(floor_stats.get("base_token_rate", 0.0)), rate + float(old_bonus[tier(run_state, "compute") - 1]))
+	floor_stats["power_draw"] = maxf(float(floor_stats.get("power_draw", 0.0)), draw)
+	floor_stats["job_slots"] = maxi(int(floor_stats.get("job_slots", 0)), lanes)
+	floor_stats["work_tier"] = maxi(int(floor_stats.get("work_tier", 0)), work)
+	floor_stats["cooling_capacity"] = maxf(float(floor_stats.get("cooling_capacity", 0.0)),
+		maxf(chapter_floor(run_state, "cooling_capacity"), tier_value("cooling", "cooling_capacity", tier(run_state, "cooling"))) + UpgradeSystem.installed_cooling(run_state, ContentDatabase))
+	floor_stats["heat_capacity"] = maxf(float(floor_stats.get("heat_capacity", 0.0)), float(run_state.compute.get("heat_capacity", 100.0)))
+	run_state.build["cabinet_legacy_floor"] = floor_stats
+	run_state.build["hardware"] = []
+	run_state.build.erase("migration_debug")
+
+
+static func power_draw(run_state: RunState) -> float:
+	var draw: float = float(chapter_profile(run_state).get("power_draw", 65.0))
+	return maxf(draw, float(Dictionary(run_state.build.get("cabinet_legacy_floor", {})).get("power_draw", 0.0)))
+
+
+static func work_tier(run_state: RunState, content_db: Node = null) -> int:
+	return maxi(int(chapter_profile(run_state, content_db).get("work_tier", 0)),
+		int(Dictionary(run_state.build.get("cabinet_legacy_floor", {})).get("work_tier", 0)))
+
+
+## Permanent unlock ids stay valid, but install capacity rather than machines.
+## A chapter that already supplies the earned machine is not charged its draw twice.
+static func grant_permanent_upgrade(state: RunState, upgrade: UpgradeDefinition) -> bool:
+	if int(UpgradeSystem.upgrade_counts(state).get(upgrade.id, 0)) > 0:
+		return false
+	if not UpgradeSystem.prerequisites_met(state, upgrade, ContentDatabase):
+		return false
+	var grants: Array = Array(state.build.get("cabinet_permanent_grants", [])).duplicate()
+	grants.append(upgrade.id)
+	var rate: float = 1000000.0
+	var draw: float = 65.0
+	var cooling: float = 0.0
+	var band: int = 0
+	for id in grants:
+		var item: UpgradeDefinition = ContentDatabase.get_upgrade(str(id))
+		if item == null:
+			continue
+		var curve: Dictionary = ContentDatabase.balance.hardware_curves.get(item.hardware_key, {})
+		rate += float(curve.get("token_rate", 0.0))
+		draw += float(curve.get("power_draw", 0.0))
+		cooling += UpgradeSystem.cooling_from(item)
+		band = maxi(band, int(curve.get("work_tier", 0)))
+	var floor_stats: Dictionary = Dictionary(state.build.get("cabinet_legacy_floor", {})).duplicate(true)
+	var actual_draw: float = maxf(power_draw(state), draw)
+	var actual_cooling: float = maxf(capacity(state, "cooling", "cooling_capacity"), float(chapter_profile(state).get("cooling_capacity", 0.0)) + cooling)
+	if actual_cooling + float(state.compute.get("meta_cooling", 0.0)) < HeatSystem.cooling_needed_for(actual_draw, maxi(work_tier(state), band)):
+		return false
+	floor_stats["base_token_rate"] = maxf(float(floor_stats.get("base_token_rate", 0.0)), rate)
+	floor_stats["power_draw"] = maxf(float(floor_stats.get("power_draw", 0.0)), draw)
+	floor_stats["work_tier"] = maxi(int(floor_stats.get("work_tier", 0)), band)
+	floor_stats["cooling_capacity"] = actual_cooling
+	state.build["cabinet_legacy_floor"] = floor_stats
+	state.build["cabinet_permanent_grants"] = grants
+	UpgradeSystem.record_free_grant(state, upgrade.id, ContentDatabase)
+	return true
 
 
 ## The chapter table's value for this stat, or 0 for a stat the chapter table
@@ -308,7 +408,8 @@ static func next_tier_cost(run_state: RunState, system_id: String, content_db: N
 	var current: int = tier(run_state, system_id, content_db)
 	if current >= max_tier(content_db):
 		return -1.0
-	return cost_of_tier(system_id, current + 1, content_db)
+	var cost: float = cost_of_tier(system_id, current + 1, content_db) * float(chapter_profile(run_state, content_db).get("cost_scale", 1.0))
+	return cost * (1.0 - clampf(float(run_state.build.get("system_discount", 0.0)), 0.0, 0.9))
 
 
 ## The price of reaching `target_tier` from the one below it. The cost array is
@@ -356,9 +457,8 @@ static func effect_text(run_state: RunState, system_id: String, from_tier: int, 
 	var parts: Array[String] = []
 	for stat_key in stat_keys(system_id, content_db):
 		var key: String = str(stat_key)
-		var floor_value: float = chapter_floor(run_state, key, content_db)
-		var before: float = maxf(tier_value(system_id, key, from_tier, content_db), floor_value)
-		var after: float = maxf(tier_value(system_id, key, to_tier, content_db), floor_value)
+		var before: float = capacity_at_tier(run_state, system_id, key, from_tier, content_db)
+		var after: float = capacity_at_tier(run_state, system_id, key, to_tier, content_db)
 		parts.append("%s → %s %s" % [
 			_format_stat(key, before), _format_stat(key, after), stat_label(key, content_db),
 		])

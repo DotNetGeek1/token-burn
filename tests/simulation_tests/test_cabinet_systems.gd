@@ -117,7 +117,7 @@ func _test_fresh_run_opens_with_the_rooms_tiers() -> void:
 	assert_eq(tiers, CabinetSystems.derive_from_dwelling("garage"), "A fresh garage run has garage tiers")
 	assert_eq(_board.derived_supported_capacity(sim.run_state, ContentDatabase), 5, "Garage backplane backs 5 bays")
 	assert_eq(UpgradeSystem.hardware_slots_total(sim.run_state, ContentDatabase), 4, "Garage power bus gives 4 slots")
-	assert_almost_eq(UpgradeSystem.location_cooling(sim.run_state, ContentDatabase), 97.0, 0.001, "Garage cooling loop cools 97")
+	assert_almost_eq(UpgradeSystem.location_cooling(sim.run_state, ContentDatabase), 110.0, 0.001, "Garage cooling covers its draw")
 	assert_almost_eq(float(sim.run_state.compute.get("heat_capacity", 0.0)), 140.0, 0.001, "Garage heat capacity is 140")
 	assert_eq(str(sim.cabinet_generation().get("name", "")), "Spliced Rig", "Garage cabinet (sum 9) is a Spliced Rig")
 	# Moving up never lowers a system bought below.
@@ -131,7 +131,7 @@ func _test_fresh_run_opens_with_the_rooms_tiers() -> void:
 func _test_tier_one_leaves_bedroom_numbers_alone() -> void:
 	var sim := _make_sim(903)
 	assert_eq(sim.cabinet_system_tiers(), CabinetSystems.default_tiers(), "Bedroom is every system at tier 1")
-	assert_almost_eq(ComputeSystem.cabinet_base_rate(sim.run_state), 0.0, 0.001, "Tier 1 compute adds no base rate")
+	assert_almost_eq(ComputeSystem.cabinet_base_rate(sim.run_state), 1000000.0, 0.001, "Tier 1 compute supplies the baseline")
 	var laptop_rate: float = float(
 		Dictionary(ContentDatabase.balance.get("hardware_curves", {})).get("used_laptop", {}).get("token_rate", 0.0)
 	)
@@ -142,7 +142,7 @@ func _test_tier_one_leaves_bedroom_numbers_alone() -> void:
 	assert_eq(_board.derived_supported_capacity(sim.run_state, ContentDatabase), 3, "Bedroom backs 3 bays")
 	assert_eq(_board.derived_workflow_capacity(sim.run_state, ContentDatabase), 1, "Bedroom holds 1 workflow")
 	assert_eq(UpgradeSystem.hardware_slots_total(sim.run_state, ContentDatabase), 2, "Bedroom has 2 slots")
-	assert_almost_eq(UpgradeSystem.location_cooling(sim.run_state, ContentDatabase), 16.0, 0.001, "Bedroom cools 16")
+	assert_almost_eq(UpgradeSystem.location_cooling(sim.run_state, ContentDatabase), 17.0, 0.001, "Bedroom baseline cooling")
 	assert_almost_eq(float(sim.run_state.compute.get("heat_capacity", 0.0)), 100.0, 0.001, "Bedroom heat capacity is 100")
 	sim.free()
 
@@ -187,9 +187,9 @@ func _test_upgrade_widens_the_board_and_cools_the_room() -> void:
 	var cooling_before: float = float(sim.run_state.compute.get("cooling", 0.0))
 	var cooling_result: Dictionary = sim.upgrade_cabinet_system("cooling")
 	assert_true(bool(cooling_result.get("ok", false)), "Cooling bought")
-	assert_almost_eq(float(sim.run_state.compute.get("heat_capacity", 0.0)), 140.0, 0.001, "Heat capacity now 140")
+	assert_almost_eq(float(sim.run_state.compute.get("heat_capacity", 0.0)), 115.0, 0.001, "Heat capacity now 115")
 	assert_almost_eq(
-		float(sim.run_state.compute.get("cooling", 0.0)), cooling_before + (97.0 - 16.0), 0.001,
+		float(sim.run_state.compute.get("cooling", 0.0)), cooling_before * 1.35, 0.001,
 		"Cooling rises by the tier difference and nothing more"
 	)
 	var delta: Dictionary = Dictionary(cooling_result.get("delta", {}))
@@ -197,7 +197,7 @@ func _test_upgrade_widens_the_board_and_cools_the_room() -> void:
 	var rate_before: float = float(sim.run_state.compute.get("local_capacity", 0.0))
 	assert_true(bool(sim.upgrade_cabinet_system("compute").get("ok", false)), "Compute bought")
 	assert_almost_eq(
-		float(sim.run_state.compute.get("local_capacity", 0.0)), rate_before + 2_000_000.0, 1.0,
+		float(sim.run_state.compute.get("local_capacity", 0.0)), rate_before * 2.0, 1.0,
 		"Compute tier 2 adds its 2M base rate to local capacity"
 	)
 	assert_eq(CabinetSystems.tier_sum(sim.run_state), 10, "Five tier-2 systems sum to 10")
@@ -247,8 +247,8 @@ func _test_facade_row_is_presentable() -> void:
 	assert_eq(str(row.get("tier_name", "")), "Desk Fan", "Row names the current tier")
 	assert_eq(int(row.get("next_tier", 0)), 2, "Row shows the next tier")
 	assert_eq(str(row.get("next_tier_name", "")), "Radiator", "Row names the next tier")
-	assert_almost_eq(float(row.get("cost", 0.0)), 2200.0, 0.001, "Row quotes the price")
-	assert_eq(str(row.get("effect", "")), "16 → 97 COOLING · 100 → 140 HEAT CAP", "Row describes the effect")
+	assert_almost_eq(float(row.get("cost", 0.0)), 450.0, 0.001, "Row quotes the price")
+	assert_eq(str(row.get("effect", "")), "17 → 23 COOLING · 100 → 115 HEAT CAP", "Row describes the effect")
 	assert_true(bool(row.get("can_upgrade", false)), "Row's button is live")
 	assert_eq(str(row.get("reason", "x")), "", "Live row has no refusal")
 	assert_false(bool(row.get("maxed", true)), "Row is not maxed")

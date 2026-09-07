@@ -259,12 +259,7 @@ func _test_bills_outlook_guides_spending() -> void:
 ## A fresh bedroom has one machine and therefore one posting. Tests that need
 ## two contracts install a second laptop so the board widens with the slots.
 func _open_two_slots(sim: Node) -> void:
-	var hardware: Array = Array(sim.run_state.build.get("hardware", []))
-	hardware.append("used_laptop")
-	sim.run_state.build["hardware"] = hardware
-	var counts: Dictionary = Dictionary(sim.run_state.build.get("upgrade_counts", {}))
-	counts["upgrade.used_laptop"] = int(counts.get("upgrade.used_laptop", 0)) + 1
-	sim.run_state.build["upgrade_counts"] = counts
+	CabinetSystems.set_tier(sim.run_state, "power", 2)
 	sim.run_state.business["job_offers"] = []
 	sim.run_state.business["job_board_stamp"] = ""
 	sim.ensure_job_offers()

@@ -1,60 +1,138 @@
 {
   "schema_version": 1,
-  "tier_range": [1, 4],
+  "tier_range": [
+    1,
+    4
+  ],
   "systems": [
     {
       "id": "compute",
       "name": "Compute Stack",
-      "tier_names": ["Exposed Board", "GPU Cage", "Accelerator Stack", "Impossible Core"],
+      "tier_names": [
+        "Exposed Board",
+        "GPU Cage",
+        "Accelerator Stack",
+        "Impossible Core"
+      ],
       "tier_values": {
-        "base_token_rate": [0, 2000000, 20000000, 200000000]
+        "base_token_rate": [
+          1000000,
+          2000000,
+          4000000,
+          8000000
+        ]
       },
-      "cost": [3000, 15000, 60000],
+      "cost": [
+        250,
+        750,
+        1500
+      ],
       "visual_mount": "system_compute",
-      "design_note": "Adds a flat base token rate on top of the hardware curves. Tier 1 is 0 because today's bedroom baseline (1M/prompt) is entirely the starter laptop, which stays a hardware row during the compatibility phase; leaving tier 1 at zero keeps every bedroom number exactly as it is. Each higher tier is worth 40% of the machine its chapter is staked with (custom_desktop 5M -> 2M, gpu_rack 50M -> 20M, compute_cluster 500M -> 200M), so the stack is a noticeable bonus but hardware remains the main throughput source until Phase 6 consolidates the rows."
+      "design_note": "Compute is the sole new-run throughput source. Chapter profiles scale these tier values to the contract band; legacy saves retain a capacity floor."
     },
     {
       "id": "cooling",
       "name": "Cooling Loop",
-      "tier_names": ["Desk Fan", "Radiator", "Liquid Manifold", "Phase Cooler"],
+      "tier_names": [
+        "Desk Fan",
+        "Radiator",
+        "Liquid Manifold",
+        "Phase Cooler"
+      ],
       "tier_values": {
-        "cooling_capacity": [16, 97, 336, 1248],
-        "heat_capacity": [100, 140, 200, 280]
+        "cooling_capacity": [
+          16,
+          97,
+          336,
+          1248
+        ],
+        "heat_capacity": [
+          100,
+          140,
+          200,
+          280
+        ]
       },
-      "cost": [2200, 11000, 48000],
+      "cost": [
+        450,
+        1000,
+        2000
+      ],
       "visual_mount": "system_cooling",
-      "design_note": "Tier values are the bedroom, garage, office and warehouse rows of dwelling_costs.json, so a migrated save keeps the room's numbers. Heat-state thresholds are ratios of heat_capacity and are untouched."
+      "design_note": "Chapter cooling is multiplied by the tier relative to its entry tier; higher tiers always improve cooling and heat headroom."
     },
     {
       "id": "power",
       "name": "Power Bus",
-      "tier_names": ["Household Lead", "Transformer", "Busbar Bank", "Unstable Core"],
+      "tier_names": [
+        "Household Lead",
+        "Transformer",
+        "Busbar Bank",
+        "Unstable Core"
+      ],
       "tier_values": {
-        "hardware_slots": [2, 4, 8, 16]
+        "job_slots": [
+          1,
+          2,
+          3,
+          4
+        ]
       },
-      "cost": [2800, 14000, 55000],
+      "cost": [
+        2800,
+        14000,
+        55000
+      ],
       "visual_mount": "system_power",
-      "design_note": "Absorbs the dwelling hardware-slot responsibility: the values are the bedroom, garage, office and warehouse floor plans. power_headroom is deliberately not modelled yet."
+      "design_note": "Power supplies parallel contract lanes. Hardware slots are retained only for legacy save compatibility."
     },
     {
       "id": "backplane",
       "name": "Workflow Backplane",
-      "tier_names": ["3-Bay Rail", "5-Bay Rail", "7-Bay Rail", "10-Bay Rail"],
+      "tier_names": [
+        "3-Bay Rail",
+        "5-Bay Rail",
+        "7-Bay Rail",
+        "10-Bay Rail"
+      ],
       "tier_values": {
-        "bays": [3, 5, 7, 10]
+        "bays": [
+          3,
+          5,
+          7,
+          10
+        ]
       },
-      "cost": [2000, 10000, 45000],
+      "cost": [
+        2000,
+        10000,
+        45000
+      ],
       "visual_mount": "system_backplane",
       "design_note": "Supported pipeline stages. Replaces job_scaling.board.supported_stages as the baseline; perk, upgrade and meta slot bonuses stay additive on top."
     },
     {
       "id": "control",
       "name": "Control Rack",
-      "tier_names": ["Single Selector", "Dual Selector", "Triple Selector", "Quad Selector"],
+      "tier_names": [
+        "Single Selector",
+        "Dual Selector",
+        "Triple Selector",
+        "Quad Selector"
+      ],
       "tier_values": {
-        "workflows": [1, 2, 3, 4]
+        "workflows": [
+          1,
+          2,
+          3,
+          4
+        ]
       },
-      "cost": [1500, 8000, 40000],
+      "cost": [
+        1500,
+        8000,
+        40000
+      ],
       "visual_mount": "system_control",
       "design_note": "Saved workflow capacity. Replaces BoardSystem.DEFAULT_WORKFLOW_CAPACITY as the baseline; perk, upgrade and meta workflow bonuses stay additive on top."
     }
@@ -65,32 +143,154 @@
     "heat_capacity": "HEAT CAP",
     "hardware_slots": "HARDWARE SLOTS",
     "bays": "BAYS",
-    "workflows": "WORKFLOWS"
+    "workflows": "WORKFLOWS",
+    "job_slots": "PARALLEL JOBS"
   },
   "generation_thresholds": [
-    {"min_sum": 5, "name": "Improvised Cabinet"},
-    {"min_sum": 8, "name": "Spliced Rig"},
-    {"min_sum": 11, "name": "Token Furnace"},
-    {"min_sum": 15, "name": "Grid Eater"},
-    {"min_sum": 19, "name": "Impossible Engine"}
+    {
+      "min_sum": 5,
+      "name": "Improvised Cabinet"
+    },
+    {
+      "min_sum": 8,
+      "name": "Spliced Rig"
+    },
+    {
+      "min_sum": 11,
+      "name": "Token Furnace"
+    },
+    {
+      "min_sum": 15,
+      "name": "Grid Eater"
+    },
+    {
+      "min_sum": 19,
+      "name": "Impossible Engine"
+    }
   ],
-  "migration_value_order": ["compute", "cooling", "power", "backplane", "control"],
+  "migration_value_order": [
+    "compute",
+    "cooling",
+    "power",
+    "backplane",
+    "control"
+  ],
   "migration_from_dwelling": {
-    "bedroom": [1, 1, 1, 1, 1],
-    "garage": [2, 2, 2, 2, 1],
-    "office_unit": [2, 2, 2, 2, 2],
-    "warehouse": [3, 3, 3, 3, 2],
-    "datacentre_campus": [3, 3, 3, 3, 3],
-    "private_power_grid": [4, 3, 4, 4, 3],
-    "moon_facility": [4, 4, 4, 4, 4]
+    "bedroom": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "garage": [
+      2,
+      2,
+      2,
+      2,
+      1
+    ],
+    "office_unit": [
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "warehouse": [
+      3,
+      3,
+      3,
+      3,
+      2
+    ],
+    "datacentre_campus": [
+      3,
+      3,
+      3,
+      3,
+      3
+    ],
+    "private_power_grid": [
+      4,
+      3,
+      4,
+      4,
+      3
+    ],
+    "moon_facility": [
+      4,
+      4,
+      4,
+      4,
+      4
+    ]
   },
   "chapter_max_tier": {
     "bedroom": 2,
-    "garage": 2,
+    "garage": 3,
     "office_unit": 3,
-    "warehouse": 3,
+    "warehouse": 4,
     "datacentre_campus": 4,
     "private_power_grid": 4,
     "moon_facility": 4
+  },
+  "chapter_profiles": {
+    "bedroom": {
+      "base_token_rate": 1000000,
+      "power_draw": 65,
+      "work_tier": 0,
+      "cooling_capacity": 17,
+      "heat_capacity": 100,
+      "cost_scale": 1.0
+    },
+    "garage": {
+      "base_token_rate": 7000000,
+      "power_draw": 415,
+      "work_tier": 1,
+      "cooling_capacity": 110,
+      "heat_capacity": 140,
+      "cost_scale": 12.5
+    },
+    "office_unit": {
+      "base_token_rate": 52000000,
+      "power_draw": 2065,
+      "work_tier": 2,
+      "cooling_capacity": 599,
+      "heat_capacity": 200,
+      "cost_scale": 125.0
+    },
+    "warehouse": {
+      "base_token_rate": 521000000,
+      "power_draw": 8065,
+      "work_tier": 3,
+      "cooling_capacity": 2597,
+      "heat_capacity": 280,
+      "cost_scale": 1250.0
+    },
+    "datacentre_campus": {
+      "base_token_rate": 5521000000,
+      "power_draw": 40065,
+      "work_tier": 4,
+      "cooling_capacity": 14489,
+      "heat_capacity": 400,
+      "cost_scale": 16666.666666666668
+    },
+    "private_power_grid": {
+      "base_token_rate": 105521000000,
+      "power_draw": 300065,
+      "work_tier": 5,
+      "cooling_capacity": 123777,
+      "heat_capacity": 560,
+      "cost_scale": 208333.33333333334
+    },
+    "moon_facility": {
+      "base_token_rate": 2105521000000,
+      "power_draw": 2000065,
+      "work_tier": 6,
+      "cooling_capacity": 960031,
+      "heat_capacity": 800,
+      "cost_scale": 1250000.0
+    }
   }
 }

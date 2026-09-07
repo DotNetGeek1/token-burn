@@ -162,8 +162,9 @@ func _test_curve_stays_in_scale() -> void:
 	sim.autosave_enabled = false
 	sim.start_run(912)
 	sim.run_state.economy["cash"] = 500000.0
-	for upgrade in ContentDatabase.upgrades:
-		sim.buy_upgrade(upgrade.id)
+	for system_id in CabinetSystems.system_ids():
+		CabinetSystems.set_tier(sim.run_state, str(system_id), CabinetSystems.max_tier_for_chapter(sim.run_state))
+	sim.compute_system().recalculate(sim.run_state, sim.effect_resolver, [], sim.rng)
 	var sustained: float = float(sim.run_state.compute.get("token_rate", 0.0))
 	var tier: int = JobSystem.location_tier(sim.run_state, ContentDatabase)
 	var band: Dictionary = Dictionary(JobSystem.location_bands(ContentDatabase)[tier])

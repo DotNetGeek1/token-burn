@@ -27,6 +27,7 @@ func _ready() -> void:
 
 	print("Token Burn -- campaign balance sweep")
 	print("=".repeat(48))
+	var accepted: bool = true
 	for profile in profiles:
 		var runner := BatchRunner.new()
 		runner.verbose = true
@@ -34,8 +35,9 @@ func _ready() -> void:
 			runs, "builder", str(profile), difficulty, seed_start
 		)
 		_print_summary(summary)
+		accepted = accepted and bool(summary.get("accepted", false))
 	print("=".repeat(48))
-	get_tree().quit()
+	get_tree().quit(0 if accepted else 1)
 
 
 func _print_summary(summary: Dictionary) -> void:

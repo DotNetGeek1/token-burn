@@ -177,7 +177,7 @@ func _test_the_permanent_rig_is_not_refundable() -> void:
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)
 	assert_eq(
-		UpgradeSystem.installed_count(sim.run_state, "custom_desktop"),
+		int(UpgradeSystem.upgrade_counts(sim.run_state).get("upgrade.custom_desktop", 0)),
 		1,
 		"The permanent desktop is racked in the next run"
 	)

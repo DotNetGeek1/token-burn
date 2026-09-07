@@ -3,8 +3,9 @@ extends RefCounted
 
 
 func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscriptions: Array, rng: DeterministicRng) -> void:
+	CabinetSystems.absorb_legacy_rig(run_state)
 	var hardware_rate: float = 0.0
-	var power_draw: float = 0.0
+	var power_draw: float = CabinetSystems.power_draw(run_state)
 	var hardware_curves: Dictionary = ContentDatabase.balance.get("hardware_curves", {})
 	for hardware_id in run_state.build["hardware"]:
 		var hw: Dictionary = hardware_curves.get(str(hardware_id), {})
@@ -120,4 +121,5 @@ static func cabinet_base_rate(run_state: RunState) -> float:
 ## contracts advancing side by side. Components (a GPU inside a desktop) make
 ## the machine they live in faster rather than adding a parallel line.
 static func job_slots(run_state: RunState) -> int:
-	return maxi(1, UpgradeSystem.hardware_slots_used(run_state, ContentDatabase))
+	# Raw legacy fixtures may be inspected before their first recalculation.
+	return maxi(UpgradeSystem.hardware_slots_used(run_state, ContentDatabase), maxi(1, int(CabinetSystems.capacity(run_state, "power", "job_slots"))))
