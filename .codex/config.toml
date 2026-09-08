@@ -1,0 +1,20 @@
+[mcp_servers.godot]
+command = "npx"
+args = [
+    "-y",
+    "@coding-solo/godot-mcp",
+]
+
+[mcp_servers.godot.env]
+DEBUG = "true"
+
+[mcp_servers.godot-editor]
+command = "npx"
+args = [
+    "-y",
+    "godot-mcp-enhanced",
+]
+
+[mcp_servers.godot-editor.env]
+GODOT_PROJECT_PATH = 'C:\source\token-burn'
+ALLOWED_PROJECT_PATHS = 'C:\source\token-burn'
