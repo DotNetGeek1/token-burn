@@ -96,13 +96,22 @@ func _ready() -> void:
 		_steps.add_child(step)
 		_step_labels.append(step)
 
+	# The figures scroll when the glass is short (a handset canvas is ~300
+	# tall), so the keys under them — BRIEF, SHIP IT — always stay on the glass
+	# instead of being the part that falls off the bottom.
+	var figures := ScrollContainer.new()
+	figures.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	figures.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	figures.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(figures)
 	var grid := GridContainer.new()
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 3)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(grid)
+	figures.add_child(grid)
 	# QUALITY sits in the first row beside STATUS: whether the bar is cleared
 	# is the figure that decides between SHIP IT and one more batch.
 	for key in ["status", "quality", "value", "step", "synergy", "heat", "risk", "expires", "next"]:

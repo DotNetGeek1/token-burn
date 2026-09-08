@@ -14,8 +14,22 @@ extends Control
 ## a player who has heard it before can tap straight past it.
 const TYPE_SPEED := 68.0
 
+## The handset as authored: 452 wide, 636 tall, held up in the middle of a
+## 720-tall canvas. A phone canvas is ~300 tall, so there the same object has
+## to be a shorter model: no portrait, tighter margins, a lower key.
+const PHONE_WIDTH := 452.0
+const PHONE_HEIGHT := 636.0
+const EDGE_PAD := 16.0
+const COMPACT_HEIGHT := 420.0
+const BODY_MIN_HEIGHT := 168.0
+const COMPACT_BODY_MIN_HEIGHT := 48.0
+const BUTTON_HEIGHT := 62.0
+const COMPACT_BUTTON_HEIGHT := 44.0
+
 @onready var backdrop: ColorRect = $Backdrop
 @onready var phone: PanelContainer = $Phone
+@onready var margin: MarginContainer = $Phone/Margin
+@onready var vbox: VBoxContainer = $Phone/Margin/VBox
 @onready var call_state: Label = $Phone/Margin/VBox/CallState
 @onready var portrait: TextureRect = $Phone/Margin/VBox/Portrait
 @onready var name_label: Label = $Phone/Margin/VBox/Name
@@ -47,11 +61,46 @@ func _ready() -> void:
 	]
 	portrait.texture = AssetCatalog.investor_texture("portrait")
 	portrait.visible = portrait.texture != null
+	resized.connect(_fit_phone)
+	visibility_changed.connect(func() -> void:
+		if visible:
+			call_deferred("_fit_phone")
+	)
+	_fit_phone()
 	# The status light and the alert line are the phone's own screen, so they
 	# burn in the same two colours the room's other screens use.
 	call_state.add_theme_color_override("font_color", ConsoleStyle.PHOSPHOR)
 	subject_label.add_theme_color_override("font_color", ConsoleStyle.DANGER)
 	body_label.add_theme_font_override("font", UiThemeBuilder.body_font())
+
+
+## Fits the handset to the canvas it is held up in front of. On a desktop that
+## is the authored 452×636; on a handset canvas the phone is as tall as the
+## screen allows and drops the portrait so the words and the key still fit.
+func _fit_phone() -> void:
+	var area: Vector2 = size
+	if area.x <= 1.0 or area.y <= 1.0:
+		area = get_viewport_rect().size
+	if area.x <= 1.0 or area.y <= 1.0:
+		return
+	var compact: bool = area.y < COMPACT_HEIGHT
+	var width: float = minf(PHONE_WIDTH, area.x - EDGE_PAD * 2.0)
+	var height: float = minf(PHONE_HEIGHT, area.y - EDGE_PAD * 2.0)
+	margin.add_theme_constant_override("margin_left", 12 if compact else 22)
+	margin.add_theme_constant_override("margin_right", 12 if compact else 22)
+	margin.add_theme_constant_override("margin_top", 8 if compact else 20)
+	margin.add_theme_constant_override("margin_bottom", 8 if compact else 20)
+	vbox.add_theme_constant_override("separation", 4 if compact else 12)
+	portrait.visible = portrait.texture != null and not compact
+	title_label.visible = not compact
+	body_label.custom_minimum_size = Vector2(0.0, COMPACT_BODY_MIN_HEIGHT if compact else BODY_MIN_HEIGHT)
+	continue_button.compact = compact
+	continue_button.set_min_height(COMPACT_BUTTON_HEIGHT if compact else BUTTON_HEIGHT)
+	phone.set_anchors_preset(Control.PRESET_CENTER)
+	phone.offset_left = -width * 0.5
+	phone.offset_right = width * 0.5
+	phone.offset_top = -height * 0.5
+	phone.offset_bottom = height * 0.5
 
 
 ## Rings the player. `context` may name the `variant` and the `seed` outright;

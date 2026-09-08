@@ -19,8 +19,9 @@ const CARD_SCENE := preload("res://ui/common/card.tscn")
 ## printed lines would ever want, but the offers are the content here.
 const TABLE_WIDTH := 1040.0
 ## Narrower than this and a card is a column of two words per line, so the
-## table stacks instead.
-const CARD_MIN_WIDTH := 300.0
+## table stacks instead. Low enough that a handset canvas (~620 of body) still
+## seats two offers side by side, because there the height is what runs out.
+const CARD_MIN_WIDTH := 280.0
 const CARD_SEPARATION := 12
 const CHIP_SEPARATION := 6
 
@@ -34,6 +35,8 @@ func _ready() -> void:
 	set_kicker("HIS TABLE")
 	setup(InvestorVoice.investor_name())
 	set_context("Pick one perk. Nothing here has a price.")
+	# The pitch restates the kicker; on a handset the offers need that height.
+	compact_hides_context = true
 	# Free or not, which one he is handing over is a decision, and a stray tap
 	# on the room behind should not answer it.
 	dismiss_on_scrim = false

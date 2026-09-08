@@ -215,6 +215,18 @@ func _apply_compact() -> void:
 	_sync_minimum_size()
 
 
+## Re-authors the button's height after `_ready`. `custom_minimum_size` set
+## from outside would be undone by the next `_sync_minimum_size`, which keeps
+## the height the button was built with; a shell that re-lays its keys out for
+## a smaller screen has to change that authored height instead.
+func set_min_height(height: float) -> void:
+	_authored_min_height = height
+	if _content == null:
+		custom_minimum_size.y = height
+	else:
+		_sync_minimum_size()
+
+
 ## Sets both lines at once, which is how callers usually refresh a button.
 func set_lines(new_headline: String, new_sub_text: String = "") -> void:
 	headline = new_headline

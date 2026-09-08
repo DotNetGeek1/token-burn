@@ -34,12 +34,30 @@ const FOOTER_SEPARATION := 8
 ## should read as part of the object.
 const BUTTON_HEIGHT := 62.0
 
+## A handset canvas is only ~300 design pixels tall (`DisplayScale` squeezes it
+## until type is legible), and the same shape shows up in a short desktop
+## window. Below this height the phone is laid out compactly: tighter margins,
+## the footer keys in a row rather than a stack, the full width of the glass —
+## otherwise a two-key sheet's chrome alone is taller than the screen and the
+## keys are the part that goes.
+const COMPACT_HEIGHT := 420.0
+const COMPACT_MARGIN_H := 12
+const COMPACT_MARGIN_V := 8
+const COMPACT_SECTION_SEPARATION := 6
+const COMPACT_BODY_SEPARATION := 4
+const COMPACT_FOOTER_SEPARATION := 6
+const COMPACT_BUTTON_HEIGHT := 44.0
+
 ## Whether tapping the dimmed room behind the phone dismisses it. Off for
 ## overlays that are a decision the player has to actually answer.
 var dismiss_on_scrim: bool = true
 ## The cap `MAX_WIDTH` sets is the width of a handset. A screen that lays cards
 ## out side by side rather than printing lines can raise it.
 var max_width: float = MAX_WIDTH
+## Whether the line under the title is dropped on a handset. A pitch that only
+## restates the screen can go when height is the thing in short supply; a line
+## carrying figures the player needs cannot.
+var compact_hides_context: bool = false
 
 var _backdrop: ColorRect = null
 var _panel: PanelContainer = null
@@ -51,11 +69,12 @@ var _title: Label = null
 var _subtitle: Label = null
 var _scroll: ScrollContainer = null
 var _body: VBoxContainer = null
-var _footer: VBoxContainer = null
+var _footer: BoxContainer = null
 var _close_button: GameButton = null
 var _action_buttons: Array[GameButton] = []
 var _closable: bool = true
 var _fit_queued: bool = false
+var _compact: bool = false
 var _scrim_tap: TapGesture = TapGesture.new()
 
 
@@ -142,7 +161,8 @@ func _ensure_built() -> void:
 	_body.minimum_size_changed.connect(_request_fit)
 	_scroll.add_child(_body)
 
-	_footer = VBoxContainer.new()
+	_footer = BoxContainer.new()
+	_footer.vertical = true
 	_footer.add_theme_constant_override("separation", FOOTER_SEPARATION)
 	_column.add_child(_footer)
 
@@ -174,7 +194,7 @@ func set_kicker(text: String) -> void:
 func set_context(text: String, color: Color = Color(UiThemeBuilder.TEXT_SECONDARY)) -> void:
 	_ensure_built()
 	_subtitle.text = text
-	_subtitle.visible = text != ""
+	_subtitle.visible = text != "" and not (_compact and compact_hides_context)
 	_subtitle.add_theme_color_override("font_color", color)
 	_request_fit()
 
@@ -217,6 +237,7 @@ func set_actions(entries: Array) -> void:
 		if accent == "":
 			accent = "danger" if destructive else ("neutral" if secondary else "action")
 		var button: GameButton = _make_button(str(entry.get("headline", "")), variation, accent)
+		_style_button(button)
 		var enabled: bool = bool(entry.get("enabled", true))
 		button.disabled = not enabled
 		var handler: Variant = entry.get("pressed", null)
@@ -262,6 +283,11 @@ func hide_overlay() -> void:
 	if is_inside_tree():
 		get_tree().call_group("main_ui", "sync_overlay_input")
 	closed.emit()
+
+
+## Whether the phone is on its handset layout.
+func is_compact() -> bool:
+	return _compact
 
 
 ## Re-measures the phone against the window. Called by the shell's own hooks;
@@ -310,9 +336,14 @@ func _fit_phone() -> void:
 	var area: Vector2 = _window()
 	if area.x <= 1.0 or area.y <= 1.0:
 		return
+	_apply_metrics(area.y < COMPACT_HEIGHT)
 	# Centred on the glass and inset from every edge, so the room stays visible
 	# around it and the phone reads as something held up in front of the desk.
-	var width: float = minf(area.x - EDGE_PAD * 2.0, max_width)
+	# A handset has no room to spare in either direction, so there the phone
+	# takes the whole width and lets the height decide what scrolls.
+	var width: float = area.x - EDGE_PAD * 2.0
+	if not _compact:
+		width = minf(width, max_width)
 	var limit: float = area.y - EDGE_PAD * 2.0
 	# The scroll view reports no height of its own, so the phone's natural
 	# height is its chrome plus whatever is printed in the body; past the window
@@ -325,6 +356,35 @@ func _fit_phone() -> void:
 	_panel.offset_right = width * 0.5
 	_panel.offset_top = -height * 0.5
 	_panel.offset_bottom = height * 0.5
+
+
+## Switches the chrome between the handset's tight layout and the desktop's.
+## Idempotent, so it can run on every fit.
+func _apply_metrics(compact: bool) -> void:
+	if compact == _compact and _footer.has_meta("phone_metrics"):
+		return
+	_compact = compact
+	_footer.set_meta("phone_metrics", true)
+	_margin.add_theme_constant_override("margin_left", COMPACT_MARGIN_H if compact else MARGIN_H)
+	_margin.add_theme_constant_override("margin_right", COMPACT_MARGIN_H if compact else MARGIN_H)
+	_margin.add_theme_constant_override("margin_top", COMPACT_MARGIN_V if compact else MARGIN_V)
+	_margin.add_theme_constant_override("margin_bottom", COMPACT_MARGIN_V if compact else MARGIN_V)
+	_column.add_theme_constant_override("separation", COMPACT_SECTION_SEPARATION if compact else SECTION_SEPARATION)
+	_header.add_theme_constant_override("separation", 2 if compact else 4)
+	_body.add_theme_constant_override("separation", COMPACT_BODY_SEPARATION if compact else BODY_SEPARATION)
+	_footer.add_theme_constant_override("separation", COMPACT_FOOTER_SEPARATION if compact else FOOTER_SEPARATION)
+	# Keys stack on a desktop phone; on a handset they share one row, because a
+	# stack of three is the height of the whole screen.
+	_footer.vertical = not compact
+	_subtitle.visible = _subtitle.text != "" and not (compact and compact_hides_context)
+	_style_button(_close_button)
+	for button in _action_buttons:
+		_style_button(button)
+
+
+func _style_button(button: GameButton) -> void:
+	button.compact = _compact
+	button.set_min_height(COMPACT_BUTTON_HEIGHT if _compact else BUTTON_HEIGHT)
 
 
 ## The overlay is always the whole window, but it is often built and mounted in
