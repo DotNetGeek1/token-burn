@@ -18,7 +18,10 @@ const GLANCE_DELAY := 2.0
 
 var _live: Label = null
 var _lines: VBoxContainer = null
-var _mult: Label = null
+var _readout: GridContainer = null
+var _rate_value: Label = null
+var _burned_value: Label = null
+var _goal_value: Label = null
 var _status: Label = null
 var _glow: ColorRect = null
 var _glow_tween: Tween = null
@@ -58,9 +61,18 @@ func _ready() -> void:
 	_lines.clip_contents = true
 	column.add_child(_lines)
 
-	_mult = CabinetStyle.mono("", CabinetStyle.FONT_HEAD, CabinetStyle.AMBER)
-	_mult.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(_mult)
+	# The batch's own ledger, in place of the multiplier the drum above already
+	# shows: what the rig is pushing now, what the run has burned, and the
+	# number the investor is holding it to.
+	_readout = GridContainer.new()
+	_readout.columns = 2
+	_readout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_readout.add_theme_constant_override("h_separation", 6)
+	_readout.add_theme_constant_override("v_separation", 0)
+	column.add_child(_readout)
+	_rate_value = _readout_row("TOKENS/MIN", CabinetStyle.AMBER)
+	_burned_value = _readout_row("RUN BURNED", CabinetStyle.PHOSPHOR)
+	_goal_value = _readout_row("GOAL", CabinetStyle.PHOSPHOR_DIM)
 	_status = CabinetStyle.mono("NO RUN ACTIVE", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(_status)
@@ -71,9 +83,36 @@ func _ready() -> void:
 	_fit()
 
 
+func _readout_row(key: String, color: Color) -> Label:
+	var label: Label = CabinetStyle.mono(key, CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_readout.add_child(label)
+	var value: Label = CabinetStyle.mono("—", CabinetStyle.FONT_TINY, color)
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_readout.add_child(value)
+	return value
+
+
 func _fit() -> void:
-	_mult.add_theme_font_size_override("font_size", clampi(int(size.y * 0.16), 10, 24))
+	var font: int = clampi(int(size.y * 0.075), 8, 13)
+	for child in _readout.get_children():
+		if child is Label:
+			(child as Label).add_theme_font_size_override("font_size", font)
 	_render()
+
+
+## The batch's ledger: `rate` in tokens a minute at the drum's current reading,
+## `burned` the run's total so far (this batch included), `goal` the contract's
+## number. A goal of zero (no contract) leaves that row blank.
+func set_readout(rate: float, burned: float, goal: float) -> void:
+	_rate_value.text = NumberFormat.format_token_rate(rate)
+	if goal > 0.0:
+		_burned_value.text = "%s · %d%%" % [NumberFormat.format(burned), int(floor(burned / goal * 100.0))]
+		_goal_value.text = NumberFormat.format(goal)
+	else:
+		_burned_value.text = NumberFormat.format(burned)
+		_goal_value.text = "—"
 
 
 ## Whether the feed is taking room on the rail right now.
@@ -90,7 +129,8 @@ func set_live(live: bool, status: String, multiplier: float = 0.0) -> void:
 	_live.add_theme_color_override("font_color", CabinetStyle.RED if live else CabinetStyle.PHOSPHOR_DIM)
 	_status.text = status.to_upper()
 	_status.add_theme_color_override("font_color", CabinetStyle.AMBER if live else CabinetStyle.PHOSPHOR_DIM)
-	_mult.text = "×%.1f" % multiplier if multiplier > 0.0 else ""
+	if multiplier > 0.0:
+		_status.text = "%s  ×%.2f" % [_status.text, multiplier]
 	_set_glow(live)
 	var was_live: bool = _is_live
 	_is_live = live

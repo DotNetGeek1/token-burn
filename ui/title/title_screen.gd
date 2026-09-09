@@ -26,9 +26,15 @@ const PHOSPHOR_DIM := ConsoleStyle.PHOSPHOR_DIM
 const REFERENCE_GLASS := Vector2(720.0, 560.0)
 const PANEL_WIDTH_RATIO := 0.62
 const PANEL_MAX_WIDTH := 800.0
-const DESKTOP_BREAKPOINT := 720.0
+const LANDSCAPE_ASPECT := 1.15
 const MIN_SCALE := 0.82
 const MAX_SCALE := 3.0
+## A handset canvas is ~300 design pixels tall (`DisplayScale`). Below this the
+## console is sized from the glass height alone and may print smaller than the
+## desktop floor, since every design pixel is already three or four real ones.
+const COMPACT_HEIGHT := 420.0
+const COMPACT_MIN_SCALE := 0.55
+const COMPACT_PANEL_WIDTH_RATIO := 0.74
 
 const BOOT_LINES := [
 	"POST OK ... 640K CONTEXT FREE",
@@ -204,20 +210,23 @@ func _notification(what: int) -> void:
 		_layout_stage()
 
 
-## Wide displays leave the turbine unobstructed. Narrow displays promote the
+## Landscape displays leave the turbine unobstructed; a handset in landscape is
+## the same console printed smaller and a little wider. Portrait promotes the
 ## console to a near-full-screen sheet so every action remains touchable.
 func _layout_stage() -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
 	_layout_backdrop()
-	var desktop: bool = size.x >= DESKTOP_BREAKPOINT and size.x / size.y >= 1.15
+	var landscape: bool = size.x / size.y >= LANDSCAPE_ASPECT
+	var compact: bool = size.y < COMPACT_HEIGHT
 	var glass_rect: Rect2
-	if desktop:
-		var margin_x: float = maxf(42.0, size.x * 0.055)
-		var margin_y: float = maxf(26.0, size.y * 0.052)
+	if landscape:
+		var margin_x: float = maxf(12.0, size.x * 0.03) if compact else maxf(42.0, size.x * 0.055)
+		var margin_y: float = maxf(8.0, size.y * 0.035) if compact else maxf(26.0, size.y * 0.052)
+		var width_ratio: float = COMPACT_PANEL_WIDTH_RATIO if compact else PANEL_WIDTH_RATIO
 		glass_rect = Rect2(
 			Vector2(margin_x, margin_y),
-			Vector2(minf(size.x * PANEL_WIDTH_RATIO, PANEL_MAX_WIDTH), size.y - margin_y * 2.0)
+			Vector2(minf(size.x * width_ratio, PANEL_MAX_WIDTH), size.y - margin_y * 2.0)
 		)
 	else:
 		var margin: float = maxf(12.0, size.x * 0.032)
@@ -241,9 +250,10 @@ func _layout_stage() -> void:
 	var fit_scale: float = minf(
 		glass_rect.size.x / REFERENCE_GLASS.x, glass_rect.size.y / REFERENCE_GLASS.y
 	)
-	if not desktop:
+	if not landscape:
 		fit_scale = maxf(fit_scale, glass_rect.size.x / 460.0)
-	_apply_metrics(clampf(fit_scale * 1.18, MIN_SCALE, MAX_SCALE))
+	var floor_scale: float = COMPACT_MIN_SCALE if compact else MIN_SCALE
+	_apply_metrics(clampf(fit_scale * 1.18, floor_scale, MAX_SCALE))
 
 
 ## Everything printed on the glass is sized from the glass, so the menu reads the

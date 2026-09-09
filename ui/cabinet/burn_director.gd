@@ -33,6 +33,11 @@ var _drum: MultiplierDrum = null
 var _heat: HeatMeter = null
 var _dock: ModuleDock = null
 var _tab_run: TabRun = null
+var _callouts: BurnCallouts = null
+
+## A beat has to multiply the drum by at least this much to earn a callout on
+## the glass; the feed and the drum still report the smaller moves.
+const CALLOUT_MIN_RATIO := 1.10
 
 # The batch in flight
 var _burning: bool = false
@@ -43,13 +48,21 @@ var _proc_depth: int = 0
 
 
 ## The instruments the spectacle plays on.
-func _init(feed: BurnFeed, drum: MultiplierDrum, heat: HeatMeter, dock: ModuleDock, tab_run: TabRun) -> void:
+func _init(
+	feed: BurnFeed,
+	drum: MultiplierDrum,
+	heat: HeatMeter,
+	dock: ModuleDock,
+	tab_run: TabRun,
+	callouts: BurnCallouts = null
+) -> void:
 	name = "BurnDirector"
 	_feed = feed
 	_drum = drum
 	_heat = heat
 	_dock = dock
 	_tab_run = tab_run
+	_callouts = callouts
 
 
 func is_burning() -> bool:
@@ -181,6 +194,19 @@ func _begin_batch_readout(preview: Dictionary, beats: Array) -> void:
 	var label: String = "%s START" % workflow_name if workflow_name != "" else "START"
 	_drum.begin_batch(start, label)
 	_feed.push("%s  ×%.2f" % [label, start], CabinetStyle.PHOSPHOR_DIM)
+	_update_feed_readout(start, 0.0)
+
+
+## The feed's ledger at the drum's reading `multiplier`: the rig's rate through
+## it, and the run's burn with this batch's `batch_tokens` so far on top, held
+## against the contract the investor set. The run's own total only moves when
+## the batch commits, so the batch is added by hand for the figure to climb
+## with the beats.
+func _update_feed_readout(multiplier: float, batch_tokens: float) -> void:
+	var rig: float = maxf(0.0, float(Simulation.run_state.compute.get("token_rate", 0.0)))
+	var progress: Dictionary = Simulation.ascension_progress()
+	var burned: float = float(progress.get("tokens_burned", 0.0)) + maxf(0.0, batch_tokens)
+	_feed.set_readout(rig * maxf(0.0, multiplier), burned, float(progress.get("total_burn", 0.0)))
 
 
 ## One beat on the cabinet: the drum spins, the stage's bay and strip cell light,
@@ -213,6 +239,7 @@ func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned
 		_feed.push("%s  +%s" % [label, NumberFormat.format(float(beat.get("tokens_added", 0.0)))], CabinetStyle.AMBER if loud else CabinetStyle.PHOSPHOR)
 		_tab_run.show_beat_status(label if loud else "BURNING", CabinetStyle.AMBER if loud else CabinetStyle.PHOSPHOR)
 	_feed.set_live(true, "burn in progress", after)
+	_update_feed_readout(after, float(beat.get("tokens", 0.0)))
 	if not job.is_empty():
 		var burned: float = burned_before + float(beat.get("tokens", 0.0))
 		_feed.push("TOKENS %s / %s" % [NumberFormat.format(minf(burned, requirement)), NumberFormat.format(requirement)], CabinetStyle.PHOSPHOR_DIM)
@@ -222,6 +249,45 @@ func _present_beat(beat: Dictionary, job: Dictionary, requirement: float, burned
 	else:
 		UiSound.play_proc(_proc_depth)
 	_pulse_beat_heat(beat)
+	_callout_beat(beat, kind, after, falls)
+
+
+## The glass-sized version of a beat that multiplied the drum: the ratio it
+## applied and the tokens-per-minute it bought. AGAIN! is named as such, with
+## how many times it ran the stage above; anything else is its ratio. The rate
+## is the rig's rate through the drum's new reading — the same figure the
+## TOKENS readout prints between batches, so the two agree.
+func _callout_beat(beat: Dictionary, kind: String, after: float, falls: bool) -> void:
+	if _callouts == null or falls:
+		return
+	if kind == BurnSpectacle.KIND_FINAL or kind == BurnSpectacle.KIND_MASTERY:
+		return
+	var ratio: float = float(beat.get("ratio", 1.0))
+	var again: bool = kind == BurnSpectacle.KIND_FORK
+	if ratio < CALLOUT_MIN_RATIO and not again:
+		return
+	var rig: float = maxf(0.0, float(Simulation.run_state.compute.get("token_rate", 0.0)))
+	var rate: String = "%s TOKENS/MIN" % NumberFormat.format_compact(rig * maxf(0.0, after))
+	var headline: String
+	if again:
+		headline = "AGAIN! ×%d" % maxi(1, int(beat.get("repeat_count", 1)))
+	else:
+		headline = "×%s" % _ratio_text(ratio)
+	var color: Color = CabinetStyle.AMBER
+	if kind == BurnSpectacle.KIND_COMBO or kind == BurnSpectacle.KIND_SYNERGY:
+		color = CabinetStyle.PHOSPHOR
+	elif again or kind == BurnSpectacle.KIND_CASCADE:
+		color = CabinetStyle.WHITE
+	_callouts.flash(headline, rate, color)
+
+
+## "2", "1.5", "2.25": as short as the ratio allows, never "2.00".
+static func _ratio_text(ratio: float) -> String:
+	if is_equal_approx(ratio, round(ratio)):
+		return str(int(round(ratio)))
+	if is_equal_approx(ratio * 10.0, round(ratio * 10.0)):
+		return "%.1f" % ratio
+	return "%.2f" % ratio
 
 
 func _pulse_beat_heat(beat: Dictionary) -> void:
@@ -265,6 +331,12 @@ func _animate_consequences(beats: Array) -> void:
 		_tab_run.show_beat_status(str(beat.get("headline", "RESULT")), color)
 		if role == "danger":
 			UiSound.play("alarm")
+		if str(beat.get("kind", "")) == BurnSpectacle.CONSEQUENCE_BUG and _callouts != null:
+			# The bugs the batch wrote, over the job's count once they are on it.
+			var added: int = int(beat.get("known_added", 0)) + int(beat.get("hidden_added", 0))
+			var job: Dictionary = Simulation.focused_job()
+			var total: int = int(job.get("known_bugs", 0)) + int(job.get("hidden_bugs", 0))
+			_callouts.flash_bugs(added, maxi(total, added))
 		await get_tree().create_timer(float(beat.get("hold", 0.35))).timeout
 
 

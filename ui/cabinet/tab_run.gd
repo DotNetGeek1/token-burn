@@ -1,11 +1,11 @@
 class_name TabRun
 extends CabinetTab
 
-## The default screen: the contract on the bench as a paper tag, the active
-## workflow drawn as a strip of stages with the batch's position lit along it,
-## and the figures that decide whether to press BURN.
+## The default screen: the contract on the bench as a paper tag and the figures
+## that decide whether to press BURN. The workflow itself is not drawn here:
+## the dock under the glass is the workflow, and the batch lights its bays as
+## it runs, so a second strip on the glass only said the same thing smaller.
 
-const MAX_STRIP := 10
 ## Width over height of the drawn job card; the card is cut to the glass's
 ## height so the paper, and the ink on it, grow with the screen.
 const CARD_ASPECT := 770.0 / 1321.0
@@ -13,15 +13,9 @@ const CARD_MIN_WIDTH := 120.0
 const CARD_MAX_WIDTH := 300.0
 
 var _card: ContractCard = null
-var _strip: HBoxContainer = null
-var _steps: HBoxContainer = null
-var _cells: Array[Control] = []
-var _glyph_rects: Array[TextureRect] = []
-var _step_labels: Array[Label] = []
 var _stats: Dictionary = {}
 var _keys: HBoxContainer = null
 var _burn_keys: HBoxContainer = null
-var _note: Label = null
 var _lit: int = -1
 var _burning: bool = false
 
@@ -53,48 +47,6 @@ func _ready() -> void:
 	column.add_theme_constant_override("separation", 3)
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(column)
-
-	var head := HBoxContainer.new()
-	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(head)
-	var caption: Label = CabinetStyle.caption("WORKFLOW OVERVIEW")
-	caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(caption)
-	_note = CabinetStyle.mono("", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
-	head.add_child(_note)
-
-	var strip_frame := PanelContainer.new()
-	strip_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	strip_frame.add_theme_stylebox_override("panel", CabinetStyle.frame(CabinetStyle.AMBER, 0.35, 0.03))
-	column.add_child(strip_frame)
-	var strip_column := VBoxContainer.new()
-	strip_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	strip_column.add_theme_constant_override("separation", 1)
-	strip_frame.add_child(strip_column)
-	_strip = HBoxContainer.new()
-	_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_strip.add_theme_constant_override("separation", 2)
-	strip_column.add_child(_strip)
-	_steps = HBoxContainer.new()
-	_steps.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_steps.add_theme_constant_override("separation", 2)
-	strip_column.add_child(_steps)
-	for index in range(MAX_STRIP):
-		var cell := PanelContainer.new()
-		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		cell.custom_minimum_size = Vector2(0, 26)
-		var glyph: TextureRect = CabinetStyle.glyph(null, 18.0)
-		glyph.name = "Glyph"
-		cell.add_child(glyph)
-		_strip.add_child(cell)
-		_cells.append(cell)
-		_glyph_rects.append(glyph)
-		var step: Label = CabinetStyle.mono(str(index + 1), CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
-		step.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		step.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_steps.add_child(step)
-		_step_labels.append(step)
 
 	# The figures scroll when the glass is short (a handset canvas is ~300
 	# tall), so the keys under them — BRIEF, SHIP IT — always stay on the glass
@@ -162,7 +114,6 @@ func refresh() -> void:
 			lane_index = index
 	_card.set_job(job, lane_index, maxi(1, lanes.size()))
 	var preview: Dictionary = Simulation.preview_next_burn()
-	_refresh_strip(preview)
 	_refresh_stats(job, working, preview)
 	_refresh_keys(job, working)
 
@@ -173,51 +124,6 @@ func _lanes() -> Array:
 		if candidate is Dictionary and float(candidate.get("tokens_remaining", 0.0)) > 0.0:
 			lanes.append(candidate)
 	return lanes
-
-
-## One cell per slot of the active workflow: the seated module's glyph in its
-## category colour, or an empty socket. The batch lights the cell it is on.
-func _refresh_strip(preview: Dictionary) -> void:
-	var slots: Array = Simulation.board_slots()
-	var shown: int = mini(slots.size(), MAX_STRIP)
-	var stages: Dictionary = {}
-	for stage in Array(preview.get("stages", [])):
-		if stage is Dictionary:
-			stages[int(stage.get("slot_index", -1))] = stage
-	for index in range(MAX_STRIP):
-		var cell: PanelContainer = _cells[index]
-		var step: Label = _step_labels[index]
-		var visible: bool = index < shown
-		cell.visible = visible
-		step.visible = visible
-		if not visible:
-			continue
-		var module_id: String = str(slots[index])
-		var module: ModuleDefinition = ContentDatabase.get_module(module_id) if module_id != "" else null
-		var glyph: TextureRect = _glyph_rects[index]
-		var lit: bool = index == _lit
-		var tint: Color = CabinetStyle.category_color(module.category) if module != null else CabinetStyle.PHOSPHOR_DIM
-		glyph.texture = AssetCatalog.cabinet_module_glyph(module.category) if module != null else null
-		glyph.modulate = tint if module != null else Color(tint.r, tint.g, tint.b, 0.3)
-		var box: StyleBoxFlat = CabinetStyle.frame(
-			CabinetStyle.AMBER if lit else tint,
-			1.0 if lit else (0.6 if module != null else 0.2),
-			0.25 if lit else (0.08 if module != null else 0.0),
-			2 if lit else 1
-		)
-		box.content_margin_left = 2
-		box.content_margin_right = 2
-		box.content_margin_top = 2
-		box.content_margin_bottom = 2
-		cell.add_theme_stylebox_override("panel", box)
-		var stage: Dictionary = stages.get(index, {})
-		var combo: bool = not Array(stage.get("combos", [])).is_empty()
-		cell.tooltip_text = (
-			"%s%s" % [module.name, "  ◆ COMBO" if combo else ""] if module != null else "Empty stage"
-		)
-		step.text = ("%d◆" % (index + 1)) if combo else str(index + 1)
-		step.add_theme_color_override("font_color", CabinetStyle.AMBER if lit or combo else CabinetStyle.PHOSPHOR_DIM)
-	_note.text = ("%d STAGES" % slots.size()) if slots.size() <= MAX_STRIP else ("%d STAGES · FIRST %d SHOWN" % [slots.size(), MAX_STRIP])
 
 
 func _refresh_stats(job: Dictionary, working: bool, preview: Dictionary) -> void:
@@ -321,10 +227,10 @@ func _add_key(text: String, accent: Color, pressed: Callable) -> void:
 	_keys.add_child(key)
 
 
-## Lights the stage the batch is on. -1 puts the strip back to rest.
+## The stage the batch is on, for the CURRENT STEP figure; the dock lights the
+## bay itself. -1 puts the figure back to rest.
 func light_step(slot_index: int) -> void:
 	_lit = slot_index
-	_refresh_strip(Simulation.preview_next_burn() if not _burning else {})
 	_stat("step", "%d / %d" % [maxi(0, _lit + 1), Simulation.board_slots().size()], CabinetStyle.AMBER if _lit >= 0 else CabinetStyle.PHOSPHOR)
 
 

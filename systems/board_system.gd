@@ -754,7 +754,6 @@ func resolve_burn(
 	var stages: Array = []
 	var pending_multiplier: float = 1.0
 	var pending_cost_mult: float = 1.0
-	var previous_stage: Dictionary = {}
 	var cascade_history: Array = []
 	var cascade_guard := ChainGuard.new("board.cascade")
 	var reached_modules: Array = []
@@ -779,6 +778,7 @@ func resolve_burn(
 		var dropped: bool = _maybe_drop_stage(run_state, rng, index)
 		var cascaded: bool = false
 		var cascade_depth: int = 0
+		var previous_hist: int = cascade_history.size() - 1
 		if not dropped:
 			_maybe_redline_twist(run_state, rng, stage, batch, index)
 		var repeat: float = maxf(0.0, float(stage["repeat_previous"]))
@@ -794,16 +794,17 @@ func resolve_burn(
 				run_state, job, batch, stage, fold_before, module, rng, effect_resolver,
 				subscriptions, board_slots, order, position, index
 			)
-			if repeat > 0.0 and repeat_count > 0 and not previous_stage.is_empty():
+			if repeat > 0.0 and repeat_count > 0 and previous_hist >= 0:
+				var echo_strength: float = repeat * repeat_strength * effective_multiplier
+				var replayed: int = 0
 				for _fork in range(repeat_count):
-					_fold(
-						batch, previous_stage,
-						repeat * repeat_strength * effective_multiplier, pending_cost_mult, false
+					replayed += _replay_history_entry(
+						batch, cascade_history, previous_hist, echo_strength, pending_cost_mult
 					)
 				if mode == ResolveMode.COMMIT:
 					run_state.statistics["stage_repeats"] = int(
 						run_state.statistics.get("stage_repeats", 0)
-					) + repeat_count
+					) + replayed
 			_apply_stage_rules(rules, module, stage, batch, job, messages)
 			cascade_depth = _maybe_cascade(
 				run_state, job, batch, stage, cascade_history, module, rng,
@@ -813,11 +814,13 @@ func resolve_burn(
 			cascaded = cascade_depth > 0
 			if cascaded:
 				messages.append("%s cascaded." % module.name)
-			cascade_history.append({
-				"stage": stage.duplicate(true),
-				"module_id": module.id,
-				"index": index,
-			})
+		cascade_history.append({
+			"stage": stage.duplicate(true),
+			"module_id": module.id,
+			"index": index,
+			"previous_history_index": previous_hist,
+			"dropped": dropped,
+		})
 
 		var previous_id: String = str(board_slots[int(order[position - 1])]) if position > 0 else ""
 		var next_id: String = (
@@ -853,7 +856,6 @@ func resolve_burn(
 		if not dropped:
 			batch["pending_block_hidden"] = float(stage.get("next_block_hidden", 0.0))
 			batch["pending_hidden_on_bug"] = float(stage.get("next_hidden_on_bug", 0.0))
-		previous_stage = stage
 
 	# What the contract asked of this workflow, and what it costs to have
 	# ignored it. Judged on the modules placed rather than on the stages that
@@ -1315,13 +1317,14 @@ func _maybe_cascade(
 	guard: ChainGuard,
 	mode: int
 ) -> int:
-	if history.is_empty():
+	var start_hist: int = _cascade_live_index(history, history.size() - 1)
+	if start_hist < 0:
 		return 0
 	if not _cascade_hits(run_state, stage, rng, index, 0):
 		return 0
 	var strength: float = maxf(0.0, float(stage.get("cascade_strength", 1.0)))
 	var queue: Array = [{
-		"hist": history.size() - 1,
+		"hist": start_hist,
 		"depth": 1,
 		"multiplier": strength * effective_multiplier,
 		"cost_mult": pending_cost_mult,
@@ -1372,17 +1375,29 @@ func _drain_cascade_queue(
 			continue
 		guard.record(EventBus.EVENT_CASCADE_TRIGGERED)
 		var entry: Dictionary = history[hist_index]
+		if bool(entry.get("dropped", false)):
+			continue
 		var replay: Dictionary = Dictionary(entry.get("stage", {}))
 		if replay.is_empty():
 			continue
 		var multiplier: float = float(proc.get("multiplier", 1.0))
 		var cost_mult: float = float(proc.get("cost_mult", 1.0))
-		_fold(batch, replay, multiplier, cost_mult, false)
+		var replayed: int = _replay_history_entry(
+			batch, history, hist_index, multiplier, cost_mult
+		)
+		if replayed <= 0:
+			continue
 		triggered += 1
 		if mode == ResolveMode.COMMIT:
 			run_state.statistics["cascades_triggered"] = int(
 				run_state.statistics.get("cascades_triggered", 0)
 			) + 1
+			# The first helper fold is the cascade hop itself; nested ancestor
+			# replays are the same stage_repeats the pipeline path records.
+			if replayed > 1:
+				run_state.statistics["stage_repeats"] = int(
+					run_state.statistics.get("stage_repeats", 0)
+				) + (replayed - 1)
 		var heat_ratio: float = _heat_ratio(run_state)
 		var source_module_id: String = str(proc.get("source_id", ""))
 		var replayed_module_id: String = str(entry.get("module_id", ""))
@@ -1398,32 +1413,97 @@ func _drain_cascade_queue(
 			EventBus.EVENT_CASCADE_TRIGGERED, run_state, job, batch, rng, effect_resolver,
 			subscriptions, payload, board_slots
 		)
-		var prior: Dictionary = {}
-		if hist_index > 0:
-			prior = Dictionary(history[hist_index - 1].get("stage", {}))
-		var repeat: float = maxf(0.0, float(replay.get("repeat_previous", 0.0)))
-		var repeat_strength: float = maxf(0.0, float(replay.get("repeat_strength", 1.0)))
-		var repeat_count: int = maxi(0, int(round(float(replay.get("repeat_count", 0.0)))))
-		if repeat > 0.0 and repeat_count > 0 and not prior.is_empty():
-			for _fork in range(repeat_count):
-				_fold(batch, prior, repeat * repeat_strength * multiplier, cost_mult, false)
-			if mode == ResolveMode.COMMIT:
-				run_state.statistics["stage_repeats"] = int(
-					run_state.statistics.get("stage_repeats", 0)
-				) + repeat_count
 		var next_depth: int = int(proc.get("depth", 1))
-		if hist_index > 0 and _cascade_hits(
+		var parent_hist: int = _cascade_live_parent(history, hist_index)
+		if parent_hist >= 0 and _cascade_hits(
 			run_state, replay, rng, int(entry.get("index", 0)), next_depth
 		):
 			if guard.can_continue(EventBus.EVENT_CASCADE_TRIGGERED):
 				queue.append({
-					"hist": hist_index - 1,
+					"hist": parent_hist,
 					"depth": next_depth + 1,
 					"multiplier": maxf(0.0, float(replay.get("cascade_strength", 1.0))) * multiplier,
 					"cost_mult": cost_mult,
 					"source_id": replayed_module_id,
 				})
 	return triggered
+
+
+## Walks one history snapshot and every ancestor echo it still owes, at the
+## supplied branch strength. Iterative so a long recursion line cannot blow
+## the GDScript stack. Does not consume positional pending and does not
+## redispatch `board.stage_resolved`.
+func _replay_history_entry(
+	batch: Dictionary,
+	history: Array,
+	hist_index: int,
+	branch_strength: float,
+	cost_mult: float
+) -> int:
+	var folds: int = 0
+	var stack: Array = [{
+		"hist": hist_index,
+		"strength": branch_strength,
+		"depth": 1,
+		"path": [],
+	}]
+	while not stack.is_empty():
+		if folds >= EffectOps.MAX_EFFECTS_PER_ACTION:
+			break
+		var work: Dictionary = stack.pop_back()
+		var idx: int = int(work.get("hist", -1))
+		var depth: int = int(work.get("depth", 1))
+		if idx < 0 or idx >= history.size() or depth > EffectOps.MAX_TRIGGER_DEPTH:
+			continue
+		var path: Array = Array(work.get("path", []))
+		if path.has(idx):
+			continue
+		var entry: Dictionary = Dictionary(history[idx])
+		var snapshot: Dictionary = Dictionary(entry.get("stage", {}))
+		if snapshot.is_empty():
+			continue
+		_fold(batch, snapshot, float(work.get("strength", 0.0)), cost_mult, false)
+		folds += 1
+		var repeat: float = maxf(0.0, float(snapshot.get("repeat_previous", 0.0)))
+		var repeat_strength: float = maxf(0.0, float(snapshot.get("repeat_strength", 1.0)))
+		var repeat_count: int = maxi(0, int(round(float(snapshot.get("repeat_count", 0.0)))))
+		var parent: int = int(entry.get("previous_history_index", -1))
+		if (
+			repeat <= 0.0 or repeat_count <= 0 or parent < 0 or parent >= history.size()
+			or depth >= EffectOps.MAX_TRIGGER_DEPTH
+			or folds >= EffectOps.MAX_EFFECTS_PER_ACTION
+		):
+			continue
+		var child_strength: float = float(work.get("strength", 0.0)) * repeat * repeat_strength
+		var next_path: Array = path.duplicate()
+		next_path.append(idx)
+		for _fork in range(repeat_count):
+			stack.append({
+				"hist": parent,
+				"strength": child_strength,
+				"depth": depth + 1,
+				"path": next_path,
+			})
+	return folds
+
+
+func _cascade_live_parent(history: Array, hist_index: int) -> int:
+	if hist_index < 0 or hist_index >= history.size():
+		return -1
+	var parent: int = int(
+		Dictionary(history[hist_index]).get("previous_history_index", hist_index - 1)
+	)
+	return _cascade_live_index(history, parent)
+
+
+func _cascade_live_index(history: Array, hist_index: int) -> int:
+	var idx: int = hist_index
+	while idx >= 0 and idx < history.size():
+		var entry: Dictionary = Dictionary(history[idx])
+		if not bool(entry.get("dropped", false)):
+			return idx
+		idx = int(entry.get("previous_history_index", idx - 1))
+	return -1
 
 
 ## Folds one stage's contribution into the batch at `multiplier` strength. A

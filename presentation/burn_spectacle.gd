@@ -67,15 +67,15 @@ static func compile(burn: Dictionary, traces: Array = []) -> Array:
 	# its own stage_resolved perks have already moved the batch, so reading the
 	# snapshots alone leaves silent gaps between stages.
 	var running: float = _starting_multiplier(burn)
-	var previous: Dictionary = {}
+	var priors: Array = []
 	for stage in stages:
 		if not stage is Dictionary:
 			continue
-		var stage_beats: Array = _stage_beats(burn, stage, board_traces, running, previous)
+		var stage_beats: Array = _stage_beats(burn, stage, board_traces, running, priors)
 		if not stage_beats.is_empty():
 			running = float(Dictionary(stage_beats[stage_beats.size() - 1]).get("multiplier_after", running))
 		beats.append_array(stage_beats)
-		previous = stage
+		priors.append(stage)
 	beats.append_array(_closing_beats(burn, board_traces, running))
 	_cap_holds(beats)
 	return beats
@@ -108,10 +108,10 @@ static func _fold_ratio(fields: Dictionary, strength: float) -> float:
 
 
 ## The share of a stage's jump that its repeat of the stage above produced,
-## reconstructed from the resolved stage fields the same way the board folds
-## them, so AGAIN! can own its own movement of the drum.
-static func _repeat_ratio(stage: Dictionary, previous: Dictionary) -> float:
-	if previous.is_empty():
+## reconstructed from the resolved stage fields the same way the board walks
+## history, so AGAIN! owns the whole nested tree as one beat.
+static func _repeat_ratio(stage: Dictionary, priors: Array) -> float:
+	if priors.is_empty():
 		return 1.0
 	var repeat: float = maxf(0.0, float(stage.get("repeated_previous", 0.0)))
 	var count: int = maxi(0, int(stage.get("repeat_count", 0)))
@@ -122,10 +122,58 @@ static func _repeat_ratio(stage: Dictionary, previous: Dictionary) -> float:
 		* maxf(0.0, float(stage.get("repeat_strength", 1.0)))
 		* maxf(0.0, float(stage.get("multiplier", 1.0)))
 	)
-	var once: float = _fold_ratio(Dictionary(previous.get("stage", {})), strength)
 	var ratio: float = 1.0
 	for _fork in range(count):
-		ratio *= once
+		ratio *= _replay_prior_ratio(priors, priors.size() - 1, strength)
+	return ratio
+
+
+## One independent replay tree of prior stage reports, matching
+## `BoardSystem._replay_history_entry` so the drum split stays honest.
+static func _replay_prior_ratio(priors: Array, hist_index: int, branch_strength: float) -> float:
+	var ratio: float = 1.0
+	var folds: int = 0
+	var stack: Array = [{
+		"hist": hist_index,
+		"strength": branch_strength,
+		"depth": 1,
+		"path": [],
+	}]
+	while not stack.is_empty():
+		if folds >= EffectOps.MAX_EFFECTS_PER_ACTION:
+			break
+		var work: Dictionary = stack.pop_back()
+		var idx: int = int(work.get("hist", -1))
+		var depth: int = int(work.get("depth", 1))
+		if idx < 0 or idx >= priors.size() or depth > EffectOps.MAX_TRIGGER_DEPTH:
+			continue
+		var path: Array = Array(work.get("path", []))
+		if path.has(idx):
+			continue
+		var report: Dictionary = Dictionary(priors[idx])
+		var strength: float = float(work.get("strength", 0.0))
+		ratio *= _fold_ratio(Dictionary(report.get("stage", {})), strength)
+		folds += 1
+		var nested_repeat: float = maxf(0.0, float(report.get("repeated_previous", 0.0)))
+		var nested_strength: float = maxf(0.0, float(report.get("repeat_strength", 1.0)))
+		var nested_count: int = maxi(0, int(report.get("repeat_count", 0)))
+		var parent: int = idx - 1
+		if (
+			nested_repeat <= 0.0 or nested_count <= 0 or parent < 0
+			or depth >= EffectOps.MAX_TRIGGER_DEPTH
+			or folds >= EffectOps.MAX_EFFECTS_PER_ACTION
+		):
+			continue
+		var child_strength: float = strength * nested_repeat * nested_strength
+		var next_path: Array = path.duplicate()
+		next_path.append(idx)
+		for _fork in range(nested_count):
+			stack.append({
+				"hist": parent,
+				"strength": child_strength,
+				"depth": depth + 1,
+				"path": next_path,
+			})
 	return ratio
 
 
@@ -240,7 +288,7 @@ static func _format_percent(ratio: float) -> String:
 ## re-derives the maths — the endpoints are the board's own snapshots — only
 ## the split between beats is reconstructed.
 static func _stage_beats(
-	burn: Dictionary, stage: Dictionary, traces: Array, incoming: float, previous: Dictionary
+	burn: Dictionary, stage: Dictionary, traces: Array, incoming: float, priors: Array
 ) -> Array:
 	var beats: Array = []
 	var after: Dictionary = stage.get("after", {})
@@ -270,7 +318,7 @@ static func _stage_beats(
 	var fork_after: float = target
 	if forked or cascaded:
 		own_after = incoming * _fold_ratio(Dictionary(stage.get("stage", {})), float(stage.get("multiplier", 1.0)))
-		fork_after = own_after * _repeat_ratio(stage, previous) if forked else own_after
+		fork_after = own_after * _repeat_ratio(stage, priors) if forked else own_after
 		if not cascaded:
 			# No cascade to absorb stage_folded effects: AGAIN! lands on the target.
 			fork_after = target

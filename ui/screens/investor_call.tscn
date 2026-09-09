@@ -44,54 +44,59 @@ theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 22
 theme_override_constants/margin_bottom = 20
 
-[node name="VBox" type="VBoxContainer" parent="Phone/Margin"]
+[node name="Columns" type="HBoxContainer" parent="Phone/Margin"]
 layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="VBox" type="VBoxContainer" parent="Phone/Margin/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 12
 
-[node name="CallState" type="Label" parent="Phone/Margin/VBox"]
+[node name="CallState" type="Label" parent="Phone/Margin/Columns/VBox"]
 layout_mode = 2
 theme_type_variation = &"SectionLabel"
 text = "INCOMING CALL"
 horizontal_alignment = 1
 
-[node name="Portrait" type="TextureRect" parent="Phone/Margin/VBox"]
+[node name="Portrait" type="TextureRect" parent="Phone/Margin/Columns/VBox"]
 custom_minimum_size = Vector2(0, 190)
 layout_mode = 2
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Name" type="Label" parent="Phone/Margin/VBox"]
+[node name="Name" type="Label" parent="Phone/Margin/Columns/VBox"]
 layout_mode = 2
 theme_type_variation = &"TitleLabel"
 text = "Vince Corrigan"
 horizontal_alignment = 1
 
-[node name="Title" type="Label" parent="Phone/Margin/VBox"]
+[node name="Title" type="Label" parent="Phone/Margin/Columns/VBox"]
 layout_mode = 2
 theme_type_variation = &"MutedLabel"
 text = "Angel Investor"
 horizontal_alignment = 1
 
-[node name="Subject" type="Label" parent="Phone/Margin/VBox"]
+[node name="Subject" type="Label" parent="Phone/Margin/Columns/VBox"]
 layout_mode = 2
 theme_type_variation = &"SectionLabel"
 text = "THE DEAL"
 horizontal_alignment = 1
 
-[node name="Body" type="Label" parent="Phone/Margin/VBox"]
+[node name="Body" type="Label" parent="Phone/Margin/Columns/VBox"]
 custom_minimum_size = Vector2(0, 168)
 layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 2
 vertical_alignment = 0
 
-[node name="Progress" type="Label" parent="Phone/Margin/VBox"]
+[node name="Progress" type="Label" parent="Phone/Margin/Columns/VBox"]
 layout_mode = 2
 theme_type_variation = &"SectionLabel"
 text = "1 / 1"
 horizontal_alignment = 1
 
-[node name="ContinueButton" type="Button" parent="Phone/Margin/VBox"]
+[node name="ContinueButton" type="Button" parent="Phone/Margin/Columns/VBox"]
 custom_minimum_size = Vector2(0, 62)
 layout_mode = 2
 theme_type_variation = &"PrimaryButton"

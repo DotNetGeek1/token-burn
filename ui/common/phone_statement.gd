@@ -23,6 +23,7 @@ const NOTE_SEPARATION := 2
 const FIGURE_FONT_SIZE := 40
 const EMPHASIS_FONT_SIZE := 20
 const NOTE_FONT_SIZE := 12
+const ASIDE_FONT_SIZE := 13
 
 
 ## One line of the statement: a labelled figure with its explanation under it.
@@ -30,20 +31,21 @@ class Line:
 	extends VBoxContainer
 
 	var _row: HBoxContainer = null
+	var _value: Label = null
 	var _note: Label = null
+	var _emphasis: bool = false
 
 	func _init(
-		label_text: String, value_text: String, note_text: String, emphasis: bool, value_color: Color
+		label_text: String, value_text: String, note_text: String, emphasis: bool, value_color: Color, scale: float
 	) -> void:
+		_emphasis = emphasis
 		size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_theme_constant_override("separation", NOTE_SEPARATION)
 		_row = PhoneRows.stat_row(label_text, value_text)
-		var value: Label = _row.get_child(_row.get_child_count() - 1) as Label
-		if value != null:
-			value.add_theme_color_override("font_color", value_color)
-			if emphasis:
-				value.add_theme_font_size_override("font_size", EMPHASIS_FONT_SIZE)
+		_value = _row.get_child(_row.get_child_count() - 1) as Label
+		if _value != null:
+			_value.add_theme_color_override("font_color", value_color)
 		if emphasis:
 			var key: Label = _row.get_child(0) as Label
 			if key != null:
@@ -59,10 +61,22 @@ class Line:
 			_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			_note.add_theme_font_size_override("font_size", NOTE_FONT_SIZE)
 			add_child(_note)
+		apply_scale(scale)
+
+	## The sizes this line sets itself, at `scale` of their authored value.
+	func apply_scale(scale: float) -> void:
+		if _value != null and _emphasis:
+			_value.add_theme_font_size_override("font_size", PhoneStatement._scaled(EMPHASIS_FONT_SIZE, scale))
+		if _note != null:
+			_note.add_theme_font_size_override("font_size", PhoneStatement._scaled(NOTE_FONT_SIZE, scale))
 
 
+static func _scaled(size: int, scale: float) -> int:
+	return maxi(9, int(round(float(size) * scale)))
+
+
+var _scale: float = 1.0
 var _title: Label = null
 var _note: Label = null
 var _aside: Label = null
@@ -99,7 +113,7 @@ func _build() -> void:
 	# lighter, slanted-looking face rather than a banner.
 	_aside = PhoneRows.paragraph("")
 	_aside.visible = false
-	_aside.add_theme_font_size_override("font_size", 13)
+	_aside.add_theme_font_size_override("font_size", _scaled(ASIDE_FONT_SIZE, _scale))
 	add_child(_aside)
 
 	_figure_box = VBoxContainer.new()
@@ -111,7 +125,7 @@ func _build() -> void:
 	_figure.theme_type_variation = &"DisplayLabel"
 	_figure.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_figure.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_figure.add_theme_font_size_override("font_size", FIGURE_FONT_SIZE)
+	_figure.add_theme_font_size_override("font_size", _scaled(FIGURE_FONT_SIZE, _scale))
 	var mono: Font = UiThemeBuilder.mono_font()
 	if mono != null:
 		_figure.add_theme_font_override("font", mono)
@@ -201,7 +215,8 @@ func add_item(
 		value_text,
 		note_text,
 		emphasis,
-		Color(options.get("value_color", Color(UiThemeBuilder.TEXT_PRIMARY)))
+		Color(options.get("value_color", Color(UiThemeBuilder.TEXT_PRIMARY))),
+		_scale
 	)
 	_items.add_child(line)
 
@@ -229,7 +244,16 @@ func items() -> VBoxContainer:
 	return _items
 
 
-## Kept for callers written against `ConsoleStatement`; the phone's type does
-## not rescale with the console.
-func set_metrics(_scale: float) -> void:
-	pass
+## The sizes the statement sets itself — the headline figure, the bottom
+## line, the notes — at `scale` of their authored value. The rest of its type
+## comes from the theme, which the phone rescales on its own. Named to match
+## `ConsoleStatement.set_metrics`.
+func set_metrics(scale: float) -> void:
+	if _items == null:
+		_build()
+	_scale = maxf(0.1, scale)
+	_figure.add_theme_font_size_override("font_size", _scaled(FIGURE_FONT_SIZE, _scale))
+	_aside.add_theme_font_size_override("font_size", _scaled(ASIDE_FONT_SIZE, _scale))
+	for child in _items.get_children():
+		if child is Line:
+			(child as Line).apply_scale(_scale)

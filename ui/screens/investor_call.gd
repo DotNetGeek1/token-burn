@@ -21,28 +21,38 @@ const PHONE_WIDTH := 452.0
 const PHONE_HEIGHT := 636.0
 const EDGE_PAD := 16.0
 const COMPACT_HEIGHT := 420.0
+## Held sideways on a handset: the words run down the left and he sits on the
+## right, so the call uses the width the screen has rather than the height it
+## does not.
+const COMPACT_PHONE_WIDTH := 560.0
+## A floor rather than the size: the panel grows past it for a long paragraph.
+const COMPACT_PHONE_HEIGHT := 196.0
+const COMPACT_PORTRAIT_WIDTH := 132.0
 const BODY_MIN_HEIGHT := 168.0
 const COMPACT_BODY_MIN_HEIGHT := 48.0
 const BUTTON_HEIGHT := 62.0
-const COMPACT_BUTTON_HEIGHT := 44.0
+const COMPACT_BUTTON_HEIGHT := 40.0
+const COMPACT_BODY_FONT_SIZE := 13
 
 @onready var backdrop: ColorRect = $Backdrop
 @onready var phone: PanelContainer = $Phone
 @onready var margin: MarginContainer = $Phone/Margin
-@onready var vbox: VBoxContainer = $Phone/Margin/VBox
-@onready var call_state: Label = $Phone/Margin/VBox/CallState
-@onready var portrait: TextureRect = $Phone/Margin/VBox/Portrait
-@onready var name_label: Label = $Phone/Margin/VBox/Name
-@onready var title_label: Label = $Phone/Margin/VBox/Title
-@onready var subject_label: Label = $Phone/Margin/VBox/Subject
-@onready var body_label: Label = $Phone/Margin/VBox/Body
-@onready var progress_label: Label = $Phone/Margin/VBox/Progress
-@onready var continue_button: GameButton = $Phone/Margin/VBox/ContinueButton
+@onready var columns: HBoxContainer = $Phone/Margin/Columns
+@onready var vbox: VBoxContainer = $Phone/Margin/Columns/VBox
+@onready var call_state: Label = $Phone/Margin/Columns/VBox/CallState
+@onready var portrait: TextureRect = $Phone/Margin/Columns/VBox/Portrait
+@onready var name_label: Label = $Phone/Margin/Columns/VBox/Name
+@onready var title_label: Label = $Phone/Margin/Columns/VBox/Title
+@onready var subject_label: Label = $Phone/Margin/Columns/VBox/Subject
+@onready var body_label: Label = $Phone/Margin/Columns/VBox/Body
+@onready var progress_label: Label = $Phone/Margin/Columns/VBox/Progress
+@onready var continue_button: GameButton = $Phone/Margin/Columns/VBox/ContinueButton
 
 var _lines: Array = []
 var _index: int = 0
 var _typed: float = 0.0
 var _typing: bool = false
+var _compact: bool = false
 var _backdrop_tap: TapGesture = TapGesture.new()
 
 
@@ -84,23 +94,56 @@ func _fit_phone() -> void:
 	if area.x <= 1.0 or area.y <= 1.0:
 		return
 	var compact: bool = area.y < COMPACT_HEIGHT
-	var width: float = minf(PHONE_WIDTH, area.x - EDGE_PAD * 2.0)
-	var height: float = minf(PHONE_HEIGHT, area.y - EDGE_PAD * 2.0)
-	margin.add_theme_constant_override("margin_left", 12 if compact else 22)
-	margin.add_theme_constant_override("margin_right", 12 if compact else 22)
-	margin.add_theme_constant_override("margin_top", 8 if compact else 20)
-	margin.add_theme_constant_override("margin_bottom", 8 if compact else 20)
-	vbox.add_theme_constant_override("separation", 4 if compact else 12)
-	portrait.visible = portrait.texture != null and not compact
-	title_label.visible = not compact
-	body_label.custom_minimum_size = Vector2(0.0, COMPACT_BODY_MIN_HEIGHT if compact else BODY_MIN_HEIGHT)
-	continue_button.compact = compact
-	continue_button.set_min_height(COMPACT_BUTTON_HEIGHT if compact else BUTTON_HEIGHT)
+	var width: float = minf(COMPACT_PHONE_WIDTH if compact else PHONE_WIDTH, area.x - EDGE_PAD * 2.0)
+	var height: float = minf(COMPACT_PHONE_HEIGHT if compact else PHONE_HEIGHT, area.y - EDGE_PAD * 2.0)
+	_apply_layout(compact)
 	phone.set_anchors_preset(Control.PRESET_CENTER)
 	phone.offset_left = -width * 0.5
 	phone.offset_right = width * 0.5
 	phone.offset_top = -height * 0.5
 	phone.offset_bottom = height * 0.5
+
+
+## Everything about the handset that differs between the two models. Upright,
+## the portrait heads a centred column; sideways, it moves out to a column of
+## its own on the right and the words line up left against it, at the phone's
+## type scale.
+func _apply_layout(compact: bool) -> void:
+	_compact = compact
+	margin.add_theme_constant_override("margin_left", 12 if compact else 22)
+	margin.add_theme_constant_override("margin_right", 12 if compact else 22)
+	margin.add_theme_constant_override("margin_top", 8 if compact else 20)
+	margin.add_theme_constant_override("margin_bottom", 8 if compact else 20)
+	vbox.add_theme_constant_override("separation", 3 if compact else 12)
+	phone.theme = UiThemeBuilder.compact_type_theme() if compact else null
+
+	var portrait_home: Node = columns if compact else vbox
+	if portrait.get_parent() != portrait_home:
+		portrait.reparent(portrait_home, false)
+	if compact:
+		portrait.size_flags_horizontal = Control.SIZE_SHRINK_END
+		portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		portrait.custom_minimum_size = Vector2(COMPACT_PORTRAIT_WIDTH, 0.0)
+	else:
+		vbox.move_child(portrait, call_state.get_index() + 1)
+		portrait.size_flags_horizontal = Control.SIZE_FILL
+		portrait.size_flags_vertical = Control.SIZE_FILL
+		portrait.custom_minimum_size = Vector2(0.0, 190.0)
+	portrait.visible = portrait.texture != null
+
+	var align: int = HORIZONTAL_ALIGNMENT_LEFT if compact else HORIZONTAL_ALIGNMENT_CENTER
+	for label in [call_state, name_label, title_label, subject_label, progress_label]:
+		(label as Label).horizontal_alignment = align
+	title_label.visible = not compact
+	if compact:
+		body_label.add_theme_font_size_override("font_size", COMPACT_BODY_FONT_SIZE)
+	else:
+		body_label.remove_theme_font_size_override("font_size")
+	body_label.custom_minimum_size = Vector2(
+		0.0, COMPACT_BODY_MIN_HEIGHT if compact else BODY_MIN_HEIGHT
+	)
+	continue_button.compact = compact
+	continue_button.set_min_height(COMPACT_BUTTON_HEIGHT if compact else BUTTON_HEIGHT)
 
 
 ## Rings the player. `context` may name the `variant` and the `seed` outright;
@@ -133,9 +176,10 @@ func _fill_terms(lines: Array) -> Array:
 	var contract: Dictionary = Simulation.ascension_boss_contract()
 	var progress: Dictionary = Simulation.ascension_progress()
 	var replacements: Dictionary = {
-		"{burn}": str(contract.get("burn_label", NumberFormat.format(
-			float(contract.get("total_burn", 0.0))
-		))),
+		# The figure itself rather than the contract's "30 Megatokens" label, in
+		# the same notation the cabinet's readouts use, so what he asks for is
+		# the number the player watches climb.
+		"{burn}": _burn_text(float(contract.get("total_burn", 0.0))),
 		"{rounds}": str(int(progress.get("deadline_round", Simulation.ROUNDS_PER_RUN))),
 		"{rounds_left}": str(int(progress.get("rounds_remaining", 0))),
 		"{rent}": NumberFormat.format_cash(float(Simulation.run_state.economy.get("round_rent", 0.0))),
@@ -149,6 +193,19 @@ func _fill_terms(lines: Array) -> Array:
 			text = text.replace(token, str(replacements[token]))
 		filled.append(text)
 	return filled
+
+
+## "30M tokens", "2.5B tokens": the cabinet's suffixes, with a whole number left
+## whole so he does not say "thirty point zero".
+static func _burn_text(total: float) -> String:
+	var figure: String = NumberFormat.format(total)
+	var suffix: String = ""
+	while not figure.is_empty() and not figure[-1].is_valid_int() and figure[-1] != ".":
+		suffix = figure[-1] + suffix
+		figure = figure.left(-1)
+	if figure.ends_with(".0"):
+		figure = figure.left(-2)
+	return "%s%s tokens" % [figure, suffix]
 
 
 ## Which version of himself he shows up as. The run already knows the answer to

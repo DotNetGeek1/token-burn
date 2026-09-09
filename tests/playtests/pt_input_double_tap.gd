@@ -113,7 +113,7 @@ func _investor_backdrop(harness: UiHarness, shell: Node) -> void:
 	assert_true(phone != null, "The phone scene is in the tree")
 	if phone == null or not SceneRouter.investor_busy():
 		return
-	var progress: Label = phone.get_node("Phone/Margin/VBox/Progress")
+	var progress: Label = phone.get_node("Phone/Margin/Columns/VBox/Progress")
 	var lines: int = int(str(progress.text).get_slice("/", 1).strip_edges())
 	# Tap on the backdrop over something that would act if pressed — the
 	# commit button, or a card if the handset covers the button at this
@@ -232,7 +232,7 @@ func _find_commit_button(root: Node) -> CommitButton:
 
 func _find_phone(root: Node) -> Node:
 	return _find_first(root, func(node: Node) -> bool:
-		return node.has_method("call_player") and node.has_node("Phone/Margin/VBox/Progress")
+		return node.has_method("call_player") and node.has_node("Phone/Margin/Columns/VBox/Progress")
 	)
 
 

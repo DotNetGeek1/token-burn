@@ -377,9 +377,21 @@ func _apply_metrics(compact: bool) -> void:
 	# stack of three is the height of the whole screen.
 	_footer.vertical = not compact
 	_subtitle.visible = _subtitle.text != "" and not (compact and compact_hides_context)
+	# The room's type scale was tuned for a 720-tall canvas; on a handset the
+	# same title is a tenth of the screen. Everything under the panel prints at
+	# the compact scale instead.
+	_panel.theme = UiThemeBuilder.compact_type_theme() if compact else null
 	_style_button(_close_button)
 	for button in _action_buttons:
 		_style_button(button)
+	_on_compact_changed(compact)
+
+
+## Called when the phone moves between its handset and desktop layouts, and
+## once on the first fit. Subclasses that size type or rows themselves,
+## outside the theme, re-measure here.
+func _on_compact_changed(_compact_now: bool) -> void:
+	pass
 
 
 func _style_button(button: GameButton) -> void:

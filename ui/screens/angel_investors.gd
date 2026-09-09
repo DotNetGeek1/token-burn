@@ -155,7 +155,7 @@ func _deal_cards() -> void:
 		}])
 		card.set_warnings(_perk_bench_warning())
 		card.set_action_style("perks", "perk", "BoostButton")
-		card.set_body_max_lines(2)
+		_fit_card(card)
 		card.set_action_pinned()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.size_flags_vertical = (
@@ -167,6 +167,23 @@ func _deal_cards() -> void:
 		card.body_pressed.connect(_show_offer_detail.bind(offer, patter))
 		_cards_list.add_child(card)
 	UiTransition.stagger(_cards_list)
+
+
+## On a desktop the face is a summary and the sheet has the rest; on a handset
+## the copy is small enough to print whole, and the key shrinks so it is not
+## most of the card.
+func _fit_card(card: GameCard) -> void:
+	var compact: bool = is_compact()
+	card.set_body_max_lines(0 if compact else 2)
+	card.set_action_compact(compact)
+
+
+func _on_compact_changed(_compact_now: bool) -> void:
+	if _cards_list == null:
+		return
+	for card in _cards_list.get_children():
+		if card is GameCard:
+			_fit_card(card)
 
 
 func _show_offer_detail(offer: Dictionary, patter: String) -> void:

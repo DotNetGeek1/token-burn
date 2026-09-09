@@ -34,8 +34,25 @@ const GLOW_BLEED := 34.0
 const FLARE_SIZE := 460.0
 const SPARK_COUNT := 48
 
+## A handset canvas is ~300 design pixels tall (`DisplayScale`), so the desktop
+## placement would land the card in the bottom half and the desktop type would
+## make it a third of the screen. Below this height the card sits just under
+## the top edge, at the phone's type scale, with a smaller trophy.
+const COMPACT_HEIGHT := 420.0
+const COMPACT_TOP_OFFSET := 10.0
+const COMPACT_DROP_HEIGHT := 40.0
+const COMPACT_ICON_SIZE := 40.0
+const COMPACT_GLOW_BLEED := 18.0
+const COMPACT_MAX_WIDTH := 420.0
+
 var _queue: Array[String] = []
 var _playing: bool = false
+var _compact: bool = false
+var _top: float = TOP_OFFSET
+var _drop: float = DROP_HEIGHT
+var _flare_factor: float = 1.0
+var _margin: MarginContainer = null
+var _icon_stack: Control = null
 var _card: PanelContainer = null
 var _icon: TextureRect = null
 var _icon_glow: TextureRect = null
@@ -131,27 +148,23 @@ func _build() -> void:
 	_card.clip_contents = true
 	add_child(_card)
 
-	var margin := MarginContainer.new()
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side in ["left", "right"]:
-		margin.add_theme_constant_override("margin_%s" % side, UiThemeBuilder.SPACE_MD)
-	for side in ["top", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, UiThemeBuilder.SPACE_MD)
-	_card.add_child(margin)
+	_margin = MarginContainer.new()
+	_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_card.add_child(_margin)
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", UiThemeBuilder.SPACE_MD)
-	margin.add_child(row)
+	_margin.add_child(row)
 
 	# A plain Control rather than a container, so the bloom can hang outside the
 	# icon's box without the row reserving room for it.
-	var icon_stack := Control.new()
-	icon_stack.name = "IconStack"
-	icon_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_stack.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
-	icon_stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(icon_stack)
+	_icon_stack = Control.new()
+	_icon_stack.name = "IconStack"
+	_icon_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_icon_stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(_icon_stack)
+	var icon_stack: Control = _icon_stack
 
 	_icon_glow = TextureRect.new()
 	_icon_glow.name = "IconGlow"
@@ -161,11 +174,6 @@ func _build() -> void:
 	_icon_glow.modulate = UiThemeBuilder.semantic("energy")
 	_icon_glow.modulate.a = 0.0
 	_icon_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "top"]:
-		_icon_glow.set("offset_%s" % side, -GLOW_BLEED)
-	for side in ["right", "bottom"]:
-		_icon_glow.set("offset_%s" % side, GLOW_BLEED)
-	_icon_glow.pivot_offset = Vector2(ICON_SIZE, ICON_SIZE) * 0.5 + Vector2(GLOW_BLEED, GLOW_BLEED)
 	icon_stack.add_child(_icon_glow)
 
 	_icon = TextureRect.new()
@@ -174,7 +182,6 @@ func _build() -> void:
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_icon.pivot_offset = Vector2(ICON_SIZE, ICON_SIZE) * 0.5
 	icon_stack.add_child(_icon)
 
 	var text_box := VBoxContainer.new()
@@ -229,6 +236,7 @@ func _build() -> void:
 	_flare.size = Vector2(FLARE_SIZE, FLARE_SIZE)
 	_flare.pivot_offset = _flare.size * 0.5
 	add_child(_flare)
+	_apply_metrics(false, true)
 
 
 ## The card is positioned by hand rather than by a container, because the drop is
@@ -244,14 +252,40 @@ func _layout_card() -> void:
 	if _card == null:
 		return
 	var view: Vector2 = get_viewport_rect().size
+	_apply_metrics(view.y > 1.0 and view.y < COMPACT_HEIGHT)
 	var width: float = minf(
-		view.x * (1.0 - SIDE_MARGIN * 2.0), UiThemeBuilder.CONTENT_MAX_WIDTH
+		view.x * (1.0 - SIDE_MARGIN * 2.0),
+		COMPACT_MAX_WIDTH if _compact else UiThemeBuilder.CONTENT_MAX_WIDTH
 	)
 	_card.offset_left = (view.x - width) * 0.5
 	_card.offset_right = _card.offset_left + width
 	if not _playing:
-		_card.offset_top = TOP_OFFSET
-		_card.offset_bottom = TOP_OFFSET
+		_card.offset_top = _top
+		_card.offset_bottom = _top
+
+
+## Everything about the card that differs between the desktop and a handset:
+## where it settles, how far it drops, the trophy's size and the type scale.
+func _apply_metrics(compact: bool, force: bool = false) -> void:
+	if compact == _compact and not force:
+		return
+	_compact = compact
+	_top = COMPACT_TOP_OFFSET if compact else TOP_OFFSET
+	_drop = COMPACT_DROP_HEIGHT if compact else DROP_HEIGHT
+	var pad: int = UiThemeBuilder.SPACE_SM if compact else UiThemeBuilder.SPACE_MD
+	for side in ["left", "right", "top", "bottom"]:
+		_margin.add_theme_constant_override("margin_%s" % side, pad)
+	_card.theme = UiThemeBuilder.compact_type_theme() if compact else null
+	var icon: float = COMPACT_ICON_SIZE if compact else ICON_SIZE
+	var bleed: float = COMPACT_GLOW_BLEED if compact else GLOW_BLEED
+	_icon_stack.custom_minimum_size = Vector2(icon, icon)
+	for side in ["left", "top"]:
+		_icon_glow.set("offset_%s" % side, -bleed)
+	for side in ["right", "bottom"]:
+		_icon_glow.set("offset_%s" % side, bleed)
+	_icon_glow.pivot_offset = Vector2(icon, icon) * 0.5 + Vector2(bleed, bleed)
+	_icon.pivot_offset = Vector2(icon, icon) * 0.5
+	_flare_factor = 0.5 if compact else 1.0
 
 
 func _play() -> void:
@@ -280,8 +314,8 @@ func _play() -> void:
 	# Collapsed first, so the card takes the height of *this* award's title. Left
 	# at the last one's pinned height it could only ever grow, and the award after
 	# a two-line name would keep its empty second line.
-	_card.offset_top = TOP_OFFSET
-	_card.offset_bottom = TOP_OFFSET
+	_card.offset_top = _top
+	_card.offset_bottom = _top
 	for _pass in range(2):
 		await get_tree().process_frame
 		if not is_inside_tree():
@@ -298,7 +332,7 @@ func _play() -> void:
 	_sparks.emission_rect_extents = Vector2(card_rect.size.x * 0.4, card_rect.size.y * 0.3)
 	_flare.position = card_rect.position + icon_center - _flare.size * 0.5
 
-	_card.position.y = TOP_OFFSET - DROP_HEIGHT
+	_card.position.y = _top - _drop
 	_icon.scale = Vector2.ZERO
 	_icon.rotation = ICON_TILT
 	_icon_glow.modulate.a = 0.0
@@ -306,7 +340,7 @@ func _play() -> void:
 	UiSound.play("fanfare")
 
 	var drop: Tween = create_tween()
-	drop.tween_property(_card, "position:y", TOP_OFFSET, DROP_SECONDS).set_trans(
+	drop.tween_property(_card, "position:y", _top, DROP_SECONDS).set_trans(
 		Tween.TRANS_BACK
 	).set_ease(Tween.EASE_OUT)
 	drop.parallel().tween_property(_card, "modulate:a", 1.0, FADE_IN_SECONDS)
@@ -314,7 +348,7 @@ func _play() -> void:
 	drop.tween_interval(HOLD_SECONDS)
 	drop.tween_property(_card, "modulate:a", 0.0, EXIT_SECONDS).set_ease(Tween.EASE_IN)
 	drop.parallel().tween_property(
-		_card, "position:y", TOP_OFFSET - EXIT_RISE, EXIT_SECONDS
+		_card, "position:y", _top - EXIT_RISE * (0.5 if _compact else 1.0), EXIT_SECONDS
 	).set_ease(Tween.EASE_IN)
 	drop.tween_callback(_finish)
 
@@ -342,9 +376,9 @@ func _burst() -> void:
 	# The flash is bright but brief: it is over the card, so anything that lingers
 	# is sitting on top of the award's own name.
 	var flare_tween: Tween = create_tween()
-	_flare.scale = Vector2(0.35, 0.35)
+	_flare.scale = Vector2(0.35, 0.35) * _flare_factor
 	flare_tween.tween_property(_flare, "modulate:a", 0.45, 0.1)
-	flare_tween.parallel().tween_property(_flare, "scale", Vector2(1.5, 1.5), 0.5).set_ease(
+	flare_tween.parallel().tween_property(_flare, "scale", Vector2(1.5, 1.5) * _flare_factor, 0.5).set_ease(
 		Tween.EASE_OUT
 	)
 	flare_tween.tween_property(_flare, "modulate:a", 0.0, 0.35)
@@ -369,7 +403,7 @@ func _set_sheen(head: float) -> void:
 
 func _finish() -> void:
 	_card.visible = false
-	_card.position.y = TOP_OFFSET
+	_card.position.y = _top
 	if not _queue.is_empty():
 		_queue.pop_front()
 	_playing = false

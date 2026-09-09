@@ -314,13 +314,25 @@ func _apply_telemetry_shares() -> void:
 	for key in _telemetry_slots:
 		var slot: Control = _telemetry_slots[key]
 		slot.size_flags_stretch_ratio = maxf(0.05, float(shares.get(key, TELEMETRY_SHARES[key])))
+	# The open feed stands exactly where the ledger stood, so the drum and the
+	# heat bar above them keep their height while a batch is running instead of
+	# being squeezed to make a fourth instrument fit.
+	if _feed.visible and _telemetry_slots.has("feed") and _telemetry_slots.has("status"):
+		var feed_slot: Control = _telemetry_slots["feed"]
+		feed_slot.size_flags_stretch_ratio = (_telemetry_slots["status"] as Control).size_flags_stretch_ratio
 
 
-## The feed's slot leaves the stack with it, so a collapsed feed takes no room.
+## The feed's slot leaves the stack with it, so a collapsed feed takes no room;
+## while it is open the ledger steps aside for it. The ledger's figures are
+## the round's standing (credits, rent, rounds) and nothing a batch changes
+## mid-flight, so nothing is lost by covering it for the burn.
 func _on_feed_visibility() -> void:
 	var slot: Node = _feed.get_parent()
 	if slot is Control and slot != _telemetry_stack:
 		(slot as Control).visible = _feed.visible
+	if _telemetry_slots.has("status"):
+		(_telemetry_slots["status"] as Control).visible = not _feed.visible
+	_apply_telemetry_shares()
 
 
 func _led() -> Panel:
@@ -361,7 +373,7 @@ func _build_tabs() -> void:
 ## The director plays the batch across the feed, drum, heat, dock and the RUN
 ## tab's strip; the cabinet latches and releases the deck around it.
 func _build_director() -> void:
-	_director = BurnDirector.new(_feed, _drum, _heat, _dock, _tab_run)
+	_director = BurnDirector.new(_feed, _drum, _heat, _dock, _tab_run, _screen.callouts())
 	_director.burn_started.connect(_on_burn_started)
 	_director.burn_finished.connect(_on_burn_finished)
 	_director.refresh_requested.connect(refresh_all)

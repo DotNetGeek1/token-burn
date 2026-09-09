@@ -26,6 +26,7 @@ var _active: String = ""
 var _hint: Label = null
 var _skip: Button = null
 var _maint: Button = null
+var _callouts: BurnCallouts = null
 
 
 func _ready() -> void:
@@ -79,7 +80,18 @@ func _ready() -> void:
 	_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_host.clip_contents = true
 	column.add_child(_host)
+	# Over the tabs, under the scanlines: the batch's callouts are printed on
+	# the glass, not on whichever tab happens to be showing.
+	add_child(callouts())
 	add_child(CabinetStyle.crt_overlay(0.16))
+
+
+## The layer the batch throws its multipliers up on.
+func callouts() -> BurnCallouts:
+	if _callouts == null:
+		_callouts = BurnCallouts.new()
+		_callouts.name = "BurnCallouts"
+	return _callouts
 
 
 func add_tab(tab: CabinetTab) -> void:

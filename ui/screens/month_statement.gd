@@ -33,6 +33,12 @@ func _build_body() -> void:
 	set_actions([{"headline": "CONTINUE", "pressed": _on_continue}])
 
 
+## The statement sizes its own figure and notes, so it is told the scale.
+func _on_compact_changed(compact_now: bool) -> void:
+	if _statement != null:
+		_statement.set_metrics(UiThemeBuilder.COMPACT_TYPE_SCALE if compact_now else 1.0)
+
+
 ## The contract `main.gd` drives the end-of-round flow through.
 func show_statement(statement: Dictionary) -> void:
 	_data = statement

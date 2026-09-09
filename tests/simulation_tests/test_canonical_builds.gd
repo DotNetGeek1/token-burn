@@ -72,6 +72,14 @@ class Build:
 
 	func _init(module_ids: Array, perk_ids: Array = [], seed_value: int = 7700) -> void:
 		rng = DeterministicRng.new(seed_value)
+		# Pipelines longer than the default three bays would otherwise land in
+		# overflow and pick up heat/cascade tax. Widen before ensure_board so
+		# stages 4+ resolve at their authored strength.
+		var extra_slots: int = maxi(0, module_ids.size() - BoardSystem.DEFAULT_SLOT_COUNT)
+		if extra_slots > 0:
+			var board_state: Dictionary = Dictionary(state.build.get("board", {}))
+			board_state["meta_slot_bonus"] = int(board_state.get("meta_slot_bonus", 0)) + extra_slots
+			state.build["board"] = board_state
 		board.ensure_board(state, ContentDatabase)
 		state.build["perks"] = []
 		for perk_id in perk_ids:
@@ -124,8 +132,21 @@ class Build:
 				subs.append(copy)
 		return subs
 
-	func burn(tokens: float = 1000.0) -> Dictionary:
-		return board.resolve_burn(state, job, tokens, rng, resolver, subscriptions(), -1)
+	func burn(tokens: float = 1000.0, mode: int = ResolveMode.COMMIT) -> Dictionary:
+		return board.resolve_burn(state, job, tokens, rng, resolver, subscriptions(), -1, mode)
+
+	func burn_with_subscriptions(
+		subs: Array, tokens: float = 1000.0, mode: int = ResolveMode.COMMIT
+	) -> Dictionary:
+		return board.resolve_burn(state, job, tokens, rng, resolver, subs, -1, mode)
+
+	func subscriptions_without_synergies() -> Array:
+		var filtered: Array = []
+		for sub in subscriptions():
+			if str(Dictionary(sub).get("source_id", "")).begins_with("synergy."):
+				continue
+			filtered.append(sub)
+		return filtered
 
 	## The pickup half of a perk, which is where liabilities and loans live.
 	func acquire(perk_id: String) -> void:

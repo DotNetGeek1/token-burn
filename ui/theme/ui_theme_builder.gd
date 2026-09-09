@@ -31,6 +31,14 @@ const FONT_BODY := 19
 const FONT_TITLE := 27
 const FONT_DISPLAY := 36
 const FONT_STAT := 30
+## The price on a card: mono, between BODY and TITLE.
+const FONT_PRICE := 26
+
+## A handset canvas is ~300 design pixels tall, and the type above was tuned
+## for 720. `DisplayScale` already makes 12 px legible there, so a 27 px title
+## is a tenth of the screen. Phone overlays on a compact canvas print at this
+## fraction of the scale instead (`compact_type_theme`).
+const COMPACT_TYPE_SCALE := 0.68
 
 # Spacing scale
 const SPACE_XS := 3
@@ -131,10 +139,45 @@ static var _body_font: Font = null
 static var _body_bold_font: Font = null
 static var _mono_font: Font = null
 static var _fonts_loaded: bool = false
+static var _compact_theme: Theme = null
 
 
 static func apply(root: Control) -> void:
 	root.theme = build()
+
+
+## Every font size the phone overlays use, at `COMPACT_TYPE_SCALE`. Set on a
+## panel, it overrides the sizes the room's theme gives the labels and buttons
+## under it and nothing else: faces and colours still resolve from the room.
+static func compact_type_theme() -> Theme:
+	if _compact_theme != null:
+		return _compact_theme
+	var theme := Theme.new()
+	theme.set_font_size("font_size", "Label", compact_size(FONT_BODY))
+	theme.set_font_size("font_size", "Button", compact_size(header_size(FONT_BODY)))
+	var variations: Dictionary = {
+		"TitleLabel": header_size(FONT_TITLE),
+		"DisplayLabel": header_size(FONT_DISPLAY),
+		"StatLabel": header_size(FONT_STAT),
+		"SectionLabel": FONT_SMALL,
+		"MutedLabel": FONT_MUTED,
+		"AccentLabel": FONT_BODY,
+		"MoneyLabel": FONT_BODY,
+		"WarningLabel": FONT_MUTED,
+		"ErrorLabel": FONT_BODY,
+		"ChipLabel": FONT_SMALL,
+		"PriceLabel": FONT_PRICE,
+	}
+	for variation in variations:
+		theme.set_type_variation(variation, "Label")
+		theme.set_font_size("font_size", variation, compact_size(int(variations[variation])))
+	_compact_theme = theme
+	return theme
+
+
+## A font size at the handset's scale, never below what stays legible.
+static func compact_size(size: int) -> int:
+	return maxi(9, int(round(float(size) * COMPACT_TYPE_SCALE)))
 
 
 static func color(color_name: String) -> Color:
@@ -282,6 +325,10 @@ static func build() -> Theme:
 	_add_mono_label_variation(theme, "MoneyLabel", green, FONT_BODY)
 	_add_label_variation(theme, "WarningLabel", orange, FONT_MUTED)
 	_add_label_variation(theme, "ErrorLabel", red, FONT_BODY)
+	# A chip's text and a card's price: named so the compact scale can reach
+	# them, since a size set on the label itself would not be rescaled.
+	_add_label_variation(theme, "ChipLabel", white, FONT_SMALL)
+	_add_mono_label_variation(theme, "PriceLabel", green, FONT_PRICE)
 	if _header_font != null:
 		theme.set_constant("extra_spacing_glyph", "SectionLabel", 2)
 

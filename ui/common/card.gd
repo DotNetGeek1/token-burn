@@ -104,11 +104,21 @@ func set_action_pinned(pinned: bool = true) -> void:
 
 
 ## Card faces are summaries; the screen can cap prose when a detail sheet is
-## available behind a tap.
+## available behind a tap. Zero lifts the cap.
 func set_body_max_lines(max_lines: int) -> void:
 	_ensure_nodes()
-	_body_label.max_lines_visible = maxi(0, max_lines)
-	_body_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_body_label.max_lines_visible = maxi(0, max_lines) if max_lines > 0 else -1
+	_body_label.text_overrun_behavior = (
+		TextServer.OVERRUN_TRIM_ELLIPSIS if max_lines > 0 else TextServer.OVERRUN_NO_TRIMMING
+	)
+
+
+## A shorter call to action for a handset canvas, where a 52 px key under two
+## lines of copy is most of the card.
+func set_action_compact(compact: bool) -> void:
+	_ensure_nodes()
+	_action_button.compact = compact
+	_action_button.set_min_height(36.0 if compact else 52.0)
 
 
 ## Colour identity for a data-driven category (job sector, upgrade group).
