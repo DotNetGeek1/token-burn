@@ -92,7 +92,11 @@ func _strip_order(market: CabinetTab) -> void:
 			rig_at = index
 	assert_true(systems_at >= 0, "The strip has a SYSTEMS shelf button (%s)" % str(words))
 	assert_true(systems_at == 0 and modules_at == 1, "SYSTEMS opens before MODULES in the strip (%s)" % str(words))
-	assert_true(rig_at == -1 and words.size() == 2, "Hardware shelves and RIG are absent (%s)" % str(words))
+	assert_true(rig_at == -1, "Hardware shelves and RIG are absent (%s)" % str(words))
+	assert_true(
+		words.size() == 3 and words[2].begins_with("CALIBRATE"),
+		"CALIBRATE is the third and last shelf, counting the owned modules (%s)" % str(words)
+	)
 	if systems_at >= 0:
 		assert_eq(words[systems_at], "SYSTEMS 5", "The SYSTEMS button counts its five rows")
 

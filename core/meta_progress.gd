@@ -201,11 +201,24 @@ func victories_on(difficulty_id: String) -> int:
 	return int(Dictionary(_profile.get("victories_by_difficulty", {})).get(difficulty_id, 0))
 
 
-func legacy_perk_slot_bonus() -> int:
+## Extra cards on the investor's table, from Rolodex ranks. The draft is three
+## cards by default; ranks add one each, capped so the table never shows more
+## than five.
+const BASE_DRAFT_OPTIONS := 3
+const MAX_DRAFT_OPTIONS := 5
+
+
+func draft_option_bonus() -> int:
 	var rank: int = unlock_count("unlock.rolodex")
 	if rank <= 0:
 		return 0
-	return int(_rank_value(get_unlock("unlock.rolodex"), rank))
+	var bonus: int = int(_rank_value(get_unlock("unlock.rolodex"), rank))
+	return clampi(bonus, 0, MAX_DRAFT_OPTIONS - BASE_DRAFT_OPTIONS)
+
+
+## How many perks the investor lays out when a goal is met.
+func draft_option_count() -> int:
+	return BASE_DRAFT_OPTIONS + draft_option_bonus()
 
 
 func completion_summary() -> Dictionary:
@@ -294,8 +307,8 @@ func is_available(unlock_id: String) -> bool:
 		return true
 	if not bool(unlock.get("repeatable", false)):
 		return owned == 0
-	if str(unlock.get("kind", "")) == "extra_slot":
-		return BoardSystem.DEFAULT_SLOT_COUNT + owned < BoardSystem.MAX_SLOT_COUNT
+	if str(unlock.get("kind", "")) in ["overflow_capacity", "extra_slot"]:
+		return owned < BoardSystem.MAX_META_OVERFLOW_BONUS
 	if str(unlock.get("kind", "")) == "workflow_slot":
 		return BoardSystem.DEFAULT_WORKFLOW_CAPACITY + owned < BoardSystem.MAX_WORKFLOW_COUNT
 	# A tiered ladder runs out when its last rung is owned.
@@ -742,7 +755,7 @@ func cooling_bonus() -> float:
 
 
 ## Folds every owned unlock into a freshly reset run. Called before the board is
-## sized, so an extra slot is already in place when the slots are laid out.
+## sized, so overflow allowance is already in place when the slots are laid out.
 func apply_to_run(run_state: RunState) -> void:
 	if not enabled:
 		return
@@ -772,12 +785,16 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 	var value: float = _rank_value(unlock, rank)
 	if ranks.is_empty() and rank > 1:
 		match kind:
-			"extra_slot", "workflow_slot", "cooling", "efficiency_base", "passive_income", "starting_module":
+			"overflow_capacity", "extra_slot", "workflow_slot", "cooling", "efficiency_base", "passive_income", "starting_module":
 				value = float(unlock.get("amount", 1.0)) * float(rank)
 	match kind:
-		"extra_slot":
+		"overflow_capacity", "extra_slot":
+			# Safe capacity belongs to the backplane alone; a permanent slot is
+			# permission to bolt one more overflow stage on. `extra_slot` is the
+			# pre-v25 spelling of the same kind, kept so an old catalog entry in
+			# a profile still applies.
 			var board: Dictionary = run_state.build.get("board", {})
-			board["meta_slot_bonus"] = int(board.get("meta_slot_bonus", 0)) + int(value)
+			board["meta_overflow_bonus"] = int(board.get("meta_overflow_bonus", 0)) + int(value)
 			run_state.build["board"] = board
 		"starting_module":
 			var module_id: String = str(unlock.get("module_id", ""))
@@ -809,9 +826,10 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 			# Read straight off the profile by `_apply_legacy_multipliers`, which
 			# has to run after `_apply_age` writes the age's own multipliers.
 			pass
-		"perk_slots":
-			# Read live by `PerkSystem.perk_capacity`, so there is nothing to
-			# write onto the run.
+		"draft_options", "perk_slots":
+			# Read live by `draft_option_bonus` when the investor deals, so
+			# there is nothing to write onto the run. `perk_slots` is the
+			# pre-v25 spelling of the same unlock.
 			pass
 		"starting_hardware":
 			# Installed by the Simulation via the upgrade pipeline, which owns

@@ -60,6 +60,13 @@ func _ready() -> void:
 	_lines.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_lines.clip_contents = true
 	column.add_child(_lines)
+	# The lines are a fixed pool: a push moves text and colour down the labels
+	# rather than freeing and rebuilding them, so a long burn adds nothing to
+	# the scene tree beat after beat.
+	for _index in range(MAX_LINES):
+		var line: Label = CabinetStyle.mono("", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR)
+		line.visible = false
+		_lines.add_child(line)
 
 	# The batch's own ledger, in place of the multiplier the drum above already
 	# shows: what the rig is pushing now, what the run has burned, and the
@@ -184,19 +191,36 @@ func _process(delta: float) -> void:
 			visible = false
 
 
+## Paints the newest lines that fit onto the label pool, oldest at the top and
+## dimming with age; the labels past the end are hidden, never freed.
 func _render() -> void:
-	for child in _lines.get_children():
-		_lines.remove_child(child)
-		child.queue_free()
+	if _lines == null:
+		return
 	var font: int = clampi(int(size.y * 0.075), 8, 13)
 	var fit: int = maxi(1, int(_lines.size.y / (font + 3.0))) if _lines.size.y > 0.0 else MAX_LINES
 	var start: int = maxi(0, _log.size() - fit)
+	var labels: Array[Node] = _lines.get_children()
+	var shown: int = 0
 	for index in range(start, _log.size()):
+		if shown >= labels.size():
+			break
+		var label: Label = labels[shown] as Label
 		var entry: Dictionary = _log[index]
 		var age: float = float(_log.size() - 1 - index)
 		var color: Color = Color(entry["color"])
 		color.a = clampf(1.0 - age * 0.14, 0.35, 1.0)
-		_lines.add_child(CabinetStyle.mono("> " + str(entry["text"]), font, color))
+		label.text = "> " + str(entry["text"])
+		label.add_theme_font_size_override("font_size", font)
+		label.add_theme_color_override("font_color", color)
+		label.visible = true
+		shown += 1
+	for index in range(shown, labels.size()):
+		labels[index].visible = false
+
+
+## How many line labels the feed keeps, for the playtests: the pool never grows.
+func line_label_count() -> int:
+	return _lines.get_child_count() if _lines != null else 0
 
 
 func _set_glow(on: bool) -> void:

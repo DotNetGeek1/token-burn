@@ -16,7 +16,7 @@ Everything happens on one machine: the **Burn Cabinet**. Contracts, modules, the
 4. Resolve complications such as bugs, scope creep, outages, and revisions.
 5. Get paid and gain reputation.
 6. Pay rent, electricity, debt, and other overhead.
-7. Take one free perk from the angel table (or decline), then buy modules, hardware and cabinet system tiers in the Market and route contracts through trained workflows.
+7. Buy modules, hardware and cabinet system tiers in the Market and route contracts through trained workflows. Perks are permanent and are only dealt once per chapter goal: meeting the investor's contract offers a table of perks (take one or decline) before the company can move on.
 8. Repeat until the run is won or collapses.
 
 ## 3. Primary resources
@@ -39,7 +39,7 @@ Mastery is scored once, the first time a contract's remaining tokens hit zero. C
 - **QUALITY** multiplies positive pipeline quality only. Penalties and the contract's passive quality share stay additive.
 - **THERMAL** divides positive pipeline heat only. Signed cooling stays additive; ambient rig heat is unchanged.
 
-Tag density is the main build glue. Equipped perks and slotted modules count; the bench does not. Named perk pairs remain easter eggs.
+Tag density is the main build glue. Owned perks (all permanent — there is no perk bench or loadout cap) and slotted modules count; benched modules do not. Named perk pairs remain easter eggs.
 
 ## 4. Strategic archetypes
 
@@ -117,7 +117,10 @@ Rules:
 - A tier is only ever bought upward. Nothing sells a system back down and no
   chapter change lowers a tier.
 - Perk, module, upgrade and meta bonuses stay additive on top of the tier
-  value. The tier is the baseline, not the ceiling.
+  value. The tier is the baseline, not the ceiling. The Workflow Backplane
+  is the one exception: its bay count *is* the safe pipeline capacity, and
+  Wide Bus, monitors/desks and meta ranks only widen the overflow allowance
+  (stages past safe that cost instability).
 - The sum of the five tiers (5–20) names the cabinet's **generation**:
   Improvised Cabinet, Spliced Rig, Token Furnace, Grid Eater, Impossible
   Engine. The generation is presentation only; nothing reads a number back

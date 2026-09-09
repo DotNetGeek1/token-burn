@@ -30,13 +30,22 @@ const EVENT_BATCH_FINISHED := "board.batch_finished"
 
 ## A run starts with fewer slots than the player owns modules. Room on the board
 ## is the scarce resource: new modules arrive benched, and taking one into the
-## pipeline means taking something else out. Overflow (when unlocked) lets the
-## pipeline grow past supported capacity; those extra stages still resolve, but
-## they are unstable.
+## pipeline means taking something else out.
+##
+## Capacity has two numbers. *Safe capacity* is the Workflow Backplane's bays
+## and nothing else — the one figure the Market row, the dock and the burn all
+## agree on. *Overflow allowance* is how many stages the player may bolt on
+## past that: the chapter's base allowance plus meta unlocks, perks and
+## upgrades. Overflow stages still resolve, but they are unstable, and every
+## one of them is added deliberately with + STAGE rather than appearing when a
+## number changes.
 const DEFAULT_SLOT_COUNT := 3
 const MAX_SLOT_COUNT := 8
 const MAX_SUPPORTED_CAPACITY := 16
 const MAX_PIPELINE_STAGES := 24
+## How many "One More Pipeline Slot" ranks a profile can hold. Each is one
+## stage of overflow allowance in every future run.
+const MAX_META_OVERFLOW_BONUS := 5
 
 ## A run opens with one workflow. Capacity is earned: a Market upgrade, a perk,
 ## and the Simulation ascension ending each hand over another one.
@@ -105,10 +114,12 @@ func ensure_board(run_state: RunState, content_db: Node) -> void:
 	var board: Variant = run_state.build.get("board", null)
 	if not board is Dictionary:
 		board = {}
+	run_state.build["board"] = board
 	_migrate_legacy_board_bonuses(run_state, content_db)
+	# `slot_count` is the safe figure. Workflows may be longer than it (their
+	# overflow stages), never shorter.
 	var slot_count_value: int = derived_supported_capacity(run_state, content_db)
 	board["slot_count"] = slot_count_value
-	run_state.build["board"] = board
 
 	# Starters are merged in rather than granted only to an empty list. A
 	# `starting_module` unlock writes its module in before this runs, and the
@@ -170,7 +181,10 @@ func _migrate_board_to_workflows(run_state: RunState) -> void:
 
 ## Normalises the list: every workflow has an id, a name, and at least
 ## `supported` string slots. Occupied overflow is never trimmed. Empty overflow
-## is kept only while overflow is unlocked.
+## is kept only while overflow is unlocked. Nothing here ever *adds* an
+## overflow stage: the layout grows past safe capacity only through
+## `append_overflow_stage`, so a capacity change cannot silently lengthen a
+## pipeline.
 func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: Node = null) -> void:
 	var workflows: Array = Array(run_state.build.get("workflows", []))
 	var capacity: int = workflow_capacity(run_state, content_db)
@@ -203,6 +217,9 @@ func _ensure_workflows(run_state: RunState, slot_count_value: int, content_db: N
 	)
 
 
+## The length a stored layout settles at: never below safe capacity, never
+## above it except to keep stages that are already there — occupied ones
+## always, empty explicit overflow only while overflow is unlocked.
 func _normalized_layout_length(layout: Array, supported: int, overflow_ok: bool) -> int:
 	var occupied_end: int = 0
 	for i in range(layout.size()):
@@ -274,33 +291,96 @@ func derived_slot_count(run_state: RunState, content_db: Node) -> int:
 	return derived_supported_capacity(run_state, content_db)
 
 
-## How many stages the cabinet will back without complaining. The Workflow
-## Backplane tier sets the baseline; monitors, desks, perks and meta unlocks
-## still add. Overflow is anything past this number.
+## How many stages the cabinet will back without complaining: the Workflow
+## Backplane's bays, and only those. Monitors, desks, perks and meta unlocks
+## no longer widen this — they widen `overflow_allowance` instead. Overflow is
+## anything past this number.
 func derived_supported_capacity(run_state: RunState, content_db: Node) -> int:
-	var board: Dictionary = run_state.build.get("board", {})
-	var meta_bonus: int = int(board.get("meta_slot_bonus", 0))
-	var perk_bonus: int = active_perk_grant_total(run_state, content_db, "board_slots")
-	var upgrade_bonus: int = int(UpgradeSystem.additive_effect_total(
-		run_state, content_db, "build.board.slot_count"
-	))
-	var baseline: int = location_supported_capacity(run_state, content_db)
 	var ceiling: int = (
 		MAX_SUPPORTED_CAPACITY
 		if FeatureFlags.is_enabled("workflow_overflow_enabled")
 		else MAX_SLOT_COUNT
 	)
-	return clampi(baseline + meta_bonus + perk_bonus + upgrade_bonus, 1, ceiling)
+	return clampi(location_supported_capacity(run_state, content_db), 1, ceiling)
 
 
-## The baseline the board starts from: the bays the run's backplane tier gives
-## it (with the legacy `supported_stages` row as a floor while it exists — see
-## CabinetSystems). With overflow switched off the board stays at the fixed
-## default it has always had.
+## The bays the run's backplane tier gives it. With overflow switched off the
+## board stays at the fixed default it has always had.
 static func location_supported_capacity(run_state: RunState, content_db: Node = null) -> int:
 	if content_db == null or not FeatureFlags.is_enabled("workflow_overflow_enabled"):
 		return DEFAULT_SLOT_COUNT
 	return maxi(1, int(CabinetSystems.capacity(run_state, "backplane", "bays", content_db)))
+
+
+## Overflow allowance the chapter itself grants before any bonus: nothing below
+## the office, a few stages from there up.
+static func location_overflow_allowance(run_state: RunState, content_db: Node = null) -> int:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	var table: Dictionary = Dictionary(overflow_config(db).get("base_allowance", {}))
+	return maxi(0, int(table.get(str(run_state.build.get("dwelling", "")), 0)))
+
+
+## Overflow allowance from permanent unlocks ("One More Pipeline Slot" ranks).
+static func meta_overflow_bonus(run_state: RunState) -> int:
+	return maxi(0, int(Dictionary(run_state.build.get("board", {})).get("meta_overflow_bonus", 0)))
+
+
+## Overflow allowance from perks (Wide Bus).
+static func perk_overflow_bonus(run_state: RunState, content_db: Node) -> int:
+	return maxi(0, active_perk_grant_total(run_state, content_db, "overflow_stages"))
+
+
+## Overflow allowance from Market upgrades (Second Monitor, Standing Desk).
+static func upgrade_overflow_bonus(run_state: RunState, content_db: Node) -> int:
+	return maxi(0, int(UpgradeSystem.additive_effect_total(
+		run_state, content_db, "build.board.overflow_stages"
+	)))
+
+
+## How many stages the pipeline may carry past safe capacity: the chapter's
+## base allowance plus every meta, perk and upgrade bonus. Zero with overflow
+## switched off.
+func overflow_allowance(run_state: RunState, content_db: Node = null) -> int:
+	if not FeatureFlags.is_enabled("workflow_overflow_enabled"):
+		return 0
+	var db: Node = content_db if content_db != null else ContentDatabase
+	return (
+		location_overflow_allowance(run_state, db)
+		+ meta_overflow_bonus(run_state)
+		+ perk_overflow_bonus(run_state, db)
+		+ upgrade_overflow_bonus(run_state, db)
+	)
+
+
+## The longest a workflow may be: safe capacity plus allowance, never past the
+## resolver's hard ceiling. This is the wall `+ STAGE` runs into.
+func max_pipeline_length(run_state: RunState, content_db: Node = null) -> int:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	var safe: int = derived_supported_capacity(run_state, db)
+	var hard_cap: int = mini(
+		MAX_PIPELINE_STAGES, maxi(1, int(overflow_config(db).get("max_pipeline", MAX_PIPELINE_STAGES)))
+	)
+	return clampi(safe + overflow_allowance(run_state, db), safe, maxi(safe, hard_cap))
+
+
+## Every number behind the board's width in one place, for the SEATED tooltip
+## behind the `capacity_debug` flag and for tests that want the breakdown.
+func capacity_debug(run_state: RunState, content_db: Node = null) -> Dictionary:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	var tier: int = CabinetSystems.tier(run_state, "backplane", db)
+	return {
+		"dwelling": str(run_state.build.get("dwelling", "")),
+		"backplane_tier": tier,
+		"backplane_safe_capacity": int(CabinetSystems.tier_value("backplane", "bays", tier, db)),
+		"base_overflow": location_overflow_allowance(run_state, db),
+		"legacy_bonus": meta_overflow_bonus(run_state),
+		"perk_bonus": perk_overflow_bonus(run_state, db),
+		"upgrade_bonus": upgrade_overflow_bonus(run_state, db),
+		"safe_capacity": derived_supported_capacity(run_state, db),
+		"overflow_capacity": overflow_allowance(run_state, db),
+		"max_pipeline_length": max_pipeline_length(run_state, db),
+		"workflow_slots_size": slots(run_state).size(),
+	}
 
 
 ## The workflows the run's Control Rack tier gives it before perks, upgrades
@@ -320,12 +400,17 @@ static func overflow_config(content_db: Node = null) -> Dictionary:
 	).get("overflow", {})
 
 
+## Overflow opens with the chapter (the office and up), or earlier for a run
+## that has been handed allowance by an unlock, a perk or a monitor — a Second
+## Monitor bought in the bedroom would otherwise do nothing until the office.
 func overflow_unlocked(run_state: RunState, content_db: Node = null) -> bool:
 	if not FeatureFlags.is_enabled("workflow_overflow_enabled"):
 		return false
 	var db: Node = content_db if content_db != null else ContentDatabase
 	var unlock_at: int = int(overflow_config(db).get("unlock_location_index", 2))
-	return JobSystem.location_tier(run_state, db) >= unlock_at
+	if JobSystem.location_tier(run_state, db) >= unlock_at:
+		return true
+	return overflow_allowance(run_state, db) > 0
 
 
 func is_overflow_index(run_state: RunState, index: int, content_db: Node = null) -> bool:
@@ -337,10 +422,11 @@ func can_append_overflow(run_state: RunState, content_db: Node = null) -> bool:
 	var db: Node = content_db if content_db != null else ContentDatabase
 	if not overflow_unlocked(run_state, db):
 		return false
-	var ceiling: int = maxi(1, int(overflow_config(db).get("max_pipeline", MAX_PIPELINE_STAGES)))
-	return slots(run_state).size() < ceiling
+	return slots(run_state).size() < max_pipeline_length(run_state, db)
 
 
+## Bolts exactly one empty stage onto the active workflow. The only way a
+## pipeline grows past safe capacity.
 func append_overflow_stage(run_state: RunState, content_db: Node = null) -> int:
 	if not can_append_overflow(run_state, content_db):
 		return -1
@@ -373,21 +459,19 @@ func derived_workflow_capacity(run_state: RunState, content_db: Node) -> int:
 	)
 
 
-## A save from before meta bonuses were tracked separately stored only the
-## total. Whatever the total cannot be explained by — the cabinet's own
-## baseline, perks, upgrades — is attributed to permanent unlocks.
+## Older saves tracked permanent slot unlocks as `meta_slot_bonus`, a number
+## that widened safe capacity. It is now `meta_overflow_bonus`, overflow
+## allowance. A save with neither gets zero: a wider-than-safe pipeline it was
+## running is kept as it stands (`_normalized_layout_length` never trims an
+## explicit or occupied stage), so those stages simply become overflow rather
+## than being explained away as a phantom unlock. Workflow capacity keeps the
+## older inference, since nothing else preserves a spare workflow.
 func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> void:
 	var board: Dictionary = run_state.build.get("board", {})
-	if not board.has("meta_slot_bonus"):
-		var stored_slots: int = int(board.get("slot_count", DEFAULT_SLOT_COUNT))
-		var perk_slots: int = active_perk_grant_total(run_state, content_db, "board_slots")
-		var upgrade_slots: int = int(UpgradeSystem.additive_effect_total(
-			run_state, content_db, "build.board.slot_count"
-		))
-		board["meta_slot_bonus"] = maxi(
-			0, stored_slots - location_supported_capacity(run_state, content_db) - perk_slots - upgrade_slots
-		)
+	if not board.has("meta_overflow_bonus"):
+		board["meta_overflow_bonus"] = maxi(0, int(board.get("meta_slot_bonus", 0)))
 		run_state.build["board"] = board
+	board.erase("meta_slot_bonus")
 	if not run_state.build.has("meta_workflow_bonus"):
 		var stored_capacity: int = int(run_state.build.get("workflow_capacity", DEFAULT_WORKFLOW_CAPACITY))
 		var perk_capacity_bonus: int = active_perk_grant_total(run_state, content_db, "workflow_capacity")
@@ -879,6 +963,12 @@ func resolve_burn(
 	var output_mult: float = workflow_output_display(
 		float(batch["token_mult"]), float(batch["progress_mult"])
 	)
+	if mode == ResolveMode.COMMIT:
+		# The heat pass runs once per prompt after every lane has burned and
+		# consumes this, so parallel lanes leave their biggest multiplier here.
+		run_state.compute["last_batch_multiplier"] = maxf(
+			float(run_state.compute.get("last_batch_multiplier", 1.0)), output_mult
+		)
 	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
 	var convert: float = clampf(float(batch["quality_to_progress"]), 0.0, 1.0)
 	var converted_quality: float = 0.0
@@ -1710,19 +1800,56 @@ func _heat_ratio(run_state: RunState) -> float:
 	return float(run_state.compute.get("heat", 0.0)) / maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 
 
-func _overflow_instability(run_state: RunState, index: int) -> float:
-	if not is_overflow_index(run_state, index):
+## How many stages past safe capacity a slot sits: 1 for the first overflow
+## stage, 2 for the next, and so on. Zero for any supported slot.
+func overflow_ordinal(run_state: RunState, index: int, content_db: Node = null) -> int:
+	var db: Node = content_db if content_db != null else ContentDatabase
+	var safe: int = derived_supported_capacity(run_state, db)
+	if index < safe:
+		return 0
+	return index - safe + 1
+
+
+## Every overflow tax scales by `ordinal ^ pressure_exponent`, so the first
+## bolted-on stage costs exactly the authored flat values and each further one
+## costs superlinearly more: with the default 1.5 the fourth stage pays 8×.
+static func overflow_pressure(ordinal: int, content_db: Node = null) -> float:
+	if ordinal <= 0:
 		return 0.0
-	return float(overflow_config().get("instability", 0.05))
+	var exponent: float = float(overflow_config(content_db).get("pressure_exponent", 1.5))
+	return pow(float(ordinal), exponent)
+
+
+## Deep Burn affixes can make unsupported stages flakier still. Uncapped.
+static func overflow_instability_mult(run_state: RunState) -> float:
+	return maxf(0.0, float(run_state.compute.get("depth_overflow_instability_mult", 1.0)))
+
+
+func _overflow_instability(run_state: RunState, index: int) -> float:
+	var ordinal: int = overflow_ordinal(run_state, index)
+	if ordinal <= 0:
+		return 0.0
+	return (
+		float(overflow_config().get("instability", 0.05))
+		* overflow_pressure(ordinal)
+		* overflow_instability_mult(run_state)
+	)
 
 
 func _apply_overflow_penalties(run_state: RunState, stage: Dictionary, index: int) -> bool:
-	if not is_overflow_index(run_state, index):
+	var ordinal: int = overflow_ordinal(run_state, index)
+	if ordinal <= 0:
 		return false
 	var cfg: Dictionary = overflow_config()
-	stage["cascade_chance"] = float(stage.get("cascade_chance", 0.0)) + float(cfg.get("cascade_chance", 0.03))
+	var pressure: float = overflow_pressure(ordinal)
+	stage["cascade_chance"] = (
+		float(stage.get("cascade_chance", 0.0)) + float(cfg.get("cascade_chance", 0.03)) * pressure
+	)
 	var heat: float = float(stage.get("heat", 0.0))
-	stage["heat"] = heat + maxf(0.0, heat) * float(cfg.get("heat_pct", 0.04)) + float(cfg.get("heat_flat", 2.0))
+	stage["heat"] = heat + (
+		maxf(0.0, heat) * float(cfg.get("heat_pct", 0.04)) + float(cfg.get("heat_flat", 2.0))
+	) * pressure
+	stage["overflow_pressure"] = pressure
 	return true
 
 

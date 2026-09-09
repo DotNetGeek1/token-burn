@@ -64,6 +64,14 @@ func _run_in(sim: Node, location: String) -> void:
 	AscensionSystem.new().activate(sim.run_state, ContentDatabase)
 
 
+## A won chapter deals the investor's perk table, and the company cannot move
+## on until it is answered. Walks away from it so the tests here can get on
+## with the move.
+func _settle_investor_draft(sim: Node) -> void:
+	if sim.investor_draft_pending():
+		sim.decline_offers()
+
+
 ## Skips straight to "the burn requirement is met", which is what the prompt
 ## evaluator actually checks.
 func _meet_requirement(sim: Node, contract_id: String) -> Dictionary:
@@ -372,6 +380,7 @@ func _test_the_winning_round_is_on_the_investor() -> void:
 		"The investor's cheque is paid rather than swallowed by rent"
 	)
 
+	_settle_investor_draft(sim)
 	assert_true(sim.advance_to_next_chapter(), "The company moves into the garage")
 	assert_true(sim.phase != sim.Phase.RUN_END, "Alive, not collapsed on arrival")
 	assert_eq(
@@ -488,17 +497,35 @@ func _test_advancing_to_the_next_chapter_carries_the_whole_business() -> void:
 	# Sampled after the victory settled its bills: what the company actually
 	# holds walking out of the bedroom is what must walk into the garage.
 	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
+	assert_true(sim.investor_draft_pending(), "The goal deals the investor's perk table first")
+	assert_false(
+		sim.advance_to_next_chapter(),
+		"The company cannot move while the investor's table is unanswered"
+	)
+	var commissioning_preview: float = sim.chapter_commissioning_preview()
+	assert_true(commissioning_preview > 0.0, "Moving up has a commissioning bill")
+	_settle_investor_draft(sim)
 	assert_true(sim.advance_to_next_chapter(), "And the company moves up a chapter")
 	assert_eq(str(sim.run_state.build.get("dwelling", "")), "garage", "Into the garage")
-	assert_true(
-		sim.phase == sim.Phase.ROUND_PREP or sim.phase == sim.Phase.ANGEL_ROUND,
-		"Back in play — round prep, or the draft the winning round earned"
-	)
+	assert_eq(sim.phase, sim.Phase.ROUND_PREP, "Back in play at round prep")
 	assert_eq(int(sim.run_state.calendar.get("round", 0)), 1, "With a fresh year on the new contract")
-	assert_true(
-		float(sim.run_state.economy.get("cash", 0.0)) >= cash_before,
-		"Cash carries forward (the stake is a floor, not a replacement)"
+	var commissioning: float = float(
+		sim.run_state.statistics.get("last_chapter_commissioning", 0.0)
 	)
+	assert_almost_eq(
+		commissioning, commissioning_preview, 0.01,
+		"The verdict screen's preview is what was actually charged"
+	)
+	assert_almost_eq(
+		float(sim.run_state.economy.get("cash", 0.0)), cash_before - commissioning, 0.01,
+		"Cash carries forward less the cost of commissioning the new room"
+	)
+	var itemised: bool = false
+	for entry in Array(sim.run_state.economy.get("ledger", [])):
+		if entry is Dictionary and str(entry.get("reason", "")) == "chapter_commissioning":
+			itemised = true
+			assert_almost_eq(float(entry.get("amount", 0.0)), commissioning, 0.01, "For the full figure")
+	assert_true(itemised, "Commissioning is itemised on the ledger")
 	assert_almost_eq(
 		float(sim.run_state.business.get("reputation", 0.0)), 17.0, 0.01,
 		"Reputation carries"
@@ -596,6 +623,9 @@ func _test_a_won_run_can_carry_on_into_endless() -> void:
 	assert_eq(sim.phase, sim.Phase.RUN_END, "The run is won")
 
 	var tokens_before: float = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
+	assert_true(sim.investor_draft_pending(), "Even the last goal deals the investor's perk table")
+	assert_false(sim.continue_after_victory(), "Which has to be answered before carrying on")
+	_settle_investor_draft(sim)
 	assert_true(sim.continue_after_victory(), "And can be carried on")
 	assert_true(sim.phase != sim.Phase.RUN_END, "Which puts it back into play")
 	assert_true(sim.in_post_victory(), "Flagged as a run past its ending")

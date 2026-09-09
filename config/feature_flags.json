@@ -12,6 +12,7 @@
   "cascade_enabled": true,
   "depth_ladder_enabled": true,
   "workflow_overflow_enabled": true,
+  "capacity_debug": false,
   "quality_consequences_enabled": true,
   "ready_to_ship_enabled": true,
   "yolo_mode_enabled": true

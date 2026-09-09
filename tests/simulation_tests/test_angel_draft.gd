@@ -4,13 +4,69 @@ extends TestCase
 func run() -> void:
 	_test_draw_returns_three_perk_offers()
 	_test_redraw_is_deterministic_for_sequence()
-	_test_angel_filters_perks_with_no_legal_swap()
+	_test_table_filters_perks_that_cannot_be_acquired()
+	_test_rolodex_widens_the_table()
+
+
+const SCRATCH_PROFILE := "user://profile_test_angel_draft.json"
 
 
 func _sim() -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	return sim
+
+
+func _with_scratch_profile() -> Dictionary:
+	var restore: Dictionary = {
+		"path": MetaProgress.profile_path,
+		"enabled": MetaProgress.enabled,
+	}
+	MetaProgress.enabled = true
+	MetaProgress.use_scratch_profile(SCRATCH_PROFILE)
+	return restore
+
+
+func _restore(restore: Dictionary) -> void:
+	if FileAccess.file_exists(SCRATCH_PROFILE):
+		DirAccess.remove_absolute(SCRATCH_PROFILE)
+	MetaProgress.profile_path = str(restore["path"])
+	MetaProgress.enabled = bool(restore["enabled"])
+	MetaProgress._loaded = false
+
+
+## Rolodex no longer adds perk slots — there are none to add. Each rank lays
+## one more card on the investor's table: four, then five, and no further.
+func _test_rolodex_widens_the_table() -> void:
+	var restore: Dictionary = _with_scratch_profile()
+	var rolodex: Dictionary = MetaProgress.get_unlock("unlock.rolodex")
+	assert_eq(str(rolodex.get("kind", "")), "draft_options", "Rolodex is a draft-size unlock")
+	assert_eq(MetaProgress.draft_option_bonus(), 0, "A fresh profile adds no cards")
+	assert_eq(MetaProgress.draft_option_count(), MetaProgress.BASE_DRAFT_OPTIONS, "Three cards to start")
+
+	MetaProgress.bank_victory(1)
+	assert_true(MetaProgress.spend_pick("unlock.rolodex"), "The first pick buys Rolodex rank 1")
+	assert_eq(MetaProgress.draft_option_bonus(), 1, "Rank 1 adds one card")
+	assert_eq(MetaProgress.draft_option_count(), 4, "Four on the table")
+
+	var sim: Node = _sim()
+	sim.start_run(4401)
+	sim._redraw_angel_offers()
+	assert_eq(sim.pending_choices.size(), 4, "The redraw deals 3 + the Rolodex bonus")
+	sim.free()
+
+	MetaProgress.bank_victory(1, "hard")
+	assert_true(MetaProgress.spend_pick("unlock.rolodex"), "A Hard win buys rank 2")
+	assert_eq(MetaProgress.draft_option_count(), MetaProgress.MAX_DRAFT_OPTIONS, "Five on the table")
+	assert_eq(MetaProgress.MAX_DRAFT_OPTIONS, 5, "And five is the ceiling")
+	assert_false(MetaProgress.is_available("unlock.rolodex"), "There is no third rank to sell")
+
+	var wide: Node = _sim()
+	wide.start_run(4402)
+	wide._redraw_angel_offers()
+	assert_eq(wide.pending_choices.size(), 5, "The redraw deals five")
+	wide.free()
+	_restore(restore)
 
 
 func _test_draw_returns_three_perk_offers() -> void:
@@ -44,7 +100,7 @@ func _test_redraw_is_deterministic_for_sequence() -> void:
 	sim_b.free()
 
 
-func _test_angel_filters_perks_with_no_legal_swap() -> void:
+func _test_table_filters_perks_that_cannot_be_acquired() -> void:
 	var state := RunState.new()
 	state.reset()
 	state.build["modules"] = ["op.unit_tests"]
@@ -56,12 +112,15 @@ func _test_angel_filters_perks_with_no_legal_swap() -> void:
 		"perk.audit_trail",
 		"perk.enterprise_grade",
 	]
-	state.build["perk_inventory"] = Array(state.build["perks"]).duplicate()
 	var system := PerkSystem.new()
 	var blocked: Array = system.undraftable_ids(state, ContentDatabase)
 	assert_true(
 		"perk.move_fast_and_break_everything" in blocked,
-		"A perk excluded by several active cards has no legal one-card swap"
+		"A perk excluded by the build's permanent cards cannot be acquired"
+	)
+	assert_false(
+		system.can_acquire(state, "perk.move_fast_and_break_everything", ContentDatabase),
+		"undraftable is exactly the complement of can_acquire"
 	)
 	var offers: Array = ContentDatabase.draw_angel_perks(
 		DeterministicRng.new(991),
@@ -74,5 +133,5 @@ func _test_angel_filters_perks_with_no_legal_swap() -> void:
 		assert_eq(str(offer.get("type", "")), "perk", "Angel offers are perk-only")
 		assert_false(
 			str(offer.get("id", "")) == "perk.move_fast_and_break_everything",
-			"Angel offers omit perks that cannot legally join the loadout"
+			"The table omits perks that cannot legally join the build"
 		)

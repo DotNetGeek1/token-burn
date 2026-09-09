@@ -6,8 +6,10 @@ extends ConsoleOverlay
 ##
 ## A win mid-campaign is a level-up, not the end of the game: the location is
 ## complete, the next one is unlocked, and the company moves there with
-## everything it owns — cash, perks, modules and rig alike. It pays nothing
-## permanent. Only the last chapter's win is the ending proper: it banks the
+## everything it owns — cash, perks, modules and rig alike — less the cost of
+## commissioning the new room. Every win also brings the investor's perk table,
+## which has to be answered (one permanent pick, or nothing) before any exit
+## opens. Only the last chapter's win is the ending proper: it banks the
 ## picks this screen doubles as the spend screen for — choose which area to
 ## boost permanently — and only it offers the endless tail. A fresh run after
 ## any of this starts back in the bedroom, carrying the permanent unlocks and
@@ -18,6 +20,11 @@ extends ConsoleOverlay
 ## a physical thing you take off the desk, so those stay as cards.
 
 const CARD_SCENE := preload("res://ui/common/card.tscn")
+
+## The player asked to see the investor's perk table. The flow raises the
+## angel_investors overlay over this one; the exits stay shut until the pick
+## is made or declined.
+signal investor_draft_requested
 
 var _statement: ConsoleStatement = null
 var _pick_rule: ColorRect = null
@@ -232,9 +239,13 @@ func _campaign_progress_text() -> String:
 	var next_location: String = MetaProgress.location_name(Simulation.next_location_unlocked())
 	if next_location == "":
 		return "%s is behind you, and there is nowhere further up to go. You have beaten the game — and the company does not have to stop here." % location
-	return "%s is behind you. %s took the meeting and bought you the %s — the company moves there with everything it owns, against a bigger contract." % [
+	var text: String = "%s is behind you. %s took the meeting and bought you the %s — the company moves there with everything it owns, against a bigger contract." % [
 		location, InvestorVoice.investor_name(), next_location
 	]
+	var commissioning: float = Simulation.chapter_commissioning_preview()
+	if commissioning > 0.0:
+		text += " Commissioning the room — power, racks, the move itself — comes to %s." % NumberFormat.format_cash(commissioning)
+	return text
 
 
 ## A banked pick has to be spent before the next run starts, so every way off
@@ -292,17 +303,30 @@ func _refresh_debrief() -> void:
 
 func _set_exits(has_pick: bool) -> void:
 	var pending: int = MetaProgress.pending_picks()
+	# The investor's perk table has to be answered before the company moves
+	# anywhere: the sim refuses to advance or continue while it is open.
+	var draft_open: bool = Simulation.investor_draft_pending()
+	var held: bool = has_pick or draft_open
 	var entries: Array = []
+	if draft_open:
+		entries.append({
+			"index": "1",
+			"headline": "THE INVESTOR'S TERMS",
+			"value": "%s has %d perks on the table. Take one, or take nothing." % [
+				InvestorVoice.investor_name(), Simulation.pending_choices.size()
+			],
+			"pressed": _on_meet_investor,
+		})
 	# Carrying on into the endless tail is only on the table for the run that
 	# beat the last chapter: a mid-campaign win's continuation is the next
 	# location, and the build has to still exist for there to be anything to
 	# carry.
 	if _can_keep_playing():
 		entries.append({
-			"index": "1",
+			"index": str(entries.size() + 1),
 			"headline": "KEEP PLAYING",
 			"value": "Deep Burn" if FeatureFlags.is_enabled("depth_ladder_enabled") else "Endless",
-			"enabled": not has_pick,
+			"enabled": not held,
 			"pressed": _on_continue,
 		})
 	if has_pick:
@@ -319,6 +343,7 @@ func _set_exits(has_pick: bool) -> void:
 			"index": str(entries.size() + 1),
 			"headline": "NEXT CHAPTER" if _chapter_ahead() else "NEW RUN",
 			"value": _new_run_subtitle(),
+			"enabled": not draft_open,
 			"pressed": _on_restart,
 		})
 	entries.append({
@@ -328,6 +353,13 @@ func _set_exits(has_pick: bool) -> void:
 		"pressed": _on_menu,
 	})
 	set_actions(entries)
+
+
+func _on_meet_investor() -> void:
+	if not Simulation.investor_draft_pending():
+		refresh()
+		return
+	investor_draft_requested.emit()
 
 
 func _keep(unlock_id: String) -> void:
@@ -414,6 +446,9 @@ func _choose_depth(affix_id: String) -> void:
 
 
 func _leave_into_continuation() -> void:
+	if Simulation.investor_draft_pending():
+		_on_meet_investor()
+		return
 	if not Simulation.continue_after_victory() and not Simulation.continue_after_depth():
 		return
 	hide_overlay()
@@ -432,9 +467,13 @@ func _chapter_ahead() -> bool:
 ## bottom of the campaign, carrying only the permanent unlocks.
 func _new_run_subtitle() -> String:
 	if _chapter_ahead():
-		return "Next chapter: the %s, with everything you own" % MetaProgress.location_name(
-			Simulation.next_location_unlocked()
-		)
+		var next_name: String = MetaProgress.location_name(Simulation.next_location_unlocked())
+		var commissioning: float = Simulation.chapter_commissioning_preview()
+		if commissioning > 0.0:
+			return "Next chapter: the %s · commissioning %s" % [
+				next_name, NumberFormat.format_cash(commissioning)
+			]
+		return "Next chapter: the %s, with everything you own" % next_name
 	var location: String = MetaProgress.location_name(MetaProgress.selected_location())
 	if location == "":
 		return "Start again"
@@ -442,6 +481,9 @@ func _new_run_subtitle() -> String:
 
 
 func _on_restart() -> void:
+	if Simulation.investor_draft_pending():
+		_on_meet_investor()
+		return
 	hide_overlay()
 	get_tree().call_group("flow_overlay", "hide_overlay")
 	# A mid-campaign win continues as the same business in the next location;

@@ -14,7 +14,9 @@ enum Phase {
 	ROUND_PREP,
 	IN_ROUND,
 	ROUND_END,
-	## An angel investor draft: free picks only. Paid upgrades live on the Market.
+	## The pre-v25 round-end angel draft. No longer entered by the round loop;
+	## kept so a save written mid-table can still resolve it. The live perk
+	## draft is the investor's, dealt in RUN_END when a chapter goal is met.
 	ANGEL_ROUND,
 	RUN_END,
 }
@@ -27,6 +29,9 @@ const ROUNDS_PER_RUN := 12
 ## Stands in for "this layout never delivers" when scoring pipelines.
 const MAX_ESTIMATED_BURNS := 99.0
 
+## `flags.draft_kind` values: the investor's goal draft, and the legacy
+## round-end angel table.
+const DRAFT_INVESTOR := "investor"
 const DRAFT_ANGEL := "angel"
 const ENDLESS_COST_ESCALATION := 1.08
 
@@ -245,8 +250,17 @@ func debug_settle_reputation(completed: Array, failed: Array) -> float:
 	return _settle_reputation(completed, failed)
 
 
+## Opens a legacy round-end angel table (phase ANGEL_ROUND). Test hook only:
+## the round loop no longer deals one.
 func debug_present_angel_offers() -> void:
-	_present_angel_offers()
+	_life.present_legacy_angel_draft(self)
+
+
+## Deals the investor's draft onto the current state without a victory. Test
+## hook: the run stays in whatever phase it is in, so pair it with `phase =
+## Phase.RUN_END` to exercise the verdict-screen flow.
+func debug_present_investor_draft() -> void:
+	_life.present_investor_draft(self)
 
 
 func debug_expire_status_effects() -> void:
@@ -558,8 +572,24 @@ func filled_slot_count() -> int:
 	return _board_system.filled_slot_count(run_state)
 
 
+## Safe capacity: the backplane's bays. Stages past this are overflow.
 func supported_capacity() -> int:
 	return _board_system.derived_supported_capacity(run_state, ContentDatabase)
+
+
+## How many overflow stages the run may bolt on past safe capacity.
+func overflow_allowance() -> int:
+	return _board_system.overflow_allowance(run_state, ContentDatabase)
+
+
+## Safe capacity plus allowance, capped: the wall `+ STAGE` stops at.
+func max_pipeline_length() -> int:
+	return _board_system.max_pipeline_length(run_state, ContentDatabase)
+
+
+## Every figure behind the board's width, for the `capacity_debug` tooltip.
+func workflow_capacity_debug() -> Dictionary:
+	return _board_system.capacity_debug(run_state, ContentDatabase)
 
 
 func overflow_unlocked() -> bool:
@@ -756,9 +786,9 @@ func ascension_boss_contract() -> Dictionary:
 
 ## The location's boss has cleared: the game is beaten. The run is not thrown away
 ## with it. The round it happened in is settled properly — the work pays out, the
-## bills land, the angels call if the rent cleared — and the phase that would have
-## come next is remembered, so continuing into endless mode resumes from a clean
-## round boundary instead of the middle of a burn.
+## bills are waived, the investor deals his perk draft — and the phase that would
+## have come next is remembered, so continuing into endless mode resumes from a
+## clean round boundary instead of the middle of a burn.
 func _reach_victory(contract: Dictionary) -> void:
 	_life.reach_victory(self, contract)
 
@@ -1023,16 +1053,28 @@ func _behind_on_contract() -> bool:
 	return _work.behind_on_contract(self)
 
 
-## Takes one of the angel's offers. Everything on the table is free, so the only
-## question is which one, and the draft closes either way.
+## Takes one of the investor's offers. Everything on the table is free, so the
+## only question is which one, and the draft closes either way.
 func accept_offer(offer_type: String, offer_id: String) -> bool:
 	return _life.accept_offer(self, offer_type, offer_id)
 
 
-## Walks away with nothing. Always allowed: a full board and a bad offer is a
-## real situation.
+## Walks away with nothing. Always allowed: a bad offer is a real situation,
+## and a permanent perk is not something to take for the sake of it.
 func decline_offers() -> void:
 	_life.decline_offers(self)
+
+
+## Whether the investor's goal draft is on the desk waiting to be answered. The
+## verdict screen routes through it before the company moves on.
+func investor_draft_pending() -> bool:
+	return _life.investor_draft_pending(self)
+
+
+## What moving into the next chapter will charge for commissioning the room,
+## for the verdict screen. Zero when there is no chapter ahead.
+func chapter_commissioning_preview() -> float:
+	return _life.chapter_commissioning_preview(self)
 
 
 ## Spends the draft's one pick and closes it.
@@ -1044,8 +1086,13 @@ func _accept_perk(perk_id: String) -> bool:
 	return _life.accept_perk(self, perk_id)
 
 
-func collect_perk(perk_id: String) -> bool:
-	if not _perk_system.collect_perk(run_state, perk_id, ContentDatabase):
+## Adds a perk to the build for good and wires it in: subscriptions rebuilt,
+## `perk.acquired` fired (loans and liabilities, once per run), the board
+## resized for any capacity grant, and the compute recalculated. False when
+## `PerkSystem.can_acquire` refuses. The draft goes through here; so does any
+## debug or migration grant.
+func grant_perk(perk_id: String) -> bool:
+	if not _perk_system.acquire(run_state, perk_id, ContentDatabase):
 		return false
 	_invalidate_subscriptions()
 	EventBus.emit_event(EventBus.EVENT_PERK_ACQUIRED, {"perk_id": perk_id})
@@ -1056,56 +1103,17 @@ func collect_perk(perk_id: String) -> bool:
 	return true
 
 
-func equip_perk(perk_id: String) -> bool:
-	if not _perk_system.equip_perk(run_state, perk_id, ContentDatabase):
-		return false
-	_recalculate_after_perk_loadout_change()
-	return true
+func can_acquire_perk(perk_id: String) -> bool:
+	return _perk_system.can_acquire(run_state, perk_id, ContentDatabase)
 
 
-func bench_perk(perk_id: String) -> bool:
-	if not _perk_system.bench_perk(run_state, perk_id, ContentDatabase):
-		return false
-	_recalculate_after_perk_loadout_change()
-	return true
+func perk_acquire_block_reason(perk_id: String) -> String:
+	return _perk_system.acquire_block_reason(run_state, perk_id, ContentDatabase)
 
 
-func swap_perk(out_id: String, in_id: String) -> bool:
-	if not _perk_system.swap_perk(run_state, out_id, in_id, ContentDatabase):
-		return false
-	_recalculate_after_perk_loadout_change()
-	return true
-
-
-func can_equip_perk(perk_id: String) -> bool:
-	return _perk_system.can_equip(run_state, perk_id, ContentDatabase)
-
-
-func perk_equip_block_reason(perk_id: String) -> String:
-	return _perk_system.equip_block_reason(run_state, perk_id, ContentDatabase)
-
-
-func perk_bench_block_reason(perk_id: String) -> String:
-	return _perk_system.bench_block_reason(run_state, perk_id, ContentDatabase)
-
-
-func can_bench_perk(perk_id: String) -> bool:
-	return _perk_system.can_bench(run_state, perk_id, ContentDatabase)
-
-
-func perk_swap_block_reason(out_id: String, in_id: String) -> String:
-	return _perk_system.swap_block_reason(run_state, out_id, in_id, ContentDatabase)
-
-
-func can_swap_perk(out_id: String, in_id: String) -> bool:
-	return _perk_system.can_swap(run_state, out_id, in_id, ContentDatabase)
-
-
-func _recalculate_after_perk_loadout_change() -> void:
-	_invalidate_subscriptions()
-	_board_system.ensure_board(run_state, ContentDatabase)
-	_compute_system.recalculate(run_state, effect_resolver, _collect_subscriptions(), rng)
-	_autosave()
+## The perks the run owns, in the order they were taken.
+func owned_perk_ids() -> Array:
+	return _perk_system.owned_ids(run_state).duplicate()
 
 
 ## Drafts a pipeline module. Unlike a perk it changes nothing on its own: it has
@@ -1116,8 +1124,8 @@ func _accept_module(module_id: String) -> bool:
 
 
 ## Pickup effects: loans, permanent liabilities, anything the player owns the
-## moment they touch the card. Fired once per run, however many times the perk
-## is collected, benched, or equipped again.
+## moment they touch the card. Fired once per run, however the perk arrives
+## (draft, migration, debug grant).
 func _dispatch_perk_acquired(perk_id: String) -> void:
 	var perk := ContentDatabase.get_perk(perk_id)
 	if perk == null:
@@ -1228,6 +1236,27 @@ func module_market_next_restock_round() -> int:
 	return MarketService.next_module_restock_round(self)
 
 
+# Module calibration (Market sink): see CalibrationSystem / MarketService.
+func module_calibration_cost(target: String) -> float:
+	return MarketService.module_calibration_cost(self, target)
+
+
+func module_calibration_rank(target: String) -> int:
+	return MarketService.module_calibration_rank(self, target)
+
+
+func calibration_block_reason(target: String, consumed: Array) -> String:
+	return MarketService.calibration_block_reason(self, target, consumed)
+
+
+func can_calibrate_module(target: String, consumed: Array) -> bool:
+	return MarketService.can_calibrate_module(self, target, consumed)
+
+
+func calibrate_module(target: String, consumed: Array) -> bool:
+	return MarketService.calibrate_module(self, target, consumed)
+
+
 func set_tuning(key: String, value: float) -> void:
 	if tuning.has(key):
 		tuning[key] = value
@@ -1240,20 +1269,6 @@ func get_perk_description(perk_id: String) -> String:
 	return _render_perk(perk)
 
 
-## How many perks the build holds against its ceiling, for screens that need to
-## warn the player that picks are running out.
-func perk_capacity() -> Dictionary:
-	var active: int = run_state.build["perks"].size()
-	var collected: int = run_state.build.get("perk_inventory", []).size()
-	var cap: int = _perk_system.perk_capacity(run_state, ContentDatabase)
-	return {
-		"owned": active,
-		"active": active,
-		"collected": collected,
-		"cap": cap,
-	}
-
-
 func get_synergies() -> Array[String]:
 	return _perk_system.detect_synergies(run_state, ContentDatabase)
 
@@ -1262,7 +1277,8 @@ func query_effect_breakdown(target_path: String, chain_id: String = "") -> Dicti
 	return effect_resolver.query_trace_breakdown(target_path, chain_id)
 
 
-## The only draft there is: the round's free offer, one pick and out.
+## The perk draft: the investor's free offer when a goal is met, one pick and
+## out. See RunLifecycle.present_investor_draft.
 
 func _draft_state() -> Dictionary:
 	return _life.draft_state(self)
@@ -1276,26 +1292,20 @@ func _redraw_angel_offers() -> void:
 	_life.redraw_angel_offers(self)
 
 
-## The round's angel draft. Everything here is free: somebody with more money
-## than sense is handing out perks. Modules and anything else with a price tag
-## are sold on the Market tab instead.
-func _present_angel_offers() -> void:
-	_life.present_angel_offers(self)
-
-
-## Which draft is on the table, so a screen can title itself.
+## Which draft is on the table (`DRAFT_INVESTOR` / `DRAFT_ANGEL`), so a screen
+## can title itself. Empty when none is open.
 func draft_kind() -> String:
 	return _life.draft_kind(self)
 
 
-## Picks still to spend on the draft. An angel draft is always worth exactly one.
+## Picks still to spend on the draft. A draft is always worth exactly one.
 func draft_picks_remaining() -> int:
 	return _life.draft_picks_remaining(self)
 
 
-## Closes the round: the bills land, the rig cools off, and — if the rent
-## cleared — the angels call. Reached only once every contract has resolved, so
-## the player is never billed in the middle of a job.
+## Closes the round: the bills land and the rig cools off. Reached only once
+## every contract has resolved, so the player is never billed in the middle of
+## a job.
 func _end_round() -> void:
 	_life.end_round(self)
 

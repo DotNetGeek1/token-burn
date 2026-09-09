@@ -2,8 +2,8 @@
   {
     "id": "unlock.extra_slot",
     "name": "One More Pipeline Slot",
-    "kind": "extra_slot",
-    "description": "Every future run starts the Burn Board one slot wider.",
+    "kind": "overflow_capacity",
+    "description": "Every future run may bolt one more overflow stage onto the pipeline, from the first round.",
     "flavour": "You have learned that the workflow is the product. Your therapist disagrees.",
     "repeatable": true,
     "amount": 1
@@ -150,11 +150,11 @@
   {
     "id": "unlock.rolodex",
     "name": "Rolodex",
-    "kind": "perk_slots",
-    "description": "Permanent active perk capacity from people who owe you.",
+    "kind": "draft_options",
+    "description": "The investor lays out one more perk each time a goal is met: four cards, then five.",
     "flavour": "Everyone knows someone.",
     "repeatable": true,
-    "ranks": [1, 2, 4, 6, 9],
-    "hard_victories_required": [0, 0, 0, 1, 3]
+    "ranks": [1, 2],
+    "hard_victories_required": [0, 1]
   }
 ]

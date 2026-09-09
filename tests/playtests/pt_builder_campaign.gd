@@ -125,6 +125,7 @@ func _advance_from_bedroom(harness: UiHarness) -> void:
 		# The chapter still has to move, which is what the next lines prove.
 		print("    note: run-end overlay stayed closed after the bedroom win")
 	await _spend_visible_picks(harness)
+	await _answer_investor_table(harness)
 	if harness.driver.command("NEXT CHAPTER") != null:
 		await harness.driver.press_command("NEXT CHAPTER")
 	elif Simulation.next_location_unlocked() != "":
@@ -142,6 +143,53 @@ func _advance_from_bedroom(harness: UiHarness) -> void:
 		location != "bedroom" or dwelling == "garage",
 		"NEXT CHAPTER left the bedroom for the garage (location=%s dwelling=%s)" % [location, dwelling]
 	)
+
+
+## A won chapter deals the investor's perk table, and NEXT CHAPTER stays shut
+## until it is answered. The verdict's THE INVESTOR'S TERMS row raises the
+## table over it; a card is taken if one is dealt, else the table is refused.
+func _answer_investor_table(harness: UiHarness) -> void:
+	if not Simulation.investor_draft_pending():
+		return
+	# The winning round's waived bills land a frame after the verdict opens
+	# and sit on top of it; they have to be read before the exits count.
+	await _dismiss_bills(harness)
+	var terms: Control = harness.driver.command("THE INVESTOR'S TERMS")
+	assert_true(terms != null, "The verdict offers THE INVESTOR'S TERMS while the table waits")
+	if terms != null:
+		await harness.driver.press(terms)
+		var opened: bool = await wait_until(
+			harness, func() -> bool: return _overlay_up(harness, "angel_investors"), 4000
+		)
+		assert_true(opened, "THE INVESTOR'S TERMS raises the investor's table over the verdict")
+		harness.driver.audit_screen("investor-draft")
+		var take: Control = harness.driver.command("TAKE IT")
+		if take != null:
+			await harness.driver.press(take)
+		else:
+			await harness.driver.press_command("TAKE NOTHING")
+		await harness.settle()
+	if Simulation.investor_draft_pending():
+		# The row was missing or the press did not land: answer through the
+		# simulation so the campaign still moves, with the UI fail recorded.
+		Simulation.decline_offers()
+		harness.get_tree().call_group("main_ui", "refresh_all")
+		await harness.settle()
+	assert_false(Simulation.investor_draft_pending(), "The investor's table has been answered")
+	await _dismiss_bills(harness)
+	# The verdict reprints its exits once the table's close lands.
+	var reopened: bool = await wait_until(
+		harness, func() -> bool: return harness.driver.command("NEXT CHAPTER") != null, 4000
+	)
+	assert_true(reopened, "NEXT CHAPTER opens once the table is answered")
+
+
+## Reads any bills statement that is up, so the paper under it is reachable.
+func _dismiss_bills(harness: UiHarness) -> void:
+	var deadline: int = Time.get_ticks_msec() + 4000
+	while _overlay_up(harness, "month_statement") and Time.get_ticks_msec() < deadline:
+		await harness.driver.press_command("CONTINUE")
+		await harness.settle()
 
 
 func _spend_visible_picks(harness: UiHarness) -> void:

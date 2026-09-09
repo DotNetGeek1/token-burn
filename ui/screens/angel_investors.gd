@@ -1,9 +1,15 @@
 extends PhoneOverlay
 
-## The round's free perk draft. Once the bills have cleared, the investor puts
-## three perks on the table and expects to be thanked for one of them — or for
-## the honesty of walking away. Modules are sold on the Market; nothing here
-## has a price, and the table cannot be rerolled.
+## The investor's perk draft. When a chapter's goal is met he puts three (or,
+## with a Rolodex, four or five) perks on the table and expects to be thanked
+## for one of them — or for the honesty of walking away. Whatever is taken is
+## permanent: there is no bench and no swap, so a pick is for the rest of the
+## run. Modules are sold on the Market; nothing here has a price, and the table
+## cannot be rerolled.
+##
+## The verdict screen raises this once the chapter is won, and the company
+## cannot move on until the table is answered. The same overlay also serves a
+## save written with the old round-end angel table still open.
 ##
 ## There is only one man doing the offering, so the table is his: the cards carry
 ## his patter rather than a different fictional fund on each one. On a landscape
@@ -32,9 +38,8 @@ var _sheet: DecisionSheet = null
 
 func _ready() -> void:
 	super._ready()
-	set_kicker("HIS TABLE")
 	setup(InvestorVoice.investor_name())
-	set_context("Pick one perk. Nothing here has a price.")
+	_apply_title()
 	# The pitch restates the kicker; on a handset the offers need that height.
 	compact_hides_context = true
 	# Free or not, which one he is handing over is a decision, and a stray tap
@@ -73,9 +78,21 @@ func _build_body() -> void:
 	column.resized.connect(_fit_columns)
 
 
+## Only the legacy round-end table opens itself; the investor's draft is raised
+## by the verdict screen so the win is read before the reward.
 func _maybe_show(_payload: Variant = null) -> void:
 	if Simulation.phase == Simulation.Phase.ANGEL_ROUND and Simulation.pending_choices.size() > 0:
 		show_choices()
+
+
+## Titles the handset for whichever table is open.
+func _apply_title() -> void:
+	if Simulation.draft_kind() == Simulation.DRAFT_INVESTOR:
+		set_kicker("THE INVESTOR'S TERMS")
+		set_context("Goal met. Pick one perk: it is yours for the rest of the run.")
+	else:
+		set_kicker("HIS TABLE")
+		set_context("Pick one perk. Nothing here has a price.")
 
 
 func show_choices() -> void:
@@ -94,6 +111,7 @@ func refresh() -> void:
 	if _cards_list == null:
 		return
 	setup(InvestorVoice.investor_name())
+	_apply_title()
 	_refresh_standing()
 	_deal_cards()
 	set_actions([{
@@ -149,11 +167,11 @@ func _deal_cards() -> void:
 		)
 		card.set_headline("FREE", "success")
 		card.set_chips([{
-			"text": "Perk",
+			"text": "Permanent perk",
 			"role": "perk",
 			"filled": true,
 		}])
-		card.set_warnings(_perk_bench_warning())
+		card.set_warnings(_perk_warnings(offer_id))
 		card.set_action_style("perks", "perk", "BoostButton")
 		_fit_card(card)
 		card.set_action_pinned()
@@ -198,11 +216,11 @@ func _show_offer_detail(offer: Dictionary, patter: String) -> void:
 			"text": "\"%s\"" % patter,
 			"role": "perk",
 		})
-	for warning in _perk_bench_warning():
+	for warning in _perk_warnings(offer_id):
 		rows.append({"rule": str(warning.get("text", "")), "text": "", "role": "warning"})
 	_sheet.show_detail(
 		str(offer.get("label", "Offer")),
-		"Free perk",
+		"Permanent perk",
 		rows,
 		[],
 		"TAKE IT",
@@ -219,10 +237,9 @@ func _refresh_standing() -> void:
 	for child in _standing.get_children():
 		_standing.remove_child(child)
 		child.queue_free()
-	var perks: Dictionary = Simulation.perk_capacity()
 	var outlook: Dictionary = Simulation.bills_outlook()
 	_standing.add_child(UiChip.create(
-		"PERKS %d/%d" % [int(perks.get("owned", 0)), int(perks.get("cap", 0))], "perk"
+		"PERKS %d" % Simulation.owned_perk_ids().size(), "perk"
 	))
 	_standing.add_child(UiChip.create(
 		"BANK %s" % NumberFormat.format_cash(float(outlook.get("cash", 0.0))), "money"
@@ -234,8 +251,10 @@ func _refresh_standing() -> void:
 
 func _accept(offer_id: String) -> void:
 	if not Simulation.accept_offer("perk", offer_id):
+		UiSound.play("error")
+		refresh()
 		return
-	if Simulation.phase == Simulation.Phase.ANGEL_ROUND and not Simulation.pending_choices.is_empty():
+	if not Simulation.pending_choices.is_empty():
 		refresh()
 	else:
 		hide_overlay()
@@ -243,11 +262,14 @@ func _accept(offer_id: String) -> void:
 	get_tree().call_group("main_ui", "refresh_all")
 
 
-func _perk_bench_warning() -> Array:
-	var perks: Dictionary = Simulation.perk_capacity()
-	if int(perks.get("active", 0)) < int(perks.get("cap", 0)):
-		return []
-	return [{"text": "Active full · goes to the bench", "role": "warning"}]
+## What the player should know before committing: the pick cannot be undone,
+## and — should the table have gone stale under them — why it cannot be taken.
+func _perk_warnings(offer_id: String) -> Array:
+	var warnings: Array = [{"text": "Permanent · cannot be removed", "role": "warning"}]
+	var reason: String = Simulation.perk_acquire_block_reason(offer_id)
+	if reason != "":
+		warnings.append({"text": reason, "role": "warning"})
+	return warnings
 
 
 func _on_decline() -> void:

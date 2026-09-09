@@ -9,6 +9,7 @@ signal system_upgraded(system_id: String, old_tier: int, new_tier: int)
 
 const MODULES := "modules"
 const SYSTEMS := "systems"
+const CALIBRATE := "calibrate"
 const RESTOCK := "restock"
 
 ## The painted tile of a system's next tier, as a row thumbnail.
@@ -16,6 +17,9 @@ const SYSTEM_TILE_PX := 44.0
 
 var _shelf: String = SYSTEMS
 var _selected: String = ""
+## On the CALIBRATE shelf: the owned modules picked to be consumed for the
+## selected target. Cleared whenever the target or the shelf changes.
+var _consume: Array = []
 var _strip: HBoxContainer = null
 var _shelf_buttons: Dictionary = {}
 var _scroll: ScrollContainer = null
@@ -126,8 +130,32 @@ func select_shelf(key: String) -> bool:
 	if _shelf != key:
 		_shelf = key
 		_selected = ""
+		_consume.clear()
 		refresh()
 		changed.emit()
+	return true
+
+
+## The modules picked to be consumed on the CALIBRATE shelf, for the playtests.
+func consume_picks() -> Array:
+	return _consume.duplicate()
+
+
+## Toggles one owned module in or out of the consume pick. Returns false when
+## it cannot be picked (not owned, the target itself, or seated in a workflow).
+func toggle_consume(module_id: String) -> bool:
+	if _shelf != CALIBRATE or module_id == _selected:
+		return false
+	if module_id in _consume:
+		_consume.erase(module_id)
+	else:
+		if not (module_id in CalibrationSystem.consumable_modules(Simulation.run_state, _selected)):
+			return false
+		if _consume.size() >= CalibrationSystem.modules_consumed():
+			_consume.pop_front()
+		_consume.append(module_id)
+	_refresh_detail()
+	changed.emit()
 	return true
 
 
@@ -146,12 +174,16 @@ func select_item(id: String) -> bool:
 
 ## Stable shelf keys preserve selection after a purchase.
 func _shelves() -> Dictionary:
-	var shelves: Dictionary = {SYSTEMS: [], MODULES: []}
+	var shelves: Dictionary = {SYSTEMS: [], MODULES: [], CALIBRATE: []}
 	for module_id in Simulation.module_market_stock():
 		shelves[MODULES].append({"kind": "module", "id": str(module_id)})
 	shelves[MODULES].append({"kind": "restock", "id": RESTOCK})
 	for system_id in CabinetSystems.system_ids():
 		shelves[SYSTEMS].append({"kind": "system", "id": str(system_id)})
+	# Every owned module is a calibration target; the consume picks come from
+	# the same list minus the target and anything seated in a workflow.
+	for module_id in Array(Simulation.run_state.build.get("modules", [])):
+		shelves[CALIBRATE].append({"kind": "calibrate", "id": str(module_id)})
 	return shelves
 
 
@@ -179,6 +211,8 @@ func _shelf_label(key: String) -> String:
 			return "MODULES"
 		SYSTEMS:
 			return "SYSTEMS"
+		CALIBRATE:
+			return "CALIBRATE"
 	return key.to_upper()
 
 
@@ -193,7 +227,8 @@ func _rebuild_shelf(shelves: Dictionary) -> void:
 		ids.append(str(Dictionary(item)["id"]))
 	if not (_selected in ids):
 		_selected = ids[0] if not ids.is_empty() else ""
-	if _shelf == MODULES:
+		_consume.clear()
+	if _shelf == MODULES or _shelf == CALIBRATE:
 		_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		var row := HBoxContainer.new()
@@ -235,7 +270,7 @@ func _rebuild_shelf(shelves: Dictionary) -> void:
 			column.add_child(tile)
 	_scroll.add_child(_row)
 	_empty.visible = items.is_empty()
-	_empty.text = "SHELF CLEARED"
+	_empty.text = "NO MODULES OWNED" if _shelf == CALIBRATE else "SHELF CLEARED"
 
 
 ## One cabinet system as a row: the next tier's painted tile, the system's
@@ -364,6 +399,8 @@ func _refresh_detail() -> void:
 				{"stat": "You have", "value": NumberFormat.format_cash(cash)},
 				{"stat": "After", "value": NumberFormat.format_cash(cash - cost), "color": CabinetStyle.PHOSPHOR if cash >= cost else CabinetStyle.RED},
 			])
+		"calibrate":
+			_refresh_calibrate_detail(str(item["id"]), cash)
 		"restock":
 			var cost: float = Simulation.module_market_reroll_cost()
 			_title.text = "RESTOCK SHELF"
@@ -412,6 +449,89 @@ func _refresh_detail() -> void:
 
 
 
+## The CALIBRATE detail: the target's rank and what a rank buys, the consume
+## picks as toggles, and the cost against the cash in hand.
+func _refresh_calibrate_detail(id: String, cash: float) -> void:
+	var module: ModuleDefinition = ContentDatabase.get_module(id)
+	if module == null:
+		return
+	var state: RunState = Simulation.run_state
+	var rank: int = Simulation.module_calibration_rank(id)
+	var cap: int = CalibrationSystem.max_rank()
+	var cost: float = Simulation.module_calibration_cost(id)
+	var needed: int = CalibrationSystem.modules_consumed()
+	_title.text = module.name.to_upper()
+	_kicker.text = "%s · CALIBRATION %d/%d" % [module.rarity.to_upper(), rank, cap]
+	_kicker.add_theme_color_override("font_color", AssetCatalog.rarity_color(module.rarity))
+	var rows: Array = [{"text": Simulation.get_module_description(id)}]
+	rows.append({"rule": "PER RANK", "text": "%s heat · %s power · %s tokens on this stage" % [
+		_pct(CalibrationSystem.per_rank(CalibrationSystem.STAT_HEAT)),
+		_pct(CalibrationSystem.per_rank(CalibrationSystem.STAT_POWER)),
+		_pct(CalibrationSystem.per_rank(CalibrationSystem.STAT_EFFECT)),
+	]})
+	if rank > 0:
+		rows.append({"rule": "FITTED", "text": "%s heat · %s power · %s tokens" % [
+			_pct(CalibrationSystem.multiplier(state, id, CalibrationSystem.STAT_HEAT)),
+			_pct(CalibrationSystem.multiplier(state, id, CalibrationSystem.STAT_POWER)),
+			_pct(CalibrationSystem.multiplier(state, id, CalibrationSystem.STAT_EFFECT)),
+		]})
+	var candidates: Array = CalibrationSystem.consumable_modules(state, id)
+	if rank >= cap:
+		rows.append({"text": "Fully calibrated — nothing more to tune."})
+	else:
+		rows.append({"rule": "CONSUME", "text": "Pick %d benched modules to strip for parts (%d/%d)." % [needed, _consume.size(), needed]})
+		if candidates.is_empty():
+			rows.append({"warn": "No benched modules to consume. Unseat one on the MODULES tab."})
+	var reason: String = Simulation.calibration_block_reason(id, _consume)
+	if reason != "" and rank < cap and _consume.size() == needed:
+		rows.append({"warn": reason})
+	elif reason == "":
+		var warning: String = Simulation.purchase_bill_warning(cost)
+		if warning != "":
+			rows.append({"warn": warning})
+	detail_rows(_rows, rows)
+	if rank < cap and not candidates.is_empty():
+		_rows.add_child(_consume_toggles(candidates))
+	var summary: Array = []
+	if rank >= cap:
+		summary.append({"stat": "Cost", "value": "MAXED", "color": CabinetStyle.PHOSPHOR_DIM})
+	else:
+		summary.append({"stat": "Cost", "value": NumberFormat.format_cash(cost), "color": CabinetStyle.PHOSPHOR if cash >= cost else CabinetStyle.RED})
+	summary.append({"stat": "You have", "value": NumberFormat.format_cash(cash)})
+	if rank < cap:
+		summary.append({"stat": "After", "value": NumberFormat.format_cash(cash - cost), "color": CabinetStyle.PHOSPHOR if cash >= cost else CabinetStyle.RED})
+	detail_rows(_summary, summary)
+
+
+## One toggle per consumable module; picked ones are lit like an active tab.
+func _consume_toggles(candidates: Array) -> Control:
+	var flow := HFlowContainer.new()
+	flow.mouse_filter = Control.MOUSE_FILTER_PASS
+	flow.add_theme_constant_override("h_separation", 2)
+	flow.add_theme_constant_override("v_separation", 2)
+	for candidate in candidates:
+		var module_id: String = str(candidate)
+		var module: ModuleDefinition = ContentDatabase.get_module(module_id)
+		var button: Button = CabinetStyle.tab(module.name if module != null else module_id)
+		button.add_theme_font_size_override("font_size", CabinetStyle.FONT_TINY)
+		CabinetStyle.set_tab_active(button, module_id in _consume)
+		button.tooltip_text = Simulation.get_module_description(module_id)
+		button.pressed.connect(_on_consume_toggle.bind(module_id))
+		flow.add_child(button)
+	return flow
+
+
+func _on_consume_toggle(module_id: String) -> void:
+	UiSound.play("tap")
+	toggle_consume(module_id)
+
+
+## "−8%" / "+6%": a multiplier as the change it makes.
+func _pct(mult: float) -> String:
+	var delta: int = int(round((mult - 1.0) * 100.0))
+	return "%s%d%%" % ["+" if delta >= 0 else "−", absi(delta)]
+
+
 ## "16 COOLING · 100 HEAT CAP": what the fitted tier is worth right now.
 func _fitted_stats(system_id: String) -> String:
 	var parts: PackedStringArray = []
@@ -451,6 +571,16 @@ func primary_action() -> Dictionary:
 				"sub": _spend_sub(cost, cash),
 				"pressed": _buy_module.bind(id),
 			})
+		"calibrate":
+			var id: String = str(item["id"])
+			var reason: String = Simulation.calibration_block_reason(id, _consume)
+			if reason != "":
+				return blocked_action("CALIBRATE", reason)
+			return normalize_action({
+				"label": "CALIBRATE", "enabled": true,
+				"sub": _spend_sub(Simulation.module_calibration_cost(id), cash),
+				"pressed": _calibrate.bind(id),
+			})
 		"restock":
 			var cost: float = Simulation.module_market_reroll_cost()
 			var can: bool = Simulation.can_reroll_module_market()
@@ -462,6 +592,16 @@ func primary_action() -> Dictionary:
 				"pressed": _reroll,
 			})
 	return blocked_action("BUY", BLOCK_SELECT_ITEM)
+
+
+func _calibrate(id: String) -> void:
+	if Simulation.calibrate_module(id, _consume.duplicate()):
+		UiSound.play("buy")
+		_consume.clear()
+		_selected = id
+		_after_trade()
+	else:
+		UiSound.play("error")
 
 
 ## "$480 · LEFT $1,120": the price and what the player is left holding. Kept
@@ -532,6 +672,9 @@ func _after_trade() -> void:
 
 func _pick(id: String) -> void:
 	UiSound.play("tap")
+	if id != _selected:
+		# A new calibration target starts with a clean consume pick.
+		_consume.clear()
 	_selected = id
 	if _row != null:
 		for child in _row.get_children():
@@ -549,5 +692,6 @@ func _on_shelf(key: String) -> void:
 	UiSound.play("tap")
 	_shelf = key
 	_selected = ""
+	_consume.clear()
 	refresh()
 	changed.emit()

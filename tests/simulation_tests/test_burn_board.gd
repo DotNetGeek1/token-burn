@@ -635,21 +635,21 @@ func _test_a_drafted_module_lands_on_the_bench() -> void:
 	assert_eq(board.slots(state), slots_before, "And nothing already placed was displaced")
 
 
-## An unlocked or bought slot is only worth having if it arrives empty and leaves
-## the existing pipeline alone.
+## A bought backplane tier is only worth having if its bays arrive empty and
+## leave the existing pipeline alone.
 func _test_widening_the_board_keeps_what_was_placed() -> void:
 	var state := RunState.new()
 	var board := BoardSystem.new()
 	board.ensure_board(state, ContentDatabase)
 	var slots_before: Array = board.slots(state).duplicate()
 
-	state.build["board"]["meta_slot_bonus"] = int(state.build["board"].get("meta_slot_bonus", 0)) + 1
+	CabinetSystems.set_tier(state, "backplane", 2)
 	board.ensure_board(state, ContentDatabase)
 	var slots_after: Array = board.slots(state)
-	assert_eq(slots_after.size(), slots_before.size() + 1, "The board is one slot wider")
+	assert_eq(slots_after.size(), slots_before.size() + 2, "The 5-Bay Rail is two slots wider")
 	for index in range(slots_before.size()):
 		assert_eq(str(slots_after[index]), str(slots_before[index]), "Placed modules stayed put")
-	assert_eq(str(slots_after[slots_after.size() - 1]), "", "And the new slot is empty to fill")
+	assert_eq(str(slots_after[slots_after.size() - 1]), "", "And the new slots are empty to fill")
 
 
 # --- Workflows ---------------------------------------------------------------

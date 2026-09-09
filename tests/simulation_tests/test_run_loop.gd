@@ -50,7 +50,7 @@ func run() -> void:
 	var refreshed_offers: Array = sim.run_state.business.get("job_offers", [])
 	assert_true(refreshed_offers.size() > 0, "Job board refreshes for the next round")
 
-	_test_angels_call_only_once_the_rent_has_cleared()
+	_test_no_perk_draft_between_rounds()
 	_test_multi_job_session_resolves()
 	_test_queued_options_and_summary()
 	_test_queue_capacity_limits()
@@ -158,44 +158,26 @@ func _test_round_end_bills_once() -> void:
 	sim.free()
 
 
-## The angel phase is the reward for keeping the lights on, so it hangs off the
-## round's bills clearing rather than off finishing a contract. A run that
-## defaults on the rent gets the next round's job board and nothing else.
-func _test_angels_call_only_once_the_rent_has_cleared() -> void:
+## Perks are the investor's reward for meeting a chapter's goal, not a round's
+## bills clearing. Settling a round — solvent or not — leads straight to the
+## next round's prep with nothing free on the table.
+func _test_no_perk_draft_between_rounds() -> void:
 	var paid: Node = _sim_at_round_end(315, 50000.0)
 	paid.start_work_sync()
 	assert_true(
 		bool(paid.last_round_statement.get("paid_in_full", false)),
 		"A solvent run clears its bills"
 	)
-	assert_true(paid.phase == paid.Phase.ANGEL_ROUND, "And the angels call once it has")
-	assert_true(paid.pending_choices.size() > 0, "With offers on the table")
-	assert_eq(paid.draft_picks_remaining(), 1, "And is worth exactly one pick")
-	# Angels give things away; anything with a price tag belongs on the Market.
-	for offer in paid.pending_choices:
-		assert_almost_eq(float(offer.get("cost", 0.0)), 0.0, 0.001, "Angel offers are free")
-		assert_eq(
-			str(offer.get("type", "")), "perk",
-			"An angel offers perks only, not modules or purchases (%s)" % str(offer.get("type", ""))
-		)
-		assert_true(
-			not offer.has("investor"),
-			"Offers carry no persona of their own — the table belongs to the one investor"
-		)
-	paid.decline_offers()
-	assert_true(paid.phase == paid.Phase.ROUND_PREP, "Declining them opens the next round's prep")
+	assert_true(paid.phase != paid.Phase.ANGEL_ROUND, "But no angel comes calling for it")
+	assert_eq(paid.phase, paid.Phase.ROUND_PREP, "The next round's prep opens straight away")
+	assert_true(paid.pending_choices.is_empty(), "With nothing free on the table")
+	assert_eq(paid.draft_picks_remaining(), 0, "And no pick to spend")
+	assert_eq(paid.draft_kind(), "", "No draft is open")
+	assert_true(
+		Array(paid.run_state.build.get("perks", [])).is_empty(),
+		"A settled bedroom round leaves the build with no perks"
+	)
 	paid.free()
-
-	var accepted: Node = _sim_at_round_end(317, 50000.0)
-	accepted.start_work_sync()
-	if accepted.phase == accepted.Phase.ANGEL_ROUND and accepted.pending_choices.size() > 0:
-		var taken: Dictionary = accepted.pending_choices[0]
-		accepted.accept_offer(str(taken.get("type", "")), str(taken.get("id", "")))
-		assert_true(
-			accepted.phase != accepted.Phase.ANGEL_ROUND,
-			"Taking an angel's offer closes the draft on the first pick"
-		)
-	accepted.free()
 
 	var missed: Node = _sim_at_round_end(315, 0.0)
 	missed.start_work_sync()

@@ -33,6 +33,254 @@ func run() -> void:
 	_test_market_closed_during_angel()
 	_test_mixed_pending_choice_migration()
 	_test_modules_read_as_token_multipliers()
+	_test_calibration_consumes_modules_and_cash()
+	_test_calibration_rank_climbs_to_cap()
+	_test_calibration_blockers()
+	_test_calibration_multipliers_reach_the_stage()
+	_test_calibration_survives_save_load()
+
+
+# --- Module calibration ------------------------------------------------------
+
+## A run with cash, a target and two benched modules to strip for parts.
+## Returns {sim, target, spare: Array} — `spare` holds two owned, unseated
+## modules that are not the target.
+func _calibration_rig(seed_value: int) -> Dictionary:
+	var sim: Node = _sim(seed_value)
+	sim.run_state.economy["cash"] = 1_000_000.0
+	var owned: Array = Array(sim.run_state.build.get("modules", []))
+	assert_true(owned.size() > 0, "A fresh run owns its starter modules")
+	var target: String = str(owned[0])
+	_grant_spares(sim, target, 2)
+	var spare: Array = CalibrationSystem.consumable_modules(sim.run_state, target).slice(0, 2)
+	assert_eq(spare.size(), 2, "Two benched modules are available to consume")
+	return {"sim": sim, "target": target, "spare": spare}
+
+
+## Grants catalogue modules to the bench until `count` benched non-target
+## modules exist.
+func _grant_spares(sim: Node, target: String, count: int) -> void:
+	for module in ContentDatabase.modules:
+		if CalibrationSystem.consumable_modules(sim.run_state, target).size() >= count:
+			return
+		if module.id == target:
+			continue
+		sim.board_system().grant_module(sim.run_state, module.id, false)
+
+
+func _test_calibration_consumes_modules_and_cash() -> void:
+	var rig: Dictionary = _calibration_rig(9700)
+	var sim: Node = rig["sim"]
+	var target: String = rig["target"]
+	var spare: Array = rig["spare"]
+	# Bedroom major_purchase is 1200; rank 1 costs 1200 × 0.25 × 1.
+	var cost: float = sim.module_calibration_cost(target)
+	assert_almost_eq(cost, 300.0, 0.01, "First rank costs a quarter of the bedroom's major purchase")
+	assert_eq(sim.module_calibration_rank(target), 0, "Modules start uncalibrated")
+	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
+	var owned_before: int = Array(sim.run_state.build.get("modules", [])).size()
+	assert_eq(sim.calibration_block_reason(target, spare), "", "A funded, stocked calibration is not blocked")
+	assert_true(sim.can_calibrate_module(target, spare), "…and reads as possible")
+	assert_true(sim.calibrate_module(target, spare), "Calibration commits")
+	assert_almost_eq(
+		float(sim.run_state.economy.get("cash", 0.0)), cash_before - cost, 0.01,
+		"Cash falls by the quoted cost"
+	)
+	var owned: Array = Array(sim.run_state.build.get("modules", []))
+	assert_eq(owned.size(), owned_before - 2, "Both consumed modules leave the inventory")
+	for module_id in spare:
+		assert_false(module_id in owned, "%s was consumed" % module_id)
+	assert_true(target in owned, "The target stays owned")
+	assert_eq(sim.module_calibration_rank(target), 1, "Rank climbs to 1")
+	assert_eq(int(sim.run_state.statistics.get("modules_calibrated", 0)), 1, "Statistic counts the calibration")
+	var ledger: Array = Array(sim.run_state.economy.get("ledger", []))
+	assert_true(ledger.size() > 0, "The debit is on the ledger")
+	if ledger.size() > 0:
+		var last: Dictionary = ledger[ledger.size() - 1]
+		assert_eq(str(last.get("reason", "")), "calibration:%s" % target, "The ledger names calibration as the reason")
+		assert_almost_eq(float(last.get("amount", 0.0)), cost, 0.01, "…for the quoted amount")
+	sim.free()
+
+
+func _test_calibration_rank_climbs_to_cap() -> void:
+	var rig: Dictionary = _calibration_rig(9701)
+	var sim: Node = rig["sim"]
+	var target: String = rig["target"]
+	var cap: int = CalibrationSystem.max_rank()
+	for expected_rank in range(1, cap + 1):
+		_grant_spares(sim, target, 2)
+		var spare: Array = CalibrationSystem.consumable_modules(sim.run_state, target).slice(0, 2)
+		assert_almost_eq(
+			sim.module_calibration_cost(target), 300.0 * float(expected_rank), 0.01,
+			"Rank %d costs %d× the base share" % [expected_rank, expected_rank]
+		)
+		assert_true(sim.calibrate_module(target, spare), "Rank %d commits" % expected_rank)
+		assert_eq(sim.module_calibration_rank(target), expected_rank, "Rank reads %d" % expected_rank)
+	_grant_spares(sim, target, 2)
+	var extra: Array = CalibrationSystem.consumable_modules(sim.run_state, target).slice(0, 2)
+	assert_eq(
+		sim.calibration_block_reason(target, extra), CalibrationSystem.REASON_MAX_RANK,
+		"A capped module refuses another rank"
+	)
+	assert_false(sim.calibrate_module(target, extra), "…and the commit is refused")
+	assert_eq(sim.module_calibration_rank(target), cap, "Rank never passes the cap")
+	assert_almost_eq(sim.module_calibration_cost(target), 0.0, 0.001, "A capped module has no next-rank price")
+	for module_id in extra:
+		assert_true(module_id in Array(sim.run_state.build.get("modules", [])), "A refused calibration consumes nothing")
+	sim.free()
+
+
+func _test_calibration_blockers() -> void:
+	var rig: Dictionary = _calibration_rig(9702)
+	var sim: Node = rig["sim"]
+	var target: String = rig["target"]
+	var spare: Array = rig["spare"]
+	var owned_before: Array = Array(sim.run_state.build.get("modules", [])).duplicate()
+
+	sim.run_state.economy["cash"] = 0.0
+	assert_true(
+		sim.calibration_block_reason(target, spare).begins_with("NEED "),
+		"No cash blocks with the shortfall"
+	)
+	assert_false(sim.calibrate_module(target, spare), "Broke calibration is refused")
+	sim.run_state.economy["cash"] = 1_000_000.0
+
+	assert_eq(
+		sim.calibration_block_reason(target, [spare[0]]),
+		CalibrationSystem.REASON_NEED_MODULES % CalibrationSystem.modules_consumed(),
+		"Too few consumed modules blocks"
+	)
+	assert_eq(
+		sim.calibration_block_reason(target, [spare[0], spare[0]]),
+		CalibrationSystem.REASON_DUPLICATE,
+		"The same module twice blocks"
+	)
+	assert_eq(
+		sim.calibration_block_reason(target, [target, spare[0]]),
+		CalibrationSystem.REASON_CONSUME_TARGET,
+		"The target cannot be its own spare part"
+	)
+	assert_true(
+		sim.calibration_block_reason(target, [spare[0], "op.not_a_real_module"]).ends_with("IS NOT OWNED"),
+		"A module the run does not own cannot be consumed"
+	)
+	assert_eq(
+		sim.calibration_block_reason("op.not_a_real_module", spare),
+		CalibrationSystem.REASON_NOT_OWNED,
+		"An unowned target blocks"
+	)
+
+	# Seat one spare in the active workflow: it has to be benched first.
+	var job: Dictionary = {}
+	var seated: String = str(spare[0])
+	assert_true(sim.board_system().place_module(sim.run_state, job, seated, 0), "Spare is seated for the probe")
+	assert_true(CalibrationSystem.is_seated(sim.run_state, seated), "The system sees the seat")
+	assert_true(
+		sim.calibration_block_reason(target, spare).begins_with("UNSEAT "),
+		"A seated module cannot be consumed"
+	)
+	assert_false(seated in CalibrationSystem.consumable_modules(sim.run_state, target), "…and is not offered")
+	assert_false(sim.calibrate_module(target, spare), "The commit is refused")
+	assert_eq(Array(sim.run_state.build.get("modules", [])), owned_before, "Refusals consume nothing")
+	assert_eq(sim.module_calibration_rank(target), 0, "…and grant no rank")
+
+	# The Market's hours apply here as at every other counter.
+	sim.board_system().clear_slot(sim.run_state, job, 0)
+	sim.phase = sim.Phase.IN_ROUND
+	assert_eq(sim.calibration_block_reason(target, spare), "MARKET CLOSED", "Closed Market blocks calibration")
+	assert_false(sim.calibrate_module(target, spare), "…and refuses the commit")
+	sim.phase = sim.Phase.ROUND_PREP
+	assert_true(sim.calibrate_module(target, spare), "Reopened, the same calibration commits")
+	sim.free()
+
+
+## A calibrated module's stage runs cooler, cheaper and stronger through the
+## same subscription path the burn uses; an uncalibrated one is untouched.
+func _test_calibration_multipliers_reach_the_stage() -> void:
+	var rig: Dictionary = _calibration_rig(9703)
+	var sim: Node = rig["sim"]
+	var target: String = rig["target"]
+	assert_true(sim.calibrate_module(target, rig["spare"]), "Rank 1 commits")
+	var state: RunState = sim.run_state
+	assert_almost_eq(CalibrationSystem.multiplier(state, target, "heat"), 0.92, 0.0001, "Rank 1 heat multiplier")
+	assert_almost_eq(CalibrationSystem.multiplier(state, target, "power"), 0.94, 0.0001, "Rank 1 power multiplier")
+	assert_almost_eq(CalibrationSystem.multiplier(state, target, "effect"), 1.06, 0.0001, "Rank 1 effect multiplier")
+	assert_almost_eq(CalibrationSystem.multiplier(state, "op.someone_else", "heat"), 1.0, 0.0001, "Other modules read ×1")
+
+	var statuses: Array = Array(state.build.get("status_effects", []))
+	var projected: int = 0
+	for status in statuses:
+		if status is Dictionary and str(Dictionary(status).get("id", "")) == "status.calibration.%s" % target:
+			projected += 1
+			assert_false(Dictionary(status).has("rounds"), "The calibration status never wears off")
+	assert_eq(projected, 1, "Exactly one calibration status per module")
+
+	var subs: Array = sim.debug_collect_subscriptions()
+	var calibrated: Dictionary = _dispatch_probe_stage(state, subs, target)
+	assert_almost_eq(float(calibrated["heat"]), 9.2, 0.001, "The calibrated stage's heat is discounted 8%")
+	assert_almost_eq(float(calibrated["cost"]), 9.4, 0.001, "…its power cost 6%")
+	assert_almost_eq(float(calibrated["token_mult"]), 1.06, 0.001, "…and its tokens rise 6%")
+	var cooling: Dictionary = _dispatch_probe_stage(state, subs, target, -10.0)
+	assert_almost_eq(float(cooling["heat"]), -10.0, 0.001, "A cooling stage's credit is not shrunk")
+	var untouched: Dictionary = _dispatch_probe_stage(state, subs, "op.someone_else")
+	assert_almost_eq(float(untouched["heat"]), 10.0, 0.001, "Other stages keep their heat")
+	assert_almost_eq(float(untouched["cost"]), 10.0, 0.001, "…their cost")
+	assert_almost_eq(float(untouched["token_mult"]), 1.0, 0.001, "…and their tokens")
+
+	# Rank 2 compounds.
+	_grant_spares(sim, target, 2)
+	assert_true(
+		sim.calibrate_module(target, CalibrationSystem.consumable_modules(state, target).slice(0, 2)),
+		"Rank 2 commits"
+	)
+	var rank_two: Dictionary = _dispatch_probe_stage(state, sim.debug_collect_subscriptions(), target)
+	assert_almost_eq(float(rank_two["heat"]), 10.0 * 0.92 * 0.92, 0.001, "Rank 2 heat compounds")
+	assert_almost_eq(float(rank_two["token_mult"]), 1.06 * 1.06, 0.001, "Rank 2 tokens compound")
+	sim.free()
+
+
+## Dispatches one `board.stage_resolved` for `module_id` with 10 heat, 10 cost
+## and ×1 tokens on the stage (as a module's own adds would leave it) and
+## returns the stage values the run's subscriptions settled on.
+func _dispatch_probe_stage(state: RunState, subs: Array, module_id: String, heat: float = 10.0) -> Dictionary:
+	var resolver := EffectResolver.new()
+	var mod_ctx := ModifierContext.new("board.stage_resolved", state)
+	mod_ctx.rng = DeterministicRng.new(7)
+	mod_ctx.extras = {"module_id": module_id, "op_id": module_id}
+	mod_ctx.set_value("stage.heat", heat)
+	mod_ctx.set_value("stage.cost", 10.0)
+	mod_ctx.set_value("stage.token_mult", 1.0)
+	resolver.begin_action("calibration.probe")
+	resolver.dispatch("board.stage_resolved", mod_ctx, subs)
+	return {
+		"heat": float(mod_ctx.get_value("stage.heat", 0.0)),
+		"cost": float(mod_ctx.get_value("stage.cost", 0.0)),
+		"token_mult": float(mod_ctx.get_value("stage.token_mult", 1.0)),
+	}
+
+
+func _test_calibration_survives_save_load() -> void:
+	var rig: Dictionary = _calibration_rig(9704)
+	var sim: Node = rig["sim"]
+	var target: String = rig["target"]
+	assert_true(sim.calibrate_module(target, rig["spare"]), "Rank 1 commits")
+	var owned: Array = Array(sim.run_state.build.get("modules", [])).duplicate()
+	var saved: Dictionary = sim.run_state.to_dict()
+	var sim2: Node = load("res://core/simulation.gd").new()
+	sim2.autosave_enabled = false
+	sim2.run_state.from_dict(saved)
+	sim2.phase = sim2.Phase.ROUND_PREP
+	assert_eq(sim2.module_calibration_rank(target), 1, "Rank survives save/load")
+	assert_eq(Array(sim2.run_state.build.get("modules", [])), owned, "The trimmed inventory survives")
+	var found: bool = false
+	for sub in sim2.debug_collect_subscriptions():
+		if str(Dictionary(sub).get("source_id", "")) == "calibration.%s" % target:
+			found = true
+	assert_true(found, "The loaded run still carries the calibration subscription")
+	var reloaded: Dictionary = _dispatch_probe_stage(sim2.run_state, sim2.debug_collect_subscriptions(), target)
+	assert_almost_eq(float(reloaded["heat"]), 9.2, 0.001, "The loaded run's stage is still discounted")
+	sim.free()
+	sim2.free()
 
 
 ## The shelf sells tokens: a module's headline figure is the multiplier it puts
@@ -122,7 +370,14 @@ func _test_fewer_than_three_perks_when_pool_is_small() -> void:
 	for perk in ContentDatabase.perks:
 		if perk.id not in allowed:
 			collected.append(perk.id)
-	state.build["perk_inventory"] = collected
+	state.build["perks"] = collected
+	# Owning everything else may exclude one of the two spares outright; the
+	# table shows whatever is still legal, and no more.
+	var legal: int = 0
+	for perk_id in allowed:
+		if perk_system.can_acquire(state, perk_id, ContentDatabase):
+			legal += 1
+	assert_true(legal >= 1 and legal < 3, "Fewer than three perks remain legal (%d)" % legal)
 	var offers: Array = ContentDatabase.draw_angel_perks(
 		DeterministicRng.new(4244),
 		state,
@@ -130,7 +385,7 @@ func _test_fewer_than_three_perks_when_pool_is_small() -> void:
 		[],
 		perk_system.undraftable_ids(state, ContentDatabase)
 	)
-	assert_eq(offers.size(), 2, "Angel table shows every legal perk when fewer than three remain")
+	assert_eq(offers.size(), legal, "The table shows every legal perk when fewer than three remain")
 
 
 func _test_taking_perk_closes_draft() -> void:
@@ -141,7 +396,7 @@ func _test_taking_perk_closes_draft() -> void:
 	var perk_id: String = str(offer.get("id", ""))
 	var taken_before: int = int(sim.run_state.statistics.get("angel_offers_taken", 0))
 	assert_true(sim.accept_offer("perk", perk_id), "Taking a perk succeeds")
-	assert_true(perk_id in Array(sim.run_state.build.get("perk_inventory", [])), "Perk is collected")
+	assert_true(perk_id in Array(sim.run_state.build.get("perks", [])), "Perk is owned")
 	assert_eq(
 		int(sim.run_state.statistics.get("angel_offers_taken", 0)),
 		taken_before + 1,
@@ -156,11 +411,11 @@ func _test_decline_still_works() -> void:
 	var sim: Node = _sim(9003)
 	sim.debug_present_angel_offers()
 	var declined_before: int = int(sim.run_state.statistics.get("angel_offers_declined", 0))
-	var inventory_before: int = Array(sim.run_state.build.get("perk_inventory", [])).size()
+	var owned_before: int = Array(sim.run_state.build.get("perks", [])).size()
 	sim.decline_offers()
 	assert_eq(
-		Array(sim.run_state.build.get("perk_inventory", [])).size(),
-		inventory_before,
+		Array(sim.run_state.build.get("perks", [])).size(),
+		owned_before,
 		"Decline acquires nothing"
 	)
 	assert_eq(
@@ -194,10 +449,14 @@ func _test_rejects_offer_not_on_table() -> void:
 
 func _test_no_eligible_perks_cannot_wedge() -> void:
 	var sim: Node = _sim(9006)
+	# Owning every perk at once is not legal, but the draw only asks whether
+	# each card is already in the build.
+	var everything: Array = []
 	for perk in ContentDatabase.perks:
-		sim.perk_system().collect_perk(sim.run_state, perk.id, ContentDatabase)
+		everything.append(perk.id)
+	sim.run_state.build["perks"] = everything
 	sim.debug_present_angel_offers()
-	assert_true(sim.pending_choices.is_empty(), "No offers when every perk is collected")
+	assert_true(sim.pending_choices.is_empty(), "No offers when every perk is owned")
 	assert_eq(sim.phase, sim.Phase.ROUND_PREP, "An empty table does not wedge Angel Round")
 	sim.free()
 
@@ -358,11 +617,13 @@ func _test_pricing_and_location_reward_scale() -> void:
 			)
 	sim.apply_run_location(sim.run_state, "garage", false)
 	MarketService.ensure_module_stock(sim)
+	# Garage: rent share 1400 × 0.15 = 210, job share 5000 × 0.05 = 250,
+	# major_purchase share 15000 × 0.02 = 300 — the wealth anchor wins.
 	assert_almost_eq(
 		sim.module_market_reroll_cost(),
-		250.0,
+		300.0,
 		0.01,
-		"Garage reroll uses 5% of its 5000 base job reward when that exceeds rent share"
+		"Garage reroll uses 2% of its 15000 major_purchase when that exceeds rent and job shares"
 	)
 	sim.free()
 

@@ -35,6 +35,121 @@ func run() -> void:
 	_test_met_demand_bonus_is_named()
 	_test_closing_synergy_carries_its_own_jump()
 	_test_again_owns_the_repeat_jump()
+	_test_memoised_replays_match_the_walked_tree()
+
+
+## A stage that runs the stage above it N times walks one replay tree, not N:
+## the compile memoises the tree per (prior, strength) and folds it N times.
+## The beats must come out bit-identical to walking the tree every time.
+func _test_memoised_replays_match_the_walked_tree() -> void:
+	var burn: Dictionary = _nested_repeat_fixture()
+	BurnSpectacle.replay_walks = 0
+	var beats: Array = BurnSpectacle.compile(burn, [])
+	var walks: int = BurnSpectacle.replay_walks
+	_assert_chained(beats, "nested repeat fixture")
+	var forks: Array = _beats_of(BurnSpectacle.KIND_FORK, beats)
+	assert_eq(forks.size(), 3, "Three forked stages compile to three AGAIN! beats")
+	assert_eq(walks, 3, "Each forked stage walks its replay tree once, whatever its repeat count (got %d)" % walks)
+
+	# The reference: the unmemoised loop, one walk per fork, multiplied in the
+	# same order the compile folds them.
+	var stages: Array = burn["stages"]
+	var priors: Array = []
+	var fork_index: int = 0
+	for stage in stages:
+		var count: int = int(stage.get("repeat_count", 0))
+		if count > 0 and float(stage.get("repeated_previous", 0.0)) > 0.0 and not priors.is_empty():
+			var strength: float = (
+				float(stage.get("repeated_previous", 0.0))
+				* float(stage.get("repeat_strength", 1.0))
+				* float(stage.get("multiplier", 1.0))
+			)
+			var expected: float = 1.0
+			for _fork in range(count):
+				expected *= BurnSpectacle._replay_prior_ratio(priors, priors.size() - 1, strength)
+			var fork: Dictionary = forks[fork_index]
+			fork_index += 1
+			# The compile lands AGAIN! on `own_after * ratio`; the same product
+			# from the same operands must give the same bits.
+			assert_eq(
+				float(fork.get("multiplier_after", 0.0)),
+				float(fork.get("multiplier_before", 0.0)) * expected,
+				"AGAIN! ×%d on %s lands exactly where the walked tree puts it" % [count, str(stage.get("name", ""))]
+			)
+			assert_almost_eq(
+				float(fork.get("ratio", 0.0)), expected, 1.0e-9,
+				"And carries the walked ratio"
+			)
+			assert_eq(int(fork.get("repeat_count", 0)), count, "And names its repeat count")
+		priors.append(stage)
+	var again: Array = BurnSpectacle.compile(burn, [])
+	assert_eq(again.size(), beats.size(), "A second compile is the same length")
+	for i in range(beats.size()):
+		assert_eq(
+			float(Dictionary(again[i]).get("multiplier_after", -1.0)),
+			float(Dictionary(beats[i]).get("multiplier_after", -2.0)),
+			"Beat %d compiles to the same multiplier twice" % i
+		)
+	assert_true(float(forks[2].get("ratio", 0.0)) > 1.0, "The deepest fork still moves the drum")
+
+
+## Six stages, three of them repeaters stacked so each replay tree nests the
+## one below it: a fixture in the shape `resolve_burn` writes, not a real burn,
+## so the counts are large enough to make the memo matter. The repeaters also
+## cascade, which is the path where the compile has to reconstruct the fork's
+## share of the jump rather than land it on the snapshot.
+func _nested_repeat_fixture() -> Dictionary:
+	var stages: Array = []
+	var running: float = 1.0
+	var specs := [
+		{"name": "Prompt", "id": "op.prompt", "progress": 1.2, "repeat": 0.0, "count": 0},
+		{"name": "Cheap Model", "id": "op.cheap_model", "progress": 1.8, "repeat": 0.0, "count": 0},
+		{"name": "Echo", "id": "op.echo_chamber", "progress": 1.0, "repeat": 0.4, "count": 3},
+		{"name": "Fractal", "id": "op.fractal_split", "progress": 0.85, "repeat": 0.5, "count": 4},
+		{"name": "Overclock", "id": "op.overclock", "progress": 1.5, "repeat": 0.0, "count": 0},
+		{"name": "Loop", "id": "op.autonomous_loop", "progress": 1.0, "repeat": 1.0, "count": 5},
+	]
+	for position in range(specs.size()):
+		var spec: Dictionary = specs[position]
+		var before: float = running
+		var fields := {"progress_mult": float(spec["progress"]), "token_mult": 1.0}
+		running *= float(spec["progress"])
+		var count: int = int(spec["count"])
+		var repeat: float = float(spec["repeat"])
+		var forked: bool = repeat > 0.0 and count > 0 and position > 0
+		if forked:
+			var strength: float = repeat
+			for _fork in range(count):
+				running *= BurnSpectacle._replay_prior_ratio(stages, stages.size() - 1, strength)
+			# The cascade's own share of the jump, on top of the replays.
+			running *= 1.1
+		stages.append({
+			"name": spec["name"],
+			"module_id": spec["id"],
+			"slot_index": position,
+			"position": position,
+			"stage": fields,
+			"multiplier": 1.0,
+			"repeated_previous": repeat,
+			"repeat_strength": 1.0,
+			"repeat_count": count,
+			"cascaded": forked,
+			"cascade_depth": 1 if forked else 0,
+			"dropped": false,
+			"combos": [],
+			"before": {"output_mult": before, "progress_mult": before, "token_mult": 1.0},
+			"after": {"output_mult": running, "progress_mult": running, "token_mult": 1.0, "heat": 0.0},
+		})
+	return {
+		"ok": true,
+		"base_tokens": 1000.0,
+		"stages": stages,
+		"output_mult": running,
+		"progress_mult": running,
+		"token_mult": 1.0,
+		"progress_tokens": 1000.0 * running,
+		"demands": [],
+	}
 
 
 ## The repeat's share of a stage's jump belongs to AGAIN!, not to the beat

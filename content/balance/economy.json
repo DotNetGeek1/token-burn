@@ -30,12 +30,18 @@
     "fault_band": [0.85, 1.00],
     "fire_risk_ratio": 1.4,
     "catastrophe_ratio": 1.5,
-    "cascade_heat_scale": 0.40
+    "cascade_heat_scale": 0.40,
+    "multiplier_pressure_coeff": 0.015,
+    "endless_heat_escalation": 1.05,
+    "endless_fault_escalation": 1.08
   },
   "build": {
-    "perk_cap": 6,
     "draft_tag_affinity": 1.5,
     "draft_tag_affinity_cap": 4.0
+  },
+  "chapter_transition": {
+    "commissioning_major_purchase_ratio": 0.5,
+    "equity_ratio": 0.30
   },
   "module_market": {
     "slots_by_location_tier": [3, 4, 4, 5, 5, 6, 6],
@@ -45,10 +51,27 @@
       "rare": 1.25,
       "legendary": 3.50
     },
+    "rarity_price_major_purchase_ratio": {
+      "common": 0.08,
+      "uncommon": 0.15,
+      "rare": 0.35,
+      "legendary": 0.75
+    },
     "reroll_rent_mult": 0.15,
     "reroll_job_reward_mult": 0.05,
+    "reroll_major_purchase_ratio": 0.02,
     "reroll_growth": 2.0,
     "price_floor": 25.0
+  },
+  "calibration": {
+    "cost_major_purchase_ratio": 0.25,
+    "modules_consumed": 2,
+    "max_rank": 3,
+    "per_rank": {
+      "heat_mult": 0.92,
+      "power_mult": 0.94,
+      "effect_mult": 1.06
+    }
   },
   "location_order": [
     "bedroom",

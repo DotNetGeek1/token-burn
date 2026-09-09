@@ -187,8 +187,50 @@ func choose_affix(
 		int(run_state.statistics.get("depth_reached", 0)), next_level
 	)
 	_apply_affix_status(run_state, chosen, stack_n)
+	apply_pressure(run_state, content_db)
 	EventBus.emit_event(EventBus.EVENT_DEPTH_ADVANCED, {"level": next_level, "affix_id": affix_id})
 	return true
+
+
+## The affix fields that make a depth *dangerous* rather than merely longer,
+## and the `run_state.compute` key each one lands in. Heat and board read the
+## compute keys; the depth dictionary stays the record of what was picked.
+const PRESSURE_FIELDS := {
+	"heat_mult": "depth_heat_mult",
+	"fault_mult": "depth_fault_mult",
+	"overflow_instability_mult": "depth_overflow_instability_mult",
+}
+
+
+## Product of every held stack's pressure multipliers, recomputed from the
+## stack counts so a reload or a re-apply never double-multiplies. Uncapped.
+static func pressure_multipliers(run_state: RunState, content_db: Node) -> Dictionary:
+	var out: Dictionary = {}
+	for field in PRESSURE_FIELDS.keys():
+		out[field] = 1.0
+	var stacks: Dictionary = Dictionary(run_state.depth.get("stacks", {}))
+	if stacks.is_empty():
+		return out
+	for affix in affixes(content_db):
+		if not affix is Dictionary:
+			continue
+		var held: int = int(stacks.get(str(affix.get("id", "")), 0))
+		if held <= 0:
+			continue
+		for field in PRESSURE_FIELDS.keys():
+			var per_stack: float = maxf(0.0, float(affix.get(field, 1.0)))
+			out[field] = float(out[field]) * pow(per_stack, float(held))
+	return out
+
+
+## Writes the live pressure multipliers into `run_state.compute` for
+## HeatSystem (`depth_heat_mult`, `depth_fault_mult`) and BoardSystem
+## (`depth_overflow_instability_mult`) to honour.
+static func apply_pressure(run_state: RunState, content_db: Node) -> Dictionary:
+	var mults: Dictionary = pressure_multipliers(run_state, content_db)
+	for field in PRESSURE_FIELDS.keys():
+		run_state.compute[str(PRESSURE_FIELDS[field])] = float(mults.get(field, 1.0))
+	return mults
 
 
 func _can_offer(affix: Dictionary, stacks: Dictionary) -> bool:

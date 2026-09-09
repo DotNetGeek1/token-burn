@@ -109,7 +109,7 @@
         45000
       ],
       "visual_mount": "system_backplane",
-      "design_note": "Supported pipeline stages. Replaces job_scaling.board.supported_stages as the baseline; perk, upgrade and meta slot bonuses stay additive on top."
+      "design_note": "Safe pipeline stages, and the only source of them: no chapter floor, no bonuses on top. Perks, monitors and meta slot unlocks add overflow allowance (job_scaling.board.overflow.base_allowance + bonuses) instead."
     },
     {
       "id": "control",

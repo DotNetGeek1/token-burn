@@ -109,17 +109,31 @@ func _test_a_loss_banks_nothing() -> void:
 	sim.free()
 
 
+## "One More Pipeline Slot" is overflow allowance, not a wider backplane: the
+## next run opens exactly as wide as its rail, and may bolt one stage on.
 func _test_an_extra_slot_widens_the_next_run() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(9003)
 	var slots_before: int = sim.board_slots().size()
+	var safe_before: int = sim.supported_capacity()
+	var allowance_before: int = sim.overflow_allowance()
+	assert_false(sim.can_append_overflow(), "A bedroom run with nothing unlocked cannot bolt a stage on")
 
 	MetaProgress.bank_victory()
 	assert_true(MetaProgress.spend_pick("unlock.extra_slot"), "An extra slot can be kept")
 
 	sim.start_run(9003)
-	assert_eq(sim.board_slots().size(), slots_before + 1, "The next run starts one slot wider")
+	assert_eq(sim.supported_capacity(), safe_before, "Safe capacity is still the backplane's")
+	assert_eq(sim.board_slots().size(), slots_before, "The next run opens no wider than its rail")
+	assert_eq(sim.overflow_allowance(), allowance_before + 1, "But it may bolt one more overflow stage on")
+	assert_eq(
+		int(sim.workflow_capacity_debug().get("legacy_bonus", 0)), 1,
+		"The debug breakdown attributes it to the permanent unlock"
+	)
+	assert_true(sim.can_append_overflow(), "And + STAGE is live from the first round")
+	assert_eq(sim.append_overflow_stage(), slots_before, "The stage lands at the end of the pipeline")
+	assert_eq(sim.board_slots().size(), slots_before + 1, "Exactly one stage was added")
 	assert_true(
 		sim.filled_slot_count() >= slots_before,
 		"And the pipeline it opens with is at least as long as before"
@@ -129,20 +143,25 @@ func _test_an_extra_slot_widens_the_next_run() -> void:
 
 func _test_the_slot_cap_holds() -> void:
 	_fresh_profile()
-	var wanted: int = BoardSystem.MAX_SLOT_COUNT - BoardSystem.DEFAULT_SLOT_COUNT
+	var wanted: int = BoardSystem.MAX_META_OVERFLOW_BONUS
 	for _i in range(wanted):
 		MetaProgress.bank_victory()
 		assert_true(MetaProgress.spend_pick("unlock.extra_slot"), "Slots stack up to the cap")
 	assert_false(
 		MetaProgress.is_available("unlock.extra_slot"),
-		"At the cap the board can take no more, so it stops being offered"
+		"At the cap the allowance can take no more, so it stops being offered"
 	)
 	MetaProgress.bank_victory()
 	assert_false(MetaProgress.spend_pick("unlock.extra_slot"), "And it cannot be bought anyway")
 
 	var sim: Node = _sim()
 	sim.start_run(9004)
-	assert_eq(sim.board_slots().size(), BoardSystem.MAX_SLOT_COUNT, "The widest board is the cap")
+	assert_eq(sim.board_slots().size(), BoardSystem.DEFAULT_SLOT_COUNT, "The board still opens at its rail")
+	assert_eq(sim.overflow_allowance(), wanted, "Every rank is one stage of allowance")
+	assert_eq(
+		sim.max_pipeline_length(), BoardSystem.DEFAULT_SLOT_COUNT + wanted,
+		"The pipeline may reach rail plus allowance"
+	)
 	sim.free()
 
 

@@ -17,7 +17,7 @@ func run() -> void:
 	_test_a_granted_module_does_not_replace_the_starters()
 	_test_previews_emit_no_domain_events()
 	_test_preview_cascade_does_not_hit_the_bus()
-	_test_a_build_cannot_hold_more_than_its_cap()
+	_test_a_build_has_no_perk_ceiling_and_no_bench()
 	_test_rival_keystones_cannot_share_a_build()
 	_test_investor_halfway_call_survives_leaving_the_desk()
 	_test_duplicate_job_definitions_stay_independent()
@@ -76,6 +76,8 @@ func _test_capacity_perks_apply_when_taken_from_the_angel() -> void:
 	var slot_sim := _make_sim()
 	slot_sim.start_run(105)
 	var slots_before: int = slot_sim.board_slots().size()
+	var safe_before: int = slot_sim.supported_capacity()
+	var allowance_before: int = slot_sim.overflow_allowance()
 	slot_sim.phase = slot_sim.Phase.ANGEL_ROUND
 	slot_sim.pending_choices = [{
 		"type": "perk",
@@ -86,11 +88,18 @@ func _test_capacity_perks_apply_when_taken_from_the_angel() -> void:
 		slot_sim.accept_offer("perk", "perk.wide_bus"),
 		"The angel can grant Wide Bus"
 	)
+	# Wide Bus is overflow allowance, not a wider backplane: safe capacity and
+	# the live pipeline are untouched, and + STAGE is what spends the grant.
+	assert_eq(slot_sim.supported_capacity(), safe_before, "Wide Bus leaves safe capacity to the backplane")
+	assert_eq(slot_sim.board_slots().size(), slots_before, "Taking Wide Bus does not lengthen the pipeline by itself")
 	assert_eq(
-		slot_sim.board_slots().size(),
-		slots_before + 1,
-		"Taking Wide Bus immediately adds its pipeline slot"
+		slot_sim.overflow_allowance(),
+		allowance_before + 1,
+		"Taking Wide Bus immediately adds one stage of overflow allowance"
 	)
+	assert_true(slot_sim.can_append_overflow(), "So a stage can be bolted on right away")
+	assert_eq(slot_sim.append_overflow_stage(), slots_before, "+ STAGE lands at the end")
+	assert_eq(slot_sim.board_slots().size(), slots_before + 1, "And adds exactly one stage")
 	slot_sim.free()
 
 	var workflow_sim := _make_sim()
@@ -131,8 +140,8 @@ func _test_round_end_choice() -> void:
 		"bug_chance": 0.0,
 	}]
 	sim.start_work_sync()
-	assert_true(sim.phase == sim.Phase.ANGEL_ROUND, "Resolving the round's work opens the angel phase")
-	assert_true(sim.pending_choices.size() > 0, "Angel choices are presented after the bills clear")
+	assert_eq(sim.phase, sim.Phase.ROUND_PREP, "Resolving the round's work opens the next round's prep")
+	assert_true(sim.pending_choices.is_empty(), "No free perks are dealt between rounds")
 	sim.free()
 
 
@@ -160,10 +169,7 @@ func _test_a_successful_round_does_not_end_the_run() -> void:
 		"bug_chance": 0.0,
 	}]
 	sim.start_work_sync()
-	assert_true(
-		sim.phase == sim.Phase.ANGEL_ROUND or sim.phase == sim.Phase.ROUND_PREP,
-		"A delivered round is still in play"
-	)
+	assert_eq(sim.phase, sim.Phase.ROUND_PREP, "A delivered round is still in play")
 	assert_true(sim.phase != sim.Phase.RUN_END, "It is not a run ending")
 	assert_eq(str(sim.run_state.flags.get("outcome", "")), "", "And it has no run-end outcome")
 	var data: Dictionary = SaveManager.load_run()
@@ -368,53 +374,50 @@ func _test_preview_cascade_does_not_hit_the_bus() -> void:
 	)
 
 
-func _test_a_build_cannot_hold_more_than_its_cap() -> void:
+## Perks are permanent and uncapped: the only thing that keeps one out of a
+## build is another perk it cannot sit beside. There is no bench for the
+## overflow to land on.
+func _test_a_build_has_no_perk_ceiling_and_no_bench() -> void:
 	var sim := _make_sim()
 	sim.start_run(152)
-	var cap: int = sim._perk_system.perk_capacity(sim.run_state, ContentDatabase)
 	var taken: int = 0
 	for perk in ContentDatabase.perks:
-		if sim.run_state.build["perks"].size() >= cap:
-			break
-		if sim._perk_system.collect_perk(sim.run_state, perk.id, ContentDatabase):
-			if sim._perk_system.equip_perk(sim.run_state, perk.id, ContentDatabase):
-				taken += 1
-	assert_true(taken > 0, "At least some perks are equippable from an empty build")
-	assert_true(
-		sim.run_state.build["perks"].size() <= cap,
-		"Active loadout stops at its cap of %d, not %d" % [cap, sim.run_state.build["perks"].size()]
-	)
+		if sim._perk_system.acquire(sim.run_state, perk.id, ContentDatabase):
+			taken += 1
+	assert_true(taken > 6, "Far more than the old six-perk cap can be owned at once (%d)" % taken)
+	assert_eq(sim.run_state.build["perks"].size(), taken, "Every acquired perk is in the build")
+	assert_false(sim.run_state.build.has("perk_inventory"), "There is no bench")
+	for method in ["equip_perk", "bench_perk", "swap_perk", "collect_perk", "perk_capacity"]:
+		assert_false(sim._perk_system.has_method(method), "PerkSystem.%s is gone" % method)
+		assert_false(sim.has_method(method), "Simulation.%s is gone" % method)
 	sim.free()
 
 
-## A doctrine is only a choice if picking one closes the other.
+## A doctrine is only a choice if picking one closes the other — and with
+## permanent perks, closes it for the rest of the run.
 func _test_rival_keystones_cannot_share_a_build() -> void:
 	var sim := _make_sim()
 	sim.start_run(153)
 	var ps = sim._perk_system
 	assert_true(
-		ps.collect_perk(sim.run_state, "perk.stack_overflow_tab", ContentDatabase),
-		"A quality/bugs common enters the collection"
+		ps.acquire(sim.run_state, "perk.stack_overflow_tab", ContentDatabase),
+		"A quality/bugs common opens both remaining keystone doctrines"
 	)
 	assert_true(
-		ps.equip_perk(sim.run_state, "perk.stack_overflow_tab", ContentDatabase),
-		"The common opens both remaining keystone doctrines"
-	)
-	assert_true(
-		ps.collect_perk(sim.run_state, "perk.move_fast_and_break_everything", ContentDatabase),
-		"Move Fast can be collected after a bugs perk"
-	)
-	assert_true(
-		ps.equip_perk(sim.run_state, "perk.move_fast_and_break_everything", ContentDatabase),
+		ps.acquire(sim.run_state, "perk.move_fast_and_break_everything", ContentDatabase),
 		"Move Fast follows from owning bugs perks"
 	)
-	assert_true(
-		ps.collect_perk(sim.run_state, "perk.enterprise_grade", ContentDatabase),
-		"Enterprise Grade may be collected even when Move Fast is active"
-	)
 	assert_false(
-		ps.can_equip(sim.run_state, "perk.enterprise_grade", ContentDatabase),
-		"Enterprise Grade cannot be equipped once the build has gone Move Fast"
+		ps.can_acquire(sim.run_state, "perk.enterprise_grade", ContentDatabase),
+		"Enterprise Grade cannot join once the build has gone Move Fast"
+	)
+	assert_true(
+		ps.acquire_block_reason(sim.run_state, "perk.enterprise_grade", ContentDatabase) != "",
+		"And the refusal names its reason"
+	)
+	assert_true(
+		"perk.enterprise_grade" in ps.undraftable_ids(sim.run_state, ContentDatabase),
+		"So the investor never deals it"
 	)
 	sim.free()
 
@@ -500,8 +503,7 @@ func _test_executive_committee_does_not_compound() -> void:
 	var sim := _make_sim()
 	sim.start_run(7702)
 	sim.run_state.economy["recurring_costs_base"] = 1000.0
-	sim._perk_system.collect_perk(sim.run_state, "perk.executive_committee", ContentDatabase)
-	sim._perk_system.equip_perk(sim.run_state, "perk.executive_committee", ContentDatabase)
+	sim._perk_system.acquire(sim.run_state, "perk.executive_committee", ContentDatabase)
 	sim.debug_invalidate_subscriptions()
 	var subs: Array = sim.debug_collect_subscriptions()
 	for _i in range(10):
@@ -522,10 +524,7 @@ func _test_executive_committee_does_not_compound() -> void:
 			"upgrade_counts": {"upgrade.gpu_rack": 2},
 		},
 	})
-	migrated_sim._perk_system.collect_perk(
-		migrated_sim.run_state, "perk.executive_committee", ContentDatabase
-	)
-	migrated_sim._perk_system.equip_perk(
+	migrated_sim._perk_system.acquire(
 		migrated_sim.run_state, "perk.executive_committee", ContentDatabase
 	)
 	migrated_sim.debug_invalidate_subscriptions()
@@ -549,8 +548,7 @@ func _test_executive_committee_does_not_compound() -> void:
 func _test_wrapper_freezes_the_in_flight_fee() -> void:
 	var sim := _make_sim()
 	sim.start_run(7703)
-	sim._perk_system.collect_perk(sim.run_state, "perk.the_wrapper", ContentDatabase)
-	sim._perk_system.equip_perk(sim.run_state, "perk.the_wrapper", ContentDatabase)
+	sim._perk_system.acquire(sim.run_state, "perk.the_wrapper", ContentDatabase)
 	sim.debug_invalidate_subscriptions()
 	var perk := ContentDatabase.get_perk("perk.the_wrapper")
 	var clone: float = 1.0 + float(perk.parameters.get("passive_ratio", 0.15))

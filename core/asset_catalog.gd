@@ -514,7 +514,7 @@ static func module_icon(category: String) -> Texture2D:
 ## debrief card reads at a glance rather than needing bespoke art.
 static func unlock_icon(kind: String) -> Texture2D:
 	match kind.to_lower():
-		"extra_slot":
+		"extra_slot", "overflow_capacity":
 			return nav_icon("board")
 		"starting_module":
 			return get_texture("category_icons", "local")
@@ -526,7 +526,8 @@ static func unlock_icon(kind: String) -> Texture2D:
 			return stat_icon("cash")
 		"efficiency_base":
 			return stat_icon("quality")
-		_:
+		"draft_options", _:
+			# A bigger investor table is a perk unlock in all but name.
 			return get_texture("category_icons", "perks")
 
 

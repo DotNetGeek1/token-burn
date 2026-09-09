@@ -1,14 +1,17 @@
 class_name TabPerks
 extends CabinetTab
 
-## The perk rack on the glass: what is fitted, what is on the bench, and the
-## combos the fitted set is producing. The big red button is FIT for a benched
-## perk and BENCH for a fitted one.
+## The perk rack on the glass: every perk the run owns and the combos they are
+## producing. Perks are permanent — the investor deals one per chapter and it
+## stays fitted for the rest of the run — so this tab is a read-only reference
+## and the big red button has nothing to commit while it is up.
+
+## The commit button's line while this tab is up: there is nothing to press.
+const BLOCK_PERKS_FIXED := "PERKS ARE PERMANENT"
 
 var _selected: String = ""
 var _capacity: Label = null
-var _fitted: VBoxContainer = null
-var _bench: VBoxContainer = null
+var _owned: VBoxContainer = null
 var _title: Label = null
 var _kicker: Label = null
 var _rows: VBoxContainer = null
@@ -43,14 +46,13 @@ func _ready() -> void:
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(body)
 
-	_fitted = _rack(body, "FITTED")
-	_bench = _rack(body, "BENCH")
+	_owned = _rack(body, "OWNED")
 
 	var detail := VBoxContainer.new()
 	detail.mouse_filter = Control.MOUSE_FILTER_PASS
 	detail.add_theme_constant_override("separation", 2)
 	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	detail.size_flags_stretch_ratio = 1.1
+	detail.size_flags_stretch_ratio = 1.4
 	body.add_child(detail)
 	_title = CabinetStyle.mono("", CabinetStyle.FONT_SMALL, CabinetStyle.AMBER)
 	detail.add_child(_title)
@@ -95,17 +97,8 @@ func _rack(host: Control, title: String) -> VBoxContainer:
 	return list
 
 
-func _fitted_ids() -> Array:
-	return Array(Simulation.run_state.build.get("perks", []))
-
-
-func _bench_ids() -> Array:
-	var fitted: Array = _fitted_ids()
-	var bench: Array = []
-	for perk_id in Array(Simulation.run_state.build.get("perk_inventory", [])):
-		if not (str(perk_id) in fitted):
-			bench.append(str(perk_id))
-	return bench
+func _owned_ids() -> Array:
+	return Simulation.owned_perk_ids()
 
 
 func refresh() -> void:
@@ -118,31 +111,29 @@ func selected_id() -> String:
 	return _selected
 
 
-## Picks a perk in either rack by id. Returns false when the run does not own it.
+## Picks an owned perk by id. Returns false when the run does not own it.
 func select_perk(perk_id: String) -> bool:
-	if not (perk_id in (_fitted_ids() + _bench_ids())):
+	if not (perk_id in _owned_ids()):
 		return false
 	_pick(perk_id)
 	return true
 
 
 func _refresh_contents() -> void:
-	var capacity: Dictionary = Simulation.perk_capacity()
-	_capacity.text = "%d / %d FITTED · %d ON THE BENCH" % [int(capacity.get("active", 0)), int(capacity.get("cap", 0)), _bench_ids().size()]
-	var all: Array = _fitted_ids() + _bench_ids()
-	if not (_selected in all):
-		_selected = str(all[0]) if not all.is_empty() else ""
-	_fill(_fitted, _fitted_ids(), true)
-	_fill(_bench, _bench_ids(), false)
+	var owned: Array = _owned_ids()
+	_capacity.text = "%d OWNED · PERMANENT" % owned.size()
+	if not (_selected in owned):
+		_selected = str(owned[0]) if not owned.is_empty() else ""
+	_fill(_owned, owned)
 	_refresh_detail()
 
 
-func _fill(list: VBoxContainer, ids: Array, fitted: bool) -> void:
+func _fill(list: VBoxContainer, ids: Array) -> void:
 	for child in list.get_children():
 		list.remove_child(child)
 		child.queue_free()
 	if ids.is_empty():
-		var empty: Label = CabinetStyle.mono("NOTHING FITTED" if fitted else "BENCH EMPTY", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
+		var empty: Label = CabinetStyle.mono("NOTHING OWNED YET", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		list.add_child(empty)
 		return
@@ -151,16 +142,14 @@ func _fill(list: VBoxContainer, ids: Array, fitted: bool) -> void:
 		var perk: PerkDefinition = ContentDatabase.get_perk(perk_id)
 		if perk == null:
 			continue
-		var can: bool = Simulation.can_bench_perk(perk_id) if fitted else Simulation.can_equip_perk(perk_id)
-		var reason: String = Simulation.perk_bench_block_reason(perk_id) if fitted else Simulation.perk_equip_block_reason(perk_id)
 		var tile := CabinetTile.new()
 		tile.set_entry({
 			"meta": perk_id,
 			"name": perk.name.to_upper(),
 			"sub": perk.rarity.to_upper(),
 			"figure": "",
-			"status": ("LIVE" if fitted else "BENCHED") if can or reason == "" else reason.to_upper(),
-			"status_color": CabinetStyle.PHOSPHOR if fitted else CabinetStyle.PHOSPHOR_DIM,
+			"status": "LIVE",
+			"status_color": CabinetStyle.PHOSPHOR,
 			"icon": AssetCatalog.perk_icon(perk_id),
 			"accent": AssetCatalog.rarity_color(perk.rarity),
 			"tooltip": Simulation.get_perk_description(perk_id),
@@ -175,18 +164,16 @@ func _refresh_detail() -> void:
 	if perk == null:
 		_title.text = "—"
 		_kicker.text = ""
-		detail_rows(_rows, [{"text": "Perks arrive from the angels between rounds. Fit them here; the rack has %d slots." % int(Simulation.perk_capacity().get("cap", 0))}])
+		detail_rows(_rows, [{
+			"text": "Perks are dealt by the investor when a chapter's goal is met. Each one is permanent: it stays fitted for the rest of the run.",
+		}])
 	else:
-		var fitted: bool = _selected in _fitted_ids()
 		_title.text = perk.name.to_upper()
-		_kicker.text = "%s · %s" % [perk.rarity.to_upper(), "FITTED" if fitted else "ON THE BENCH"]
+		_kicker.text = "%s · PERMANENT" % perk.rarity.to_upper()
 		_kicker.add_theme_color_override("font_color", AssetCatalog.rarity_color(perk.rarity))
 		var rows: Array = [{"text": Simulation.get_perk_description(_selected)}]
 		if not perk.tags.is_empty():
 			rows.append({"stat": "Tags", "value": ", ".join(perk.tags).to_upper()})
-		var reason: String = Simulation.perk_bench_block_reason(_selected) if fitted else Simulation.perk_equip_block_reason(_selected)
-		if reason != "":
-			rows.append({"warn": reason})
 		detail_rows(_rows, rows)
 	var synergies: Array = []
 	for line in Simulation.get_synergies():
@@ -196,48 +183,17 @@ func _refresh_detail() -> void:
 	detail_rows(_synergies, synergies)
 
 
+## Nothing to commit here: perks cannot be fitted, benched or swapped. The
+## button explains itself rather than going blank.
 func primary_action() -> Dictionary:
-	var perk: PerkDefinition = ContentDatabase.get_perk(_selected) if _selected != "" else null
-	if perk == null:
-		return blocked_action("FIT", BLOCK_SELECT_ITEM)
-	var capacity: Dictionary = Simulation.perk_capacity()
-	var fitted: bool = _selected in _fitted_ids()
-	if fitted:
-		if not Simulation.can_bench_perk(_selected):
-			var reason: String = Simulation.perk_bench_block_reason(_selected).to_upper()
-			return blocked_action("BENCH", reason if reason != "" else "CANNOT BENCH")
-		return normalize_action({
-			"label": "BENCH", "enabled": true,
-			"sub": "%s · %d/%d LEFT FITTED" % [perk.name.to_upper(), maxi(0, int(capacity.get("active", 0)) - 1), int(capacity.get("cap", 0))],
-			"pressed": _toggle.bind(_selected, true),
-		})
-	if not Simulation.can_equip_perk(_selected):
-		var reason: String = Simulation.perk_equip_block_reason(_selected).to_upper()
-		return blocked_action("FIT", reason if reason != "" else "RACK FULL")
-	return normalize_action({
-		"label": "FIT", "enabled": true,
-		"sub": "%s · %d/%d FITTED" % [perk.name.to_upper(), int(capacity.get("active", 0)) + 1, int(capacity.get("cap", 0))],
-		"pressed": _toggle.bind(_selected, false),
-	})
-
-
-func _toggle(perk_id: String, fitted: bool) -> void:
-	var ok: bool = Simulation.bench_perk(perk_id) if fitted else Simulation.equip_perk(perk_id)
-	if ok:
-		UiSound.play("accept")
-		shell.call("refresh_all")
-		changed.emit()
-		get_tree().call_group("ui_refresh", "refresh")
-	else:
-		UiSound.play("error")
+	return blocked_action("PERMANENT", BLOCK_PERKS_FIXED)
 
 
 func _pick(perk_id: String) -> void:
 	UiSound.play("tap")
 	_selected = perk_id
-	for list in [_fitted, _bench]:
-		for child in list.get_children():
-			if child is CabinetTile:
-				child.set_selected(str(child.meta) == perk_id)
+	for child in _owned.get_children():
+		if child is CabinetTile:
+			child.set_selected(str(child.meta) == perk_id)
 	_refresh_detail()
 	changed.emit()

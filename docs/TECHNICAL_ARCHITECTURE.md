@@ -157,6 +157,11 @@ reads `rent`, `starting_cash`, `starting_hardware` and the chapter key itself
 capacity, but the three late chapters (Datacentre, Grid, Moon) out-size tier 4
 (40/80/160 slots against 16; 5,280/36,000/216,000 cooling against 1,248), and
 the floor is what keeps their numbers. Capacities never decrease on migration.
+Backplane bays are the exception: the safe pipeline capacity is the tier's bay
+count and nothing else. Meta ranks, Wide Bus and monitor/desk upgrades only
+widen the **overflow allowance** (`BoardSystem.overflow_allowance`,
+`max_pipeline_length = safe + allowance`, capped), and `+STAGE` appends exactly
+one overflow slot.
 
 ## 3. Core state model
 
@@ -195,7 +200,7 @@ RunState
 
 ### Save versions
 
-`RunState.SAVE_VERSION` is 23. `_migrate_to_v23` derives
+`RunState.SAVE_VERSION` is 25. `_migrate_to_v23` derives
 `build.cabinet_systems` from the save's `build.dwelling` through the
 `migration_from_dwelling` table, clamps every tier to the tier range, and
 never loses capacity: a tier is raised until it covers the bays, workflows and
@@ -203,6 +208,14 @@ floor the save was demonstrably using. The dwelling key is kept in
 `build.migration_debug` for one version. Fixtures for all seven chapters live
 in `tests/fixtures/saves/dwelling_<key>.json` and are replayed by
 `test_save_migration_fixtures.gd`.
+
+The v25 migration covers the backplane-authoritative capacity and permanent
+perk changes together: `board.meta_slot_bonus` is renamed to
+`board.meta_overflow_bonus` (meta ranks widen the overflow allowance, never
+the safe capacity), pipeline stages a legacy save held beyond its backplane
+bays are kept as overflow rather than folded into the safe figure, and
+`build.perk_inventory` is folded into `build.perks` (unique, legal in order,
+removed perks stripped) before the key is dropped.
 
 ## 4. Effect system
 
@@ -498,7 +511,7 @@ token-burn/
 │   ├── board_system.gd
 │   ├── cabinet_systems.gd           # five tiered systems -> capacities, generation
 │   ├── workflow_mastery_system.gd   # one-shot contract completion training
-│   ├── perk_system.gd               # loadout, tag density, synergies
+│   ├── perk_system.gd               # permanent perks (acquire only), tag density, synergies
 │   └── progression_system.gd
 ├── content/
 │   ├── jobs/

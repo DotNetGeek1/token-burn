@@ -14,6 +14,159 @@ func run() -> void:
 	_test_fire_thresholds()
 	_test_fault_expires()
 	_test_heat_state_names_the_late_bands()
+	_test_multiplier_pressure_curve()
+	_test_million_multiplier_adds_pressure_to_instability()
+	_test_multiplier_pressure_is_consumed_per_prompt()
+	_test_endless_escalation_ramps_heat_and_faults()
+	_test_endless_round_past_the_deadline_ramps_heat_and_faults()
+	_test_fault_multiplier_reaches_the_roll()
+
+
+func _test_multiplier_pressure_curve() -> void:
+	var cfg := {"multiplier_pressure_coeff": 0.015}
+	assert_eq(HeatSystem.multiplier_pressure(1.0, cfg), 0.0, "A ×1 burn has no multiplier pressure")
+	assert_eq(HeatSystem.multiplier_pressure(0.5, cfg), 0.0, "A sub-×1 burn is clamped to none")
+	assert_almost_eq(HeatSystem.multiplier_pressure(2.0, cfg), 0.015, 1e-6, "One doubling is one coefficient")
+	assert_almost_eq(HeatSystem.multiplier_pressure(1024.0, cfg), 0.15, 1e-6, "Ten doublings are ten")
+	assert_almost_eq(
+		HeatSystem.multiplier_pressure(1_000_000.0, cfg), 0.299, 0.002,
+		"×1M is worth about 0.3 instability before the clamp"
+	)
+	var previous: float = -1.0
+	for mult in [1.0, 4.0, 64.0, 1e4, 1e6, 1e9, 1e15]:
+		var pressure: float = HeatSystem.multiplier_pressure(float(mult), cfg)
+		assert_true(pressure >= previous, "Multiplier pressure never falls as the multiplier grows")
+		previous = pressure
+
+
+func _test_million_multiplier_adds_pressure_to_instability() -> void:
+	var heat := HeatSystem.new()
+	var calm := _rig(["gpu_rack"], 0.0)
+	heat.process_prompt(calm, [], EffectResolver.new(), DeterministicRng.new(3), ResolveMode.COMMIT)
+	assert_eq(float(calm.compute.get("instability", -1.0)), 0.0, "A cold rack with a ×1 burn is stable")
+	var big := _rig(["gpu_rack"], 0.0)
+	big.compute["last_batch_multiplier"] = 1_000_000.0
+	heat.process_prompt(big, [], EffectResolver.new(), DeterministicRng.new(3), ResolveMode.COMMIT)
+	assert_almost_eq(
+		float(big.compute.get("instability", 0.0)), 0.299, 0.002,
+		"A ×1M burn on a cold rack adds ~0.3 instability"
+	)
+	var debug: Dictionary = HeatSystem.pressure_debug(big)
+	assert_almost_eq(float(debug.get("multiplier_pressure", 0.0)), 0.299, 0.002, "The debug dict names the pressure")
+	assert_eq(float(debug.get("heat_instability", -1.0)), 0.0, "And the heat component separately")
+	assert_almost_eq(float(debug.get("batch_multiplier", 0.0)), 1_000_000.0, 0.5, "And the multiplier it saw")
+	var hot := _rig(["gpu_rack"], 130.0)
+	hot.compute["last_batch_multiplier"] = 1e30
+	heat.process_prompt(hot, [], EffectResolver.new(), DeterministicRng.new(3), ResolveMode.COMMIT)
+	assert_true(
+		float(hot.compute.get("instability", 0.0)) <= 1.0,
+		"Total instability is clamped at 1 after pressure is added"
+	)
+	assert_true(
+		float(hot.compute.get("instability_multiplier_pressure", 0.0)) > 1.0,
+		"But the raw pressure component is reported unclamped"
+	)
+
+
+func _test_multiplier_pressure_is_consumed_per_prompt() -> void:
+	var heat := HeatSystem.new()
+	var state := _rig(["gpu_rack"], 0.0)
+	state.compute["last_batch_multiplier"] = 1024.0
+	heat.process_prompt(state, [], EffectResolver.new(), DeterministicRng.new(4), ResolveMode.PREVIEW)
+	assert_true(state.compute.has("last_batch_multiplier"), "A preview does not spend the burn's multiplier")
+	heat.process_prompt(state, [], EffectResolver.new(), DeterministicRng.new(4), ResolveMode.COMMIT)
+	assert_almost_eq(float(state.compute.get("instability", 0.0)), 0.15, 1e-6, "The commit reads it")
+	assert_false(state.compute.has("last_batch_multiplier"), "And spends it")
+	heat.process_prompt(state, [], EffectResolver.new(), DeterministicRng.new(4), ResolveMode.COMMIT)
+	assert_eq(float(state.compute.get("instability", -1.0)), 0.0, "A prompt with no burn carries no pressure")
+
+
+func _test_endless_escalation_ramps_heat_and_faults() -> void:
+	var state := _rig(["used_laptop"], 10.0)
+	assert_eq(HeatSystem.heat_gain_mult(state), 1.0, "A fresh run has no heat pressure")
+	assert_eq(HeatSystem.fault_chance_mult(state), 1.0, "Or fault pressure")
+	var tuning := {"heat": {"endless_heat_escalation": 1.05, "endless_fault_escalation": 1.08}}
+	HeatSystem.escalate_endless(state, tuning)
+	assert_almost_eq(float(state.compute.get("endless_heat_mult", 0.0)), 1.05, 1e-6, "One endless round ramps ambient heat 5%")
+	assert_almost_eq(float(state.compute.get("endless_fault_mult", 0.0)), 1.08, 1e-6, "And fault chance 8%")
+	for _i in range(9):
+		HeatSystem.escalate_endless(state, tuning)
+	assert_almost_eq(float(state.compute.get("endless_heat_mult", 0.0)), pow(1.05, 10), 1e-6, "Ten rounds compound")
+	assert_almost_eq(float(state.compute.get("endless_fault_mult", 0.0)), pow(1.08, 10), 1e-6, "Uncapped")
+	assert_almost_eq(HeatSystem.heat_gain_mult(state), pow(1.05, 10), 1e-6, "The heat pass reads the ramp")
+	# Ambient gain follows the multiplier; ambient cooling does not.
+	state.compute["power_draw"] = 100.0
+	state.compute["cooling"] = 0.0
+	var base: float = HeatSystem.generation(100.0)
+	assert_almost_eq(HeatSystem.ambient_delta(state), base * pow(1.05, 10), 1e-4, "Positive ambient heat is scaled")
+	state.compute["power_draw"] = 0.0
+	state.compute["cooling"] = 100.0
+	assert_almost_eq(HeatSystem.ambient_delta(state), -HeatSystem.sink(100.0), 1e-4, "Cooling is left alone")
+	# Pipeline heat follows it too, but only heat the pipeline adds.
+	assert_almost_eq(HeatSystem.scale_pipeline_heat(state, 10.0), 10.0 * pow(1.05, 10), 1e-4, "Pipeline heat is scaled")
+	assert_almost_eq(HeatSystem.scale_pipeline_heat(state, -10.0), -10.0, 1e-4, "A cooling stage is not")
+	# The default config path works without an explicit tuning dictionary.
+	var plain := _rig(["used_laptop"], 10.0)
+	HeatSystem.escalate_endless(plain)
+	assert_true(float(plain.compute.get("endless_heat_mult", 1.0)) > 1.0, "escalate_endless reads economy.heat by default")
+	assert_true(float(plain.compute.get("endless_fault_mult", 1.0)) > 1.0, "For both multipliers")
+
+
+## The lifecycle hook: ending a round past the contract deadline in a run that
+## carried on past its victory ramps heat and fault pressure alongside the
+## rent and power creep, and a round inside the calendar leaves them alone.
+func _test_endless_round_past_the_deadline_ramps_heat_and_faults() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(9203)
+	# Enough cash that the bills past the deadline never end the run.
+	sim.run_state.economy["cash"] = 1e9
+	sim.run_state.calendar["round"] = 1
+	sim.debug_end_round()
+	assert_eq(float(sim.run_state.compute.get("endless_heat_mult", 1.0)), 1.0, "A round inside the calendar adds no endless heat pressure")
+	assert_eq(float(sim.run_state.compute.get("endless_fault_mult", 1.0)), 1.0, "Or fault pressure")
+
+	sim.run_state.flags["post_victory"] = true
+	# Well past any contract's deadline, whatever the chapter's terms.
+	sim.run_state.calendar["round"] = sim.ROUNDS_PER_RUN * 3
+	var rent_before: float = float(sim.run_state.economy.get("round_rent", 0.0))
+	sim.debug_end_round()
+	assert_true(sim.phase != sim.Phase.RUN_END, "A post-victory run is not ended by the deadline")
+	assert_true(float(sim.run_state.economy.get("round_rent", 0.0)) > rent_before, "The bills climb")
+	var cfg: Dictionary = HeatSystem.heat_config()
+	assert_almost_eq(
+		float(sim.run_state.compute.get("endless_heat_mult", 1.0)),
+		maxf(1.0, float(cfg.get("endless_heat_escalation", 1.05))), 1e-6,
+		"And one endless round ramps ambient heat by the configured step"
+	)
+	assert_almost_eq(
+		float(sim.run_state.compute.get("endless_fault_mult", 1.0)),
+		maxf(1.0, float(cfg.get("endless_fault_escalation", 1.08))), 1e-6,
+		"And fault chance by its step"
+	)
+	assert_true(HeatSystem.heat_gain_mult(sim.run_state) > 1.0, "Which the heat pass reads")
+	sim.debug_end_round()
+	assert_almost_eq(
+		float(sim.run_state.compute.get("endless_heat_mult", 1.0)),
+		pow(maxf(1.0, float(cfg.get("endless_heat_escalation", 1.05))), 2), 1e-6,
+		"A second round past the deadline compounds"
+	)
+	sim.free()
+
+
+func _test_fault_multiplier_reaches_the_roll() -> void:
+	var heat := HeatSystem.new()
+	var never := _rig(["compute_cluster"], 95.0)
+	never.compute["endless_fault_mult"] = 0.0
+	for i in range(32):
+		never.compute["heat"] = 95.0
+		heat.process_prompt(never, [], EffectResolver.new(), DeterministicRng.new(500 + i), ResolveMode.COMMIT)
+	assert_false(_has_fault(never), "A zero fault multiplier means no rack ever drops")
+	var always := _rig(["compute_cluster"], 95.0)
+	always.compute["depth_fault_mult"] = 1e6
+	heat.process_prompt(always, [], EffectResolver.new(), DeterministicRng.new(501), ResolveMode.COMMIT)
+	assert_true(_has_fault(always), "A huge fault multiplier drops a rack on the first hot prompt")
+	assert_almost_eq(HeatSystem.fault_chance_mult(always), 1e6, 1.0, "Endless and depth multipliers compose uncapped")
 
 
 func _test_bedroom_has_no_instability() -> void:

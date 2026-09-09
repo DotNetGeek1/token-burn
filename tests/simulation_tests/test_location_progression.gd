@@ -318,6 +318,8 @@ func _test_the_permanent_rig_arrives_on_every_fresh_run() -> void:
 
 	# The garage can take the desktop. The rack still cooks there.
 	_force_chapter_win(sim)
+	if sim.investor_draft_pending():
+		sim.decline_offers()
 	assert_true(sim.advance_to_next_chapter(), "The win moves the company into the garage")
 	hardware = Array(sim.run_state.build.get("hardware", []))
 	assert_true(int(UpgradeSystem.upgrade_counts(sim.run_state).get("upgrade.custom_desktop", 0)) > 0, "Garage inherits earned compute capacity")

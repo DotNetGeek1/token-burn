@@ -274,9 +274,11 @@ func _test_market_closed_refuses() -> void:
 	sim.free()
 
 
-## A v22 save that was demonstrably using more than its room's row is raised
-## until the tiers explain what it had, and the legacy bonus migration then
-## attributes nothing extra to meta unlocks, so nothing is counted twice.
+## A v22 save that was demonstrably using more workflows or floor than its
+## room's row is raised until those tiers explain what it had. The backplane is
+## the exception: a wider-than-tier pipeline is kept as overflow stages (see
+## test_save_migration_fixtures), so the tier stays where the room puts it and
+## no meta bonus is invented to explain the difference.
 func _test_migration_never_reduces_capacity() -> void:
 	var sim := _make_sim(909)
 	var saved: Dictionary = sim.run_state.to_dict()
@@ -287,6 +289,7 @@ func _test_migration_never_reduces_capacity() -> void:
 	build.erase("meta_workflow_bonus")
 	var board: Dictionary = build["board"]
 	board.erase("meta_slot_bonus")
+	board.erase("meta_overflow_bonus")
 	board["slot_count"] = 5
 	build["board"] = board
 	build["workflow_capacity"] = 2
@@ -295,7 +298,7 @@ func _test_migration_never_reduces_capacity() -> void:
 
 	var state := RunState.new()
 	state.from_dict(saved)
-	assert_eq(CabinetSystems.tier(state, "backplane"), 2, "Backplane raised to cover 5 bays")
+	assert_eq(CabinetSystems.tier(state, "backplane"), 1, "Backplane stays at the room's tier: extra slots become overflow, not a rail")
 	assert_eq(CabinetSystems.tier(state, "control"), 2, "Control raised to cover 2 workflows")
 	assert_eq(CabinetSystems.tier(state, "power"), 2, "Power raised to cover 3 machines")
 	assert_eq(CabinetSystems.tier(state, "compute"), 1, "Compute untouched: nothing demanded it")
@@ -304,10 +307,35 @@ func _test_migration_never_reduces_capacity() -> void:
 		UpgradeSystem.hardware_slots_total(state, ContentDatabase) >= 3, "Three machines still fit"
 	)
 	_board.ensure_board(state, ContentDatabase)
-	assert_eq(_board.derived_supported_capacity(state, ContentDatabase), 5, "Board is 5 bays, not 5 + a phantom meta bonus")
-	assert_eq(int(Dictionary(state.build.get("board", {})).get("meta_slot_bonus", -1)), 0, "No meta slot bonus invented")
+	assert_eq(_board.derived_supported_capacity(state, ContentDatabase), 3, "Safe capacity is the 3-Bay Rail")
+	var migrated_board: Dictionary = Dictionary(state.build.get("board", {}))
+	assert_false(migrated_board.has("meta_slot_bonus"), "The old meta_slot_bonus field is gone")
+	assert_eq(int(migrated_board.get("meta_overflow_bonus", -1)), 0, "No overflow bonus invented from the stored slot count")
 	assert_eq(_board.derived_workflow_capacity(state, ContentDatabase), 2, "Two workflows, not 2 + a phantom bonus")
 	assert_eq(int(state.build.get("meta_workflow_bonus", -1)), 0, "No meta workflow bonus invented")
+
+	# A save that had banked a real slot unlock keeps it, as allowance.
+	var unlocked: Dictionary = sim_saved_with_meta_slot_bonus(2)
+	var kept := RunState.new()
+	kept.from_dict(unlocked)
+	var kept_board: Dictionary = Dictionary(kept.build.get("board", {}))
+	assert_false(kept_board.has("meta_slot_bonus"), "v25 renames meta_slot_bonus")
+	assert_eq(int(kept_board.get("meta_overflow_bonus", -1)), 2, "Its value becomes meta_overflow_bonus")
+	_board.ensure_board(kept, ContentDatabase)
+	assert_eq(_board.derived_supported_capacity(kept, ContentDatabase), 3, "Safe capacity is still the rail")
+	assert_eq(_board.overflow_allowance(kept, ContentDatabase), 2, "The two ranks are two stages of allowance")
+
+
+func sim_saved_with_meta_slot_bonus(bonus: int) -> Dictionary:
+	var sim := _make_sim(912)
+	var saved: Dictionary = sim.run_state.to_dict()
+	sim.free()
+	saved["save_version"] = 24
+	var build: Dictionary = saved["build"]
+	var board: Dictionary = build["board"]
+	board.erase("meta_overflow_bonus")
+	board["meta_slot_bonus"] = bonus
+	return saved
 
 
 func _test_migration_clamps_stray_tiers() -> void:

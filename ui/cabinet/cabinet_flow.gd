@@ -77,6 +77,8 @@ func build() -> void:
 			continue
 		_overlay_root.add_child(overlay)
 	bills_screen.continue_pressed.connect(_on_bills_continue)
+	run_end.investor_draft_requested.connect(_on_investor_draft_requested)
+	angel_investors.closed.connect(_on_investor_table_closed)
 
 
 ## Wires the simulation signals that bring the paperwork out. Called by the
@@ -91,8 +93,8 @@ func connect_events() -> void:
 # --- What the shell asks ------------------------------------------------------
 
 ## The paperwork half of a redraw, after the instruments have been refreshed:
-## brings out the angels, the verdict and the investor when the phase calls for
-## them, and settles whether the paper is blocking the machine.
+## brings out the legacy angel table, the verdict and the investor when the
+## phase calls for them, and settles whether the paper is blocking the machine.
 func refresh() -> void:
 	if title_active:
 		sync_overlay_input()
@@ -104,11 +106,16 @@ func refresh() -> void:
 	if not (in_angel and report_open):
 		_last_angel_phase = in_angel
 	if Simulation.phase == Simulation.Phase.RUN_END and not bills_screen.visible:
-		_clear_stage_for(run_end)
-		run_end.show_from_state(
-			bool(Simulation.run_state.flags.get("victory", false)),
-			str(Simulation.run_state.flags.get("loss_reason", ""))
-		)
+		if angel_investors.visible and Simulation.investor_draft_pending():
+			# The investor's table sits on top of the verdict while the pick
+			# is made; redrawing the verdict under it would sweep it away.
+			pass
+		else:
+			_clear_stage_for(run_end)
+			run_end.show_from_state(
+				bool(Simulation.run_state.flags.get("victory", false)),
+				str(Simulation.run_state.flags.get("loss_reason", ""))
+			)
 	elif run_end != null and run_end.visible:
 		run_end.hide_overlay()
 	if Simulation.phase == Simulation.Phase.ROUND_PREP:
@@ -397,6 +404,25 @@ func _on_bills_continue() -> void:
 		angel_investors.show_choices()
 		_last_angel_phase = true
 	refresh_requested.emit()
+
+
+## The verdict asked for the investor's perk table. It comes up over the
+## verdict — which stays where it is — so the exits are waiting once the pick
+## is made.
+func _on_investor_draft_requested() -> void:
+	if not Simulation.investor_draft_pending():
+		refresh_requested.emit()
+		return
+	angel_investors.move_to_front()
+	angel_investors.show_choices()
+	sync_overlay_input()
+
+
+## The table has been answered (or a stale one closed); the verdict's exits
+## need reprinting now the company is free to move.
+func _on_investor_table_closed() -> void:
+	if Simulation.phase == Simulation.Phase.RUN_END:
+		refresh_requested.emit()
 
 
 func _clear_stage_for(verdict: Control) -> void:

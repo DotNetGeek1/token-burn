@@ -82,8 +82,6 @@ class Harness:
 	func equip(perk_id: String) -> Array:
 		var perk: PerkDefinition = ContentDatabase.get_perk(perk_id)
 		assert(perk != null)
-		if not (perk_id in Array(state.build.get("perk_inventory", []))):
-			state.build["perk_inventory"] = Array(state.build.get("perk_inventory", [])) + [perk_id]
 		if not (perk_id in Array(state.build.get("perks", []))):
 			state.build["perks"] = Array(state.build.get("perks", [])) + [perk_id]
 		var subs: Array = []

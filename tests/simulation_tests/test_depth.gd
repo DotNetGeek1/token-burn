@@ -20,6 +20,124 @@ func run() -> void:
 	_test_later_prompt_does_not_recomplete()
 	_test_depth_complete_settles_the_active_session()
 	_test_depth_score_accrues_at_the_live_multiplier()
+	_test_affixes_author_pressure_multipliers()
+	_test_affix_pressure_reaches_heat_and_faults()
+	_test_affix_pressure_reaches_overflow_instability()
+	_test_pressure_recomputes_from_stacks()
+
+
+func _test_affixes_author_pressure_multipliers() -> void:
+	var seen_heat := false
+	var seen_fault := false
+	var seen_overflow := false
+	for affix in DepthSystem.affixes(ContentDatabase):
+		if not affix is Dictionary:
+			continue
+		for field in DepthSystem.PRESSURE_FIELDS.keys():
+			assert_true(affix.has(field), "%s authors %s" % [str(affix.get("id", "")), str(field)])
+			assert_true(float(affix.get(field, 0.0)) >= 1.0, "Pressure multipliers never make a depth safer")
+		seen_heat = seen_heat or float(affix.get("heat_mult", 1.0)) > 1.0
+		seen_fault = seen_fault or float(affix.get("fault_mult", 1.0)) > 1.0
+		seen_overflow = seen_overflow or float(affix.get("overflow_instability_mult", 1.0)) > 1.0
+	assert_true(seen_heat, "At least one affix makes the rig run hotter")
+	assert_true(seen_fault, "At least one affix makes racks flakier")
+	assert_true(seen_overflow, "At least one affix makes overflow stages less stable")
+
+
+func _test_affix_pressure_reaches_heat_and_faults() -> void:
+	var depth := DepthSystem.new()
+	var state := RunState.new()
+	state.build["dwelling"] = "moon_facility"
+	assert_eq(HeatSystem.heat_gain_mult(state), 1.0, "No depth, no heat pressure")
+	var cooling := _affix_named("depth.thin_cooling")
+	state.depth["pending_picks"] = [cooling.duplicate(true)]
+	assert_true(depth.choose_affix(state, "depth.thin_cooling", ContentDatabase), "Thin Cooling lands")
+	var heat_mult: float = float(cooling.get("heat_mult", 1.0))
+	var fault_mult: float = float(cooling.get("fault_mult", 1.0))
+	assert_almost_eq(float(state.compute.get("depth_heat_mult", 0.0)), heat_mult, 1e-6, "The affix's heat multiplier lands in compute")
+	assert_almost_eq(float(state.compute.get("depth_fault_mult", 0.0)), fault_mult, 1e-6, "So does its fault multiplier")
+	assert_almost_eq(HeatSystem.heat_gain_mult(state), heat_mult, 1e-6, "HeatSystem reads the heat pressure")
+	assert_almost_eq(HeatSystem.fault_chance_mult(state), fault_mult, 1e-6, "And the fault pressure")
+	state.build["hardware"] = ["compute_cluster"]
+	state.compute["heat_capacity"] = 100.0
+	state.compute["cooling"] = 0.0
+	state.compute["power_draw"] = 100.0
+	var plain := RunState.new()
+	plain.build["dwelling"] = "moon_facility"
+	plain.build["hardware"] = ["compute_cluster"]
+	plain.compute["heat_capacity"] = 100.0
+	plain.compute["cooling"] = 0.0
+	plain.compute["power_draw"] = 100.0
+	assert_almost_eq(
+		HeatSystem.ambient_delta(state), HeatSystem.ambient_delta(plain) * heat_mult, 1e-4,
+		"Thin Cooling makes ambient heat gain %.2f× larger" % heat_mult
+	)
+	state.depth["pending_picks"] = [cooling.duplicate(true)]
+	assert_true(depth.choose_affix(state, "depth.thin_cooling", ContentDatabase), "A second stack lands")
+	assert_almost_eq(
+		float(state.compute.get("depth_heat_mult", 0.0)), heat_mult * heat_mult, 1e-6,
+		"Stacks multiply rather than add"
+	)
+	assert_almost_eq(
+		float(state.compute.get("depth_fault_mult", 0.0)), fault_mult * fault_mult, 1e-6,
+		"For faults too"
+	)
+	# The fault roll itself honours the multiplier: with a giant one a hot
+	# cluster drops a rack on the very first prompt.
+	state.compute["depth_fault_mult"] = 1e6
+	state.compute["heat"] = 95.0
+	state.compute["power_draw"] = 0.0
+	var heat := HeatSystem.new()
+	heat.process_prompt(state, [], EffectResolver.new(), DeterministicRng.new(9801), ResolveMode.COMMIT)
+	assert_true(_has_status(state, "status.fault.dead_rack"), "Depth fault pressure reaches the rack roll")
+
+
+func _test_affix_pressure_reaches_overflow_instability() -> void:
+	var depth := DepthSystem.new()
+	var board := BoardSystem.new()
+	var state := RunState.new()
+	Simulation.apply_run_location(state, "moon_facility", false)
+	board.ensure_board(state, ContentDatabase)
+	var safe: int = board.derived_supported_capacity(state, ContentDatabase)
+	var index: int = board.append_overflow_stage(state, ContentDatabase)
+	assert_eq(index, safe, "The moon can bolt on an overflow stage")
+	var before: float = board._overflow_instability(state, index)
+	assert_true(before > 0.0, "An overflow stage carries instability")
+	var bugs := _affix_named("depth.hidden_bug")
+	var mult: float = float(bugs.get("overflow_instability_mult", 1.0))
+	assert_true(mult > 1.0, "Recursive Bugs makes overflow less stable")
+	state.depth["pending_picks"] = [bugs.duplicate(true)]
+	assert_true(depth.choose_affix(state, "depth.hidden_bug", ContentDatabase), "Recursive Bugs lands")
+	assert_almost_eq(
+		float(state.compute.get("depth_overflow_instability_mult", 0.0)), mult, 1e-6,
+		"The affix's overflow multiplier lands in compute"
+	)
+	assert_almost_eq(
+		board._overflow_instability(state, index), before * mult, 1e-9,
+		"BoardSystem scales overflow instability by it"
+	)
+	assert_eq(board._overflow_instability(state, 0), 0.0, "Supported stages are still free")
+
+
+func _test_pressure_recomputes_from_stacks() -> void:
+	var state := RunState.new()
+	state.depth["stacks"] = {"depth.thin_cooling": 3, "depth.target_x5": 2}
+	var cooling := _affix_named("depth.thin_cooling")
+	var target := _affix_named("depth.target_x5")
+	var expected_heat: float = pow(float(cooling.get("heat_mult", 1.0)), 3.0) * pow(float(target.get("heat_mult", 1.0)), 2.0)
+	var expected_fault: float = pow(float(cooling.get("fault_mult", 1.0)), 3.0) * pow(float(target.get("fault_mult", 1.0)), 2.0)
+	var mults: Dictionary = DepthSystem.apply_pressure(state, ContentDatabase)
+	assert_almost_eq(float(mults.get("heat_mult", 0.0)), expected_heat, 1e-6, "Pressure is the product over held stacks")
+	assert_almost_eq(float(state.compute.get("depth_heat_mult", 0.0)), expected_heat, 1e-6, "And is written to compute")
+	assert_almost_eq(float(state.compute.get("depth_fault_mult", 0.0)), expected_fault, 1e-6, "For every field")
+	DepthSystem.apply_pressure(state, ContentDatabase)
+	assert_almost_eq(
+		float(state.compute.get("depth_heat_mult", 0.0)), expected_heat, 1e-6,
+		"Re-applying (a reload, say) does not double-multiply"
+	)
+	state.depth["stacks"] = {}
+	DepthSystem.apply_pressure(state, ContentDatabase)
+	assert_eq(float(state.compute.get("depth_heat_mult", 0.0)), 1.0, "No stacks means no pressure")
 
 
 func _test_reset_clears_depth() -> void:

@@ -9,13 +9,18 @@ extends RefCounted
 ## costs and why it cannot be bought yet.
 ##
 ## The tier is the primary source of every capacity; the chapter table
-## (`dwelling_costs.json`, keyed by `build.dwelling`, plus
-## `job_scaling.board.supported_stages` for bays) is a permanent floor beneath
-## it for chapters that out-size the tier table. The datacentre, the grid and
-## the moon hand out forty, eighty and a hundred and sixty slots against the
-## Unstable Core's sixteen, and their bays run past the tier-4 backplane, so a
-## capacity is always `max(tier value, chapter floor)` and never decreases when
-## a run moves up a chapter.
+## (`dwelling_costs.json`, keyed by `build.dwelling`) is a permanent floor
+## beneath it for the stats chapters out-size the tier table on: floor slots,
+## cooling and heat capacity. The datacentre, the grid and the moon hand out
+## forty, eighty and a hundred and sixty slots against the Unstable Core's
+## sixteen, so those capacities are `max(tier value, chapter floor)` and never
+## decrease when a run moves up a chapter.
+##
+## Bays are the exception: the Workflow Backplane tier is the *only* source of
+## safe pipeline capacity. No chapter floor, no bonus stacks on top. A chapter
+## move still lifts the tier itself (`raise_to_dwelling`), which is how a
+## warehouse run opens with a 7-Bay Rail. Anything the room, a perk or an
+## unlock adds arrives as overflow allowance instead (see BoardSystem).
 ##
 ## Everything here is static and reads content through `ContentDatabase`
 ## unless a database is passed in, the same way the other systems do.
@@ -26,7 +31,8 @@ const MAX_TIER := 4
 
 ## Which chapter-table column each floored stat is read from.
 const CHAPTER_STATS := ["hardware_slots", "cooling_capacity", "heat_capacity"]
-const CHAPTER_BOARD_STAT := "bays"
+## The one stat that is never floored: the backplane tier is authoritative.
+const BACKPLANE_STAT := "bays"
 
 const REASON_MAXED := "MAXED OUT"
 const REASON_UNKNOWN := "UNKNOWN SYSTEM"
@@ -236,6 +242,14 @@ static func capacity_at_tier(run_state: RunState, system_id: String, stat_key: S
 		value = float(profile.get(stat_key, value)) * (1.0 + step * float(level - 1)) / (1.0 + step * float(entry_tier - 1))
 	elif stat_key == "hardware_slots":
 		value = maxf(float([2, 4, 8, 16][clampi(level - 1, 0, 3)]), chapter_floor(run_state, stat_key, content_db))
+	elif stat_key == BACKPLANE_STAT:
+		# Bays are the tier's number and nothing else. A legacy save that was
+		# demonstrably running a wider pipeline keeps those stages as overflow
+		# (BoardSystem._migrate_legacy_board_bonuses), so no floor — chapter or
+		# `cabinet_legacy_floor` — is needed to preserve what the player had, and
+		# applying one would put the safe figure out of step with the tier the
+		# Market row says the run owns.
+		return value
 	else:
 		value = maxf(value, chapter_floor(run_state, stat_key, content_db))
 	return maxf(value, float(Dictionary(run_state.build.get("cabinet_legacy_floor", {})).get(stat_key, 0.0)))
@@ -320,7 +334,7 @@ static func grant_permanent_upgrade(state: RunState, upgrade: UpgradeDefinition)
 
 
 ## The chapter table's value for this stat, or 0 for a stat the chapter table
-## does not carry (`workflows`, `base_token_rate`).
+## does not carry (`bays`, `workflows`, `base_token_rate`).
 static func chapter_floor(run_state: RunState, stat_key: String, content_db: Node = null) -> float:
 	var db: Node = content_db if content_db != null else ContentDatabase
 	var dwelling: String = str(run_state.build.get("dwelling", ""))
@@ -329,11 +343,6 @@ static func chapter_floor(run_state: RunState, stat_key: String, content_db: Nod
 	if stat_key in CHAPTER_STATS:
 		var row: Dictionary = Dictionary(Dictionary(db.balance.get("dwelling_costs", {})).get(dwelling, {}))
 		return float(row.get(stat_key, 0.0))
-	if stat_key == CHAPTER_BOARD_STAT:
-		var table: Dictionary = Dictionary(
-			Dictionary(Dictionary(db.balance.get("job_scaling", {})).get("board", {})).get("supported_stages", {})
-		)
-		return float(table.get(dwelling, 0))
 	return 0.0
 
 

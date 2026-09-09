@@ -1,9 +1,14 @@
 class_name RunLifecycle
 extends RefCounted
 
-## Start/end of a run, round boundaries, angel draft, victory/chapters, and
-## save/load. Owned by Simulation as `_life`. Public `phase` / `pending_choices`
-## stay on the facade (too many callers).
+## Start/end of a run, round boundaries, the investor's perk draft, victory /
+## chapters, and save/load. Owned by Simulation as `_life`. Public `phase` /
+## `pending_choices` stay on the facade (too many callers).
+##
+## Perks are drafted once per chapter, when the investor's goal is met: the
+## table is dealt in `reach_victory` and has to be taken or declined before the
+## company can move on. The old round-end angel draft is gone; `ANGEL_ROUND`
+## survives only so a save written with one open can still resolve it.
 ##
 ## `sim` is the owning Simulation node, taken as a plain `Node` to avoid a
 ## circular class reference. Cross-concern calls (end session) go back through
@@ -52,10 +57,10 @@ func repair_after_load(sim: Node) -> void:
 		sim.Phase.ROUND_END:
 			sim.phase = sim.Phase.ROUND_PREP
 		sim.Phase.ANGEL_ROUND:
+			# A pre-v25 save mid-draft. Let it finish the table it was dealt;
+			# an empty table is simply closed.
 			if sim.pending_choices.is_empty():
-				present_angel_offers(sim)
-			if sim.pending_choices.is_empty():
-				sim.phase = sim.Phase.ROUND_PREP
+				after_angel_round(sim)
 
 	_ensure_job_offers(sim)
 
@@ -265,7 +270,8 @@ func can_accept_offer(sim: Node, job_id: String) -> bool:
 
 ## The location's boss has cleared: the game is beaten. The run is not thrown away
 ## with it. The round it happened in is settled properly — the work pays out, the
-## bills land, the angels call if the rent cleared — and the phase that would have
+## bills are waived — and then the investor deals his perks: one draft per goal,
+## taken or declined before the company moves on. The phase that would have
 ## come next is remembered, so continuing into endless mode resumes from a clean
 ## round boundary instead of the middle of a burn.
 func reach_victory(sim: Node, contract: Dictionary) -> void:
@@ -295,13 +301,13 @@ func reach_victory(sim: Node, contract: Dictionary) -> void:
 	settling_victory = true
 	sim._end_session("ascended")
 	settling_victory = false
-	# Settling normally leaves the round closed out into either a draft or the next
-	# round's prep, but a loss check swallowed mid-settle can leave it in neither.
-	# The phase to resume on is therefore taken from what is actually on the table
-	# rather than from wherever the settle happened to stop.
-	sim.run_state.flags["post_victory_phase"] = sim._phase_name(
-		sim.Phase.ANGEL_ROUND if not sim.pending_choices.is_empty() else sim.Phase.ROUND_PREP
-	)
+	# The reward for the goal. Dealt exactly once here, whatever the contract
+	# says about picks — those are the profile's, paid at the summit only.
+	present_investor_draft(sim)
+	# Settling leaves the round closed out into the next round's prep, but a
+	# loss check swallowed mid-settle can leave it elsewhere. Continuing always
+	# resumes on a clean round boundary.
+	sim.run_state.flags["post_victory_phase"] = sim._phase_name(sim.Phase.ROUND_PREP)
 	sim.phase = sim.Phase.RUN_END
 	EventBus.emit_event(EventBus.EVENT_RUN_ENDED, {"victory": true})
 	sim._autosave()
@@ -393,6 +399,10 @@ func continue_after_victory(sim: Node) -> bool:
 		return false
 	if next_location_unlocked(sim) != "":
 		return false
+	# The investor's table is still on the desk. Take a card or turn them all
+	# down first; the run does not carry on with the draft unresolved.
+	if investor_draft_pending(sim):
+		return false
 	sim.run_state.flags["post_victory"] = true
 	sim.run_state.flags["victory"] = false
 	sim.run_state.flags["outcome"] = ""
@@ -473,6 +483,11 @@ func advance_to_next_chapter(sim: Node) -> bool:
 	var next_location: String = next_location_unlocked(sim)
 	if next_location == "":
 		return false
+	# The perk draft the goal earned is settled before the move, not carried
+	# into the new chapter as a loose end.
+	if investor_draft_pending(sim):
+		return false
+	sim.run_state.flags["investor_draft_resolved"] = false
 	sim.run_state.flags["victory"] = false
 	sim.run_state.flags["outcome"] = ""
 	sim.run_state.flags["location_completed"] = false
@@ -491,7 +506,9 @@ func advance_to_next_chapter(sim: Node) -> bool:
 	# The next room's own machine is a stake for a run that starts there. A run
 	# that won its way up arrives with the rig it won on, and nothing else.
 	apply_run_location(sim, sim.run_state, next_location, false)
-	sim.run_state.economy["cash"] = maxf(cash_carried, float(sim.run_state.economy.get("cash", 0.0)))
+	var stake: float = float(sim.run_state.economy.get("cash", 0.0))
+	sim.run_state.economy["cash"] = maxf(cash_carried, stake)
+	_charge_chapter_commissioning(sim, next_location, cash_carried, stake)
 	# A permanent rig rung the old room had no floor for is racked now that
 	# there is a room that fits it.
 	_install_permanent_rig(sim)
@@ -504,22 +521,110 @@ func advance_to_next_chapter(sim: Node) -> bool:
 		% MetaProgress.location_name(next_location)
 	)
 	_begin_round(sim)
-	# A draft pick earned on the winning round is still on the table; the new
-	# chapter opens once it has been taken, exactly as a round boundary would.
-	if not sim.pending_choices.is_empty():
-		sim.phase = sim.Phase.ANGEL_ROUND
 	sim._autosave()
 	return true
 
 
-## Takes one of the angel's perk offers. Everything on the table is free, so the
-## only question is which one, and the draft closes either way.
+## Moving up is not free. A bigger room has to be commissioned — the power
+## connection, the racks migrated, the facility fitted out — and the bill is
+## the larger of half the chapter's big purchase and a share of the cash the
+## company walked in with, so a war chest built in a cheap room does not buy
+## the next one outright. Never below the room's own stake: the company
+## always arrives with at least what a fresh start there would have.
+func chapter_commissioning_cost(
+	sim: Node, next_location: String, cash_carried: float, stake: float
+) -> float:
+	var cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("chapter_transition", {})
+	var major_ratio: float = float(cfg.get("commissioning_major_purchase_ratio", 0.5))
+	var equity_ratio: float = float(cfg.get("equity_ratio", 0.3))
+	var major_purchase: float = _location_major_purchase(next_location)
+	var cost: float = maxf(major_purchase * major_ratio, cash_carried * equity_ratio)
+	var arriving: float = maxf(cash_carried, stake)
+	return clampf(cost, 0.0, maxf(0.0, arriving - stake))
+
+
+## What advancing would cost right now, for the verdict screen. Zero when
+## there is no chapter ahead.
+func chapter_commissioning_preview(sim: Node) -> float:
+	var next_location: String = next_location_unlocked(sim)
+	if next_location == "":
+		return 0.0
+	var cash_carried: float = float(sim.run_state.economy.get("cash", 0.0))
+	return chapter_commissioning_cost(
+		sim, next_location, cash_carried, _location_stake(sim, next_location)
+	)
+
+
+## The float a fresh run in `location` opens with, which is what
+## `apply_run_location` writes before the carried cash is laid over it.
+func _location_stake(sim: Node, location: String) -> float:
+	var stats: Dictionary = Dictionary(
+		ContentDatabase.balance.get("dwelling_costs", {}).get(location, {})
+	)
+	return float(stats.get("starting_cash", 0.0)) * float(
+		sim.run_state.economy.get("cash_multiplier", 1.0)
+	)
+
+
+## `job_scaling.location_bands[].major_purchase` for a named location — the
+## same anchor the Market prices off, read for the room being moved into
+## rather than the one being left.
+func _location_major_purchase(location: String) -> float:
+	for band in JobSystem.location_bands(ContentDatabase):
+		if band is Dictionary and str(band.get("location", "")) == location:
+			return float(band.get("major_purchase", 0.0))
+	return 0.0
+
+
+func _charge_chapter_commissioning(
+	sim: Node, next_location: String, cash_carried: float, stake: float
+) -> void:
+	var cost: float = chapter_commissioning_cost(sim, next_location, cash_carried, stake)
+	sim.run_state.statistics["last_chapter_commissioning"] = cost
+	if cost <= 0.0:
+		return
+	sim.economy_system().debit(sim.run_state, cost, "chapter_commissioning", {
+		"location": next_location,
+		"cash_carried": cash_carried,
+		"stake": stake,
+	})
+	sim.run_state.statistics["chapter_commissioning"] = (
+		float(sim.run_state.statistics.get("chapter_commissioning", 0.0)) + cost
+	)
+	sim.round_log.append(
+		"Commissioning the %s — power connection, rack migration, fit-out — costs %s."
+		% [MetaProgress.location_name(next_location), NumberFormat.format_cash(cost)]
+	)
+
+
+## Takes one of the investor's perk offers. Everything on the table is free, so
+## the only question is which one, and the draft closes either way.
 func accept_offer(sim: Node, offer_type: String, offer_id: String) -> bool:
 	if offer_type != "perk":
 		return false
 	if not _pending_contains(sim, "perk", offer_id):
 		return false
 	return _accept_perk(sim, offer_id)
+
+
+## Whether a perk table is on the desk and can be answered: the investor's
+## draft on a won run, or a legacy save's round-end angel draft.
+func draft_open(sim: Node) -> bool:
+	if sim.pending_choices.is_empty():
+		return false
+	if sim.phase == sim.Phase.ANGEL_ROUND:
+		return true
+	return investor_draft_pending(sim)
+
+
+## The investor's own draft: dealt on the victory screen, resolved before the
+## company moves on.
+func investor_draft_pending(sim: Node) -> bool:
+	return (
+		sim.phase == sim.Phase.RUN_END
+		and not sim.pending_choices.is_empty()
+		and str(sim.run_state.flags.get("draft_kind", "")) == sim.DRAFT_INVESTOR
+	)
 
 
 func _pending_contains(sim: Node, offer_type: String, offer_id: String) -> bool:
@@ -534,7 +639,7 @@ func _pending_contains(sim: Node, offer_type: String, offer_id: String) -> bool:
 ## Walks away with nothing. Always allowed: a full board and a bad offer is a
 ## real situation.
 func decline_offers(sim: Node) -> void:
-	if sim.phase != sim.Phase.ANGEL_ROUND:
+	if not draft_open(sim):
 		return
 	sim.run_state.statistics["angel_offers_declined"] = int(
 		sim.run_state.statistics.get("angel_offers_declined", 0)
@@ -548,22 +653,13 @@ func _spend_draft_pick(sim: Node, _offer_type: String, _offer_id: String) -> voi
 
 
 func _accept_perk(sim: Node, perk_id: String) -> bool:
-	if sim.phase != sim.Phase.ANGEL_ROUND:
+	if not draft_open(sim):
 		return false
-	if not sim.perk_system().collect_perk(sim.run_state, perk_id, ContentDatabase):
+	if not sim.grant_perk(perk_id):
 		return false
-	if sim.perk_system().can_equip(sim.run_state, perk_id, ContentDatabase):
-		sim.perk_system().equip_perk(sim.run_state, perk_id, ContentDatabase)
 	sim.run_state.statistics["angel_offers_taken"] = int(
 		sim.run_state.statistics.get("angel_offers_taken", 0)
 	) + 1
-	sim.debug_invalidate_subscriptions()
-	EventBus.emit_event(EventBus.EVENT_PERK_ACQUIRED, {"perk_id": perk_id})
-	sim._dispatch_perk_acquired(perk_id)
-	sim.board_system().ensure_board(sim.run_state, ContentDatabase)
-	sim.compute_system().recalculate(
-		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
-	)
 	_spend_draft_pick(sim, "perk", perk_id)
 	return true
 
@@ -589,12 +685,13 @@ func _angel_draw_rng(sim: Node) -> DeterministicRng:
 	return sim.rng.derive("angel.%d.reroll.0" % sequence)
 
 
+## Deals the table: three cards, plus one per Rolodex rank the profile holds.
 func _redraw_angel_offers(sim: Node) -> void:
 	sim.pending_choices = []
 	for offer in ContentDatabase.draw_angel_perks(
 		_angel_draw_rng(sim),
 		sim.run_state,
-		3,
+		MetaProgress.BASE_DRAFT_OPTIONS + MetaProgress.draft_option_bonus(),
 		sim.perk_system().owned_tags(sim.run_state, ContentDatabase),
 		sim.perk_system().undraftable_ids(sim.run_state, ContentDatabase)
 	):
@@ -608,36 +705,58 @@ func _redraw_angel_offers(sim: Node) -> void:
 		})
 
 
-## The round's angel draft. Everything here is free: somebody with more money
-## than sense is handing out perks. Modules are sold on the Market instead.
-func present_angel_offers(sim: Node) -> void:
+## Deals a fresh table and stamps it with `kind`. False when nothing could be
+## dealt — every perk owned or blocked — so the caller can skip the draft.
+func _deal_draft(sim: Node, kind: String) -> bool:
 	var draft: Dictionary = _draft_state(sim)
 	draft["sequence"] = int(draft.get("sequence", 0)) + 1
 	draft["rerolls"] = 0
 	sim.run_state.build["draft_state"] = draft
 	_redraw_angel_offers(sim)
 	if sim.pending_choices.is_empty():
+		sim.run_state.flags["draft_kind"] = ""
+		return false
+	sim.run_state.flags["draft_kind"] = kind
+	return true
+
+
+## The investor's draft, dealt when a chapter's goal is met. Everything on it
+## is free and permanent; the phase stays wherever the victory left it
+## (`RUN_END`), and the table is answered from the verdict screen. A goal with
+## nothing left to offer is marked resolved straight away so nothing waits on
+## an empty table.
+func present_investor_draft(sim: Node) -> void:
+	if _deal_draft(sim, sim.DRAFT_INVESTOR):
+		sim.run_state.flags["investor_draft_resolved"] = false
+		return
+	sim.run_state.flags["investor_draft_resolved"] = true
+
+
+## The pre-v25 round-end angel draft, kept only so a save that was written
+## mid-table can be resolved and so tests can open a table between rounds.
+## Nothing in the round loop calls this any more.
+func present_legacy_angel_draft(sim: Node) -> void:
+	if not _deal_draft(sim, sim.DRAFT_ANGEL):
 		after_angel_round(sim)
 		return
-	sim.run_state.flags["draft_kind"] = sim.DRAFT_ANGEL
 	sim.phase = sim.Phase.ANGEL_ROUND
 
 
-## Which draft is on the table, so a screen can title itself.
+## Which draft is on the table, so a screen can title itself. Empty when none.
 func draft_kind(sim: Node) -> String:
-	if sim.phase != sim.Phase.ANGEL_ROUND:
+	if not draft_open(sim):
 		return ""
 	return str(sim.run_state.flags.get("draft_kind", sim.DRAFT_ANGEL))
 
 
-## Picks still to spend on the draft. An angel draft is always worth exactly one.
+## Picks still to spend on the draft. A draft is always worth exactly one.
 func draft_picks_remaining(sim: Node) -> int:
-	return 1 if sim.phase == sim.Phase.ANGEL_ROUND else 0
+	return 1 if draft_open(sim) else 0
 
 
-## Closes the round: the bills land, the rig cools off, and — if the rent
-## cleared — the angels call. Reached only once every contract has resolved, so
-## the player is never billed in the middle of a job.
+## Closes the round: the bills land and the rig cools off. Reached only once
+## every contract has resolved, so the player is never billed in the middle of
+## a job. Nothing is drafted here — perks come from the investor's goal.
 func end_round(sim: Node) -> void:
 	sim.phase = sim.Phase.ROUND_END
 	# The round a contract was completed in is settled by the investor, not the
@@ -698,12 +817,6 @@ func end_round(sim: Node) -> void:
 	sim.run_state.calendar["round"] = int(sim.run_state.calendar["round"]) + 1
 	sim.achievement_system().evaluate_tick(sim.run_state, ContentDatabase)
 	_begin_round(sim)
-	# Angels only call on a tenant in good standing. Clearing the round's bills
-	# is the price of admission; miss the rent and nobody with money wants to be
-	# seen anywhere near the operation. `_begin_round` has already opened round
-	# prep, which is where a defaulting run stays.
-	if bool(statement.get("paid_in_full", false)) and not settling_depth:
-		present_angel_offers(sim)
 
 
 ## Ages the run's status effects by one round and drops the ones that have run
@@ -736,14 +849,16 @@ func expire_status_effects(sim: Node) -> void:
 		sim.round_log.append("%s has worn off." % name)
 
 
-## Each round past the twelfth, rent and power creep up 8%: the same rig that
-## coasted through the final act starts to strain again, keeping an endless
-## run a real challenge instead of a victory lap.
+## Each round past the twelfth, rent and power creep up 8%, and the room runs
+## hotter and the racks flakier (`HeatSystem.escalate_endless`): the same rig
+## that coasted through the final act starts to strain again, keeping an
+## endless run a real challenge instead of a victory lap.
 func _escalate_endless_costs(sim: Node) -> void:
 	sim.run_state.economy["round_rent"] = float(sim.run_state.economy.get("round_rent", 400.0)) * sim.ENDLESS_COST_ESCALATION
 	sim.run_state.economy["power_base_cost_per_prompt"] = float(
 		sim.run_state.economy.get("power_base_cost_per_prompt", 10.0)
 	) * sim.ENDLESS_COST_ESCALATION
+	HeatSystem.escalate_endless(sim.run_state, Dictionary(ContentDatabase.balance.get("economy", {})))
 	sim.run_state.statistics["endless_rounds"] = int(sim.run_state.statistics.get("endless_rounds", 0)) + 1
 
 
@@ -764,9 +879,20 @@ func rounds_remaining(sim: Node) -> int:
 	return maxi(0, _contract_deadline_round(sim) - int(sim.run_state.calendar.get("round", 1)) + 1)
 
 
+## Closes whichever draft was open. The investor's draft leaves the phase
+## alone — the run is still on its verdict screen, now free to move on — while
+## a legacy angel draft rolls the round over the way it always did.
 func after_angel_round(sim: Node) -> void:
+	var was_investor: bool = investor_draft_pending(sim) or (
+		sim.phase == sim.Phase.RUN_END
+		and str(sim.run_state.flags.get("draft_kind", "")) == sim.DRAFT_INVESTOR
+	)
 	sim.pending_choices.clear()
 	sim.run_state.flags["draft_kind"] = ""
+	if was_investor:
+		sim.run_state.flags["investor_draft_resolved"] = true
+		sim._autosave()
+		return
 	if sim.progression_system().check_loss(sim.run_state):
 		end_run(sim, false)
 		return
@@ -908,6 +1034,15 @@ func _migrate_pending_choices(sim: Node) -> void:
 			if ContentDatabase.get_perk(perk_id) != null and perk_id not in blocked_perks:
 				kept.append(choice)
 	sim.pending_choices = kept
+	if sim.phase == sim.Phase.RUN_END:
+		# An investor draft whose every card has since become illegal is
+		# simply over; the verdict screen has nothing to wait for.
+		if sim.pending_choices.is_empty() and str(
+			sim.run_state.flags.get("draft_kind", "")
+		) == sim.DRAFT_INVESTOR:
+			sim.run_state.flags["draft_kind"] = ""
+			sim.run_state.flags["investor_draft_resolved"] = true
+		return
 	if sim.phase != sim.Phase.ANGEL_ROUND:
 		return
 	if not sim.pending_choices.is_empty():
@@ -970,6 +1105,10 @@ func angel_draw_rng(sim: Node) -> DeterministicRng:
 
 func redraw_angel_offers(sim: Node) -> void:
 	_redraw_angel_offers(sim)
+
+
+func location_major_purchase(location: String) -> float:
+	return _location_major_purchase(location)
 
 
 func escalate_endless_costs(sim: Node) -> void:

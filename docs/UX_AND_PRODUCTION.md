@@ -147,12 +147,14 @@ Cards scroll vertically. Critical contract information remains visible without o
 
 ## 6. Build screen
 
-The PERKS tab (loadout and synergies) and the MODULES tab (bench, and the
-backplane bays under the glass: FIT / BENCH / SEAT / EJECT).
+The PERKS tab (a read-only list of the perks the company owns, with their
+synergies — perks are permanent, there is no equip/bench) and the MODULES tab
+(module bench, and the backplane bays under the glass: FIT / BENCH / SEAT /
+EJECT; the counter reads `n/safe SEATED (+k OVERFLOW)`).
 
 ```text
 ┌─────────────────────────────────┐
-│ YOUR BUILD            4 / 5     │
+│ YOUR BUILD            4 PERKS   │
 ├─────────────────────────────────┤
 │ ┌────────────┐  ┌────────────┐  │
 │ │ SHIP IT    │  │ QUANTISED  │  │
@@ -186,8 +188,10 @@ Rules:
 
 ## 7. Post-job upgrade choice
 
-The angel table (three perks, take one or decline) is an overlay; everything
-paid for is the MARKET tab: the MODULES shelf, the hardware shelves, the
+The investor's perk table (three perks, more with Rolodex ranks; take one or
+decline) is an overlay dealt once when a chapter goal is met, before the
+company can advance — never after an ordinary round. Everything paid for is
+the MARKET tab: the MODULES shelf, the hardware shelves, the
 SYSTEMS shelf and the RIG shelf (what is installed, sellable back).
 
 ```text

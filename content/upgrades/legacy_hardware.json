@@ -353,7 +353,7 @@
     "id": "upgrade.second_monitor",
     "name": "Second Monitor",
     "category": "hardware",
-    "description": "One more pipeline slot on the Burn Board. Turns out you could not see the whole workflow on a laptop.",
+    "description": "Room for one more overflow stage on the Burn Board. Turns out you could not see the whole workflow on a laptop.",
     "cost": 1800,
     "tags": [
       "hardware",
@@ -363,7 +363,7 @@
     "effects": [
       {
         "operation": "add",
-        "target": "build.board.slot_count",
+        "target": "build.board.overflow_stages",
         "value": 1
       }
     ]
@@ -392,7 +392,7 @@
     "id": "upgrade.standing_desk",
     "name": "Standing Desk Setup",
     "category": "hardware",
-    "description": "Another pipeline slot, and a posture your physiotherapist describes as 'a start'.",
+    "description": "Another overflow stage for the pipeline, and a posture your physiotherapist describes as 'a start'.",
     "cost": 6500,
     "tags": [
       "hardware",
@@ -402,7 +402,7 @@
     "effects": [
       {
         "operation": "add",
-        "target": "build.board.slot_count",
+        "target": "build.board.overflow_stages",
         "value": 1
       }
     ]

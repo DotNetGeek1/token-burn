@@ -67,11 +67,40 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 		var saved_workflows: int = int(saved_build.get("workflow_capacity", 0))
 		var saved_hardware: Array = Array(saved_build.get("hardware", []))
 		var saved_heat_capacity: float = float(Dictionary(saved.get("compute", {})).get("heat_capacity", 0.0))
-		assert_true(
-			board_system.derived_supported_capacity(state, ContentDatabase) >= saved_slots,
-			"%s: board capacity %d >= saved %d" % [
-				dwelling, board_system.derived_supported_capacity(state, ContentDatabase), saved_slots,
+		# Safe capacity is the room's backplane tier and nothing more. A save
+		# that was running a wider pipeline keeps every stage of it: the ones
+		# past the rail are overflow now, not a tier it never bought and not a
+		# phantom unlock.
+		var backplane_tier: int = int(Dictionary(tiers).get("backplane", 0))
+		var expected_safe: int = int(CabinetSystems.tier_value("backplane", "bays", backplane_tier))
+		var saved_layout: Array = Array(
+			Dictionary(Array(saved_build.get("workflows", []))[0]).get("slots", [])
+		)
+		board_system.ensure_board(state, ContentDatabase)
+		assert_eq(
+			board_system.derived_supported_capacity(state, ContentDatabase), expected_safe,
+			"%s: safe capacity %d is the tier-%d backplane's bays" % [dwelling, expected_safe, backplane_tier]
+		)
+		assert_eq(
+			board_system.slots(state).size(), maxi(expected_safe, saved_layout.size()),
+			"%s: the %d-stage pipeline is kept (%d safe + %d overflow)" % [
+				dwelling, saved_layout.size(), expected_safe, maxi(0, saved_layout.size() - expected_safe),
 			]
+		)
+		assert_true(
+			board_system.slots(state).size() >= saved_slots,
+			"%s: pipeline %d >= saved slot_count %d" % [dwelling, board_system.slots(state).size(), saved_slots]
+		)
+		for index in range(saved_layout.size()):
+			assert_eq(
+				str(board_system.slots(state)[index]), str(saved_layout[index]),
+				"%s: stage %d keeps its module" % [dwelling, index + 1]
+			)
+		var migrated_board: Dictionary = Dictionary(state.build.get("board", {}))
+		assert_false(migrated_board.has("meta_slot_bonus"), "%s: meta_slot_bonus is renamed" % dwelling)
+		assert_eq(
+			int(migrated_board.get("meta_overflow_bonus", -1)), 0,
+			"%s: no overflow bonus is invented to explain the wider pipeline" % dwelling
 		)
 		assert_true(
 			board_system.derived_workflow_capacity(state, ContentDatabase) >= saved_workflows,
@@ -138,7 +167,7 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 			Array(state.build.get("hardware", [])).size(), 0,
 			"%s: hardware converted to cabinet capacity" % dwelling
 		)
-		assert_eq(int(state.to_dict().get("save_version", 0)), RunState.SAVE_VERSION, "%s: saved back at v23" % dwelling)
+		assert_eq(int(state.to_dict().get("save_version", 0)), RunState.SAVE_VERSION, "%s: saved back at the current version" % dwelling)
 		var round_trip := RunState.new()
 		round_trip.from_dict(state.to_dict())
 		assert_eq(

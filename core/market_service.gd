@@ -239,6 +239,11 @@ static func _module_market_rng(sim: Node, market: Dictionary) -> DeterministicRn
 	)
 
 
+## A module costs the larger of two anchors: a share of the round's rent
+## (which keeps the bedroom shelf priced against the bills) and a share of the
+## chapter's `major_purchase` (which keeps late shelves priced against the
+## wealth a chapter actually generates, where rent alone would make a
+## legendary pocket change next to a single contract).
 static func module_price(sim: Node, module_id: String) -> float:
 	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
 	if module == null:
@@ -247,8 +252,11 @@ static func module_price(sim: Node, module_id: String) -> float:
 	var rarity_mults: Dictionary = Dictionary(tuning.get("rarity_price_rent_mult", {}))
 	var mult: float = float(rarity_mults.get(module.rarity, 1.0))
 	var rent: float = float(sim.run_state.economy.get("round_rent", 400.0))
+	var rent_based: float = rent * mult
+	var major_ratios: Dictionary = Dictionary(tuning.get("rarity_price_major_purchase_ratio", {}))
+	var major_based: float = _location_major_purchase(sim) * float(major_ratios.get(module.rarity, 0.0))
 	var floor_price: float = float(tuning.get("price_floor", 25.0))
-	return maxf(floor_price, snappedf(rent * mult, 1.0))
+	return maxf(floor_price, snappedf(maxf(rent_based, major_based), 1.0))
 
 
 static func can_buy_module(sim: Node, module_id: String) -> bool:
@@ -300,6 +308,12 @@ static func module_reroll_cost(sim: Node) -> float:
 		rent * float(tuning.get("reroll_rent_mult", 0.15)),
 		_location_base_job_reward(sim) * float(tuning.get("reroll_job_reward_mult", 0.05))
 	)
+	# Late chapters: the shelf's reroll tracks the same wealth anchor as its
+	# prices, so a refresh never becomes free relative to what it sells.
+	base = maxf(
+		base,
+		_location_major_purchase(sim) * float(tuning.get("reroll_major_purchase_ratio", 0.02))
+	)
 	var growth: float = float(tuning.get("reroll_growth", 2.0))
 	var rerolls: int = int(market.get("rerolls", 0))
 	return snappedf(base * pow(growth, float(rerolls)), 1.0)
@@ -335,7 +349,70 @@ static func _location_base_job_reward(sim: Node) -> float:
 	return float(sim.run_state.economy.get("round_rent", 400.0))
 
 
+## The chapter's `major_purchase` from `job_scaling.location_bands` — the
+## price of the big buy a chapter is meant to fund. Zero when the band data
+## is absent, so the rent-based anchors win unchanged.
+static func _location_major_purchase(sim: Node) -> float:
+	var bands: Array = JobSystem.location_bands(ContentDatabase)
+	if bands.is_empty():
+		return 0.0
+	var tier: int = JobSystem.location_tier(sim.run_state, ContentDatabase)
+	return float(Dictionary(bands[clampi(tier, 0, bands.size() - 1)]).get("major_purchase", 0.0))
+
+
+## Public spelling of the wealth anchor, for the sinks priced off it
+## (module calibration) that live outside this file.
+static func location_major_purchase(sim: Node) -> float:
+	return _location_major_purchase(sim)
+
+
 static func next_module_restock_round(sim: Node) -> int:
 	ensure_module_stock(sim)
 	var market: Dictionary = ensure_module_market_state(sim)
 	return int(market.get("round", int(sim.run_state.calendar.get("round", 1)))) + 1
+
+
+# --- Module calibration ------------------------------------------------------
+##
+## Consumes owned, benched modules plus a share of the chapter's
+## `major_purchase` to raise one owned module's calibration rank. The rules
+## and the state live in `CalibrationSystem`; this layer adds the Market's
+## opening hours, the cash anchor and the post-trade bookkeeping.
+
+static func module_calibration_cost(sim: Node, target: String) -> float:
+	return CalibrationSystem.cost(sim.run_state, _location_major_purchase(sim), target)
+
+
+static func module_calibration_rank(sim: Node, target: String) -> int:
+	return CalibrationSystem.rank(sim.run_state, target)
+
+
+static func calibration_block_reason(sim: Node, target: String, consumed: Array) -> String:
+	if not market_open(sim):
+		return "MARKET CLOSED"
+	return CalibrationSystem.block_reason(
+		sim.run_state, target, consumed,
+		float(sim.run_state.economy.get("cash", 0.0)), _location_major_purchase(sim)
+	)
+
+
+static func can_calibrate_module(sim: Node, target: String, consumed: Array) -> bool:
+	return calibration_block_reason(sim, target, consumed) == ""
+
+
+static func calibrate_module(sim: Node, target: String, consumed: Array) -> bool:
+	if not can_calibrate_module(sim, target, consumed):
+		return false
+	if not CalibrationSystem.calibrate(
+		sim.run_state, target, consumed, sim.economy_system(), _location_major_purchase(sim)
+	):
+		return false
+	# The rank is carried by a status-effect subscription, so the cached
+	# subscription list has to be rebuilt before the next burn or preview.
+	sim.debug_invalidate_subscriptions()
+	sim.compute_system().recalculate(
+		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
+	)
+	sim.achievement_system().evaluate_tick(sim.run_state, ContentDatabase)
+	sim._autosave()
+	return true

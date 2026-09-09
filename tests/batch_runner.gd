@@ -178,6 +178,10 @@ func run_campaign(
 					summary["outcomes"][outcome] = int(summary["outcomes"].get(outcome, 0)) + 1
 					finished = true
 					break
+				# The investor's perk table has to be answered before the
+				# company can move on; the policy takes the first legal card.
+				if sim.investor_draft_pending():
+					_angel_pick_perk(sim)
 				if not sim.advance_to_next_chapter():
 					summary["outcomes"]["advance_failed"] = int(
 						summary["outcomes"].get("advance_failed", 0)
@@ -237,7 +241,7 @@ func _apply_profile(sim: Node, profile_id: String) -> void:
 		profile.get("starting_cash_bonus", 0.0)
 	)
 	var board: Dictionary = Dictionary(state.build.get("board", {}))
-	board["meta_slot_bonus"] = int(profile.get("extra_pipeline_slots", 0))
+	board["meta_overflow_bonus"] = int(profile.get("extra_pipeline_slots", 0))
 	state.build["board"] = board
 	_install_profile_rig(sim, profile_id)
 	sim.board_system().ensure_board(state, ContentDatabase)
@@ -288,11 +292,16 @@ func _finalize_campaign_chapter(summary: Dictionary, sim: Node, outcome: String)
 		"prompts": 0, "round_sessions": 0, "cooling_prompts": 0,
 		"dangerous_forecasts": 0, "fires": 0, "peak_heat_ratio": 0.0,
 		"peak_token_rates": [], "peak_cash": [], "ascension_burn_ratios": [],
-		"ascension_qualities": [],
+		"ascension_qualities": [], "perk_counts": [],
 		"hardware_acquisition_rounds": {},
 		"outcomes": {},
 	}))
 	aggregate["attempts"] = int(aggregate["attempts"]) + 1
+	# Perks are permanent and only ever dealt on a won chapter, so the count
+	# walking out of a chapter is a direct read on the campaign's perk pacing.
+	var perk_count: int = Array(sim.run_state.build.get("perks", [])).size()
+	aggregate["perk_counts"].append(perk_count)
+	summary["max_perks_owned"] = maxi(int(summary.get("max_perks_owned", 0)), perk_count)
 	aggregate["outcomes"][outcome] = int(aggregate["outcomes"].get(outcome, 0)) + 1
 	if bool(sim.run_state.flags.get("victory", false)):
 		aggregate["wins"] = int(aggregate["wins"]) + 1
@@ -482,7 +491,8 @@ func _play_policy_step(sim: Node, policy: String) -> void:
 			pass
 
 
-## Angel tables are perk-only. Prefer the first collectible perk; otherwise decline.
+## Perk tables (the investor's on a win, or a legacy angel round) are
+## perk-only. Take the first perk that can be acquired; otherwise decline.
 func _angel_pick_perk(sim: Node) -> void:
 	if sim.pending_choices.is_empty():
 		sim.decline_offers()

@@ -135,7 +135,16 @@ func _refresh_contents() -> void:
 			loose.append(str(module_id))
 	if armed_module_id != "" and not (armed_module_id in loose):
 		armed_module_id = ""
-	_count.text = "%d LOOSE · %d/%d SEATED" % [loose.size(), Simulation.filled_slot_count(), seated.size()]
+	# Seated is read against safe capacity, with the stages bolted on past it
+	# called out separately, so the counter matches the backplane the Market
+	# row sold rather than whatever length the pipeline has grown to.
+	var safe: int = Simulation.supported_capacity()
+	var overflow_stages: int = maxi(0, seated.size() - safe)
+	_count.text = "%d LOOSE · %d/%d SEATED%s" % [
+		loose.size(), Simulation.filled_slot_count(), safe,
+		(" (+%d OVERFLOW)" % overflow_stages) if overflow_stages > 0 else "",
+	]
+	_count.tooltip_text = _capacity_tooltip()
 	for child in _bin.get_children():
 		_bin.remove_child(child)
 		child.queue_free()
@@ -151,6 +160,29 @@ func _refresh_contents() -> void:
 	_empty.text = "EVERY MODULE YOU OWN IS SEATED — THE MARKET SELLS MORE" if not seated.is_empty() else "NO MODULES"
 	_refresh_keys()
 	_refresh_detail()
+
+
+## The breakdown behind the SEATED counter. Only spelled out in full behind the
+## `capacity_debug` flag; otherwise a one-line reminder of what the number is.
+func _capacity_tooltip() -> String:
+	if not FeatureFlags.is_enabled("capacity_debug"):
+		return "Seated modules against the backplane's safe capacity. Overflow stages are unstable."
+	var debug: Dictionary = Simulation.workflow_capacity_debug()
+	return "\n".join(PackedStringArray([
+		"CAPACITY DEBUG",
+		"dwelling: %s" % str(debug.get("dwelling", "")),
+		"backplane tier: %d (%d bays)" % [
+			int(debug.get("backplane_tier", 0)), int(debug.get("backplane_safe_capacity", 0)),
+		],
+		"safe capacity: %d" % int(debug.get("safe_capacity", 0)),
+		"overflow: base %d + legacy %d + perk %d + upgrade %d = %d" % [
+			int(debug.get("base_overflow", 0)), int(debug.get("legacy_bonus", 0)),
+			int(debug.get("perk_bonus", 0)), int(debug.get("upgrade_bonus", 0)),
+			int(debug.get("overflow_capacity", 0)),
+		],
+		"max pipeline length: %d" % int(debug.get("max_pipeline_length", 0)),
+		"workflow slots: %d" % int(debug.get("workflow_slots_size", 0)),
+	]))
 
 
 func _refresh_keys() -> void:
@@ -177,7 +209,10 @@ func _refresh_keys() -> void:
 	_keys.add_child(delete)
 	if Simulation.can_append_overflow():
 		var stage: Button = CabinetStyle.key("+ STAGE", CabinetStyle.PHOSPHOR, CabinetStyle.FONT_TINY)
-		stage.tooltip_text = "Bolt another stage onto the pipeline (%d overflow)." % Simulation.overflow_count()
+		stage.tooltip_text = "Bolt another overflow stage onto the pipeline (%d of %d used)." % [
+			maxi(0, Simulation.board_slots().size() - Simulation.supported_capacity()),
+			Simulation.overflow_allowance(),
+		]
 		stage.pressed.connect(func() -> void:
 			if Simulation.append_overflow_stage() >= 0:
 				UiSound.play("accept")

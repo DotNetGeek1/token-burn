@@ -198,8 +198,8 @@ func perk_is_unlocked(perk: PerkDefinition) -> bool:
 	return MetaProgress.has_achievement(perk.unlock_achievement)
 
 
-## Whether a perk is eligible for His Table this round: unlocked, allowed on
-## the current difficulty and location, not already collected, and not blocked.
+## Whether a perk is eligible for the investor's table: unlocked, allowed on
+## the current difficulty and location, not already owned, and not blocked.
 func perk_is_eligible(
 	perk: PerkDefinition,
 	run_state: RunState,
@@ -207,8 +207,8 @@ func perk_is_eligible(
 ) -> bool:
 	if perk == null:
 		return false
-	var collected: Array = run_state.build.get("perk_inventory", [])
-	if perk.id in collected or perk.id in blocked_ids:
+	var owned: Array = run_state.build.get("perks", [])
+	if perk.id in owned or perk.id in blocked_ids:
 		return false
 	if not perk_is_unlocked(perk):
 		return false
@@ -389,7 +389,7 @@ func draw_perks(
 ) -> Array[PerkDefinition]:
 	var state := RunState.new()
 	state.reset()
-	state.build["perk_inventory"] = owned_ids.duplicate()
+	state.build["perks"] = owned_ids.duplicate()
 	var offers: Array = draw_angel_perks(rng, state, count, owned_tags, blocked_ids, rarity_bias)
 	var picks: Array[PerkDefinition] = []
 	for offer in offers:
@@ -593,7 +593,7 @@ func _load_achievements() -> void:
 		_achievements_by_id[str(entry.get("id", ""))] = entry
 
 
-## Build-layer knobs: the perk cap and how hard drafts lean into owned tags.
+## Build-layer knobs: how hard drafts lean into owned tags.
 func _build_tuning() -> Dictionary:
 	var economy: Dictionary = balance.get("economy", {})
 	var block: Variant = economy.get("build", {})

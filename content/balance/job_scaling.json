@@ -15,22 +15,23 @@
     "expected_progress_multiplier": 1.6,
     "base_quality_ratio": 0.2,
     "hidden_bug_discovery_chance": 0.6,
-    "supported_stages": {
-      "bedroom": 3,
-      "garage": 5,
-      "office_unit": 7,
-      "warehouse": 9,
-      "datacentre_campus": 10,
-      "private_power_grid": 11,
-      "moon_facility": 12
-    },
     "overflow": {
       "unlock_location_index": 2,
       "max_pipeline": 24,
+      "base_allowance": {
+        "bedroom": 0,
+        "garage": 0,
+        "office_unit": 2,
+        "warehouse": 3,
+        "datacentre_campus": 4,
+        "private_power_grid": 5,
+        "moon_facility": 6
+      },
       "instability": 0.05,
       "cascade_chance": 0.03,
       "heat_pct": 0.04,
-      "heat_flat": 2.0
+      "heat_flat": 2.0,
+      "pressure_exponent": 1.5
     },
     "production_risk": {
       "elevated": 1,
@@ -164,15 +165,21 @@
       "description": "This depth's workload is five times larger.",
       "score_mult": 3.0,
       "requirement_mult": 5.0,
+      "heat_mult": 1.0,
+      "fault_mult": 1.15,
+      "overflow_instability_mult": 1.15,
       "repeatable": true,
       "max_stacks": 0
     },
     {
       "id": "depth.thin_cooling",
       "name": "Thin Cooling",
-      "description": "Cooling efficiency -35% while this depth is live.",
+      "description": "Cooling efficiency -35% and heat gain +25% while this depth is live.",
       "score_mult": 2.0,
       "requirement_mult": 1.0,
+      "heat_mult": 1.25,
+      "fault_mult": 1.5,
+      "overflow_instability_mult": 1.0,
       "repeatable": true,
       "max_stacks": 5,
       "status": {
@@ -197,9 +204,12 @@
     {
       "id": "depth.hidden_bug",
       "name": "Recursive Bugs",
-      "description": "Every cascade or repeat writes a hidden bug.",
+      "description": "Every cascade or repeat writes a hidden bug. Overflow stages are half again as unstable.",
       "score_mult": 4.0,
       "requirement_mult": 1.0,
+      "heat_mult": 1.0,
+      "fault_mult": 1.0,
+      "overflow_instability_mult": 1.5,
       "repeatable": true,
       "max_stacks": 5,
       "status": {

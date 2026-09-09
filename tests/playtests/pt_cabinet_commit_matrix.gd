@@ -17,8 +17,14 @@ const EXPECTED := {
 	"contracts": ["ACCEPT"],
 	"modules": ["SEAT", "EJECT"],
 	"market": ["BUY", "REROLL", "SELL", "UPGRADE"],
-	"perks": ["FIT", "BENCH"],
+	# Perks are permanent and read-only: the button is always blocked here and
+	# says so.
+	"perks": ["PERMANENT"],
 }
+
+## Tabs that commit nothing of their own: `primary_action` is empty and the
+## button is the shell's.
+const SHELL_OWNED: Array[String] = ["run"]
 
 const TAB_ORDER: Array[String] = ["run", "contracts", "modules", "market", "perks"]
 
@@ -71,6 +77,9 @@ func _contract_shape(harness: UiHarness, shell: Node, screen: CabinetScreen) -> 
 			continue
 		var action: Dictionary = tab.primary_action()
 		var full: Dictionary = CabinetTab.normalize_action(action)
+		if key in SHELL_OWNED:
+			assert_true(full.is_empty(), "%s commits nothing of its own; the button is the shell's" % key)
+			continue
 		for field in ["label", "enabled", "sub", "tone", "confirm", "hold_seconds", "pressed"]:
 			assert_true(full.has(field), "%s primary_action carries '%s' after normalisation" % [key, field])
 		assert_true(
@@ -265,8 +274,14 @@ func _check_deck(shell: Node, screen: CabinetScreen, button: Control, key: Strin
 			sub.strip_edges() != "",
 			"%s disabled commit '%s' prints a blocker line" % [where, label]
 		)
-	# The run deck is the shell's own; every other tab answers primary_action.
-	if key != "run":
+	# The run deck is the shell's own (and the read-only perks tab hands it
+	# back); every other tab answers primary_action.
+	if key in SHELL_OWNED and key != "run":
+		var quiet: CabinetTab = screen.active_tab()
+		assert_true(quiet != null, "%s has an active CabinetTab" % where)
+		if quiet != null:
+			assert_true(quiet.primary_action().is_empty(), "%s primary_action is empty" % where)
+	if not (key in SHELL_OWNED):
 		var tab: CabinetTab = screen.active_tab()
 		assert_true(tab != null, "%s has an active CabinetTab" % where)
 		if tab != null:

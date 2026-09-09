@@ -76,12 +76,81 @@ static func ambient_delta_for(
 
 
 static func ambient_delta(run_state: RunState) -> float:
-	return ambient_delta_for(
+	var delta: float = ambient_delta_for(
 		float(run_state.compute.get("power_draw", 0.0)),
 		float(run_state.compute.get("cooling", 0.0)),
 		maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0))),
 		work_tier(run_state)
 	)
+	# Pressure only ever makes the rig run hotter: a bar that is cooling keeps
+	# cooling at the authored rate, a bar that is heating heats faster.
+	if delta > 0.0:
+		delta *= heat_gain_mult(run_state)
+	return delta
+
+
+## Every source of extra heat gain stacked on the run: endless-round creep and
+## Deep Burn affixes. Uncapped by design — a Depth 8 rig is meant to cook.
+static func heat_gain_mult(run_state: RunState) -> float:
+	return (
+		maxf(0.0, float(run_state.compute.get("endless_heat_mult", 1.0)))
+		* maxf(0.0, float(run_state.compute.get("depth_heat_mult", 1.0)))
+	)
+
+
+## Same shape for the rack-fault roll.
+static func fault_chance_mult(run_state: RunState) -> float:
+	return (
+		maxf(0.0, float(run_state.compute.get("endless_fault_mult", 1.0)))
+		* maxf(0.0, float(run_state.compute.get("depth_fault_mult", 1.0)))
+	)
+
+
+## A pipeline that multiplies its batch a million times over is not free: each
+## doubling of the burn multiplier adds `multiplier_pressure_coeff` of
+## instability, so ×1M (~20 doublings) is worth about 0.3 before the clamp.
+static func multiplier_pressure(batch_multiplier: float, cfg: Dictionary = {}) -> float:
+	if cfg.is_empty():
+		cfg = heat_config()
+	var coeff: float = maxf(0.0, float(cfg.get("multiplier_pressure_coeff", 0.015)))
+	var mult: float = maxf(1.0, batch_multiplier)
+	if coeff <= 0.0 or mult <= 1.0:
+		return 0.0
+	return coeff * (log(mult) / log(2.0))
+
+
+## Each endless round past the contract, the room runs a little hotter and the
+## racks a little flakier, alongside the rent and power creep. Ramps the
+## multipliers `process_prompt` reads; never capped.
+static func escalate_endless(run_state: RunState, tuning: Dictionary = {}) -> void:
+	var cfg: Dictionary = Dictionary(tuning.get("heat", {})) if tuning.has("heat") else heat_config()
+	var heat_step: float = maxf(1.0, float(cfg.get("endless_heat_escalation", 1.05)))
+	var fault_step: float = maxf(1.0, float(cfg.get("endless_fault_escalation", 1.08)))
+	run_state.compute["endless_heat_mult"] = maxf(
+		1.0, float(run_state.compute.get("endless_heat_mult", 1.0))
+	) * heat_step
+	run_state.compute["endless_fault_mult"] = maxf(
+		1.0, float(run_state.compute.get("endless_fault_mult", 1.0))
+	) * fault_step
+
+
+## Where this prompt's instability came from, for the HUD and tests.
+static func pressure_debug(run_state: RunState) -> Dictionary:
+	return {
+		"heat_instability": float(run_state.compute.get("instability_heat", 0.0)),
+		"multiplier_pressure": float(run_state.compute.get("instability_multiplier_pressure", 0.0)),
+		"batch_multiplier": float(run_state.compute.get("instability_batch_multiplier", 1.0)),
+		"instability": float(run_state.compute.get("instability", 0.0)),
+		"heat_gain_mult": heat_gain_mult(run_state),
+		"fault_chance_mult": fault_chance_mult(run_state),
+		"endless_heat_mult": float(run_state.compute.get("endless_heat_mult", 1.0)),
+		"endless_fault_mult": float(run_state.compute.get("endless_fault_mult", 1.0)),
+		"depth_heat_mult": float(run_state.compute.get("depth_heat_mult", 1.0)),
+		"depth_fault_mult": float(run_state.compute.get("depth_fault_mult", 1.0)),
+		"depth_overflow_instability_mult": float(
+			run_state.compute.get("depth_overflow_instability_mult", 1.0)
+		),
+	}
 
 
 static func cooling_needed_for(power_draw: float, tier: int) -> float:
@@ -95,11 +164,14 @@ static func cooling_needed_for(power_draw: float, tier: int) -> float:
 
 
 static func scale_pipeline_heat(run_state: RunState, authored: float) -> float:
+	# Pressure multipliers only bite on heat the pipeline adds; a Liquid Cooling
+	# stage that takes heat off the rig is not made stronger by Deep Burn.
+	var pressure: float = heat_gain_mult(run_state) if authored > 0.0 else 1.0
 	if not uses_thermal_load(work_tier(run_state)):
-		return authored
+		return authored * pressure
 	var ref: float = maxf(1.0, float(heat_config().get("pipeline_heat_ref_capacity", 100.0)))
 	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
-	return authored * (capacity / ref)
+	return authored * (capacity / ref) * pressure
 
 
 static func apply_pipeline_heat(heat_system: HeatSystem, run_state: RunState, authored: float) -> float:
@@ -234,7 +306,19 @@ func process_prompt(
 
 	add_heat(run_state, ambient_delta(run_state))
 	var ratio: float = float(run_state.compute["heat"]) / capacity
-	run_state.compute["instability"] = instability_from_ratio(ratio, tier)
+	var heat_instability: float = instability_from_ratio(ratio, tier)
+	# The burn that just resolved leaves its multiplier behind; a prompt with no
+	# burn (or a preview) reads whatever is there without spending it.
+	var batch_multiplier: float = maxf(1.0, float(run_state.compute.get("last_batch_multiplier", 1.0)))
+	if mode == ResolveMode.COMMIT:
+		run_state.compute.erase("last_batch_multiplier")
+	var pressure: float = 0.0
+	if FeatureFlags.is_enabled("instability_enabled"):
+		pressure = multiplier_pressure(batch_multiplier, heat_cfg)
+	run_state.compute["instability_heat"] = heat_instability
+	run_state.compute["instability_multiplier_pressure"] = pressure
+	run_state.compute["instability_batch_multiplier"] = batch_multiplier
+	run_state.compute["instability"] = clampf(heat_instability + pressure, 0.0, 1.0)
 	run_state.statistics["max_instability"] = maxf(
 		float(run_state.statistics.get("max_instability", 0.0)),
 		float(run_state.compute["instability"])
@@ -277,7 +361,7 @@ func _maybe_fault(
 	if _has_status(run_state, "status.fault.dead_rack"):
 		return messages
 	var band_t: float = 1.0 if ratio >= 1.0 else (ratio - 0.85) / 0.15
-	if rng.derive("compute.fault").next_float() >= 0.08 * band_t:
+	if rng.derive("compute.fault").next_float() >= 0.08 * band_t * fault_chance_mult(run_state):
 		return messages
 	if not (run_state.build.get("status_effects") is Array):
 		run_state.build["status_effects"] = []

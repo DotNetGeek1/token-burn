@@ -68,10 +68,14 @@ static func compile(burn: Dictionary, traces: Array = []) -> Array:
 	# snapshots alone leaves silent gaps between stages.
 	var running: float = _starting_multiplier(burn)
 	var priors: Array = []
+	# Replay trees are memoised per (prior index, strength) for the length of
+	# this compile: a replay only reads the priors below its index, which never
+	# change once appended, so N identical forks cost one walk.
+	var replay_cache: Dictionary = {}
 	for stage in stages:
 		if not stage is Dictionary:
 			continue
-		var stage_beats: Array = _stage_beats(burn, stage, board_traces, running, priors)
+		var stage_beats: Array = _stage_beats(burn, stage, board_traces, running, priors, replay_cache)
 		if not stage_beats.is_empty():
 			running = float(Dictionary(stage_beats[stage_beats.size() - 1]).get("multiplier_after", running))
 		beats.append_array(stage_beats)
@@ -109,8 +113,11 @@ static func _fold_ratio(fields: Dictionary, strength: float) -> float:
 
 ## The share of a stage's jump that its repeat of the stage above produced,
 ## reconstructed from the resolved stage fields the same way the board walks
-## history, so AGAIN! owns the whole nested tree as one beat.
-static func _repeat_ratio(stage: Dictionary, priors: Array) -> float:
+## history, so AGAIN! owns the whole nested tree as one beat. `cache` memoises
+## the replay per (prior index, strength) across one compile; the forks of one
+## stage are all the same tree, so it is walked once and folded `count` times —
+## the same multiplications, in the same order, as walking it every time.
+static func _repeat_ratio(stage: Dictionary, priors: Array, cache: Dictionary = {}) -> float:
 	if priors.is_empty():
 		return 1.0
 	var repeat: float = maxf(0.0, float(stage.get("repeated_previous", 0.0)))
@@ -122,15 +129,36 @@ static func _repeat_ratio(stage: Dictionary, priors: Array) -> float:
 		* maxf(0.0, float(stage.get("repeat_strength", 1.0)))
 		* maxf(0.0, float(stage.get("multiplier", 1.0)))
 	)
+	var tree: float = _cached_replay_prior_ratio(priors, priors.size() - 1, strength, cache)
 	var ratio: float = 1.0
 	for _fork in range(count):
-		ratio *= _replay_prior_ratio(priors, priors.size() - 1, strength)
+		ratio *= tree
 	return ratio
+
+
+## `_replay_prior_ratio` through the compile's memo. Keyed by index then by the
+## exact strength (float keys compare exactly), so two strengths that only
+## print alike never share a result.
+static func _cached_replay_prior_ratio(
+	priors: Array, hist_index: int, branch_strength: float, cache: Dictionary
+) -> float:
+	var by_strength: Dictionary = cache.get_or_add(hist_index, {})
+	if by_strength.has(branch_strength):
+		return float(by_strength[branch_strength])
+	var ratio: float = _replay_prior_ratio(priors, hist_index, branch_strength)
+	by_strength[branch_strength] = ratio
+	return ratio
+
+
+## How many replay trees `_replay_prior_ratio` has walked since the counter was
+## last reset. For the tests: memoisation must make repeats cost one walk.
+static var replay_walks: int = 0
 
 
 ## One independent replay tree of prior stage reports, matching
 ## `BoardSystem._replay_history_entry` so the drum split stays honest.
 static func _replay_prior_ratio(priors: Array, hist_index: int, branch_strength: float) -> float:
+	replay_walks += 1
 	var ratio: float = 1.0
 	var folds: int = 0
 	var stack: Array = [{
@@ -288,7 +316,8 @@ static func _format_percent(ratio: float) -> String:
 ## re-derives the maths — the endpoints are the board's own snapshots — only
 ## the split between beats is reconstructed.
 static func _stage_beats(
-	burn: Dictionary, stage: Dictionary, traces: Array, incoming: float, priors: Array
+	burn: Dictionary, stage: Dictionary, traces: Array, incoming: float, priors: Array,
+	replay_cache: Dictionary = {}
 ) -> Array:
 	var beats: Array = []
 	var after: Dictionary = stage.get("after", {})
@@ -318,7 +347,7 @@ static func _stage_beats(
 	var fork_after: float = target
 	if forked or cascaded:
 		own_after = incoming * _fold_ratio(Dictionary(stage.get("stage", {})), float(stage.get("multiplier", 1.0)))
-		fork_after = own_after * _repeat_ratio(stage, priors) if forked else own_after
+		fork_after = own_after * _repeat_ratio(stage, priors, replay_cache) if forked else own_after
 		if not cascaded:
 			# No cascade to absorb stage_folded effects: AGAIN! lands on the target.
 			fork_after = target

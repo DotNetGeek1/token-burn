@@ -30,7 +30,7 @@ func run() -> void:
 	_test_warm_cache_doubles_the_discount()
 	_test_caught_in_review_is_the_combo_not_a_slot_effect()
 	_test_heat_gates_read_the_rig_not_the_burn()
-	_test_bench_is_blocked_when_it_orphans_a_dependent()
+	_test_a_dependent_perk_needs_its_source_in_the_build()
 	_test_owned_modules_steer_the_draft()
 	_test_conditions_see_the_stage_before_effects_run()
 	_test_flash_attention_combo_replaces_base_bonus()
@@ -73,13 +73,11 @@ class Build:
 	func _init(module_ids: Array, perk_ids: Array = [], seed_value: int = 7700) -> void:
 		rng = DeterministicRng.new(seed_value)
 		# Pipelines longer than the default three bays would otherwise land in
-		# overflow and pick up heat/cascade tax. Widen before ensure_board so
-		# stages 4+ resolve at their authored strength.
-		var extra_slots: int = maxi(0, module_ids.size() - BoardSystem.DEFAULT_SLOT_COUNT)
-		if extra_slots > 0:
-			var board_state: Dictionary = Dictionary(state.build.get("board", {}))
-			board_state["meta_slot_bonus"] = int(board_state.get("meta_slot_bonus", 0)) + extra_slots
-			state.build["board"] = board_state
+		# overflow and pick up heat/cascade tax. Safe capacity is the backplane
+		# alone, so fit the widest rail before ensure_board and stages 4+
+		# resolve at their authored strength.
+		if module_ids.size() > BoardSystem.DEFAULT_SLOT_COUNT:
+			CabinetSystems.set_tier(state, "backplane", CabinetSystems.max_tier())
 		board.ensure_board(state, ContentDatabase)
 		state.build["perks"] = []
 		for perk_id in perk_ids:
@@ -653,35 +651,45 @@ func _test_heat_gates_read_the_rig_not_the_burn() -> void:
 
 # --- Loadout rules -----------------------------------------------------------
 
-## Benching is not allowed to leave an illegal board behind it.
-func _test_bench_is_blocked_when_it_orphans_a_dependent() -> void:
-	var build := Build.new([], ["perk.stack_overflow_tab", "perk.bug_alchemy"])
+## A dependent perk needs its prerequisite in the build before it can be
+## taken, and — perks being permanent — the prerequisite can never be taken
+## away from under it afterwards.
+func _test_a_dependent_perk_needs_its_source_in_the_build() -> void:
+	var build := Build.new([])
 	var alchemy: PerkDefinition = ContentDatabase.get_perk("perk.bug_alchemy")
 	var provider: PerkDefinition = ContentDatabase.get_perk("perk.stack_overflow_tab")
 	assert_true("bugs" in Array(alchemy.requires_tags), "Bug Alchemy needs a bug source")
 	assert_true("bugs" in Array(provider.tags), "Stack Overflow Tab is one")
 
 	assert_false(
-		build.perk_system.can_bench(build.state, "perk.stack_overflow_tab", ContentDatabase),
-		"Benching the only bug source would orphan Bug Alchemy"
+		build.perk_system.can_acquire(build.state, "perk.bug_alchemy", ContentDatabase),
+		"Bug Alchemy cannot be taken with no bug source in the build"
 	)
 	assert_true(
-		build.perk_system.bench_block_reason(
-			build.state, "perk.stack_overflow_tab", ContentDatabase
-		).find(alchemy.name) >= 0,
-		"And the block names the perk that would be left stranded"
+		build.perk_system.acquire_block_reason(
+			build.state, "perk.bug_alchemy", ContentDatabase
+		).find("bugs") >= 0,
+		"And the block names the missing tag"
+	)
+	assert_true(
+		build.perk_system.acquire(build.state, "perk.stack_overflow_tab", ContentDatabase),
+		"The source perk goes in first"
+	)
+	assert_true(
+		build.perk_system.acquire(build.state, "perk.bug_alchemy", ContentDatabase),
+		"Then the dependent can follow"
 	)
 
-	# A drafted module carries the tag just as well, so the same bench is legal
-	# once the board provides it.
-	build.state.build["modules"] = ["op.stack_overflow"]
+	# A drafted module carries the tag just as well, so the same dependent is
+	# legal once the board provides it.
+	var modular := Build.new(["op.stack_overflow"])
 	assert_true(
 		"bugs" in Array(ContentDatabase.get_module("op.stack_overflow").tags),
 		"Copy-Paste from Stack Overflow is a bug source"
 	)
 	assert_true(
-		build.perk_system.can_bench(build.state, "perk.stack_overflow_tab", ContentDatabase),
-		"With a bug-making module owned, the perk can be benched"
+		modular.perk_system.can_acquire(modular.state, "perk.bug_alchemy", ContentDatabase),
+		"With a bug-making module owned, the dependent perk can be taken"
 	)
 
 

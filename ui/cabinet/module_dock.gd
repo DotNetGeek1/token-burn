@@ -30,6 +30,10 @@ var _armed: bool = false
 var _lit: int = -1
 var _paged: bool = false
 
+## How many full redraws the dock has done. A burn lighting its way along a
+## pipeline must not add to this unless it turns the page; the playtests check.
+var refresh_count: int = 0
+
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -134,6 +138,7 @@ func _bay_aspect() -> float:
 
 
 func refresh() -> void:
+	refresh_count += 1
 	var slots: Array = Simulation.board_slots()
 	var per_page: int = bays_shown()
 	var pages: int = maxi(1, int(ceil(float(slots.size()) / per_page)))
@@ -209,13 +214,31 @@ func set_armed(armed: bool) -> void:
 	refresh()
 
 
-## Lights the bay whose stage the batch is on; -1 clears.
+## Lights the bay whose stage the batch is on; -1 clears. Only the bay that
+## was lit and the bay that is now lit are touched; the dock is only redrawn
+## in full when the step has moved onto another page.
 func light_step(slot: int) -> void:
+	var previous: int = _lit
 	_lit = slot
 	var per_page: int = bays_shown()
 	if slot >= 0 and (slot < _page * per_page or slot >= (_page + 1) * per_page):
 		_page = slot / per_page
-	refresh()
+		refresh()
+		return
+	if previous == slot:
+		return
+	_set_bay_lit(previous, false)
+	_set_bay_lit(slot, true)
+
+
+func _set_bay_lit(slot: int, lit: bool) -> void:
+	if slot < 0:
+		return
+	var index: int = slot - _page * bays_shown()
+	if index < 0 or index >= _bays.size():
+		return
+	var bay: ModuleBay = _bays[index]
+	bay.set_lit_step(lit and not bay.covered)
 
 
 ## The dock-space centre of a slot's bay, for anything animating towards it.

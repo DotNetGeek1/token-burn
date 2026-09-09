@@ -46,6 +46,9 @@ var _note: Label = null
 var _tap: TapGesture = TapGesture.new()
 var _pulse: Tween = null
 var _body: Rect2 = Rect2()
+## What the rarity pips on the glass were last built for (module, rarity and
+## pip size), so a redraw that changes none of them keeps the row it has.
+var _pips_key: String = ""
 
 
 func _ready() -> void:
@@ -136,9 +139,14 @@ func _fit() -> void:
 	_led.position = tab.get_center() - _led.size * 0.5
 	_outline.position = _body.position + Vector2(1, 1)
 	_outline.size = _body.size - Vector2(2, 2)
+	# The pips are sized from the screen, so a resize rebuilds them.
+	if _pips_key != "":
+		_refresh_pips(ContentDatabase.get_module(module_id) if module_id != "" else null)
 
 
 func show_slot(slot: int, id: String, is_covered: bool) -> void:
+	if slot == slot_index and id == module_id and is_covered == covered:
+		return
 	slot_index = slot
 	module_id = id
 	covered = is_covered
@@ -153,6 +161,8 @@ func show_slot(slot: int, id: String, is_covered: bool) -> void:
 
 
 func set_selected(value: bool) -> void:
+	if selected == value:
+		return
 	selected = value
 	_render()
 
@@ -186,9 +196,7 @@ func _render() -> void:
 	_name.visible = module != null
 	_glyph.visible = module != null
 	_bars_holder.visible = module != null
-	for child in _bars_holder.get_children():
-		_bars_holder.remove_child(child)
-		child.queue_free()
+	_refresh_pips(module)
 	var tint: Color = CabinetStyle.category_color(module.category) if module != null else CabinetStyle.GREY
 	_screen.set_look(tint, module != null)
 	_set_led(tint if module != null else CabinetStyle.GREY, module != null)
@@ -199,9 +207,6 @@ func _render() -> void:
 		_name.text = module.name.to_upper()
 		_glyph.texture = AssetCatalog.cabinet_module_glyph(module.category)
 		_glyph.modulate = tint
-		var level: int = int(RARITY_LEVEL.get(module.rarity.to_lower(), 1))
-		var pip: float = clampf(_screen.size.y * 0.11, 3.0, 6.0)
-		_bars_holder.add_child(CabinetStyle.pips(level, AssetCatalog.rarity_color(module.rarity), 5, pip, Color(1, 1, 1, 0.08)))
 	_outline.visible = (selected or targeted or lit_step) and not covered
 	if _pulse != null and _pulse.is_valid():
 		_pulse.kill()
@@ -215,6 +220,28 @@ func _render() -> void:
 		_pulse = create_tween().set_loops()
 		_pulse.tween_property(_outline, "modulate:a", 0.3, 0.5)
 		_pulse.tween_property(_outline, "modulate:a", 1.0, 0.5)
+
+
+## The rarity pips under the glyph, rebuilt only when the module, its rarity or
+## the pip size has changed; a bay lit or picked keeps the row it already has.
+func _refresh_pips(module: ModuleDefinition) -> void:
+	if _bars_holder == null:
+		return
+	var key: String = ""
+	var level: int = 0
+	var pip: float = 0.0
+	if module != null:
+		level = int(RARITY_LEVEL.get(module.rarity.to_lower(), 1))
+		pip = clampf(_screen.size.y * 0.11, 3.0, 6.0)
+		key = "%s|%s|%.2f" % [module.id, module.rarity, pip]
+	if key == _pips_key:
+		return
+	_pips_key = key
+	for child in _bars_holder.get_children():
+		_bars_holder.remove_child(child)
+		child.queue_free()
+	if module != null:
+		_bars_holder.add_child(CabinetStyle.pips(level, AssetCatalog.rarity_color(module.rarity), 5, pip, Color(1, 1, 1, 0.08)))
 
 
 ## The small lamp on the frame's top tab, in the category colour when a module

@@ -100,17 +100,13 @@ class Walker:
 		get_tree().quit()
 
 	## A fresh run owns no perks, and an empty rack says nothing about how the
-	## perks tab lays one out. Handed straight into the inventory rather than
+	## perks tab lays one out. Granted straight into the build rather than
 	## drafted, because what is wanted is a populated screen and not a fair draw.
 	func _stock_perks() -> void:
-		var inventory: Array = Simulation.run_state.build["perk_inventory"]
 		for perk in ContentDatabase.perks:
-			if inventory.size() >= PERK_STOCK:
+			if Simulation.owned_perk_ids().size() >= PERK_STOCK:
 				break
-			if not (perk.id in inventory):
-				inventory.append(perk.id)
-		for perk_id in inventory:
-			Simulation.equip_perk(str(perk_id))
+			Simulation.grant_perk(perk.id)
 
 	## Extra modules, handed over without placing them, so the modules tab has a
 	## bin under its dock.

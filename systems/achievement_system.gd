@@ -145,7 +145,7 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.modules_drafted": int(stats.get("modules_drafted", 0)),
 		"run.modules_owned": Array(run_state.build.get("modules", [])).size(),
 		"run.perks_owned": Array(run_state.build.get("perks", [])).size(),
-		"run.perks_collected": Array(run_state.build.get("perk_inventory", [])).size(),
+		"run.perks_collected": Array(run_state.build.get("perks", [])).size(),
 		"run.hardware_owned": Array(run_state.build.get("hardware", [])).size(),
 		"run.board_slots": int(board.get("slot_count", 0)),
 		"run.board_filled": filled_slots,

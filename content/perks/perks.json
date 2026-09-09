@@ -227,9 +227,9 @@
     "name": "Wide Bus",
     "rarity": "rare",
     "tags": ["board", "hardware"],
-    "description_template": "The Burn Board gains {slots} extra pipeline slot.",
+    "description_template": "The pipeline may take {slots} extra overflow stage beyond what the backplane backs.",
     "parameters": {"slots": 1},
-    "grants": {"board_slots": 1},
+    "grants": {"overflow_stages": 1},
     "subscriptions": []
   },
   {
@@ -394,31 +394,45 @@
     "id": "perk.org_chart",
     "name": "Org Chart",
     "rarity": "rare",
-    "tags": ["management", "capacity"],
-    "description_template": "+{slot_bonus} active perk slots. Contract rewards pay {reward_pct}%.",
-    "parameters": {"slot_bonus": 2, "reward_multiplier": 0.95, "reward_pct": 95},
-    "grants": {"perk_slots": 2},
-    "subscriptions": [{
-      "event": "reward.calculated",
-      "priority": 40,
-      "conditions": [],
-      "effects": [{"operation": "multiply", "target": "job.reward", "value": "$reward_multiplier"}]
-    }]
+    "tags": ["management", "economy"],
+    "description_template": "Somebody owns every box. Contract rewards pay {reward_pct}% more; recurring operating costs rise {cost_pct}%.",
+    "parameters": {"reward_multiplier": 1.15, "reward_pct": 15, "cost_multiplier": 1.08, "cost_pct": 8},
+    "subscriptions": [
+      {
+        "event": "reward.calculated",
+        "priority": 40,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "job.reward", "value": "$reward_multiplier"}]
+      },
+      {
+        "event": "compute.recalculate",
+        "priority": 5,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "economy.recurring_costs", "value": "$cost_multiplier"}]
+      }
+    ]
   },
   {
     "id": "perk.executive_committee",
     "name": "Executive Committee",
     "rarity": "legendary",
-    "tags": ["management", "capacity"],
-    "description_template": "+{slot_bonus} active perk slots. Recurring operating costs rise {cost_pct}%.",
-    "parameters": {"slot_bonus": 3, "cost_multiplier": 1.2, "cost_pct": 20},
-    "grants": {"perk_slots": 3},
-    "subscriptions": [{
-      "event": "compute.recalculate",
-      "priority": 5,
-      "conditions": [],
-      "effects": [{"operation": "multiply", "target": "economy.recurring_costs", "value": "$cost_multiplier"}]
-    }]
+    "tags": ["management", "economy"],
+    "description_template": "A board that signs off on everything. Contract rewards pay {reward_pct}% more; recurring operating costs rise {cost_pct}%.",
+    "parameters": {"reward_multiplier": 1.4, "reward_pct": 40, "cost_multiplier": 1.2, "cost_pct": 20},
+    "subscriptions": [
+      {
+        "event": "reward.calculated",
+        "priority": 40,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "job.reward", "value": "$reward_multiplier"}]
+      },
+      {
+        "event": "compute.recalculate",
+        "priority": 5,
+        "conditions": [],
+        "effects": [{"operation": "multiply", "target": "economy.recurring_costs", "value": "$cost_multiplier"}]
+      }
+    ]
   },
   {
     "id": "perk.bare_metal",

@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 24
+const SAVE_VERSION := 25
 
 ## Upgrades that no longer exist in content. Migration refunds the original
 ## purchase total from this table rather than looking the defs up.
@@ -107,7 +107,6 @@ var business: Dictionary = {
 
 var build: Dictionary = {
 	"perks": [],
-	"perk_inventory": [],
 	"perk_liabilities": [],
 	"draft_state": {"sequence": 0, "rerolls": 0},
 	"hardware": [],
@@ -212,6 +211,9 @@ var flags: Dictionary = {
 	"location_completed": false,
 	"next_location": "",
 	"draft_kind": "",
+	## Set once the investor's perk draft has been taken or declined, so a
+	## victory screen can tell a fresh win from one whose pick is already made.
+	"investor_draft_resolved": false,
 	## Set once at `reset_run` from the profile's chosen difficulty, and read
 	## back by job scaling rather than re-reading the profile mid-run — so a
 	## difficulty change in the menu cannot reach into a run already going.
@@ -490,9 +492,54 @@ func _migrate(from_version: int) -> void:
 		for modifier in compute.get("rate_modifiers", []):
 			if modifier is Dictionary and str(modifier.get("source", "")) in ["event.power_cut", "event.scope_creep_email", "event.landlord_inspection"]:
 				modifier["prompts_remaining"] = mini(1, int(modifier.get("prompts_remaining", 1)))
+	if from_version < 25:
+		_migrate_to_v25()
 	# Whatever version the save was, the tiers it carries are whole numbers
 	# inside the tier range, and every system is present.
 	CabinetSystems.ensure_state(self)
+
+
+## Safe capacity is the backplane's alone; permanent slot unlocks become
+## overflow allowance. `board.meta_slot_bonus` is renamed to
+## `board.meta_overflow_bonus` with its value intact. Pipelines a save was
+## running past its backplane stay as they are and simply count as overflow.
+##
+## Perks become permanent in the same version: the bench (`perk_inventory`)
+## folds into `perks`, keeping every card that is legal alongside the ones
+## before it, and the split is gone.
+func _migrate_to_v25() -> void:
+	_migrate_board_bonus_to_overflow()
+	_migrate_perks_permanent()
+
+
+## `perks = unique(perks ∪ perk_inventory)`, active perks first so what the
+## save was actually running wins any conflict with what sat on its bench, then
+## filtered so no two perks in the result exclude each other. Removed perks are
+## stripped and the bench key is dropped.
+func _migrate_perks_permanent() -> void:
+	var candidates: Array = []
+	for source in [build.get("perks", []), build.get("perk_inventory", [])]:
+		if not source is Array:
+			continue
+		for perk_id in Array(source):
+			var key: String = str(perk_id)
+			if key == "" or key in candidates or key in REMOVED_PERKS:
+				continue
+			candidates.append(key)
+	build["perks"] = PerkSystem.new().legal_subset(self, candidates, ContentDatabase)
+	build.erase("perk_inventory")
+
+
+func _migrate_board_bonus_to_overflow() -> void:
+	var board: Variant = build.get("board", null)
+	if not board is Dictionary:
+		return
+	var stored: Dictionary = board
+	if stored.has("meta_slot_bonus"):
+		stored["meta_overflow_bonus"] = maxi(
+			int(stored.get("meta_overflow_bonus", 0)), int(stored.get("meta_slot_bonus", 0))
+		)
+		stored.erase("meta_slot_bonus")
 
 
 ## Dwellings stop being the source of capacity: the five cabinet systems are.
@@ -520,17 +567,12 @@ func _migrate_to_v23() -> void:
 ## still apply on top (meta unlocks, perks, upgrades). Each tier is raised until
 ## it explains at least that much, so the derived capacity after migration is
 ## never below the stored one.
+##
+## The backplane is deliberately left alone: a pipeline wider than the room's
+## tier is kept stage for stage by BoardSystem as overflow, so a 9-slot
+## warehouse save comes up as 7 safe + 2 overflow rather than being handed a
+## tier it never bought.
 func _raise_cabinet_tiers_to_cover_capacity() -> void:
-	var board: Variant = build.get("board", {})
-	if board is Dictionary:
-		var stored_slots: int = int(Dictionary(board).get("slot_count", 0))
-		if stored_slots > 0:
-			var slot_bonus: int = (
-				int(Dictionary(board).get("meta_slot_bonus", 0))
-				+ BoardSystem.active_perk_grant_total(self, ContentDatabase, "board_slots")
-				+ int(UpgradeSystem.additive_effect_total(self, ContentDatabase, "build.board.slot_count"))
-			)
-			_raise_cabinet_tier_until("backplane", "bays", stored_slots - slot_bonus)
 	var stored_workflows: int = int(build.get("workflow_capacity", 0))
 	if stored_workflows > 0:
 		var workflow_bonus: int = (
@@ -1022,7 +1064,6 @@ func _default_business() -> Dictionary:
 func _default_build() -> Dictionary:
 	return {
 		"perks": [],
-		"perk_inventory": [],
 		"perk_liabilities": [],
 	"draft_state": {"sequence": 0, "rerolls": 0},
 		"hardware": [],
@@ -1123,6 +1164,7 @@ func _default_flags() -> Dictionary:
 		"location_completed": false,
 		"next_location": "",
 		"draft_kind": "",
+		"investor_draft_resolved": false,
 		"difficulty": "normal",
 		"investor_beats": {},
 	}
