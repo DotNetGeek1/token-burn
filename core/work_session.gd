@@ -299,7 +299,7 @@ func record_completed_quality(sim: Node, state: RunState) -> void:
 			continue
 		# Judged on what the client receives, not what the pipeline produced:
 		# unfinished delivery and shipped known bugs both come off first.
-		sim.ascension_system().record_job_quality(state, JobSystem.delivered_quality(job))
+		sim.investor_progression().record_job_quality(state, JobSystem.delivered_quality(job))
 		job["_ascension_quality_recorded"] = true
 
 
@@ -318,26 +318,26 @@ func finish_prompt(sim: Node, result: Dictionary) -> void:
 		sim._end_run(false)
 		sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
 		return
-	if sim.ascension_system().is_active(sim.run_state):
-		# A job's quality has to be settled against the contract's average
-		# before the contract is judged, not after: judging first and
+	if sim.investor_progression().is_active(sim.run_state):
+		# A job's quality has to be settled against the target's average
+		# before the target is judged, not after: judging first and
 		# recording second is how a losing final job can win on last round's
 		# quality, and a winning one can be refused for it.
 		record_completed_quality(sim, sim.run_state)
-		var ascension_result: Dictionary = sim.ascension_system().evaluate_prompt(
+		var ascension_result: Dictionary = sim.investor_progression().evaluate_prompt(
 			sim.run_state, ContentDatabase
 		)
 		for message in ascension_result.get("messages", []):
 			sim.round_log.append(str(message))
 		var outcome: String = str(ascension_result.get("outcome", ""))
-		if outcome == AscensionSystem.STATUS_COMPLETED:
+		if outcome == InvestorProgression.STATUS_COMPLETED:
 			work_running = false
-			sim._reach_victory(sim.ascension_system().current_contract(sim.run_state, ContentDatabase))
+			sim._reach_target_complete(sim.investor_progression().current_target(sim.run_state, ContentDatabase))
 			sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
 			return
-		elif outcome == AscensionSystem.STATUS_FAILED:
+		elif outcome == InvestorProgression.STATUS_FAILED:
 			work_running = false
-			sim.run_state.flags["loss_reason"] = "Ascension contract failed."
+			sim.run_state.flags["loss_reason"] = "The investor's target was failed."
 			sim._end_run(false, "ascension_failed")
 			sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
 			return
@@ -431,7 +431,7 @@ func set_work_policy(sim: Node, policy: String) -> void:
 func yolo_unlocked(sim: Node) -> bool:
 	if not FeatureFlags.is_enabled("yolo_mode_enabled"):
 		return false
-	return JobSystem.location_tier(sim.run_state, ContentDatabase) >= 3
+	return InfrastructureSystem.tier(sim.run_state, ContentDatabase) >= 3
 
 
 func _execute_tick(sim: Node) -> Dictionary:
@@ -467,7 +467,7 @@ func end_session(sim: Node, reason: String) -> void:
 		else:
 			failed.append(job)
 
-	if sim.ascension_system().is_active(sim.run_state):
+	if sim.investor_progression().is_active(sim.run_state):
 		# Covers jobs settled by ship/abandon, which never pass through
 		# `finish_prompt`. Jobs already recorded there are skipped.
 		record_completed_quality(sim, sim.run_state)
@@ -528,8 +528,8 @@ func end_session(sim: Node, reason: String) -> void:
 	# claim on is how a player gets evicted holding a new GPU.
 	sim._round_end_pending = false
 	sim._end_round()
-	# A chapter win settles the round (next calendar, maybe a draft) and then
-	# `_reach_victory` flips to RUN_END. Saving here would write a live next
+	# A met target settles the round (next calendar, maybe a draft) and then
+	# `_reach_target_complete` flips to RUN_END. Saving here would write a live next
 	# round under the verdict; Continue from title then resurrected a run the
 	# overlay had just called closed. The victory path saves once, after the
 	# phase is honest. Depth complete does the same: settle, then overlay.
@@ -696,7 +696,7 @@ func _workflow_mastery_events(jobs: Array) -> Array:
 ## run three quarters through the calendar with a quarter of the burn done is
 ## losing, however well the individual round went, and the debrief says so.
 func _behind_on_contract(sim: Node) -> bool:
-	var progress: Dictionary = sim.ascension_progress()
+	var progress: Dictionary = sim.investor_progress()
 	if progress.is_empty():
 		return false
 	var deadline: int = maxi(1, int(progress.get("deadline_round", sim.ROUNDS_PER_RUN)))

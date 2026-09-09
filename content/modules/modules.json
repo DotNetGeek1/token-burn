@@ -1538,7 +1538,7 @@
       "local",
       "hardware"
     ],
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "badge": "\u00d7{progress}",
     "description_template": "Keep the weights on disk. \u00d7{progress} TOKENS and \u00d7{thermal} THERMAL for ${cost}.",
     "parameters": {
@@ -1574,7 +1574,7 @@
       "model",
       "local"
     ],
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "badge": "\u00d7{progress}",
     "description_template": "Inference at the edge. \u00d7{progress} tokens, +{heat} heat.",
     "parameters": {
@@ -1639,7 +1639,7 @@
       "heat",
       "thermal_runaway"
     ],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "badge": "\u00d7{progress}",
     "description_template": "Store heat, spend it later. \u00d7{progress} tokens on any burn the rig starts at or above {threshold_pct}% heat \u2014 you have to be redlined before the burn, not by it.",
     "parameters": {
@@ -1777,7 +1777,7 @@
       "quality",
       "safe"
     ],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "badge": "CLEAN \u00d7{clean}",
     "description_template": "Buries one hidden bug. Clean burn: \u00d7{clean} QUALITY. Dirty burn: merely +{dirty} quality.",
     "parameters": {
@@ -1828,7 +1828,7 @@
       "agent",
       "recursion"
     ],
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "badge": "Repeat {strength_pct}%",
     "description_template": "Ask the model what the model thinks. Repeats the stage above at {strength_pct}% strength.",
     "parameters": {
@@ -1853,7 +1853,7 @@
       "agent",
       "recursion"
     ],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "badge": "Repeat {strength_pct}% \u00d7{forks}",
     "description_template": "Each stage forks the one above at {strength_pct}% strength, {forks} times over. Its own stage runs \u00d7{progress} tokens.",
     "parameters": {
@@ -1891,7 +1891,7 @@
       "recursion",
       "risk"
     ],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "badge": "Cascade {chance_pct}%",
     "description_template": "{chance_pct}% chance to replay the stage above after this one resolves. Heat makes that likelier.",
     "parameters": {
@@ -1924,7 +1924,7 @@
       "heat",
       "risk"
     ],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "badge": "Leak",
     "description_template": "Every replay runs hotter and harder: +{heat} heat and +{boost_pct}% repeat strength on this stage.",
     "parameters": {
@@ -1961,7 +1961,7 @@
       "heat",
       "risk"
     ],
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "badge": "Crit \u00d7{crit}",
     "description_template": "Above {threshold_pct}% heat, a {chance_pct}% chance the stage crits at \u00d7{crit} tokens and +{heat} heat.",
     "parameters": {
@@ -2020,7 +2020,7 @@
       "heat",
       "risk"
     ],
-    "min_location_tier": 4,
+    "min_investor_level": 5,
     "badge": "\u00d7{survive}",
     "description_template": "If the batch starts already past 100% heat and no stage drops, final tokens \u00d7{survive}. A dropped stage instead \u00d7{fault}.",
     "parameters": {
@@ -2141,7 +2141,7 @@
     "name": "Flash Attention",
     "category": "model",
     "rarity": "rare",
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "draft_weight": 0.75,
     "tags": [
       "model",
@@ -2274,7 +2274,7 @@
     "name": "Clean Room Gate",
     "category": "test",
     "rarity": "rare",
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "draft_weight": 0.75,
     "tags": [
       "test",
@@ -2355,7 +2355,7 @@
     "name": "Benchmark Harness",
     "category": "test",
     "rarity": "rare",
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "draft_weight": 0.7,
     "tags": [
       "test",
@@ -2453,7 +2453,7 @@
     "name": "Thermal Recuperator",
     "category": "hardware",
     "rarity": "rare",
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "draft_weight": 0.75,
     "tags": [
       "hardware",
@@ -2539,7 +2539,7 @@
     "name": "VRAM Compression",
     "category": "model",
     "rarity": "uncommon",
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "draft_weight": 0.8,
     "tags": [
       "model",
@@ -2628,7 +2628,7 @@
       "heat",
       "risk"
     ],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "draft_weight": 0.6,
     "badge": "\u00d7{progress}",
     "description_template": "\u00d7{progress} TOKENS and \u00d7{thermal} THERMAL. Already redlined: \u00d7{redline} TOKENS instead.",
@@ -2689,7 +2689,7 @@
       "combo_next": 1.15
     },
     "draft_weight": 0.85,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "add",
@@ -2749,7 +2749,7 @@
       "combo_quality": 8
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "add",
@@ -2798,7 +2798,7 @@
       "next": 1.25
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "unlock_achievement": "ach.repo_cartographer",
     "slot_effects": [
       {
@@ -2839,7 +2839,7 @@
       "combo_quality": 8
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.vector_search",
     "slot_effects": [
       {
@@ -2888,7 +2888,7 @@
       "thermal": 1.25
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "slot_effects": [
       {
         "operation": "multiply",
@@ -2925,7 +2925,7 @@
       "quality": 5
     },
     "draft_weight": 0.75,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -2982,7 +2982,7 @@
       "next": 1.5
     },
     "draft_weight": 0.75,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.dependency_spaghetti",
     "slot_effects": [
       {
@@ -3021,7 +3021,7 @@
       "hidden": 1
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "unlock_achievement": "ach.chaos_prompting",
     "slot_effects": [
       {
@@ -3061,7 +3061,7 @@
       "clean": 1.15
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 2,
     "slot_effects": [
       {
@@ -3110,7 +3110,7 @@
       "short_quality": 1.15
     },
     "draft_weight": 0.6,
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "min_victories": 3,
     "slot_effects": [
       {
@@ -3169,7 +3169,7 @@
       "combo_quality": 6
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "multiply",
@@ -3227,7 +3227,7 @@
       "combo": 1.25
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.mixture_of_everything",
     "slot_effects": [
       {
@@ -3283,7 +3283,7 @@
       "combo_next": 1.2
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "slot_effects": [
       {
         "operation": "multiply",
@@ -3335,7 +3335,7 @@
       "fix": 1
     },
     "draft_weight": 0.75,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.spotless",
     "slot_effects": [
       {
@@ -3382,7 +3382,7 @@
       "cost": 100
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -3430,7 +3430,7 @@
       "quality": 0.9
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.sparse_operator",
     "slot_effects": [
       {
@@ -3467,7 +3467,7 @@
       "heat": 6
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -3509,7 +3509,7 @@
       "next": 1.3
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -3562,7 +3562,7 @@
       "combo_hidden": -1
     },
     "draft_weight": 0.75,
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "min_victories": 2,
     "slot_effects": [
       {
@@ -3618,7 +3618,7 @@
       "cost": 500
     },
     "draft_weight": 0.6,
-    "min_location_tier": 4,
+    "min_investor_level": 5,
     "min_victories": 3,
     "slot_effects": [
       {
@@ -3699,7 +3699,7 @@
       "progress": 0.95
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "add",
@@ -3737,7 +3737,7 @@
       "progress": 0.8
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.integration_day",
     "slot_effects": [
       {
@@ -3780,7 +3780,7 @@
       "final_quality": 1.15
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.property_owner",
     "slot_effects": [
       {
@@ -3827,7 +3827,7 @@
       "quality": 5
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.fuzzed_prod",
     "slot_effects": [
       {
@@ -3867,7 +3867,7 @@
       "final_quality": 1.5
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -3918,7 +3918,7 @@
       "clean": 1.3
     },
     "draft_weight": 0.75,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.golden_reference",
     "slot_effects": [
       {
@@ -3960,7 +3960,7 @@
       "progress": 0.95
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -4003,7 +4003,7 @@
       "cost": 1000
     },
     "draft_weight": 0.6,
-    "min_location_tier": 4,
+    "min_investor_level": 5,
     "min_victories": 5,
     "slot_effects": [
       {
@@ -4055,7 +4055,7 @@
       "last_quality": 15
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "add",
@@ -4102,7 +4102,7 @@
       "thermal": 1.15
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 2,
     "slot_effects": [
       {
@@ -4156,7 +4156,7 @@
       "heat": 10
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "slot_effects": [
       {
         "operation": "multiply",
@@ -4191,7 +4191,7 @@
       "short": 0.9
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "unlock_achievement": "ach.graph_capture",
     "slot_effects": [
       {
@@ -4252,7 +4252,7 @@
       "heat": 3
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.pinned_down",
     "slot_effects": [
       {
@@ -4294,7 +4294,7 @@
       "thermal": 1.4
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -4339,7 +4339,7 @@
       "progress": 0.95
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "add",
@@ -4371,7 +4371,7 @@
       "cost": 8
     },
     "draft_weight": 1.0,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.cold_operator",
     "slot_effects": [
       {
@@ -4407,7 +4407,7 @@
       "cost": 150
     },
     "draft_weight": 0.6,
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "min_victories": 3,
     "slot_effects": [
       {
@@ -4453,7 +4453,7 @@
       "thermal": 4.0
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.thermal_event",
     "slot_effects": [
       {
@@ -4515,7 +4515,7 @@
       "hidden": 1
     },
     "draft_weight": 0.75,
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "min_victories": 2,
     "slot_effects": [
       {
@@ -4557,7 +4557,7 @@
       "hot_progress": 0.75
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 2,
     "slot_effects": [
       {
@@ -4615,7 +4615,7 @@
       "next": 1.3
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "add",
@@ -4647,7 +4647,7 @@
       "fix": 1
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.code_review",
     "slot_effects": [
       {
@@ -4687,7 +4687,7 @@
       "heat": 12
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "unlock_achievement": "ach.parallel_everything",
     "slot_effects": [
       {
@@ -4726,7 +4726,7 @@
       "reveal": 1
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.watch_this",
     "slot_effects": [
       {
@@ -4765,7 +4765,7 @@
       "progress": 0.9
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -4812,7 +4812,7 @@
       "cost": 300
     },
     "draft_weight": 0.6,
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "min_victories": 3,
     "slot_effects": [
       {
@@ -4855,7 +4855,7 @@
       "fix": 1
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -4899,7 +4899,7 @@
       "hidden": 1
     },
     "draft_weight": 0.6,
-    "min_location_tier": 4,
+    "min_investor_level": 5,
     "min_hard_victories": 1,
     "slot_effects": [
       {
@@ -4951,7 +4951,7 @@
       "next": 1.1
     },
     "draft_weight": 1.0,
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "slot_effects": [
       {
         "operation": "multiply",
@@ -4983,7 +4983,7 @@
       "cost_mult": 0.75
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.semantic_reuse",
     "slot_effects": [
       {
@@ -5022,7 +5022,7 @@
       "combo_progress": 1.2
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -5071,7 +5071,7 @@
       "dirty": 0.85
     },
     "draft_weight": 0.85,
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "unlock_achievement": "ach.canary_keeper",
     "finalizing_effects": [
       {
@@ -5119,7 +5119,7 @@
       "cost": 100
     },
     "draft_weight": 0.75,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 1,
     "slot_effects": [
       {
@@ -5175,7 +5175,7 @@
       "progress": 0.9
     },
     "draft_weight": 0.85,
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "min_victories": 2,
     "slot_effects": [
       {
@@ -5222,7 +5222,7 @@
       "progress": 1.05
     },
     "draft_weight": 0.75,
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "min_victories": 3,
     "slot_effects": [
       {
@@ -5296,7 +5296,7 @@
       "heat": 10
     },
     "draft_weight": 0.5,
-    "min_location_tier": 4,
+    "min_investor_level": 5,
     "min_victories": 5,
     "slot_effects": [
       {
@@ -5367,7 +5367,7 @@
       "thermal": 0.5
     },
     "draft_weight": 0.5,
-    "min_location_tier": 5,
+    "min_investor_level": 6,
     "min_hard_victories": 1,
     "slot_effects": [
       {
@@ -5444,7 +5444,7 @@
       "gain": 0.04
     },
     "draft_weight": 0.5,
-    "min_location_tier": 4,
+    "min_investor_level": 5,
     "min_victories": 5,
     "slot_effects": [
       {
@@ -5493,7 +5493,7 @@
       "overkill": 2.0
     },
     "draft_weight": 0.5,
-    "min_location_tier": 6,
+    "min_investor_level": 7,
     "min_hard_victories": 3,
     "slot_effects": [
       {

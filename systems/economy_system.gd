@@ -81,9 +81,26 @@ func accrue_prompt_costs(run_state: RunState, _tuning: Dictionary) -> void:
 	run_state.economy["costs_this_round"] = float(run_state.economy.get("costs_this_round", 0.0)) + total
 
 
+## The investor's pressure on the rent: `investor_targets.rent_mult_by_level`
+## for the run's Investor Level (1.0 everywhere until tuned).
+static func investor_rent_multiplier(run_state: RunState) -> float:
+	var level: int = maxi(
+		InvestorProgression.FIRST_LEVEL,
+		int(run_state.investor.get("level", InvestorProgression.FIRST_LEVEL))
+	)
+	return InvestorProgression.rent_multiplier(level, ContentDatabase)
+
+
+## The rent the round's bills will actually charge: `economy.round_rent` under
+## the investor's pressure for the run's level.
+static func billed_rent(run_state: RunState) -> float:
+	return float(run_state.economy.get("round_rent", 400.0)) * investor_rent_multiplier(run_state)
+
+
 ## Charges rent and the other end-of-round bills, and returns the statement so
 ## the UI can show the player exactly what they just paid for. Rent is a flat
-## charge per round however many prompts the round took.
+## charge per round however many prompts the round took, scaled by the
+## investor's pressure for the run's level.
 func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 	# Rule-changer: a client retainer or subscription line lands before the
 	# bills do, so it is real income rather than a discount on rent.
@@ -91,7 +108,7 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 	passive *= float(run_state.business.get("legacy_income_multiplier", 1.0))
 	if passive > 0.0:
 		add_income(run_state, passive, tuning)
-	var rent: float = float(run_state.economy.get("round_rent", 400.0))
+	var rent: float = billed_rent(run_state)
 	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
 	var operating: float = float(run_state.economy.get("costs_this_round", 0.0))
 	var total: float = rent + recurring
@@ -128,13 +145,13 @@ func apply_round_bills(run_state: RunState, tuning: Dictionary) -> Dictionary:
 	return bill_metadata
 
 
-## The round the contract was completed in is on the investor. Nothing is
+## The round the target was completed in is on the investor. Nothing is
 ## charged and nothing is owed: the statement still itemises what the round
-## would have cost so the player can see what was covered, and the unpaid
-## streak is wiped so a chapter cleared with empty pockets cannot be evicted
-## for it afterwards.
+## would have cost so the player can see what was covered. The unpaid streak
+## is left exactly as it stands — the run is continuous, so a target met with
+## the rent already in arrears does not wipe the arrears.
 func waive_round_bills(run_state: RunState) -> Dictionary:
-	var rent: float = float(run_state.economy.get("round_rent", 400.0))
+	var rent: float = billed_rent(run_state)
 	var recurring: float = float(run_state.economy.get("recurring_costs", 0.0))
 	var operating: float = float(run_state.economy.get("costs_this_round", 0.0))
 	var total: float = rent + recurring
@@ -151,11 +168,10 @@ func waive_round_bills(run_state: RunState) -> Dictionary:
 		"waived_total": total,
 	}
 	_append_ledger_entry(run_state, LEDGER_TYPE_DEBIT, 0.0, "round_bills_waived", float(run_state.economy.get("cash", 0.0)), bill_metadata)
-	run_state.economy["rent_unpaid_streak"] = 0
 	run_state.economy["last_round_costs"] = operating
 	bill_metadata["cash_after"] = float(run_state.economy.get("cash", 0.0))
 	bill_metadata["debt"] = float(run_state.economy.get("debt", 0.0))
-	bill_metadata["unpaid_streak"] = 0
+	bill_metadata["unpaid_streak"] = int(run_state.economy.get("rent_unpaid_streak", 0))
 	return bill_metadata
 
 

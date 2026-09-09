@@ -3,29 +3,26 @@ extends Node
 ## Cross-run progression. Everything else in the game is scoped to a single run
 ## and thrown away; this is the one file that remembers.
 ##
-## Only beating the campaign's final Ascension Contract banks picks. Spending a
-## pick buys a permanent unlock from content/meta/unlocks.json, which is applied
-## to every run from then on. Mid-campaign angel goals are chapter breaks inside
-## a run, not sources of permanent power.
+## Only completing the game — the final Investor Target — banks picks. Spending
+## a pick buys a Permanent Unlock from content/meta/unlocks.json, which is
+## applied to every run from then on. Targets cleared on the way up are
+## level-ups inside a run, not sources of permanent power. The profile also
+## keeps the player's records: deepest Deep Burn, biggest batch, richest run,
+## fastest completion.
 
 const DEFAULT_PROFILE_PATH := "user://profile.json"
 const CATALOG_PATH := "res://content/meta/unlocks.json"
-const PROFILE_VERSION := 7
+const PROFILE_VERSION := 8
 
-## Where a run that has unlocked nothing takes place. The campaign always has at
-## least this rung, so no profile can ever end up with nowhere to play.
-const DEFAULT_LOCATION := "bedroom"
-
-## Used only if the balance data cannot be read. The order matters: it is what
-## "the next location" means when one is cleared.
-const FALLBACK_LOCATION_ORDER := [
-	"bedroom",
-	"garage",
-	"office_unit",
-	"warehouse",
-	"datacentre_campus",
-	"private_power_grid",
-	"moon_facility",
+## The player's bests across every run, for the records sheet. Every entry only
+## ever moves up (or, for the fastest completion, down).
+const RECORD_KEYS: Array[String] = [
+	"games_completed",
+	"highest_depth",
+	"highest_multiplier",
+	"highest_single_batch",
+	"highest_profit",
+	"fastest_completion_rounds",
 ]
 
 ## Cumulative counters that outlive a run, so an achievement can ask for ten
@@ -235,14 +232,14 @@ func completion_summary() -> Dictionary:
 	for module in ContentDatabase.modules:
 		if ContentDatabase.module_is_unlocked(module):
 			modules_unlocked += 1
-	var legacy_owned: int = 0
-	var legacy_total: int = 0
+	var permanent_owned: int = 0
+	var permanent_total: int = 0
 	for unlock in _catalog:
 		var ranks: Array = Array(unlock.get("ranks", []))
 		if ranks.is_empty():
 			continue
-		legacy_total += ranks.size()
-		legacy_owned += mini(unlock_count(str(unlock.get("id", ""))), ranks.size())
+		permanent_total += ranks.size()
+		permanent_owned += mini(unlock_count(str(unlock.get("id", ""))), ranks.size())
 	var parts: Array[float] = []
 	if achievements_total > 0:
 		parts.append(float(achievements_earned) / float(achievements_total))
@@ -250,8 +247,8 @@ func completion_summary() -> Dictionary:
 		parts.append(float(perks_unlocked) / float(perks_total))
 	if modules_total > 0:
 		parts.append(float(modules_unlocked) / float(modules_total))
-	if legacy_total > 0:
-		parts.append(float(legacy_owned) / float(legacy_total))
+	if permanent_total > 0:
+		parts.append(float(permanent_owned) / float(permanent_total))
 	var percent: float = 0.0
 	for part in parts:
 		percent += part
@@ -260,13 +257,13 @@ func completion_summary() -> Dictionary:
 	var overall: bool = achievements_earned >= achievements_total \
 		and perks_unlocked >= perks_total \
 		and modules_unlocked >= modules_total \
-		and legacy_owned >= legacy_total \
-		and achievements_total > 0 and perks_total > 0 and modules_total > 0 and legacy_total > 0
+		and permanent_owned >= permanent_total \
+		and achievements_total > 0 and perks_total > 0 and modules_total > 0 and permanent_total > 0
 	return {
 		"achievements": {"earned": achievements_earned, "total": achievements_total},
 		"perks": {"unlocked": perks_unlocked, "total": perks_total},
 		"modules": {"unlocked": modules_unlocked, "total": modules_total},
-		"legacy": {"ranks_owned": legacy_owned, "total_ranks": legacy_total},
+		"permanent_unlocks": {"ranks_owned": permanent_owned, "total_ranks": permanent_total},
 		"overall_complete": overall,
 		"percent": percent,
 	}
@@ -318,10 +315,10 @@ func is_available(unlock_id: String) -> bool:
 
 
 ## Every unlock a banked pick could buy right now. Picks are rare — one batch
-## per completion of the whole campaign — so the player chooses freely between
-## all the areas rather than being dealt a random hand. Reward-only unlocks
-## (granted automatically by a specific Ascension ending) never show up here —
-## picks are choices, not prizes already handed out.
+## per completion of the whole game — so the player chooses freely between all
+## the areas rather than being dealt a random hand. Reward-only unlocks
+## (granted automatically by completing the game) never show up here — picks
+## are choices, not prizes already handed out.
 func available_choices() -> Array:
 	_ensure_loaded()
 	var pool: Array = []
@@ -333,9 +330,9 @@ func available_choices() -> Array:
 	return pool
 
 
-## Banks `picks` unlock picks for completing the campaign's final Ascension
-## Contract. Only the summit pays permanence: a chapter goal cleared on the way
-## up is progress inside the run, not a source of unlocks.
+## Banks `picks` unlock picks for completing the game's final Investor Target.
+## Only the summit pays permanence: a target cleared on the way up is progress
+## inside the run, not a source of unlocks.
 func bank_victory(picks: int = 1, difficulty_id: String = "normal") -> void:
 	if not enabled:
 		return
@@ -345,8 +342,76 @@ func bank_victory(picks: int = 1, difficulty_id: String = "normal") -> void:
 	by_difficulty[difficulty_id] = int(by_difficulty.get(difficulty_id, 0)) + 1
 	_profile["victories_by_difficulty"] = by_difficulty
 	_profile["pending_picks"] = pending_picks() + maxi(0, picks)
+	var bests: Dictionary = _records()
+	bests["games_completed"] = maxi(int(bests.get("games_completed", 0)), victories())
+	_profile["records"] = bests
 	_save()
 	pick_banked.emit(pending_picks())
+
+
+# --- Records -----------------------------------------------------------------
+
+func records() -> Dictionary:
+	_ensure_loaded()
+	return _records().duplicate(true)
+
+
+## Folds one run's bests into the profile's records. Safe to call on every
+## ending — each record only ever improves, so a run banked twice cannot move a
+## record the wrong way. The fastest completion is taken only at the moment the
+## final target is met (before the run carries on into Deep Burn), so the rounds
+## spent burning afterwards never count against it. `highest_multiplier` is the
+## Deep Burn score multiplier, the one multiplier the run tracks.
+func record_run_records(run_state: RunState) -> void:
+	if not enabled or run_state == null:
+		return
+	_ensure_loaded()
+	var bests: Dictionary = _records()
+	var stats: Dictionary = run_state.statistics
+	bests["highest_depth"] = maxi(
+		int(bests.get("highest_depth", 0)),
+		maxi(int(stats.get("depth_reached", 0)), int(run_state.depth.get("level", 0)))
+	)
+	bests["highest_multiplier"] = maxf(
+		float(bests.get("highest_multiplier", 1.0)), float(run_state.depth.get("score_mult", 1.0))
+	)
+	bests["highest_single_batch"] = maxf(
+		float(bests.get("highest_single_batch", 0.0)), float(stats.get("peak_prompt_tokens", 0.0))
+	)
+	bests["highest_profit"] = maxf(
+		float(bests.get("highest_profit", 0.0)),
+		maxf(float(stats.get("peak_cash", 0.0)), float(run_state.economy.get("cash", 0.0)))
+	)
+	var completed_now: bool = bool(run_state.flags.get("game_completed", false)) \
+		and bool(run_state.flags.get("victory", false)) \
+		and not bool(run_state.flags.get("post_victory", false))
+	if completed_now:
+		var rounds: int = maxi(1, int(run_state.calendar.get("round", 1)))
+		var fastest: int = int(bests.get("fastest_completion_rounds", 0))
+		bests["fastest_completion_rounds"] = rounds if fastest <= 0 else mini(fastest, rounds)
+	_profile["records"] = bests
+	_save()
+	profile_changed.emit()
+
+
+func _records() -> Dictionary:
+	var stored: Dictionary = Dictionary(_profile.get("records", {}))
+	var bests: Dictionary = _default_records()
+	for key in RECORD_KEYS:
+		if stored.has(key):
+			bests[key] = stored[key]
+	return bests
+
+
+func _default_records() -> Dictionary:
+	return {
+		"games_completed": 0,
+		"highest_depth": 0,
+		"highest_multiplier": 1.0,
+		"highest_single_batch": 0.0,
+		"highest_profit": 0.0,
+		"fastest_completion_rounds": 0,
+	}
 
 
 ## Surviving the year without ascending. Recorded so the profile can tell the
@@ -364,8 +429,8 @@ func retirements() -> int:
 	return int(_profile.get("retirements", 0))
 
 
-## The Compute Age a fresh run starts in. Advances one step the first time a
-## Tier 3 Ascension Contract that unlocks the next age is completed.
+## The Compute Age a fresh run starts in. Advances one step the first time the
+## game is completed while the next age is still unreached.
 func age() -> int:
 	_ensure_loaded()
 	return int(_profile.get("age", 0))
@@ -381,7 +446,7 @@ func advance_age(max_age: int) -> void:
 
 
 ## Grants an unlock outright rather than through the pick economy: this is how
-## a specific Ascension ending hands over the one permanent mechanic it
+## completing the game hands over the one permanent mechanic the final target
 ## promised, the first time (and only the first time) it is completed.
 func grant_ending_unlock(unlock_id: String) -> void:
 	if not enabled:
@@ -503,113 +568,6 @@ func set_difficulty(difficulty_id: String) -> void:
 	profile_changed.emit()
 
 
-# --- Campaign locations ------------------------------------------------------
-
-## The campaign is a list of places rather than a ladder bought during a run:
-## a run happens in exactly one of them, and clearing it is what opens the next.
-## With the meta layer switched off — the test suite, balance sweeps — every run
-## starts from the first rung, for the same reason Endless is forced off there.
-
-## The full campaign in order, from content so the order and the balance data
-## that describes each location cannot drift apart.
-func location_order() -> Array:
-	var order: Array = Array(
-		ContentDatabase.balance.get("economy", {}).get("location_order", [])
-	)
-	if order.is_empty():
-		return FALLBACK_LOCATION_ORDER.duplicate()
-	var ids: Array = []
-	for entry in order:
-		ids.append(str(entry))
-	return ids
-
-
-func unlocked_locations() -> Array:
-	if not enabled:
-		return [DEFAULT_LOCATION]
-	_ensure_loaded()
-	return Array(_locations().get("unlocked", [])).duplicate()
-
-
-func is_location_unlocked(location_id: String) -> bool:
-	return location_id in unlocked_locations()
-
-
-func completed_locations() -> Array:
-	if not enabled:
-		return []
-	_ensure_loaded()
-	return Array(_locations().get("completed", [])).duplicate()
-
-
-## Where the next run will take place. A fresh run is a fresh game — it starts
-## at the bottom of the campaign and climbs the chapters in-run — so nothing
-## moves this forward automatically any more; it exists for replays and tests.
-func selected_location() -> String:
-	if not enabled:
-		return DEFAULT_LOCATION
-	_ensure_loaded()
-	var selected: String = str(_locations().get("selected", DEFAULT_LOCATION))
-	if not is_location_unlocked(selected):
-		return DEFAULT_LOCATION
-	return selected
-
-
-## Chooses where the next run happens. Refuses rather than silently falling back
-## so a stale menu cannot start a run somewhere the player has not earned.
-func select_location(location_id: String) -> bool:
-	if not enabled:
-		return false
-	_ensure_loaded()
-	if not is_location_unlocked(location_id):
-		return false
-	var locations: Dictionary = _locations()
-	locations["selected"] = location_id
-	_profile["locations"] = locations
-	_save()
-	profile_changed.emit()
-	return true
-
-
-## Opens a location permanently. Returns false when it was already open, so a
-## caller can tell a first clear from a replay.
-func unlock_location(location_id: String) -> bool:
-	if not enabled:
-		return false
-	if not (location_id in location_order()):
-		return false
-	_ensure_loaded()
-	var locations: Dictionary = _locations()
-	var unlocked: Array = Array(locations.get("unlocked", []))
-	if location_id in unlocked:
-		return false
-	unlocked.append(location_id)
-	locations["unlocked"] = _sorted_by_campaign_order(unlocked)
-	_profile["locations"] = locations
-	_save()
-	profile_changed.emit()
-	return true
-
-
-## Records a location as beaten and opens whatever follows it. Replaying a
-## cleared location is allowed, so completion is a set rather than a counter.
-func complete_location(location_id: String) -> void:
-	if not enabled:
-		return
-	_ensure_loaded()
-	var locations: Dictionary = _locations()
-	var completed: Array = Array(locations.get("completed", []))
-	if not (location_id in completed):
-		completed.append(location_id)
-		locations["completed"] = _sorted_by_campaign_order(completed)
-		_profile["locations"] = locations
-		_save()
-	var next_id: String = next_location_after(location_id)
-	if next_id != "":
-		unlock_location(next_id)
-	profile_changed.emit()
-
-
 ## The machines a fresh run starts with, earned one rung at a time through the
 ## "starting_hardware" unlock ladder: the first pick is the desktop, the next is
 ## the GPU rack, and so on. This is the only kit that crosses runs — everything
@@ -630,74 +588,13 @@ func starting_rig() -> Array:
 	return earned
 
 
-## The rung above this one, or "" at the top of the campaign.
-func next_location_after(location_id: String) -> String:
-	var order: Array = location_order()
-	var index: int = order.find(location_id)
-	if index < 0 or index + 1 >= order.size():
-		return ""
-	return str(order[index + 1])
-
-
-## A location id as a player-facing name. Derived rather than authored: the ids
-## are already readable words, and a second list of them would only drift.
-func location_name(location_id: String) -> String:
-	if location_id == "":
-		return ""
-	return location_id.replace("_", " ").capitalize()
-
-
-## Brings the profile up to date with a location the player is demonstrably in:
-## a save from before the campaign existed can be mid-warehouse, and everything
-## below that rung must count as already earned.
-func ensure_location_unlocked_through(location_id: String) -> void:
-	if not enabled:
-		return
-	var order: Array = location_order()
-	var index: int = order.find(location_id)
-	if index < 0:
-		return
-	for i in range(index + 1):
-		unlock_location(str(order[i]))
-
-
-func _locations() -> Dictionary:
-	var locations: Dictionary = Dictionary(_profile.get("locations", {}))
-	if locations.is_empty():
-		locations = _default_locations()
-		_profile["locations"] = locations
-	return locations
-
-
-func _default_locations() -> Dictionary:
-	return {
-		"unlocked": [DEFAULT_LOCATION],
-		"selected": DEFAULT_LOCATION,
-		"completed": [],
-	}
-
-
-func _sorted_by_campaign_order(ids: Array) -> Array:
-	var order: Array = location_order()
-	var sorted: Array = []
-	for entry in order:
-		if str(entry) in ids:
-			sorted.append(str(entry))
-	# Anything the campaign no longer lists is kept rather than dropped: a
-	# renamed location should not quietly cost the player an unlock.
-	for entry in ids:
-		if not (str(entry) in sorted):
-			sorted.append(str(entry))
-	return sorted
-
-
-## Endless mode unlocks the first time any Tier 3 Ascension Contract is
-## completed once: proof the build can already reach the real finish line, so
-## an infinite tail past round 12 is a bonus rather than a way to dodge it.
+## Endless mode unlocks the first time the game's final target is completed:
+## proof the build can already reach the real finish line, so an infinite tail
+## past the calendar is a bonus rather than a way to dodge it.
 func endless_unlocked() -> bool:
 	_ensure_loaded()
 	var ascensions: Dictionary = _profile.get("ascensions", {})
-	for contract in ContentDatabase.ascension_contracts:
+	for contract in ContentDatabase.investor_targets:
 		if int(contract.get("tier", 1)) >= 3 and int(ascensions.get(str(contract.get("id", "")), 0)) > 0:
 			return true
 	return false
@@ -804,7 +701,7 @@ func _apply_rank(run_state: RunState, unlock: Dictionary, rank: int) -> void:
 				run_state.build["modules"] = owned
 		"cooling":
 			# Kept apart from the run's own cooling, which is derived from the
-			# location and the kit in it and would overwrite anything added here.
+			# Infrastructure Tier and the kit in it and would overwrite anything added here.
 			run_state.compute["meta_cooling"] = float(run_state.compute.get("meta_cooling", 0.0)) + value
 		"starting_cash":
 			run_state.economy["cash"] = float(run_state.economy.get("cash", 0.0)) + value
@@ -895,7 +792,7 @@ func _default_profile() -> Dictionary:
 		"lifetime_stats": {},
 		"difficulty": "normal",
 		"endless_enabled": false,
-		"locations": _default_locations(),
+		"records": _default_records(),
 		"settings": _default_settings(),
 	}
 
@@ -955,22 +852,16 @@ func _load_profile() -> void:
 	var lifetime: Dictionary = {}
 	for key in Dictionary(loaded.get("lifetime_stats", {})).keys():
 		lifetime[str(key)] = float(loaded["lifetime_stats"][key])
-	var locations: Dictionary = _default_locations()
-	if loaded.get("locations", null) is Dictionary:
-		var stored: Dictionary = loaded["locations"]
-		var unlocked: Array = [DEFAULT_LOCATION]
-		for entry in Array(stored.get("unlocked", [])):
-			if not (str(entry) in unlocked):
-				unlocked.append(str(entry))
-		var completed: Array = []
-		for entry in Array(stored.get("completed", [])):
-			if not (str(entry) in completed):
-				completed.append(str(entry))
-		locations = {
-			"unlocked": unlocked,
-			"selected": str(stored.get("selected", DEFAULT_LOCATION)),
-			"completed": completed,
-		}
+	var bests: Dictionary = _default_records()
+	if loaded.get("records", null) is Dictionary:
+		var stored: Dictionary = loaded["records"]
+		for key in RECORD_KEYS:
+			if not stored.has(key):
+				continue
+			if bests[key] is int:
+				bests[key] = int(stored[key])
+			else:
+				bests[key] = float(stored[key])
 	_profile = {
 		"version": PROFILE_VERSION,
 		"victories": int(loaded.get("victories", 0)),
@@ -986,9 +877,11 @@ func _load_profile() -> void:
 		"lifetime_stats": lifetime,
 		"difficulty": str(loaded.get("difficulty", "normal")),
 		"endless_enabled": bool(loaded.get("endless_enabled", false)),
-		"locations": locations,
+		"records": bests,
 		"settings": _merge_settings(loaded.get("settings", {})),
 	}
+	# The v8 profile has no `locations` block: anything an older profile kept
+	# there is dropped on load rather than carried as dead weight.
 	_migrate_profile(int(loaded.get("version", 1)))
 
 
@@ -1006,24 +899,8 @@ func _migrate_profile(from_version: int) -> void:
 			float(stats.get("tokens_burned", 0.0)),
 			float(Dictionary(_profile.get("best_scores", {})).get("total_tokens_burned", 0.0))
 		)
-	if from_version < 3:
-		# Profiles written before the campaign existed have no record of which
-		# premises they reached — that lived in the run save, not here. They
-		# start the campaign at the bottom; loading an in-progress run reopens
-		# whatever rung it was actually on.
-		var locations: Dictionary = _locations()
-		locations["unlocked"] = _sorted_by_campaign_order(
-			Array(locations.get("unlocked", [DEFAULT_LOCATION]))
-		)
-		_profile["locations"] = locations
-	if from_version < 4:
-		# Chapter wins used to move the campaign selection forward so the next
-		# fresh run resumed in the next location. A fresh run is now a fresh
-		# game from the bottom — chapters are climbed inside a run — so any
-		# selection an older profile advanced points back at the start.
-		var selection: Dictionary = _locations()
-		selection["selected"] = DEFAULT_LOCATION
-		_profile["locations"] = selection
+	# v3 and v4 shaped the campaign `locations` block; v8 removed it, so there
+	# is nothing left for those steps to do.
 	if from_version < 5:
 		if not _profile.has("victories_by_difficulty"):
 			_profile["victories_by_difficulty"] = {"normal": 0, "hard": 0}
@@ -1055,6 +932,13 @@ func _migrate_profile(from_version: int) -> void:
 			_profile["unlocks"] = cloud_unlocks
 			_profile["pending_picks"] = int(_profile.get("pending_picks", 0)) + returned
 			_profile["retired_cloud_unlocks"] = true
+	if from_version < 8:
+		# Rooms stopped being progression: the campaign `locations` block is
+		# gone (dropped on load). The records sheet is new; every game an older
+		# profile completed was a victory, so that record is seeded from them.
+		var bests: Dictionary = _records()
+		bests["games_completed"] = maxi(int(bests.get("games_completed", 0)), int(_profile.get("victories", 0)))
+		_profile["records"] = bests
 	_save()
 
 

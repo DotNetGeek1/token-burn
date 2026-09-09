@@ -1,7 +1,7 @@
 extends TestCase
 
 ## Meta-progression is the only state that outlives a run, so these cover what a
-## player is promised across runs: only beating the whole campaign banks picks,
+## player is promised across runs: only completing the whole game banks picks,
 ## spending one changes every future run, the slot cap holds, and the profile
 ## survives a restart.
 ##
@@ -18,7 +18,7 @@ func run() -> void:
 	var restore_enabled: bool = MetaProgress.enabled
 	MetaProgress.enabled = true
 
-	_test_only_beating_the_campaign_banks_picks()
+	_test_only_completing_the_game_banks_picks()
 	_test_a_loss_banks_nothing()
 	_test_an_extra_slot_widens_the_next_run()
 	_test_the_slot_cap_holds()
@@ -27,7 +27,7 @@ func run() -> void:
 	_test_the_profile_survives_a_restart()
 	_test_a_disabled_meta_layer_leaves_a_run_alone()
 	_test_difficulty_choice_carries_into_a_new_run()
-	_test_endless_stays_locked_without_a_tier_3_ascension()
+	_test_endless_stays_locked_without_a_final_target()
 	_test_endless_keeps_the_run_going_past_round_twelve()
 	_test_a_legacy_rank_reads_its_total_not_its_stack()
 	_test_old_silicon_speeds_the_rig_up()
@@ -35,6 +35,8 @@ func run() -> void:
 	_test_a_hard_gated_rank_waits_for_a_hard_win()
 	_test_sound_settings_default_on_and_persist()
 	_test_retired_cloud_unlocks_return_their_picks()
+	_test_a_v7_profile_drops_locations_and_seeds_records()
+	_test_run_records_only_move_up()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -54,15 +56,15 @@ func _sim() -> Node:
 	return sim
 
 
-## Permanence is the reward for finishing the whole campaign. A chapter goal
+## Permanence is the reward for finishing the whole game. A target
 ## cleared on the way up banks nothing; the summit banks its contract's picks,
 ## and the debrief lays out every area still open to spend them on.
-func _test_only_beating_the_campaign_banks_picks() -> void:
+func _test_only_completing_the_game_banks_picks() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(9001)
 	sim._end_run(true)
-	assert_eq(MetaProgress.victories(), 0, "A chapter win is not the end of the game")
+	assert_eq(MetaProgress.victories(), 0, "A target on the way up is not the end of the game")
 	assert_eq(MetaProgress.pending_picks(), 0, "So it banks nothing permanent")
 	assert_true(sim.debrief_choices().is_empty(), "And there is nothing to spend")
 	sim.free()
@@ -70,10 +72,13 @@ func _test_only_beating_the_campaign_banks_picks() -> void:
 	_fresh_profile()
 	var summit: Node = _sim()
 	summit.start_run(9001)
-	summit.apply_run_location(summit.run_state, "moon_facility")
-	var picks: int = maxi(1, int(summit.ascension_boss_contract().get("picks", 1)))
+	# The final target is the last authored Investor Level, not a room.
+	summit.investor_progression().activate_level(
+		summit.run_state, InvestorProgression.final_level(ContentDatabase), ContentDatabase
+	)
+	var picks: int = maxi(1, int(summit.investor_target().get("picks", 1)))
 	summit._end_run(true)
-	assert_eq(MetaProgress.victories(), 1, "Beating the last chapter is the victory")
+	assert_eq(MetaProgress.victories(), 1, "Completing the final target is the victory")
 	assert_eq(MetaProgress.pending_picks(), picks, "And it banks the summit contract's picks")
 
 	var choices: Array = summit.debrief_choices()
@@ -190,7 +195,7 @@ func _test_the_permanent_rig_is_not_refundable() -> void:
 	sim.start_run(9008)
 	# The bedroom cannot cool a desktop, so the rung stays boxed until a room
 	# that can take it. The garage is that room.
-	sim.apply_run_location(sim.run_state, "garage", false)
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room("garage"))
 	sim._install_permanent_rig()
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
@@ -254,14 +259,14 @@ func _test_difficulty_choice_carries_into_a_new_run() -> void:
 	assert_true(hard_cash < normal_cash, "Hard starts with less cash than normal, per the difficulty profile")
 
 
-func _test_endless_stays_locked_without_a_tier_3_ascension() -> void:
+func _test_endless_stays_locked_without_a_final_target() -> void:
 	_fresh_profile()
 	assert_false(MetaProgress.endless_unlocked(), "A fresh profile has not proven it can reach a real ending")
 	MetaProgress.set_endless_enabled(true)
 	assert_false(MetaProgress.endless_enabled(), "Toggling it on does nothing until it is actually unlocked")
 
 	MetaProgress.record_ascension("ascension.the_monopoly")
-	assert_true(MetaProgress.endless_unlocked(), "Completing a Tier 3 contract unlocks it")
+	assert_true(MetaProgress.endless_unlocked(), "Completing a final-tier target unlocks it")
 	assert_true(MetaProgress.endless_enabled(), "The earlier toggle now takes effect")
 
 
@@ -413,7 +418,7 @@ func _test_a_hard_gated_rank_waits_for_a_hard_win() -> void:
 		assert_true(MetaProgress.spend_pick("unlock.starting_cash"), "The ungated rungs are for sale")
 	assert_false(
 		MetaProgress.is_available("unlock.starting_cash"),
-		"The next rung is held back until the campaign has been beaten on Hard"
+		"The next rung is held back until the game has been completed on Hard"
 	)
 
 	for _i in range(int(required[gated_rank])):
@@ -476,3 +481,109 @@ func _test_retired_cloud_unlocks_return_their_picks() -> void:
 	MetaProgress._ensure_loaded()
 	assert_eq(MetaProgress.pending_picks(), 4, "Returned picks survive a reload")
 	assert_true(MetaProgress.retired_cloud_unlocks(), "The grant marker survives a reload")
+
+
+## Profile v8: rooms are not progression, so the campaign `locations` block is
+## dropped on load, and the new records sheet is seeded from the victories the
+## old profile already counted. Nothing else the profile held is lost.
+func _test_a_v7_profile_drops_locations_and_seeds_records() -> void:
+	_fresh_profile()
+	var old_profile := {
+		"version": 7,
+		"victories": 3,
+		"victories_by_difficulty": {"normal": 2, "hard": 1},
+		"unlocks": {"unlock.client_retainer": 1},
+		"pending_picks": 2,
+		"achievements": {"ach.first_burn": 1700000000},
+		"lifetime_stats": {"runs": 9.0},
+		"difficulty": "hard",
+		"locations": {"unlocked": ["bedroom", "garage", "office_unit"], "selected": "garage", "completed": ["bedroom", "garage"]},
+	}
+	var file := FileAccess.open(SCRATCH_PROFILE, FileAccess.WRITE)
+	file.store_string(JSON.stringify(old_profile))
+	file.close()
+	MetaProgress._loaded = false
+	MetaProgress._ensure_loaded()
+
+	assert_false(MetaProgress._profile.has("locations"), "The campaign locations block is gone")
+	assert_eq(int(MetaProgress._profile.get("version", 0)), MetaProgress.PROFILE_VERSION, "Brought up to the current version")
+	var records: Dictionary = MetaProgress.records()
+	assert_eq(int(records.get("games_completed", -1)), 3, "Every old victory was a completed game")
+	assert_eq(int(records.get("highest_depth", -1)), 0, "No depth record is invented")
+	assert_eq(int(records.get("fastest_completion_rounds", -1)), 0, "Nor a fastest completion")
+	assert_eq(MetaProgress.unlock_count("unlock.client_retainer"), 1, "Its unlocks survive the migration")
+	assert_eq(MetaProgress.pending_picks(), 2, "So do its banked picks")
+	assert_eq(MetaProgress.victories(), 3, "And its victories")
+	assert_eq(MetaProgress.victories_on("hard"), 1, "By difficulty too")
+	assert_true(MetaProgress.has_achievement("ach.first_burn"), "And its achievements")
+	assert_eq(MetaProgress.difficulty(), "hard", "And the difficulty it was set to")
+
+	# Written back and read again, the migrated profile is stable.
+	MetaProgress._loaded = false
+	MetaProgress._ensure_loaded()
+	assert_false(MetaProgress._profile.has("locations"), "Locations do not come back on a reload")
+	assert_eq(int(MetaProgress.records().get("games_completed", -1)), 3, "The seeded record survives a reload")
+
+
+## The records sheet takes the best of every run and never gives one back: a
+## worse run later leaves every record where it was, and the fastest completion
+## is only taken at the moment the game is completed.
+func _test_run_records_only_move_up() -> void:
+	_fresh_profile()
+	var strong := RunState.new()
+	strong.reset()
+	strong.statistics["peak_prompt_tokens"] = 5.0e9
+	strong.statistics["peak_cash"] = 250000.0
+	strong.statistics["depth_reached"] = 3
+	strong.depth["level"] = 3
+	strong.depth["score_mult"] = 4.5
+	strong.calendar["round"] = 9
+	strong.flags["victory"] = true
+	strong.flags["game_completed"] = true
+	MetaProgress.record_run_records(strong)
+	var records: Dictionary = MetaProgress.records()
+	assert_almost_eq(float(records.get("highest_single_batch", 0.0)), 5.0e9, 1.0, "The biggest batch is recorded")
+	assert_almost_eq(float(records.get("highest_profit", 0.0)), 250000.0, 0.01, "So is the richest run")
+	assert_eq(int(records.get("highest_depth", 0)), 3, "And the deepest burn")
+	assert_almost_eq(float(records.get("highest_multiplier", 0.0)), 4.5, 1e-6, "And the best multiplier")
+	assert_eq(int(records.get("fastest_completion_rounds", 0)), 9, "And how fast the game was completed")
+
+	var weak := RunState.new()
+	weak.reset()
+	weak.statistics["peak_prompt_tokens"] = 10.0
+	weak.statistics["peak_cash"] = 100.0
+	weak.calendar["round"] = 30
+	weak.flags["victory"] = true
+	weak.flags["game_completed"] = true
+	MetaProgress.record_run_records(weak)
+	records = MetaProgress.records()
+	assert_almost_eq(float(records.get("highest_single_batch", 0.0)), 5.0e9, 1.0, "A smaller batch changes nothing")
+	assert_almost_eq(float(records.get("highest_profit", 0.0)), 250000.0, 0.01, "Nor a poorer run")
+	assert_eq(int(records.get("highest_depth", 0)), 3, "Nor a shallower one")
+	assert_eq(int(records.get("fastest_completion_rounds", 0)), 9, "A slower completion does not replace the fastest")
+
+	var quick := RunState.new()
+	quick.reset()
+	quick.calendar["round"] = 6
+	quick.flags["victory"] = true
+	quick.flags["game_completed"] = true
+	MetaProgress.record_run_records(quick)
+	assert_eq(int(MetaProgress.records().get("fastest_completion_rounds", 0)), 6, "A faster one does")
+
+	# A run ending deep in Deep Burn, long after it completed the game, has
+	# `post_victory` set: its round count is not a completion time.
+	var deep := RunState.new()
+	deep.reset()
+	deep.calendar["round"] = 2
+	deep.flags["victory"] = false
+	deep.flags["game_completed"] = true
+	deep.flags["post_victory"] = true
+	deep.statistics["depth_reached"] = 7
+	MetaProgress.record_run_records(deep)
+	records = MetaProgress.records()
+	assert_eq(int(records.get("fastest_completion_rounds", 0)), 6, "A post-victory ending is not a completion time")
+	assert_eq(int(records.get("highest_depth", 0)), 7, "But its depth still counts")
+
+	MetaProgress._loaded = false
+	MetaProgress._ensure_loaded()
+	assert_eq(int(MetaProgress.records().get("highest_depth", 0)), 7, "Records survive a reload")

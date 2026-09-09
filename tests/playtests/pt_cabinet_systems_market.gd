@@ -1,9 +1,9 @@
 extends PlaytestCase
 
-## The Market's SYSTEMS shelf: five rows, one per cabinet system, each showing
-## only the tier it can buy next; picking one arms UPGRADE with the price and
-## what is left; a short purse, a chapter cap and a top tier each print their
-## own blocker. A successful UPGRADE is saved before the install reveal even
+## The Market's SYSTEMS shelf: the INFRASTRUCTURE row and then five rows, one
+## per cabinet system, each showing only the tier it can buy next; picking one
+## arms UPGRADE with the price and what is left; a short purse, an
+## infrastructure cap and a top tier each print their own blocker. A successful UPGRADE is saved before the install reveal even
 ## starts, plays the reveal on the maintenance camera, and comes back to the
 ## Market on the same shelf, row and scroll. The reveal can be skipped.
 ##
@@ -59,7 +59,7 @@ func play(harness: UiHarness) -> void:
 	await _arms_upgrade(harness, shell, market, button)
 	await _short_purse(harness, shell, market, button)
 	await _upgrade_and_reveal(harness, shell, screen, market, button, layer)
-	await _chapter_cap(harness, shell, market, button)
+	await _infrastructure_cap(harness, shell, market, button)
 	await _skipped_reveal(harness, shell, market, button, layer)
 	await _maxed(harness, shell, market, button)
 	_generation_is_derived()
@@ -71,8 +71,8 @@ func play(harness: UiHarness) -> void:
 
 # --- The shelf ---------------------------------------------------------------
 
-## SYSTEMS sits after MODULES and before the hardware shelves in the strip,
-## labelled with its five rows.
+## SYSTEMS sits before MODULES in the strip, labelled with its six rows: the
+## Infrastructure row and the five systems.
 func _strip_order(market: CabinetTab) -> void:
 	var words: Array[String] = []
 	var strip: HBoxContainer = _find_first(market, func(node: Node) -> bool: return node is HBoxContainer) as HBoxContainer
@@ -98,14 +98,24 @@ func _strip_order(market: CabinetTab) -> void:
 		"CALIBRATE is the third and last shelf, counting the owned modules (%s)" % str(words)
 	)
 	if systems_at >= 0:
-		assert_eq(words[systems_at], "SYSTEMS 5", "The SYSTEMS button counts its five rows")
+		assert_eq(
+			words[systems_at], "SYSTEMS %d" % (SYSTEMS.size() + 1),
+			"The SYSTEMS button counts the Infrastructure row and the five systems"
+		)
 
 
 ## One row per system, in the authored order, each carrying the next tier's
 ## painted tile, its name, `TIER n → n+1 · <name>`, the effect and the price.
+## The Infrastructure row heads the shelf above them.
 func _rows(harness: UiHarness, market: CabinetTab) -> void:
 	var tiles: Array[CabinetTile] = _system_tiles(market)
-	assert_eq(tiles.size(), 5, "The SYSTEMS shelf shows five rows")
+	assert_eq(tiles.size(), 5, "The SYSTEMS shelf shows five system rows")
+	var infrastructure_rows: Array[int] = [0]
+	_walk(market, func(node: Node) -> void:
+		if node is CabinetTile and str((node as CabinetTile).meta) == "infrastructure":
+			infrastructure_rows[0] += 1
+	)
+	assert_eq(infrastructure_rows[0], 1, "And one Infrastructure row above them")
 	var ids: Array[String] = []
 	for tile in tiles:
 		ids.append(str(tile.meta))
@@ -278,29 +288,30 @@ func _upgrade_and_reveal(harness: UiHarness, shell: Node, screen: CabinetScreen,
 	EventBus.cabinet_system_upgraded.disconnect(on_upgraded)
 
 
-## The bedroom caps every system at tier 2: the control rack, now at 2, is
-## blocked with the chapter line rather than a price.
-func _chapter_cap(harness: UiHarness, shell: Node, market: CabinetTab, button: Control) -> void:
-	var cap: int = CabinetSystems.max_tier_for_chapter(Simulation.run_state)
+## The starting rig caps every system at tier 2: the control rack, now at 2, is
+## blocked with the infrastructure line rather than a price.
+func _infrastructure_cap(harness: UiHarness, shell: Node, market: CabinetTab, button: Control) -> void:
+	var cap: int = CabinetSystems.max_tier_for_infrastructure(Simulation.run_state)
 	var tier: int = int(Simulation.cabinet_system_tiers().get("control", 1))
 	if tier < cap or tier >= CabinetSystems.max_tier():
-		print("    control is at tier %d under a chapter cap of %d; cap blocker not exercised" % [tier, cap])
+		print("    control is at tier %d under an infrastructure cap of %d; cap blocker not exercised" % [tier, cap])
 		return
+	var blocker: String = CabinetSystems.REASON_NEEDS_INFRASTRUCTURE % InfrastructureSystem.tier_required_for_cabinet(tier + 1)
 	Simulation.run_state.economy["cash"] = 1_000_000.0
 	market.call("select_item", "control")
 	shell.refresh_all()
 	await harness.settle()
 	var reading: Dictionary = _button_reading(button)
 	assert_eq(str(reading["label"]), "UPGRADE", "A capped system keeps the UPGRADE word")
-	assert_false(bool(reading["enabled"]), "UPGRADE is disabled past the chapter cap")
-	assert_eq(str(reading["sub"]), "NEXT CHAPTER UNLOCKS TIER %d" % (tier + 1), "The blocker names the chapter cap")
-	assert_eq(str(button.call("state")), "blocked", "The chapter cap is the blocked face")
+	assert_false(bool(reading["enabled"]), "UPGRADE is disabled past the infrastructure cap")
+	assert_eq(str(reading["sub"]), blocker, "The blocker names the infrastructure tier that would admit it")
+	assert_eq(str(button.call("state")), "blocked", "The infrastructure cap is the blocked face")
 	var detail: String = " | ".join(_texts(market))
-	assert_true(detail.find("NEXT CHAPTER UNLOCKS TIER %d" % (tier + 1)) >= 0, "Detail column prints the chapter cap")
+	assert_true(detail.find(blocker) >= 0, "Detail column prints the infrastructure cap")
 	# Pressing through the simulation is refused for the same reason.
 	var result: Dictionary = Simulation.upgrade_cabinet_system("control")
-	assert_false(bool(result.get("ok", true)), "The simulation refuses a tier past the chapter cap")
-	assert_eq(str(result.get("reason", "")), "NEXT CHAPTER UNLOCKS TIER %d" % (tier + 1), "…with the same words")
+	assert_false(bool(result.get("ok", true)), "The simulation refuses a tier past the infrastructure cap")
+	assert_eq(str(result.get("reason", "")), blocker, "…with the same words")
 	Simulation.run_state.economy["cash"] = PURSE
 
 

@@ -202,6 +202,86 @@
         }
       ]
     },
+    "room_changed": {
+      "bedroom": [
+        {
+          "subject": "THE BEDROOM",
+          "lines": [
+            "Back in the bedroom. Don't ask how.",
+            "Rent's {rent}. Same target, same me."
+          ]
+        }
+      ],
+      "garage": [
+        {
+          "subject": "NEW PREMISES",
+          "lines": [
+            "This room isn't going to survive another rack. I've leased somewhere bigger.",
+            "It's a garage. It has a door, three-phase power and a landlord who doesn't ask questions. Rent's {rent} now, and the target hasn't moved an inch.",
+            "Fill it."
+          ]
+        }
+      ],
+      "office_unit": [
+        {
+          "subject": "NEW PREMISES",
+          "lines": [
+            "You've outgrown the garage. I've put you in an office unit — carpet tiles, a proper cooling loop, and a fire alarm that works.",
+            "Rent's {rent}. That is the cost of looking like a company. The number I want is unchanged.",
+            "Don't get comfortable."
+          ]
+        }
+      ],
+      "warehouse": [
+        {
+          "subject": "NEW PREMISES",
+          "lines": [
+            "An office doesn't hold this much hardware. I've taken a warehouse on the industrial estate.",
+            "Concrete floor, rolling doors, more amps than sense. Rent's {rent} and I'm not covering it twice.",
+            "Rack it up."
+          ]
+        }
+      ],
+      "datacentre_campus": [
+        {
+          "subject": "NEW PREMISES",
+          "lines": [
+            "Warehouses are for people who ship boxes. You've got a datacentre campus now. Keycards, chillers, a man on the gate.",
+            "Rent's {rent}. Yes, I saw the figure. So did my accountant, and he's stopped speaking to me.",
+            "Make it earn."
+          ]
+        }
+      ],
+      "private_power_grid": [
+        {
+          "subject": "NEW PREMISES",
+          "lines": [
+            "The campus was pulling the grid down with it, so I bought the grid. Private substation, your own lines, nobody else's flicker.",
+            "Rent's {rent} — that's the word we're using for what the turbines cost. The target is the same target.",
+            "Burn."
+          ]
+        }
+      ],
+      "moon_facility": [
+        {
+          "subject": "NEW PREMISES",
+          "lines": [
+            "There's nowhere left on this planet that will take the heat. So I've moved you off it.",
+            "The facility is on the Moon. Vacuum cooling, no neighbours, and a rent of {rent} that I'd rather you didn't repeat to anyone.",
+            "Finish the contract before I have to explain the launch invoices."
+          ]
+        }
+      ],
+      "default": [
+        {
+          "subject": "NEW PREMISES",
+          "lines": [
+            "You've moved up. Bigger room, bigger bills — rent's {rent} now.",
+            "The target hasn't changed. Neither have I."
+          ]
+        }
+      ]
+    },
     "run_lost": {
       "contract_expired": [
         {

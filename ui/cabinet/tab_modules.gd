@@ -170,7 +170,10 @@ func _capacity_tooltip() -> String:
 	var debug: Dictionary = Simulation.workflow_capacity_debug()
 	return "\n".join(PackedStringArray([
 		"CAPACITY DEBUG",
-		"dwelling: %s" % str(debug.get("dwelling", "")),
+		"room: %s (infrastructure tier %d)" % [
+			RoomProgression.room_for(Simulation.run_state),
+			InfrastructureSystem.tier(Simulation.run_state),
+		],
 		"backplane tier: %d (%d bays)" % [
 			int(debug.get("backplane_tier", 0)), int(debug.get("backplane_safe_capacity", 0)),
 		],

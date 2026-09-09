@@ -11,7 +11,7 @@ func _sim(location: String = "bedroom") -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(1091)
-	sim.apply_run_location(sim.run_state, location)
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room(location))
 	sim.compute_system().recalculate(sim.run_state, sim.effect_resolver, [], sim.rng)
 	sim.phase = sim.Phase.ROUND_PREP
 	return sim
@@ -31,8 +31,9 @@ func _test_catalog_and_purchase_routes() -> void:
 
 func _test_chapter_capacity_and_cooling() -> void:
 	var previous_rate: float = 0.0
-	for location in ContentDatabase.balance.economy.location_order:
-		var sim: Node = _sim(str(location))
+	for entry in InfrastructureSystem.entries():
+		var location: String = str(Dictionary(entry).get("room", ""))
+		var sim: Node = _sim(location)
 		var state: RunState = sim.run_state
 		assert_true(float(state.compute.token_rate) > previous_rate, str(location) + " enters the next throughput scale")
 		previous_rate = float(state.compute.token_rate)

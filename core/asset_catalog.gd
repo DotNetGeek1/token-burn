@@ -52,7 +52,8 @@ static func stat_icon(stat: String) -> Texture2D:
 	return get_texture("stat_icons", stat.to_lower())
 
 
-## The room the campaign is currently played in. Every location is painted as
+## The room the run is currently drawn in (presentation for its Infrastructure
+## Tier, see RoomProgression). Every room is painted as
 ## one picture with its furniture in known places, and the shell mounts itself
 ## onto that picture: the HUD, the machine, the readouts and the side panel are
 ## all positioned against rects authored beside the art, so moving the run to
@@ -149,8 +150,8 @@ static func board_scene_keys() -> Array:
 	return Dictionary(scenes).keys() if scenes is Dictionary else []
 
 
-## A location with no art of its own still has to have somewhere to stand, so
-## every lookup falls back to the room the campaign starts in.
+## A room with no art of its own still has to have somewhere to stand, so
+## every lookup falls back to the room a run starts in.
 static func _board_scene(dwelling: String) -> Dictionary:
 	_ensure_loaded()
 	var scenes: Variant = _data.get("board_scenes")
@@ -558,10 +559,17 @@ static func tag_icon(tag: String) -> Texture2D:
 
 
 ## Which room a run is being played in. The rig growing on the desk is the burn
-## board's job; the room only changes when the operation moves premises.
+## board's job; the room only changes when the operation buys its next
+## Infrastructure Tier, so it is read off `build.infrastructure_tier` through
+## `RoomProgression` — never off a stored room key.
 static func dwelling_for_build(build: Dictionary) -> String:
-	var dwelling: String = str(build.get("dwelling", DEFAULT_DWELLING))
-	return dwelling if not dwelling.is_empty() else DEFAULT_DWELLING
+	var tier: int = int(build.get(InfrastructureSystem.STATE_KEY, InfrastructureSystem.MIN_TIER))
+	return RoomProgression.room_at(tier)
+
+
+## The same answer for a whole run.
+static func room_for_run(run_state: RunState) -> String:
+	return RoomProgression.room_for(run_state)
 
 
 static func palette_color(color_name: String, fallback: Color = Color.WHITE) -> Color:

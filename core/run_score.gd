@@ -12,7 +12,7 @@ static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 	var depth_mult: float = maxf(1.0, float(run_state.depth.get("score_mult", 1.0)))
 	if str(run_state.flags.get("work_policy", "")) == "yolo":
 		depth_mult *= 1.25
-	var ascension_system := AscensionSystem.new()
+	var investor := InvestorProgression.new()
 	return {
 		"total_tokens_burned": lifetime_tokens,
 		"comparison": NumberFormat.comparison(lifetime_tokens, content_db.comparisons),
@@ -21,11 +21,12 @@ static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 		"completed_jobs": int(stats.get("completed_jobs", 0)),
 		"failed_jobs": int(stats.get("failed_jobs", 0)),
 		"hidden_bugs_shipped": int(stats.get("hidden_bugs_shipped", 0)),
-		"infrastructure_tier": ascension_system.infrastructure_tier(run_state, content_db),
+		"infrastructure_tier": InfrastructureSystem.tier(run_state, content_db),
+		"investor_level": investor.level(run_state),
+		"targets_completed": investor.targets_completed(run_state),
 		"peak_cash": float(stats.get("peak_cash", 0.0)),
 		"rounds_survived": int(run_state.calendar.get("round", 1)),
 		"outcome": str(run_state.flags.get("outcome", "")),
-		"ascension_tier": int(run_state.flags.get("ascension_tier", 0)),
 		"contract_name": _contract_name(run_state, content_db),
 		"peak_overkill": float(stats.get("peak_overkill", 0.0)),
 		"lifetime_overkill": lifetime_overkill,
@@ -37,10 +38,13 @@ static func compute(run_state: RunState, content_db: Node) -> Dictionary:
 
 
 static func _contract_name(run_state: RunState, content_db: Node) -> String:
-	var contract_id: String = str(run_state.ascension.get("contract_id", ""))
+	var contract_id: String = str(run_state.investor.get("contract_id", ""))
 	if contract_id == "":
 		return ""
-	return str(content_db.get_ascension_contract(contract_id).get("name", ""))
+	var authored: Dictionary = content_db.get_investor_target(contract_id)
+	if not authored.is_empty():
+		return str(authored.get("name", ""))
+	return str(InvestorProgression.new().current_target(run_state, content_db).get("name", ""))
 
 
 ## Headline text for the debrief: the one number the whole run was for.

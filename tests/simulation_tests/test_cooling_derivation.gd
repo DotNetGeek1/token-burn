@@ -25,7 +25,7 @@ func _sim(seed_value: int, location: String = "bedroom") -> Node:
 	sim.start_run(seed_value)
 	# The subject is the room's own cooling budget, so the machine the room comes
 	# with — which carries cooling of its own — is left out of the sum.
-	sim.apply_run_location(sim.run_state, location, false)
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room(location))
 	sim.run_state.economy["cash"] = 1.0e12
 	sim._compute_system.recalculate(
 		sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
@@ -39,7 +39,7 @@ func _cooling(sim: Node) -> float:
 
 func _location_cooling(location: String) -> float:
 	return float(
-		ContentDatabase.cabinet_systems.get("chapter_profiles", {}).get(location, {}).get("cooling_capacity", 0.0)
+		InfrastructureSystem.profile_at(InfrastructureSystem.tier_for_room(location)).get("cooling_capacity", 0.0)
 	)
 
 
@@ -120,7 +120,7 @@ func _test_an_old_save_sheds_its_accumulated_cooling() -> void:
 	var migrated := RunState.new()
 	migrated.from_dict(legacy)
 	assert_eq(
-		str(migrated.build.get("dwelling", "")),
+		RoomProgression.room_for(migrated),
 		"warehouse",
 		"The run is still in the warehouse it was saved in"
 	)

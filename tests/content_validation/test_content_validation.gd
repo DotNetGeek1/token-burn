@@ -166,8 +166,8 @@ func _validate_percent_parameters(source_id: String, parameters: Dictionary) -> 
 		)
 
 
-## Modules are about tokens. A `stage.progress_mult` is ×N tokens delivered to
-## the contract (`progress_tokens = base × token_mult × progress_mult`), so the
+## Modules are about tokens. A `stage.progress_mult` is Ã—N tokens delivered to
+## the contract (`progress_tokens = base Ã— token_mult Ã— progress_mult`), so the
 ## player copy says "tokens", never "progress" or "OUTPUT". The one exception
 ## is the workflow-mastery stat, which is called OUTPUT everywhere else on the
 ## cabinet ("trains +0.03 OUTPUT").
@@ -199,7 +199,7 @@ func _validate_token_copy(module: ModuleDefinition) -> void:
 func _validate_perk_token_copy(perk: PerkDefinition) -> void:
 	var text: String = perk.description_template
 	assert_false(
-		text.contains("} progress") or text.contains("}× progress") or text.contains("into progress")
+		text.contains("} progress") or text.contains("}Ã— progress") or text.contains("into progress")
 			or text.contains("the progress") or text.contains("progress multiplier") or text.contains("final progress"),
 		"Perk %s copy says tokens, not progress: %s" % [perk.id, text]
 	)
@@ -318,7 +318,7 @@ const COOLING_BUDGET_RATIO := 2.0
 ## Every machine on the ladder has to be coolable at the space it needs, out of
 ## cooling that is actually on sale there and at a price the machine justifies.
 ## Without this the ladder can grow a rung whose heat nothing on the shelf can
-## answer — the rig cooks, and COOL is net-positive with no way to fix it.
+## answer â€” the rig cooks, and COOL is net-positive with no way to fix it.
 func _validate_every_machine_can_be_cooled() -> void:
 	var heat_cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("heat", {})
 	var gain_factor: float = float(heat_cfg.get("gain_per_power", 0.06))
@@ -336,7 +336,7 @@ func _validate_every_machine_can_be_cooled() -> void:
 		assert_true(home != null, "Some chapter's fresh cabinet can take a %s" % upgrade.name)
 		if home == null:
 			continue
-		var dwelling: String = str(home.build.get("dwelling", ""))
+		var dwelling: String = RoomProgression.room_for(home)
 		var have: float = _location_cooling(home) + _cooling_of(upgrade)
 		var needed: float = (power + starting_draw) * gain_factor / cooling_factor
 		var shortfall: float = needed - have
@@ -371,7 +371,7 @@ func _validate_every_machine_can_be_cooled() -> void:
 		assert_true(cheapest >= 0.0, "Something on the Cooling shelf can cool a %s" % upgrade.name)
 		assert_true(
 			cheapest <= upgrade.cost * COOLING_BUDGET_RATIO,
-			"Cooling a %s (%s, %s) costs less than %.1f× the machine (%s)" % [
+			"Cooling a %s (%s, %s) costs less than %.1fÃ— the machine (%s)" % [
 				upgrade.name,
 				cheapest_name,
 				NumberFormat.format_cash(maxf(0.0, cheapest)),
@@ -382,7 +382,7 @@ func _validate_every_machine_can_be_cooled() -> void:
 
 
 ## Validation is only useful if it stays quiet on the content the game
-## actually ships — a check that also flags real content is one nobody can
+## actually ships â€” a check that also flags real content is one nobody can
 ## leave switched on.
 func _test_shipped_content_passes_validation() -> void:
 	var errors: Array[String] = ContentDatabase.collect_validation_errors()
@@ -400,7 +400,7 @@ func _test_validation_catches_synthetic_bad_content() -> void:
 	bad_upgrade.repeatable = true
 	bad_upgrade.cost_growth = 0.0
 	bad_upgrade.max_level = -1
-	bad_upgrade.requires_chapter = "houseboat"
+	bad_upgrade.requires_infrastructure = 99
 	bad_upgrade.requires_system = {"plumbing": 2, "power": 9}
 	var bad_effect := EffectDefinition.new()
 	bad_effect.operation = "explode"
@@ -434,8 +434,8 @@ func _test_validation_catches_synthetic_bad_content() -> void:
 		"Validation catches a negative max_level"
 	)
 	assert_true(
-		errors.any(func(e: String) -> bool: return e.contains("requires missing chapter 'houseboat'")),
-		"Validation catches a chapter gate naming a chapter the table does not have"
+		errors.any(func(e: String) -> bool: return e.contains("requires infrastructure tier 99 outside")),
+		"Validation catches an infrastructure gate asking for a tier the table does not have"
 	)
 	assert_true(
 		errors.any(func(e: String) -> bool: return e.contains("requires unknown cabinet system 'plumbing'")),
@@ -482,13 +482,9 @@ func _test_validation_catches_bad_cabinet_systems() -> void:
 		{"min_sum": 11, "name": "Token Furnace"},
 		{"min_sum": 8, "name": "Spliced Rig"},
 	]
-	var migration: Dictionary = Dictionary(broken.get("migration_from_dwelling", {}))
-	migration["houseboat"] = [1, 1, 1, 1, 1]
-	migration["garage"] = [2, 2, 2, 9, 1]
-	broken["migration_from_dwelling"] = migration
-	var caps: Dictionary = Dictionary(broken.get("chapter_max_tier", {}))
-	caps["treehouse"] = 3
-	broken["chapter_max_tier"] = caps
+	var order: Array = Array(broken.get("migration_value_order", [])).duplicate()
+	order.append("houseboat_pump")
+	broken["migration_value_order"] = order
 	ContentDatabase.cabinet_systems = broken
 	var errors: Array[String] = ContentDatabase.collect_validation_errors()
 	ContentDatabase.cabinet_systems = shipped
@@ -510,16 +506,8 @@ func _test_validation_catches_bad_cabinet_systems() -> void:
 		"Validation catches generation thresholds out of order"
 	)
 	assert_true(
-		errors.any(func(e: String) -> bool: return e.contains("migration_from_dwelling names unknown dwelling 'houseboat'")),
-		"Validation catches a migration row for a dwelling that does not exist"
-	)
-	assert_true(
-		errors.any(func(e: String) -> bool: return e.contains("migration_from_dwelling.garage has tier 9 outside 1..4")),
-		"Validation catches a migration tier outside the range"
-	)
-	assert_true(
-		errors.any(func(e: String) -> bool: return e.contains("chapter_max_tier names unknown dwelling 'treehouse'")),
-		"Validation catches a chapter cap for a dwelling that does not exist"
+		errors.any(func(e: String) -> bool: return e.contains("migration_value_order names unknown system 'houseboat_pump'")),
+		"Validation catches a migration order naming a system that does not exist"
 	)
 	assert_true(
 		ContentDatabase.collect_validation_errors().is_empty(),
@@ -528,7 +516,7 @@ func _test_validation_catches_bad_cabinet_systems() -> void:
 
 
 ## A board rule BoardSystem does not recognise is ignored at the table, and a
-## demand naming a capability nothing reports can never be met — both read to
+## demand naming a capability nothing reports can never be met â€” both read to
 ## the player as a contract behaving differently to the card it is printed on,
 ## so both have to fail at load rather than in a run.
 func _test_validation_catches_unknown_rules_and_capabilities() -> void:
@@ -633,6 +621,103 @@ func _test_validation_catches_module_gate_and_shape_errors() -> void:
 	)
 
 
+## Investor Level gates are 1-based and have to sit inside the authored ladder:
+## a level past the final target can never be reached, and a ceiling below the
+## floor can never be open. Both would read as a card that simply never turns
+## up, so they fail at load.
+func _test_validation_catches_investor_level_gate_errors() -> void:
+	var top: int = InvestorProgression.max_authored_level()
+	var too_high := PerkDefinition.new()
+	too_high.id = "perk.synthetic_gate_high"
+	too_high.name = "Unreachable"
+	too_high.min_investor_level = top + 1
+	var inverted := ModuleDefinition.new()
+	inverted.id = "op.synthetic_gate_inverted"
+	inverted.name = "Inverted"
+	inverted.category = "prompt"
+	inverted.rarity = "common"
+	inverted.description_template = "Never appears."
+	inverted.tags = PackedStringArray(["prompt"])
+	inverted.min_investor_level = 4
+	inverted.max_investor_level = 2
+	inverted.slot_effects = [{"operation": "multiply", "target": "stage.token_mult", "value": 1.1}]
+	var negative := ModuleDefinition.new()
+	negative.id = "op.synthetic_gate_negative"
+	negative.name = "Negative"
+	negative.category = "prompt"
+	negative.rarity = "common"
+	negative.description_template = "Never appears."
+	negative.tags = PackedStringArray(["prompt"])
+	negative.min_investor_level = -1
+	negative.max_investor_level = 0
+	negative.slot_effects = [{"operation": "multiply", "target": "stage.token_mult", "value": 1.1}]
+	ContentDatabase.perks.append(too_high)
+	ContentDatabase.modules.append(inverted)
+	ContentDatabase.modules.append(negative)
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.perks.pop_back()
+	ContentDatabase.modules.pop_back()
+	ContentDatabase.modules.pop_back()
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("needs Investor Level %d, above the final target's level %d" % [top + 1, top])),
+		"Validation catches a gate past the final target"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("has max_investor_level 2 below min_investor_level 4")),
+		"Validation catches an inverted level window"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("negative min_investor_level -1")),
+		"Validation catches a negative level gate"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("max_investor_level 0 below the first Investor Level")),
+		"Validation catches a ceiling below level 1"
+	)
+	assert_true(
+		ContentDatabase.collect_validation_errors().is_empty(),
+		"Removing the synthetic gated content restores a clean validation pass"
+	)
+	for perk in ContentDatabase.perks:
+		assert_true(
+			perk.min_investor_level >= 0 and perk.min_investor_level <= top,
+			"%s gates on a reachable Investor Level (%d)" % [perk.id, perk.min_investor_level]
+		)
+	for module in ContentDatabase.modules:
+		assert_true(
+			module.min_investor_level >= 0 and module.min_investor_level <= top,
+			"%s gates on a reachable Investor Level (%d)" % [module.id, module.min_investor_level]
+		)
+
+
+## An infrastructure tier naming a room the art catalog has not painted would
+## draw as the bedroom while the investor talks about the Moon.
+func _test_validation_catches_unpainted_infrastructure_room() -> void:
+	var shipped: Dictionary = ContentDatabase.infrastructure
+	var broken: Dictionary = shipped.duplicate(true)
+	var tiers: Array = Array(broken.get("tiers", []))
+	var last: Dictionary = Dictionary(tiers[tiers.size() - 1]).duplicate(true)
+	last["room"] = "houseboat"
+	last.erase("investor_line")
+	tiers[tiers.size() - 1] = last
+	broken["tiers"] = tiers
+	ContentDatabase.infrastructure = broken
+	var errors: Array[String] = ContentDatabase.collect_validation_errors()
+	ContentDatabase.infrastructure = shipped
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("names room 'houseboat' with no art in the catalog")),
+		"Validation catches an infrastructure tier drawn in a room nobody painted"
+	)
+	assert_true(
+		errors.any(func(e: String) -> bool: return e.contains("has no investor_line")),
+		"Validation catches an infrastructure tier Vince has nothing to say about"
+	)
+	assert_true(
+		ContentDatabase.collect_validation_errors().is_empty(),
+		"Restoring the shipped infrastructure restores a clean pass"
+	)
+
+
 func _test_folded_only_module_is_accepted() -> void:
 	var folded := ModuleDefinition.new()
 	folded.id = "op.synthetic_folded_only"
@@ -671,16 +756,16 @@ func _test_effect_resolver_errors_on_unknown_operation() -> void:
 	)
 
 
-## A run happens in one location and gets that location's cooling, once. Nothing
-## from the chapters below it carries over, because it was never bought.
-## The first chapter, in campaign order, whose fresh cabinet (the tiers the
-## migration table hands a run opening there, floored by the chapter table)
-## meets the machine's gates — where a player first sees it on the shelf.
+## A run sits on one Infrastructure Tier and gets that tier's cooling, once.
+## Nothing from the tiers below it carries over, because it was never bought.
+## The first tier, ascending, whose fresh cabinet (the tier's entry tiers,
+## floored by its own row) meets the machine's gates â€” where a player first
+## sees it on the shelf.
 func _home_chapter_state(upgrade: UpgradeDefinition) -> RunState:
-	for location in MetaProgress.location_order():
+	for tier in range(InfrastructureSystem.max_tier() + 1):
 		var state := RunState.new()
-		state.build["dwelling"] = str(location)
-		CabinetSystems.raise_to_dwelling(state, str(location))
+		InfrastructureSystem.set_tier(state, tier)
+		CabinetSystems.raise_to_infrastructure(state)
 		if UpgradeSystem.prerequisites_met(state, upgrade, ContentDatabase):
 			return state
 	return null
@@ -708,38 +793,49 @@ func _cost_of_units(upgrade: UpgradeDefinition, units: int) -> float:
 	return total
 
 
-## Ascension Contracts are the only exit from a run, so a location without one is
-## an unfinishable chapter rather than a missing bonus.
-func _validate_ascension_contracts() -> void:
-	var contracts: Array = ContentDatabase.ascension_contracts
-	assert_true(contracts.size() > 0, "Content loads the contract pool")
-	var bosses: Dictionary = {}
+## The investor's targets are the only exit from a run, so an Investor Level
+## without one is an unfinishable ladder rung rather than a missing bonus.
+func _validate_investor_targets() -> void:
+	var contracts: Array = ContentDatabase.investor_targets
+	assert_true(contracts.size() > 0, "Content loads the target pool")
+	var by_level: Dictionary = {}
+	var finals: int = 0
 	for contract in contracts:
 		var id: String = str(contract.get("id", ""))
-		assert_true(id.begins_with("ascension."), "Contract id is namespaced: %s" % id)
-		assert_true(str(contract.get("name", "")) != "", "Contract %s is named" % id)
-		assert_true(float(contract.get("total_burn", 0.0)) > 0.0, "Contract %s asks for a burn" % id)
-		assert_true(int(contract.get("deadline_rounds", 0)) > 0, "Contract %s has a deadline" % id)
-		assert_true(int(contract.get("picks", 0)) > 0, "Contract %s pays out at least one pick" % id)
+		assert_true(id.begins_with("ascension."), "Target id is namespaced: %s" % id)
+		assert_true(str(contract.get("name", "")) != "", "Target %s is named" % id)
+		assert_true(float(contract.get("total_burn", 0.0)) > 0.0, "Target %s asks for a burn" % id)
+		assert_true(int(contract.get("deadline_rounds", 0)) > 0, "Target %s has a deadline" % id)
+		assert_true(int(contract.get("picks", 0)) > 0, "Target %s pays out at least one pick" % id)
 		if bool(contract.get("alternate", false)):
 			continue
-		var location: String = str(contract.get("location", ""))
-		assert_true(location != "", "Primary contract %s names the location it is played for" % id)
-		assert_false(bosses.has(location), "%s has exactly one contract" % location)
-		bosses[location] = id
-	for location in MetaProgress.location_order():
-		assert_true(bosses.has(str(location)), "%s has a way out of it" % str(location))
+		var level: int = int(contract.get("level", 0))
+		assert_true(level >= 1, "Primary target %s names the Investor Level it is played for" % id)
+		assert_false(by_level.has(level), "Level %d has exactly one target" % level)
+		by_level[level] = id
+		if bool(contract.get("final", false)):
+			finals += 1
+	for level in range(1, InvestorProgression.max_authored_level() + 1):
+		assert_true(by_level.has(level), "Investor Level %d has a way out of it" % level)
+	assert_eq(finals, 1, "Exactly one target completes the game")
 
 
 ## The shell mounts itself onto the room art: the work column, the side panel,
 ## the readouts on the wall and the workstation bay are all placed from rects
-## authored beside each location's picture. A location that ships without them,
-## or with a bay that falls outside the column the console is mounted in,
-## lands the player in a room where the UI does not line up with the furniture.
+## authored beside each room's picture. Every Infrastructure Tier names the
+## room it is drawn in; one that ships without them, or with a bay that falls
+## outside the column the console is mounted in, lands the player in a room
+## where the UI does not line up with the furniture.
 func _validate_room_art() -> void:
 	var props: Array[String] = ["plan_board", "heat_readout", "power_meter", "phone"]
-	for raw_location in MetaProgress.location_order():
-		var location: String = str(raw_location)
+	assert_true(InfrastructureSystem.max_tier() > 0, "There is more than one infrastructure tier to draw")
+	for tier in range(InfrastructureSystem.max_tier() + 1):
+		var location: String = RoomProgression.room_at(tier)
+		assert_true(location != "", "Infrastructure tier %d names a room" % tier)
+		assert_true(
+			InvestorVoice.has_call(RoomProgression.ROOM_CHANGED_TRIGGER, location),
+			"Vince has a line for arriving in the %s" % location
+		)
 		assert_true(
 			AssetCatalog.board_scene_art(location) != null,
 			"%s has a room painted for it" % location
@@ -806,7 +902,7 @@ func run() -> void:
 		ContentDatabase.reload()
 	assert_true(ContentDatabase.jobs.size() > 0, "Content loads jobs after reload")
 	_validate_every_machine_can_be_cooled()
-	_validate_ascension_contracts()
+	_validate_investor_targets()
 	_validate_room_art()
 	_validate_workstation_art()
 	_test_shipped_content_passes_validation()
@@ -815,6 +911,8 @@ func run() -> void:
 	_test_validation_catches_unknown_rules_and_capabilities()
 	_test_validation_catches_unknown_module_operation()
 	_test_validation_catches_module_gate_and_shape_errors()
+	_test_validation_catches_investor_level_gate_errors()
+	_test_validation_catches_unpainted_infrastructure_room()
 	_test_folded_only_module_is_accepted()
 	_test_effect_resolver_errors_on_unknown_operation()
 
@@ -823,9 +921,8 @@ func run() -> void:
 			var curves: Dictionary = ContentDatabase.balance.get("hardware_curves", {})
 			assert_true(curves.has(upgrade.hardware_key), "Hardware key '%s' resolves for %s" % [upgrade.hardware_key, upgrade.id])
 		assert_true(upgrade.category != "dwelling", "No premises row survives in upgrades.json (%s)" % upgrade.id)
-		if upgrade.requires_chapter != "":
-			var chapters: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
-			assert_true(chapters.has(upgrade.requires_chapter), "Chapter gate '%s' resolves for %s" % [upgrade.requires_chapter, upgrade.id])
+		if upgrade.requires_infrastructure > 0:
+			assert_true(upgrade.requires_infrastructure <= InfrastructureSystem.max_tier(), "Infrastructure gate %d resolves for %s" % [upgrade.requires_infrastructure, upgrade.id])
 		for system_id in upgrade.requires_system.keys():
 			assert_true(str(system_id) in CabinetSystems.system_ids(), "System gate '%s' resolves for %s" % [str(system_id), upgrade.id])
 

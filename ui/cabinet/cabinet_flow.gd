@@ -23,7 +23,6 @@ const BILLS_SCREEN := preload("res://ui/screens/month_statement.tscn")
 const BURN_LAB := preload("res://ui/debug/burn_lab.tscn")
 const TITLE_SCREEN := preload("res://ui/title/title_screen.tscn")
 
-const ASCENSION_WARNING_ROUND := 9
 const INVESTOR_FINAL_CALL_ROUNDS := 3
 const DEADLINE_WARNING_PROMPTS := 3
 const DEADLINE_DANGER_PROMPTS := 1
@@ -88,6 +87,7 @@ func connect_events() -> void:
 	Simulation.work_session_finished.connect(_on_work_session_finished)
 	Simulation.round_statement_ready.connect(_on_bills_ready)
 	EventBus.run_ended.connect(_on_run_ended_call)
+	EventBus.infrastructure_upgraded.connect(_on_infrastructure_upgraded)
 
 
 # --- What the shell asks ------------------------------------------------------
@@ -448,16 +448,19 @@ func _maybe_open_intro_call() -> void:
 func _maybe_call_ascension_beat() -> void:
 	if title_active or SceneRouter.investor_busy():
 		return
-	var progress: Dictionary = Simulation.ascension_progress()
-	if progress.is_empty():
+	var progress: Dictionary = Simulation.investor_progress()
+	if progress.is_empty() or not Simulation.investor_active():
 		return
+	# Beats are per target: each Investor Level gets its own halfway and
+	# last-call, keyed by the level the target belongs to.
+	var level: int = Simulation.investor_level()
 	var rounds_left: int = int(progress.get("rounds_remaining", 99))
-	if rounds_left <= INVESTOR_FINAL_CALL_ROUNDS and not Simulation.run_state.investor_beat_heard("contract_final_call"):
-		Simulation.run_state.mark_investor_beat("contract_final_call")
+	if rounds_left <= INVESTOR_FINAL_CALL_ROUNDS and not Simulation.run_state.investor_beat_heard("contract_final_call", level):
+		Simulation.run_state.mark_investor_beat("contract_final_call", level)
 		SceneRouter.investor_says("contract_final_call", {"rounds_remaining": rounds_left})
 		return
-	if float(progress.get("burn_ratio", 0.0)) >= 0.5 and not Simulation.run_state.investor_beat_heard("contract_halfway"):
-		Simulation.run_state.mark_investor_beat("contract_halfway")
+	if float(progress.get("burn_ratio", 0.0)) >= 0.5 and not Simulation.run_state.investor_beat_heard("contract_halfway", level):
+		Simulation.run_state.mark_investor_beat("contract_halfway", level)
 		SceneRouter.investor_says("contract_halfway")
 
 
@@ -465,3 +468,21 @@ func _on_run_ended_call(victory: bool) -> void:
 	if title_active:
 		return
 	SceneRouter.investor_says("ascension_complete" if victory else "run_lost")
+
+
+## The Market sold an Infrastructure Tier, so the operation has moved rooms.
+## Vince rings once per tier bought — remembered on the run as a beat keyed by
+## the tier, so a reload or a trip through the market cannot ring it twice —
+## with the line the new room's infrastructure entry names. Tier 0 is the
+## room the run started in and gets no call.
+func _on_infrastructure_upgraded(tier: int) -> void:
+	if title_active or tier <= InfrastructureSystem.MIN_TIER:
+		return
+	var run_state: RunState = Simulation.run_state
+	if run_state.investor_beat_heard(RoomProgression.ROOM_CHANGED_TRIGGER, tier):
+		return
+	run_state.mark_investor_beat(RoomProgression.ROOM_CHANGED_TRIGGER, tier)
+	SceneRouter.investor_says(RoomProgression.ROOM_CHANGED_TRIGGER, {
+		"room": RoomProgression.investor_variant(run_state),
+		"seed": tier,
+	})

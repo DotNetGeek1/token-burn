@@ -513,7 +513,7 @@
     "name": "Homelab Hero",
     "rarity": "common",
     "tags": ["local", "hardware"],
-    "min_location_tier": 0,
+    "min_investor_level": 1,
     "draft_weight": 1.2,
     "description_template": "Owned hardware runs {bonus_pct}% faster.",
     "parameters": {"bonus": 1.15, "bonus_pct": 15},
@@ -531,7 +531,7 @@
     "tags": ["local", "hardware"],
     "unlock_achievement": "ach.bare_metal_purist",
     "requires_tags": ["local"],
-    "min_location_tier": 2,
+    "min_investor_level": 3,
     "description_template": "Local throughput +{bonus_pct}%.",
     "parameters": {"bonus": 1.25, "bonus_pct": 25},
     "subscriptions": [{
@@ -564,7 +564,7 @@
     "tags": ["board", "heat", "thermal_runaway"],
     "difficulty": ["hard"],
     "requires_tags": ["heat"],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "description_template": "While the rig sits at or above {threshold_pct}% heat, token rate ×{bonus}.",
     "parameters": {"threshold": 0.9, "threshold_pct": 90, "bonus": 1.5},
     "subscriptions": [{
@@ -652,7 +652,7 @@
     "name": "Stage Déjà Vu",
     "rarity": "common",
     "tags": ["board", "recursion"],
-    "min_location_tier": 1,
+    "min_investor_level": 2,
     "description_template": "Every stage repeats the one above at no less than {strength_pct}% strength.",
     "parameters": {"strength": 0.35, "strength_pct": 35},
     "subscriptions": [{
@@ -669,7 +669,7 @@
     "tags": ["board", "recursion", "keystone"],
     "unlock_achievement": "ach.recursive_business",
     "requires_tags": ["recursion"],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "description_template": "Stage repeats run at {multiplier}× strength.",
     "parameters": {"multiplier": 1.6},
     "subscriptions": [{
@@ -684,7 +684,7 @@
     "name": "Redline Rider",
     "rarity": "rare",
     "tags": ["board", "heat", "risk", "thermal_runaway"],
-    "min_location_tier": 3,
+    "min_investor_level": 4,
     "description_template": "While the rig sits at or above {threshold_pct}% heat, cascade chance +{chance_pct}% and cooling ×{cooling}.",
     "parameters": {"threshold": 0.85, "threshold_pct": 85, "chance": 0.10, "chance_pct": 10, "cooling": 0.85},
     "subscriptions": [

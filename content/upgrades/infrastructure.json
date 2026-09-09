@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "design_note": "Machine scale, bought in the Market as a tier 0..6 whenever the run can afford it; progression itself is the investor's ladder (investor/targets.json). Each tier is the one authority for its scale: `profile` is the cabinet scale profile (base rate, draw, work tier, cooling, heat capacity, cost scale) the cabinet tier values are scaled against; `cabinet_max_tier` caps how high a cabinet system may be bought; `cabinet_entry_tiers` (in `cabinet_entry_tier_order`) are the cabinet tiers the scale opens with, and what a pre-v26 save's room key migrates to; `floors` are the permanent capacity floors; `facility_cost` sets the rent; `overflow_allowance` is the board's free overflow. `cost` is half the matching job_scaling.scale_bands[tier].major_purchase; tier 0 is free. `room` and `investor_line` are presentation only: the art and Vince's call for the tier.",
+  "cabinet_entry_tier_order": [
+    "compute",
+    "cooling",
+    "power",
+    "backplane",
+    "control"
+  ],
+  "tiers": [
+    {
+      "id": "infrastructure.starting_rig",
+      "tier": 0,
+      "name": "Starting Rig",
+      "cost": 0,
+      "profile": {
+        "base_token_rate": 1000000,
+        "power_draw": 65,
+        "work_tier": 0,
+        "cooling_capacity": 17,
+        "heat_capacity": 100,
+        "cost_scale": 1.0
+      },
+      "facility_cost": 400,
+      "floors": {
+        "hardware_slots": 2,
+        "cooling_capacity": 16,
+        "heat_capacity": 100
+      },
+      "cabinet_max_tier": 2,
+      "cabinet_entry_tiers": [1, 1, 1, 1, 1],
+      "overflow_allowance": 0,
+      "room": "bedroom",
+      "investor_line": "room_changed.bedroom"
+    },
+    {
+      "id": "infrastructure.compute_cluster",
+      "tier": 1,
+      "name": "Compute Cluster",
+      "cost": 7500,
+      "profile": {
+        "base_token_rate": 7000000,
+        "power_draw": 415,
+        "work_tier": 1,
+        "cooling_capacity": 110,
+        "heat_capacity": 140,
+        "cost_scale": 12.5
+      },
+      "facility_cost": 1400,
+      "floors": {
+        "hardware_slots": 4,
+        "cooling_capacity": 97,
+        "heat_capacity": 140
+      },
+      "cabinet_max_tier": 3,
+      "cabinet_entry_tiers": [2, 2, 2, 2, 1],
+      "overflow_allowance": 0,
+      "room": "garage",
+      "investor_line": "room_changed.garage"
+    },
+    {
+      "id": "infrastructure.server_room",
+      "tier": 2,
+      "name": "Server Room",
+      "cost": 75000,
+      "profile": {
+        "base_token_rate": 52000000,
+        "power_draw": 2065,
+        "work_tier": 2,
+        "cooling_capacity": 599,
+        "heat_capacity": 200,
+        "cost_scale": 125.0
+      },
+      "facility_cost": 3200,
+      "floors": {
+        "hardware_slots": 8,
+        "cooling_capacity": 336,
+        "heat_capacity": 200
+      },
+      "cabinet_max_tier": 3,
+      "cabinet_entry_tiers": [2, 2, 2, 2, 2],
+      "overflow_allowance": 2,
+      "room": "office_unit",
+      "investor_line": "room_changed.office_unit"
+    },
+    {
+      "id": "infrastructure.industrial_cluster",
+      "tier": 3,
+      "name": "Industrial Cluster",
+      "cost": 750000,
+      "profile": {
+        "base_token_rate": 521000000,
+        "power_draw": 8065,
+        "work_tier": 3,
+        "cooling_capacity": 2597,
+        "heat_capacity": 280,
+        "cost_scale": 1250.0
+      },
+      "facility_cost": 8000,
+      "floors": {
+        "hardware_slots": 16,
+        "cooling_capacity": 1248,
+        "heat_capacity": 280
+      },
+      "cabinet_max_tier": 4,
+      "cabinet_entry_tiers": [3, 3, 3, 3, 2],
+      "overflow_allowance": 3,
+      "room": "warehouse",
+      "investor_line": "room_changed.warehouse"
+    },
+    {
+      "id": "infrastructure.datacentre_fabric",
+      "tier": 4,
+      "name": "Datacentre Fabric",
+      "cost": 10000000,
+      "profile": {
+        "base_token_rate": 5521000000,
+        "power_draw": 40065,
+        "work_tier": 4,
+        "cooling_capacity": 14489,
+        "heat_capacity": 400,
+        "cost_scale": 16666.666666666668
+      },
+      "facility_cost": 150000,
+      "floors": {
+        "hardware_slots": 40,
+        "cooling_capacity": 5280,
+        "heat_capacity": 400
+      },
+      "cabinet_max_tier": 4,
+      "cabinet_entry_tiers": [3, 3, 3, 3, 3],
+      "overflow_allowance": 4,
+      "room": "datacentre_campus",
+      "investor_line": "room_changed.datacentre_campus"
+    },
+    {
+      "id": "infrastructure.private_grid",
+      "tier": 5,
+      "name": "Private Grid",
+      "cost": 125000000,
+      "profile": {
+        "base_token_rate": 105521000000,
+        "power_draw": 300065,
+        "work_tier": 5,
+        "cooling_capacity": 123777,
+        "heat_capacity": 560,
+        "cost_scale": 208333.33333333334
+      },
+      "facility_cost": 900000,
+      "floors": {
+        "hardware_slots": 80,
+        "cooling_capacity": 36000,
+        "heat_capacity": 560
+      },
+      "cabinet_max_tier": 4,
+      "cabinet_entry_tiers": [4, 3, 4, 4, 3],
+      "overflow_allowance": 5,
+      "room": "private_power_grid",
+      "investor_line": "room_changed.private_power_grid"
+    },
+    {
+      "id": "infrastructure.planetary",
+      "tier": 6,
+      "name": "Planetary Infrastructure",
+      "cost": 750000000,
+      "profile": {
+        "base_token_rate": 2105521000000,
+        "power_draw": 2000065,
+        "work_tier": 6,
+        "cooling_capacity": 960031,
+        "heat_capacity": 800,
+        "cost_scale": 1250000.0
+      },
+      "facility_cost": 6000000,
+      "floors": {
+        "hardware_slots": 160,
+        "cooling_capacity": 216000,
+        "heat_capacity": 800
+      },
+      "cabinet_max_tier": 4,
+      "cabinet_entry_tiers": [4, 4, 4, 4, 4],
+      "overflow_allowance": 6,
+      "room": "moon_facility",
+      "investor_line": "room_changed.moon_facility"
+    }
+  ]
+}

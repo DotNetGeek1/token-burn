@@ -27,8 +27,8 @@
     "category": "milestone",
     "icon": "trophy",
     "hidden": false,
-    "description": "One Ascension Contract, signed and delivered. Nobody has asked what the product does yet. Keep it that way.",
-    "hint": "Complete any Ascension Contract.",
+    "description": "One Investor Target, signed and delivered. Nobody has asked what the product does yet. Keep it that way.",
+    "hint": "Complete any Investor Target.",
     "condition": {
       "trigger": "run_end",
       "checks": [
@@ -50,7 +50,7 @@
     "icon": "trophy",
     "hidden": false,
     "description": "A Tier 2 contract. You now own a whiteboard nobody is allowed to erase.",
-    "hint": "Complete a Tier 2 Ascension Contract.",
+    "hint": "Complete Investor Target 3 or beyond.",
     "condition": {
       "trigger": "run_end",
       "checks": [
@@ -60,7 +60,7 @@
           "value": "ascended"
         },
         {
-          "stat": "run.ascension_tier",
+          "stat": "run.target_tier",
           "op": ">=",
           "value": 2
         }
@@ -77,7 +77,7 @@
     "icon": "brain",
     "hidden": false,
     "description": "Tier 3. The board has stopped asking about margins and started asking about souls.",
-    "hint": "Complete a Tier 3 Ascension Contract.",
+    "hint": "Complete Investor Target 6 or beyond.",
     "condition": {
       "trigger": "run_end",
       "checks": [
@@ -87,7 +87,7 @@
           "value": "ascended"
         },
         {
-          "stat": "run.ascension_tier",
+          "stat": "run.target_tier",
           "op": ">=",
           "value": 3
         }
@@ -683,8 +683,8 @@
     "category": "milestone",
     "icon": "wrench",
     "hidden": false,
-    "description": "You cleared a proper office on machines you own.",
-    "hint": "Ascend from Office or later.",
+    "description": "You cleared a proper target on machines you own.",
+    "hint": "Complete Investor Target 3 or later.",
     "condition": {
       "trigger": "run_end",
       "checks": [
@@ -694,9 +694,9 @@
           "value": "ascended"
         },
         {
-          "stat": "run.location_tier",
+          "stat": "run.investor_level",
           "op": ">=",
-          "value": 2
+          "value": 3
         }
       ]
     },
@@ -760,7 +760,7 @@
           "value": 0
         },
         {
-          "stat": "run.ascension_tier",
+          "stat": "run.target_tier",
           "op": ">=",
           "value": 2
         }

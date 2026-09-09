@@ -23,6 +23,9 @@ const EVENT_BILL_DUE := "bill.due"
 const EVENT_UPGRADE_PURCHASED := "upgrade.purchased"
 const EVENT_HARDWARE_SOLD := "hardware.sold"
 const EVENT_CABINET_SYSTEM_UPGRADED := "cabinet_system.upgraded"
+const EVENT_INFRASTRUCTURE_UPGRADED := "infrastructure.upgraded"
+const EVENT_INVESTOR_TARGET_COMPLETED := "investor.target_completed"
+const EVENT_INVESTOR_LEVEL_ADVANCED := "investor.level_advanced"
 const EVENT_PERK_ACQUIRED := "perk.acquired"
 const EVENT_MODULE_ACQUIRED := "module.acquired"
 const EVENT_HEAT_THRESHOLD_CROSSED := "heat.threshold_crossed"
@@ -58,6 +61,9 @@ signal bill_due(bill_type: String, amount: float)
 signal upgrade_purchased(upgrade_id: String)
 signal hardware_sold(hardware_key: String)
 signal cabinet_system_upgraded(system_id: String, tier: int)
+signal infrastructure_upgraded(tier: int)
+signal investor_target_completed(level: int, final: bool)
+signal investor_level_advanced(level: int)
 signal perk_acquired(perk_id: String)
 signal module_acquired(module_id: String)
 signal heat_threshold_crossed(level: float)
@@ -105,6 +111,12 @@ func emit_event(event_name: String, payload: Dictionary = {}) -> void:
 			hardware_sold.emit(payload.get("hardware_key", ""))
 		EVENT_CABINET_SYSTEM_UPGRADED:
 			cabinet_system_upgraded.emit(payload.get("system_id", ""), int(payload.get("tier", 0)))
+		EVENT_INFRASTRUCTURE_UPGRADED:
+			infrastructure_upgraded.emit(int(payload.get("tier", 0)))
+		EVENT_INVESTOR_TARGET_COMPLETED:
+			investor_target_completed.emit(int(payload.get("level", 0)), bool(payload.get("final", false)))
+		EVENT_INVESTOR_LEVEL_ADVANCED:
+			investor_level_advanced.emit(int(payload.get("level", 0)))
 		EVENT_PERK_ACQUIRED:
 			perk_acquired.emit(payload.get("perk_id", ""))
 		EVENT_MODULE_ACQUIRED:

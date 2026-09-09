@@ -1,8 +1,9 @@
 extends TestCase
 
 ## The five cabinet systems: what a tier is worth, what the next one costs and
-## why it cannot be bought yet, how a dwelling maps onto tiers, and the one
-## rule generation obeys — it is a label on the tier sum and nothing more.
+## why it cannot be bought yet, how an Infrastructure Tier (and the legacy room
+## key a pre-v26 save carried) maps onto tiers, and the one rule generation
+## obeys — it is a label on the tier sum and nothing more.
 
 const DWELLINGS := [
 	"bedroom", "garage", "office_unit", "warehouse",
@@ -16,7 +17,7 @@ func run() -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
 	_test_generation_is_a_function_of_the_sum_only()
-	_test_derive_from_dwelling_matches_the_table()
+	_test_legacy_room_tiers_match_the_infrastructure_entry_tiers()
 	_test_fresh_run_opens_with_the_rooms_tiers()
 	_test_tier_one_leaves_bedroom_numbers_alone()
 	_test_upgrade_charges_cash_and_raises_tier()
@@ -35,7 +36,7 @@ func _make_sim(run_seed: int = 901, location: String = "bedroom") -> Node:
 	sim.autosave_enabled = false
 	sim.start_run(run_seed)
 	if location != "bedroom":
-		sim.apply_run_location(sim.run_state, location, true)
+		sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room(location))
 		sim.board_system().ensure_board(sim.run_state, ContentDatabase)
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
@@ -88,41 +89,48 @@ func _test_generation_is_a_function_of_the_sum_only() -> void:
 	assert_eq(keys, ["index", "name", "sum"], "Generation carries a label and a sum, no stats")
 
 
-func _test_derive_from_dwelling_matches_the_table() -> void:
-	var table: Dictionary = Dictionary(ContentDatabase.cabinet_systems.get("migration_from_dwelling", {}))
+## The v23 migration's room → tiers read is the infrastructure entry's
+## `cabinet_entry_tiers`, in `migration_value_order`, so the cabinet a
+## pre-v26 save comes up with is the one a run at that tier opens with.
+func _test_legacy_room_tiers_match_the_infrastructure_entry_tiers() -> void:
 	var order: Array = Array(ContentDatabase.cabinet_systems.get("migration_value_order", []))
 	assert_eq(order, ["compute", "cooling", "power", "backplane", "control"], "Migration order is the pack's")
-	for dwelling in DWELLINGS:
-		var derived: Dictionary = CabinetSystems.derive_from_dwelling(dwelling)
-		var row: Array = Array(table.get(dwelling, []))
+	for index in range(DWELLINGS.size()):
+		var room: String = str(DWELLINGS[index])
+		var derived: Dictionary = CabinetSystems._legacy_tiers_for_room(room)
+		var row: Array = Array(InfrastructureSystem.entry(index).get("cabinet_entry_tiers", []))
+		assert_eq(row.size(), order.size(), "Tier %d authors an entry tier for every system" % index)
 		for i in range(order.size()):
 			assert_eq(
 				int(derived.get(str(order[i]), 0)), int(row[i]),
-				"%s derives %s tier %d" % [dwelling, str(order[i]), int(row[i])]
+				"%s derives %s tier %d" % [room, str(order[i]), int(row[i])]
 			)
-	var unknown: Dictionary = CabinetSystems.derive_from_dwelling("houseboat")
+		assert_eq(
+			derived, InfrastructureSystem.cabinet_entry_tiers_at(index),
+			"%s reads as Infrastructure Tier %d's entry tiers" % [room, index]
+		)
+	var unknown: Dictionary = CabinetSystems._legacy_tiers_for_room("houseboat")
 	for system_id in order:
-		assert_eq(int(unknown.get(str(system_id), 0)), 1, "Unknown dwelling: %s is tier 1" % str(system_id))
-	var missing: Dictionary = CabinetSystems.derive_from_dwelling("")
-	assert_eq(CabinetSystems.default_tiers(), missing, "Missing dwelling is the default cabinet")
-	assert_eq(int(CabinetSystems.max_tier_for_dwelling("bedroom")), 2, "Bedroom caps systems at tier 2")
-	assert_eq(int(CabinetSystems.max_tier_for_dwelling("office_unit")), 3, "Office caps systems at tier 3")
-	assert_eq(int(CabinetSystems.max_tier_for_dwelling("moon_facility")), 4, "Moon opens tier 4")
-	assert_eq(int(CabinetSystems.max_tier_for_dwelling("houseboat")), 2, "Unknown dwelling gets the lowest cap")
+		assert_eq(int(unknown.get(str(system_id), 0)), 1, "Unknown room: %s is tier 1" % str(system_id))
+	var missing: Dictionary = CabinetSystems._legacy_tiers_for_room("")
+	assert_eq(CabinetSystems.default_tiers(), missing, "Missing room is the default cabinet")
+	assert_eq(InfrastructureSystem.cabinet_max_tier_at(0), 2, "Tier 0 caps systems at tier 2")
+	assert_eq(InfrastructureSystem.cabinet_max_tier_at(2), 3, "Tier 2 caps systems at tier 3")
+	assert_eq(InfrastructureSystem.cabinet_max_tier_at(6), 4, "Tier 6 opens tier 4")
 
 
 func _test_fresh_run_opens_with_the_rooms_tiers() -> void:
 	var sim := _make_sim(902, "garage")
 	var tiers: Dictionary = sim.cabinet_system_tiers()
-	assert_eq(tiers, CabinetSystems.derive_from_dwelling("garage"), "A fresh garage run has garage tiers")
+	assert_eq(tiers, InfrastructureSystem.cabinet_entry_tiers_at(1), "A fresh tier-1 run has tier 1's entry tiers")
 	assert_eq(_board.derived_supported_capacity(sim.run_state, ContentDatabase), 5, "Garage backplane backs 5 bays")
 	assert_eq(UpgradeSystem.hardware_slots_total(sim.run_state, ContentDatabase), 4, "Garage power bus gives 4 slots")
-	assert_almost_eq(UpgradeSystem.location_cooling(sim.run_state, ContentDatabase), 110.0, 0.001, "Garage cooling covers its draw")
+	assert_almost_eq(UpgradeSystem.infrastructure_cooling(sim.run_state, ContentDatabase), 110.0, 0.001, "Garage cooling covers its draw")
 	assert_almost_eq(float(sim.run_state.compute.get("heat_capacity", 0.0)), 140.0, 0.001, "Garage heat capacity is 140")
 	assert_eq(str(sim.cabinet_generation().get("name", "")), "Spliced Rig", "Garage cabinet (sum 9) is a Spliced Rig")
 	# Moving up never lowers a system bought below.
 	CabinetSystems.set_tier(sim.run_state, "control", 2)
-	sim.apply_run_location(sim.run_state, "office_unit", false)
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room("office_unit"))
 	assert_eq(CabinetSystems.tier(sim.run_state, "control"), 2, "Control kept at 2 on the move to the office")
 	assert_eq(CabinetSystems.tier(sim.run_state, "backplane"), 2, "Office does not raise the backplane beyond its row")
 	sim.free()
@@ -142,7 +150,7 @@ func _test_tier_one_leaves_bedroom_numbers_alone() -> void:
 	assert_eq(_board.derived_supported_capacity(sim.run_state, ContentDatabase), 3, "Bedroom backs 3 bays")
 	assert_eq(_board.derived_workflow_capacity(sim.run_state, ContentDatabase), 1, "Bedroom holds 1 workflow")
 	assert_eq(UpgradeSystem.hardware_slots_total(sim.run_state, ContentDatabase), 2, "Bedroom has 2 slots")
-	assert_almost_eq(UpgradeSystem.location_cooling(sim.run_state, ContentDatabase), 17.0, 0.001, "Bedroom baseline cooling")
+	assert_almost_eq(UpgradeSystem.infrastructure_cooling(sim.run_state, ContentDatabase), 17.0, 0.001, "Bedroom baseline cooling")
 	assert_almost_eq(float(sim.run_state.compute.get("heat_capacity", 0.0)), 100.0, 0.001, "Bedroom heat capacity is 100")
 	sim.free()
 
@@ -220,11 +228,11 @@ func _test_blocked_reasons() -> void:
 	sim.run_state.economy["cash"] = 1_000_000.0
 	CabinetSystems.set_tier(sim.run_state, "backplane", 2)
 	var capped: Dictionary = CabinetSystems.can_upgrade(sim.run_state, "backplane")
-	assert_false(bool(capped.get("ok", true)), "Bedroom cannot buy tier 3")
-	assert_eq(str(capped.get("reason", "")), "NEXT CHAPTER UNLOCKS TIER 3", "Chapter cap is spelled out")
-	assert_eq(CabinetSystems.max_tier_for_chapter(sim.run_state), 2, "Bedroom's cap is 2")
+	assert_false(bool(capped.get("ok", true)), "The starting rig cannot buy tier 3")
+	assert_eq(str(capped.get("reason", "")), "NEEDS INFRASTRUCTURE TIER 1", "Infrastructure cap is spelled out")
+	assert_eq(CabinetSystems.max_tier_for_infrastructure(sim.run_state), 2, "Tier 0's cap is 2")
 
-	sim.apply_run_location(sim.run_state, "moon_facility", false)
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room("moon_facility"))
 	CabinetSystems.set_tier(sim.run_state, "backplane", 4)
 	var maxed: Dictionary = CabinetSystems.can_upgrade(sim.run_state, "backplane")
 	assert_false(bool(maxed.get("ok", true)), "Tier 4 cannot go higher")

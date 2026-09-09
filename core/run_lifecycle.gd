@@ -1,14 +1,15 @@
 class_name RunLifecycle
 extends RefCounted
 
-## Start/end of a run, round boundaries, the investor's perk draft, victory /
-## chapters, and save/load. Owned by Simulation as `_life`. Public `phase` /
-## `pending_choices` stay on the facade (too many callers).
+## Start/end of a run, round boundaries, the investor's perk draft, targets /
+## victory / Deep Burn, and save/load. Owned by Simulation as `_life`. Public
+## `phase` / `pending_choices` stay on the facade (too many callers).
 ##
-## Perks are drafted once per chapter, when the investor's goal is met: the
-## table is dealt in `reach_victory` and has to be taken or declined before the
-## company can move on. The old round-end angel draft is gone; `ANGEL_ROUND`
-## survives only so a save written with one open can still resolve it.
+## Perks are drafted once per target, when the investor's figure is met: the
+## table is dealt in `reach_target_complete` and has to be taken or declined
+## before the company can move on. The old round-end angel draft is gone;
+## `ANGEL_ROUND` survives only so a save written with one open can still
+## resolve it.
 ##
 ## `sim` is the owning Simulation node, taken as a plain `Node` to avoid a
 ## circular class reference. Cross-concern calls (end session) go back through
@@ -121,77 +122,40 @@ func reset_run(sim: Node, p_seed: int = 0, difficulty_override: String = "") -> 
 	settling_depth = false
 	sim.last_round_statement = {}
 	sim.debug_invalidate_subscriptions()
-	# Where the run happens is decided before it starts and never moves again,
-	# so rent and floor space are settled before anything is bought.
-	apply_run_location(sim, sim.run_state, MetaProgress.selected_location())
+	# Every run starts on the starting rig. Machine scale is bought in the
+	# Market from here; nothing about where the run "is" is decided up front.
+	apply_infrastructure_tier(sim, sim.run_state, InfrastructureSystem.MIN_TIER)
 	# Permanent unlocks land before the board is sized, so an unlocked slot is
 	# there to be filled rather than turning up a round late.
 	MetaProgress.apply_to_run(sim.run_state)
 	_install_permanent_rig(sim)
 	sim.board_system().ensure_board(sim.run_state, ContentDatabase)
-	# The location's contract is the run's win condition, not something taken on
-	# part-way through, so it is live before the first prompt is spent.
-	sim.ascension_system().activate(sim.run_state, ContentDatabase)
+	# The investor's first target is the run's win condition, not something
+	# taken on part-way through, so it is live before the first prompt is spent.
+	sim.investor_progression().activate_level(
+		sim.run_state, InvestorProgression.FIRST_LEVEL, ContentDatabase
+	)
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)
 
 
-## Settles the run into its location. A location is a chapter, not a purchase:
-## its rent, floor space and environmental cooling replace the defaults once,
-## at the start, rather than being added to whatever was already there.
-## `grant_starter_rig` is only turned off by tests that are measuring the room
-## itself — its cooling, its floor space, its shelves — where the machine the
-## room comes with would be counted as part of the answer.
-func apply_run_location(
-	sim: Node, state: RunState, location_id: String, grant_starter_rig: bool = true
-) -> void:
-	var dwelling_costs: Dictionary = ContentDatabase.balance.get("dwelling_costs", {})
-	var location: String = location_id
-	if not dwelling_costs.has(location):
-		location = MetaProgress.DEFAULT_LOCATION
-	state.build["dwelling"] = location
-	if not dwelling_costs.has(location):
-		return
-	var stats: Dictionary = dwelling_costs[location]
-	# The room is worth a set of cabinet tiers (the pack's migration table). A
-	# fresh run in the garage opens with garage-tier systems; a run that moves
-	# up keeps anything it had already bought above what the new room gives.
-	CabinetSystems.raise_to_dwelling(state, location)
-	var rent_multiplier: float = float(state.economy.get("rent_multiplier", 1.0))
-	state.economy["round_rent"] = float(
-		stats.get("rent", state.economy.get("round_rent", 0.0))
-	) * rent_multiplier
-	# The stake the investor puts in when he buys the room. A chapter whose rent
-	# is three times the last one's cannot be started on the last one's float.
-	if stats.has("starting_cash"):
-		state.economy["cash"] = float(stats["starting_cash"]) * float(
-			state.economy.get("cash_multiplier", 1.0)
-		)
+## Settles the run onto an Infrastructure Tier: the cabinet systems are raised
+## to the tier's entry tiers (never lowered — anything already bought above
+## them stays), the rent becomes the tier's facility cost, and heat capacity
+## and cooling are re-derived from the new floors. Nothing is granted and no
+## cash moves; the purchase flow and the investor's target are separate.
+func apply_infrastructure_tier(sim: Node, state: RunState, new_tier: int) -> void:
+	InfrastructureSystem.set_tier(state, new_tier, ContentDatabase)
+	CabinetSystems.raise_to_infrastructure(state, ContentDatabase)
+	InfrastructureSystem.apply_rent(state, ContentDatabase)
 	# A bigger cooling loop takes longer to cook. Heat is measured against this
 	# rather than a fixed hundred, so a higher tier buys headroom as well as
-	# cooling. Read from the Cooling Loop tier, floored by the room's own row.
+	# cooling. Read from the Cooling Loop tier, floored by the tier's own row.
 	state.compute["heat_capacity"] = CabinetSystems.capacity(state, "cooling", "heat_capacity")
-	# Chapter throughput and draw are supplied by CabinetSystems.chapter_profiles.
 	state.compute["cooling"] = ComputeSystem.derive_cooling(state)
-	# The contract belongs to the location, so moving the run moves the contract
-	# with it. Nothing else can set it: a run measured against the chapter it is
-	# no longer in has no way to be won.
-	sim.ascension_system().activate(state, ContentDatabase)
-
-
-## The machine the room comes with. Contracts are sized against the rig a
-## location expects rather than against whatever the player happens to own, so a
-## run that starts in the warehouse on a second-hand laptop would be handed work
-## a thousand times beyond it.
-func _grant_location_starter_rig(sim: Node, state: RunState, stats: Dictionary) -> void:
-	for upgrade_id in Array(stats.get("starting_hardware", [])):
-		var upgrade: UpgradeDefinition = ContentDatabase.get_upgrade(str(upgrade_id))
-		if upgrade == null:
-			continue
-		if UpgradeSystem.installed_count(state, UpgradeSystem.installed_key(upgrade)) > 0:
-			continue
-		sim.upgrade_system().install_carried(state, str(upgrade_id), ContentDatabase, sim.effect_resolver)
+	if sim != null:
+		sim.debug_invalidate_subscriptions()
 
 
 ## Racks the machines earned through the permanent starting-rig unlock ladder.
@@ -199,8 +163,8 @@ func _grant_location_starter_rig(sim: Node, state: RunState, stats: Dictionary) 
 ## bought arrives — so this is the one place hardware crosses runs, and only
 ## because a pick was spent on it after beating the whole campaign.
 ##
-## Free of charge but not of floor space: a small room racks what fits, and the
-## call from `advance_to_next_chapter` racks the rest once a bigger room opens.
+## Free of charge but not of floor space: a small rig racks what fits, and the
+## call from `purchase_infrastructure` racks the rest once a bigger tier opens.
 ## That second call is why a rung already standing is skipped rather than
 ## installed again.
 func _install_permanent_rig(sim: Node) -> void:
@@ -235,8 +199,9 @@ func _begin_round(sim: Node) -> void:
 	)
 	sim.job_system().generate_offers(sim.run_state, sim.rng.derive("job_offers"), ContentDatabase, sim.tuning)
 	sim.run_state.business["job_board_stamp"] = _board_stamp(sim)
-	# Module shelf restocks once per round/location, after the calendar and
-	# dwelling are settled. Opening the Market never regenerates it.
+	# Module shelf restocks once per round and scale stamp (Investor Level and
+	# Infrastructure Tier), after the calendar is settled. Opening the Market
+	# never regenerates it.
 	MarketService.ensure_module_stock(sim)
 	sim.phase = sim.Phase.ROUND_PREP
 
@@ -268,61 +233,81 @@ func can_accept_offer(sim: Node, job_id: String) -> bool:
 	return float(info.get("ratio", 0.0)) <= sim.queue_capacity_cap()
 
 
-## The location's boss has cleared: the game is beaten. The run is not thrown away
-## with it. The round it happened in is settled properly — the work pays out, the
-## bills are waived — and then the investor deals his perks: one draft per goal,
-## taken or declined before the company moves on. The phase that would have
-## come next is remembered, so continuing into endless mode resumes from a clean
-## round boundary instead of the middle of a burn.
-func reach_victory(sim: Node, contract: Dictionary) -> void:
-	sim.ascension_system().record_final(sim.run_state, contract)
+## The investor's target has been met. The run is not thrown away with it. The
+## round it happened in is settled properly — the work pays out, the bills are
+## waived — and then the investor deals his perks: one draft per target, taken
+## or declined before the company moves on. The phase that would have come next
+## is remembered, so continuing resumes from a clean round boundary instead of
+## the middle of a burn.
+##
+## Only the target marked `final` is the end of the game: that is the one that
+## sets `game_completed`, pays out Permanent Unlocks, and whose continuation is
+## Deep Burn. Every other target is a level-up inside the run, continued in
+## place through `continue_after_target`.
+func reach_target_complete(sim: Node, target: Dictionary) -> void:
+	var investor: InvestorProgression = sim.investor_progression()
+	var level: int = investor.level(sim.run_state)
+	var is_final: bool = bool(target.get("final", false))
+	investor.record_final(sim.run_state, target)
 	sim.run_state.flags["victory"] = true
 	sim.run_state.flags["outcome"] = "ascended"
-	sim.run_state.flags["ascension_tier"] = int(contract.get("tier", 1))
-	sim.round_log.append("%s is complete. You have ascended." % str(contract.get("name", "The contract")))
+	sim.run_state.flags["target_complete"] = true
+	if is_final:
+		sim.run_state.flags["game_completed"] = true
+		sim.round_log.append("%s is complete. Token Burn is complete." % str(target.get("name", "The target")))
+	else:
+		sim.round_log.append("%s is complete. Investor Level %d." % [str(target.get("name", "The target")), level + 1])
 	MetaProgress.record_best_score(RunScore.compute(sim.run_state, ContentDatabase))
-	MetaProgress.record_ascension(str(contract.get("id", "")))
-	_complete_run_location(sim)
-	# Permanence is the reward for finishing the whole campaign. A chapter goal
-	# cleared on the way up is a level-up inside the run — it banks no picks,
-	# advances no age and hands over no rule unlocks; only the summit pays.
-	if _run_is_final_chapter(sim):
-		MetaProgress.bank_victory(
-			maxi(1, int(contract.get("picks", 1))),
-			str(sim.run_state.flags.get("difficulty", "normal"))
-		)
-		if bool(contract.get("unlocks_age", false)):
-			MetaProgress.advance_age(Ages.max_age_index())
-		var ending_unlock: String = str(contract.get("ending_unlock", ""))
-		if ending_unlock != "":
-			MetaProgress.grant_ending_unlock(ending_unlock)
+	MetaProgress.record_ascension(str(target.get("id", "")))
+	# Permanence is the reward for finishing the whole game. A target cleared on
+	# the way up is a level-up inside the run — it banks no picks, advances no
+	# age and hands over no rule unlocks; only the final target pays.
+	if is_final:
+		_pay_permanent_unlocks(sim, target)
 	_bank_run_legacy(sim, true)
-	_pay_ascension_bonus(sim, contract)
+	_pay_ascension_bonus(sim, target)
 	settling_victory = true
 	sim._end_session("ascended")
 	settling_victory = false
-	# The reward for the goal. Dealt exactly once here, whatever the contract
-	# says about picks — those are the profile's, paid at the summit only.
+	# The reward for the target. Dealt exactly once here, whatever the target
+	# says about picks — those are the profile's, paid at the final only.
 	present_investor_draft(sim)
 	# Settling leaves the round closed out into the next round's prep, but a
 	# loss check swallowed mid-settle can leave it elsewhere. Continuing always
 	# resumes on a clean round boundary.
 	sim.run_state.flags["post_victory_phase"] = sim._phase_name(sim.Phase.ROUND_PREP)
 	sim.phase = sim.Phase.RUN_END
+	EventBus.emit_event(EventBus.EVENT_INVESTOR_TARGET_COMPLETED, {
+		"level": level, "target_id": str(target.get("id", "")), "final": is_final,
+	})
 	EventBus.emit_event(EventBus.EVENT_RUN_ENDED, {"victory": true})
 	sim._autosave()
 
 
-## The investor pays for the contract on delivery, and pays more for delivering
+## The Permanent Unlocks for completing the game: picks on the profile's
+## unlock ladder, the age, and any ending the target opens.
+func _pay_permanent_unlocks(sim: Node, target: Dictionary) -> void:
+	MetaProgress.bank_victory(
+		maxi(1, int(target.get("picks", 1))),
+		str(sim.run_state.flags.get("difficulty", "normal"))
+	)
+	if bool(target.get("unlocks_age", false)):
+		MetaProgress.advance_age(Ages.max_age_index())
+	var ending_unlock: String = str(target.get("ending_unlock", ""))
+	if ending_unlock != "":
+		MetaProgress.grant_ending_unlock(ending_unlock)
+
+
+## The investor pays for the target on delivery, and pays more for delivering
 ## early: every round left on the deadline is worth another round's rent. Rent is
-## the scale because it is the one figure that already tracks the chapter — the
-## same formula is pocket money in the bedroom and a fortune on the moon, without
-## a table of per-location numbers to keep in step.
+## the scale because it is the one figure that already tracks the machine's
+## scale — the same formula is pocket money on the starting rig and a fortune
+## at planetary scale, without a table of per-tier numbers to keep in step.
 func _pay_ascension_bonus(sim: Node, contract: Dictionary) -> void:
 	var cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("ascension_bonus", {})
 	var rent: float = float(sim.run_state.economy.get("round_rent", 400.0))
 	var rounds_spare: int = maxi(
-		0, sim.ascension_system().deadline_round(contract) - int(sim.run_state.calendar.get("round", 1))
+		0, sim.investor_progression().deadline_round(sim.run_state, contract) - int(sim.run_state.calendar.get("round", 1))
 	)
 	var multiple: float = (
 		float(cfg.get("base_multiple", 1.0))
@@ -350,35 +335,11 @@ func _pay_ascension_bonus(sim: Node, contract: Dictionary) -> void:
 		)
 
 
-## Beating the boss retires the chapter and opens the next one. Guarded once-only
-## because `_end_run`'s "ascended" branch settles the same victory from the other
-## direction, and a location must not be completed twice.
-##
-## The profile records the clear, but the campaign selection stays put: the win
-## continues in place through `advance_to_next_chapter`, and a run started fresh
-## afterwards is a fresh game from the bedroom, not a resume.
-func _complete_run_location(sim: Node) -> void:
-	if bool(sim.run_state.flags.get("location_completed", false)):
-		return
-	sim.run_state.flags["location_completed"] = true
-	var location: String = str(sim.run_state.build.get("dwelling", ""))
-	if location == "":
-		return
-	sim.run_state.flags["next_location"] = MetaProgress.next_location_after(location)
-	MetaProgress.complete_location(location)
-
-
-## Whether the run is being played in the campaign's last location — the only
-## place a victory is the end of the game rather than of a chapter, and so the
-## only place permanent rewards are paid out.
-func _run_is_final_chapter(sim: Node) -> bool:
-	return MetaProgress.next_location_after(str(sim.run_state.build.get("dwelling", ""))) == ""
-
-
-## The location this victory opened up, empty if the run was played in the last
-## chapter there is.
-func next_location_unlocked(sim: Node) -> String:
-	return str(sim.run_state.flags.get("next_location", ""))
+## Whether the target the run is playing for (or has just completed) is the one
+## whose completion is the end of the game — the only place permanent rewards
+## are paid out. Read off the target's own `final` flag.
+func _run_is_final_target(sim: Node) -> bool:
+	return bool(sim.investor_progression().current_target(sim.run_state, ContentDatabase).get("final", false))
 
 
 ## True while a victory is being settled: the bills landing in that window cannot
@@ -387,17 +348,18 @@ func is_settling_victory() -> bool:
 	return settling_victory
 
 
-## Carries a won run on rather than starting over. Everything the run owns stays
-## put; from here the calendar is behind it and the costs climb every round, so
-## the tail lasts exactly as long as the build can hold it up.
+## Carries a completed game on into Deep Burn rather than starting over.
+## Everything the run owns stays put; from here the calendar is behind it and
+## the costs climb every round, so the tail lasts exactly as long as the build
+## can hold it up.
 ##
-## Only the last chapter offers this. A mid-campaign win is a level-up — the next
-## location is the continuation, and an endless tail there would just be a bigger
-## bedroom. The tail exists for the run with nowhere further up to go.
+## Only the final target offers this. Any other target is a level-up — the next
+## target is the continuation (`continue_after_target`), and an endless tail
+## there would just be a bigger starting rig.
 func continue_after_victory(sim: Node) -> bool:
 	if sim.phase != sim.Phase.RUN_END or not bool(sim.run_state.flags.get("victory", false)):
 		return false
-	if next_location_unlocked(sim) != "":
+	if not bool(sim.run_state.flags.get("game_completed", false)):
 		return false
 	# The investor's table is still on the desk. Take a card or turn them all
 	# down first; the run does not carry on with the draft unresolved.
@@ -406,6 +368,7 @@ func continue_after_victory(sim: Node) -> bool:
 	sim.run_state.flags["post_victory"] = true
 	sim.run_state.flags["victory"] = false
 	sim.run_state.flags["outcome"] = ""
+	sim.run_state.flags["target_complete"] = false
 	sim.phase = sim._phase_from_name(str(sim.run_state.flags.get("post_victory_phase", "ROUND_PREP")))
 	if sim.phase == sim.Phase.RUN_END or sim.phase == sim.Phase.IDLE:
 		sim.phase = sim.Phase.ROUND_PREP
@@ -419,8 +382,8 @@ func continue_after_victory(sim: Node) -> bool:
 
 
 ## A Deep Burn target was met. Called after the current session has already
-## been settled: contracts never cross a depth boundary. Chapter bonuses stay
-## put — this is not `_reach_victory`.
+## been settled: contracts never cross a depth boundary. Target bonuses stay
+## put — this is not `reach_target_complete`.
 func reach_depth_complete(sim: Node) -> void:
 	sim._work_running = false
 	sim.run_state.flags["depth_complete_pending"] = false
@@ -466,135 +429,61 @@ func continue_after_depth(sim: Node) -> bool:
 	return true
 
 
-## Whether the run has already beaten a Tier 3 contract and chosen to carry on.
+## Whether the run has already completed the game and chosen to carry on into
+## Deep Burn.
 func in_post_victory(sim: Node) -> bool:
 	return bool(sim.run_state.flags.get("post_victory", false))
 
 
-## Moves a mid-campaign win into the next chapter as the same business. The
-## angel's goal is the end of a chapter, not the end of the game: cash, perks,
-## modules, workflows, upgrades and reputation all carry forward — what changes
-## is the room, the rent, and the contract the run is measured against, which
-## is the next location's bigger one. Only the last chapter has no next room;
-## its continuation is `continue_after_victory`.
-func advance_to_next_chapter(sim: Node) -> bool:
+## Takes the next target after a non-final one is met: the same business,
+## the same room, the same calendar, one Investor Level higher. Cash, perks,
+## modules, workflows, upgrades and machine all carry forward untouched; the
+## only thing that changes is the figure the run is measured against and the
+## deadline it has to hit it by. The final target has no next; its
+## continuation is `continue_after_victory` (Deep Burn).
+func continue_after_target(sim: Node) -> bool:
 	if sim.phase != sim.Phase.RUN_END or not bool(sim.run_state.flags.get("victory", false)):
 		return false
-	var next_location: String = next_location_unlocked(sim)
-	if next_location == "":
+	if not bool(sim.run_state.flags.get("target_complete", false)):
 		return false
-	# The perk draft the goal earned is settled before the move, not carried
-	# into the new chapter as a loose end.
+	if bool(sim.run_state.flags.get("game_completed", false)):
+		return false
+	# The perk draft the target earned is settled before moving on, not
+	# carried into the next level as a loose end.
 	if investor_draft_pending(sim):
 		return false
 	sim.run_state.flags["investor_draft_resolved"] = false
 	sim.run_state.flags["victory"] = false
 	sim.run_state.flags["outcome"] = ""
-	sim.run_state.flags["location_completed"] = false
-	sim.run_state.flags["next_location"] = ""
+	sim.run_state.flags["target_complete"] = false
 	sim.run_state.flags["post_victory_phase"] = ""
-	# A new room comes with a new landlord. Arrears from the chapter just cleared
-	# do not follow the company through the door, and neither does a loss reason
-	# a suppressed mid-victory check may have left lying around — carried over,
-	# either one could evict the run on its first prompt in the new chapter.
-	sim.run_state.economy["rent_unpaid_streak"] = 0
+	# The run is continuous, so the rent record carries over: arrears owed
+	# before the target stand after it. Only a loss reason a suppressed
+	# mid-victory check may have left lying around is cleared — carried over,
+	# it could end the run on its first prompt at the new level.
 	sim.run_state.flags["loss_reason"] = ""
-	# The investor's stake pays for the room, but the company keeps its own
-	# float: the stake is a floor under the new rent, not a replacement for
-	# what the last chapter earned.
-	var cash_carried: float = float(sim.run_state.economy.get("cash", 0.0))
-	# The next room's own machine is a stake for a run that starts there. A run
-	# that won its way up arrives with the rig it won on, and nothing else.
-	apply_run_location(sim, sim.run_state, next_location, false)
-	var stake: float = float(sim.run_state.economy.get("cash", 0.0))
-	sim.run_state.economy["cash"] = maxf(cash_carried, stake)
-	_charge_chapter_commissioning(sim, next_location, cash_carried, stake)
-	# A permanent rig rung the old room had no floor for is racked now that
-	# there is a room that fits it.
-	_install_permanent_rig(sim)
-	# A new room starts cold, and the new chapter starts its year at round one.
-	sim.run_state.compute["heat"] = 0.0
-	sim.run_state.flags["fire_risk"] = false
-	sim.run_state.calendar["round"] = 1
+	var investor: InvestorProgression = sim.investor_progression()
+	investor.advance(sim.run_state, ContentDatabase)
+	var level: int = investor.level(sim.run_state)
+	var target: Dictionary = investor.active_target(sim.run_state, ContentDatabase)
 	sim.round_log.append(
-		"Moved into the %s. Everything comes with you — the contract is bigger."
-		% MetaProgress.location_name(next_location)
+		"Investor Level %d. %s: %s by round %d."
+		% [
+			level,
+			str(target.get("name", "The next target")),
+			str(target.get("burn_label", NumberFormat.format(float(target.get("total_burn", 0.0))))),
+			investor.deadline_round(sim.run_state, target),
+		]
 	)
-	_begin_round(sim)
+	EventBus.emit_event(EventBus.EVENT_INVESTOR_LEVEL_ADVANCED, {
+		"level": level, "target_id": str(target.get("id", "")),
+	})
+	# Settlement already rolled the round over into the next one's prep, so
+	# the run resumes there; nothing on the calendar moves.
+	sim.phase = sim.Phase.ROUND_PREP
+	_ensure_job_offers(sim)
 	sim._autosave()
 	return true
-
-
-## Moving up is not free. A bigger room has to be commissioned — the power
-## connection, the racks migrated, the facility fitted out — and the bill is
-## the larger of half the chapter's big purchase and a share of the cash the
-## company walked in with, so a war chest built in a cheap room does not buy
-## the next one outright. Never below the room's own stake: the company
-## always arrives with at least what a fresh start there would have.
-func chapter_commissioning_cost(
-	sim: Node, next_location: String, cash_carried: float, stake: float
-) -> float:
-	var cfg: Dictionary = ContentDatabase.balance.get("economy", {}).get("chapter_transition", {})
-	var major_ratio: float = float(cfg.get("commissioning_major_purchase_ratio", 0.5))
-	var equity_ratio: float = float(cfg.get("equity_ratio", 0.3))
-	var major_purchase: float = _location_major_purchase(next_location)
-	var cost: float = maxf(major_purchase * major_ratio, cash_carried * equity_ratio)
-	var arriving: float = maxf(cash_carried, stake)
-	return clampf(cost, 0.0, maxf(0.0, arriving - stake))
-
-
-## What advancing would cost right now, for the verdict screen. Zero when
-## there is no chapter ahead.
-func chapter_commissioning_preview(sim: Node) -> float:
-	var next_location: String = next_location_unlocked(sim)
-	if next_location == "":
-		return 0.0
-	var cash_carried: float = float(sim.run_state.economy.get("cash", 0.0))
-	return chapter_commissioning_cost(
-		sim, next_location, cash_carried, _location_stake(sim, next_location)
-	)
-
-
-## The float a fresh run in `location` opens with, which is what
-## `apply_run_location` writes before the carried cash is laid over it.
-func _location_stake(sim: Node, location: String) -> float:
-	var stats: Dictionary = Dictionary(
-		ContentDatabase.balance.get("dwelling_costs", {}).get(location, {})
-	)
-	return float(stats.get("starting_cash", 0.0)) * float(
-		sim.run_state.economy.get("cash_multiplier", 1.0)
-	)
-
-
-## `job_scaling.location_bands[].major_purchase` for a named location — the
-## same anchor the Market prices off, read for the room being moved into
-## rather than the one being left.
-func _location_major_purchase(location: String) -> float:
-	for band in JobSystem.location_bands(ContentDatabase):
-		if band is Dictionary and str(band.get("location", "")) == location:
-			return float(band.get("major_purchase", 0.0))
-	return 0.0
-
-
-func _charge_chapter_commissioning(
-	sim: Node, next_location: String, cash_carried: float, stake: float
-) -> void:
-	var cost: float = chapter_commissioning_cost(sim, next_location, cash_carried, stake)
-	sim.run_state.statistics["last_chapter_commissioning"] = cost
-	if cost <= 0.0:
-		return
-	sim.economy_system().debit(sim.run_state, cost, "chapter_commissioning", {
-		"location": next_location,
-		"cash_carried": cash_carried,
-		"stake": stake,
-	})
-	sim.run_state.statistics["chapter_commissioning"] = (
-		float(sim.run_state.statistics.get("chapter_commissioning", 0.0)) + cost
-	)
-	sim.round_log.append(
-		"Commissioning the %s — power connection, rack migration, fit-out — costs %s."
-		% [MetaProgress.location_name(next_location), NumberFormat.format_cash(cost)]
-	)
 
 
 ## Takes one of the investor's perk offers. Everything on the table is free, so
@@ -720,7 +609,7 @@ func _deal_draft(sim: Node, kind: String) -> bool:
 	return true
 
 
-## The investor's draft, dealt when a chapter's goal is met. Everything on it
+## The investor's draft, dealt when a target is met. Everything on it
 ## is free and permanent; the phase stays wherever the victory left it
 ## (`RUN_END`), and the table is answered from the verdict screen. A goal with
 ## nothing left to offer is marked resolved straight away so nothing waits on
@@ -798,19 +687,19 @@ func end_round(sim: Node) -> void:
 			return
 		if int(sim.run_state.calendar["round"]) >= _contract_deadline_round(sim):
 			if in_post_victory(sim) or MetaProgress.endless_enabled():
-				# Endless keeps going instead of stopping: the bills get harder
-				# every round past the twelfth, so staying alive is the challenge
+				# Deep Burn keeps going instead of stopping: the bills get harder
+				# every round past the deadline, so staying alive is the challenge
 				# rather than survival being a foregone conclusion.
 				_escalate_endless_costs(sim)
 			else:
-				# The terms were stated before the first prompt: the contract is
-				# done inside the year or it is not done at all. Completing it
-				# ends the run the moment it happens, mid-round, well before this
-				# check is reached.
-				sim.ascension_system().fail_on_deadline(sim.run_state)
-				sim.run_state.flags["loss_reason"] = "The year ran out with the contract unfinished."
+				# The terms were stated when the target went live: it is done by
+				# its deadline or it is not done at all. Completing it ends the
+				# round the moment it happens, mid-burn, well before this check
+				# is reached.
+				sim.investor_progression().fail_on_deadline(sim.run_state)
+				sim.run_state.flags["loss_reason"] = "The deadline passed with the investor's target unmet."
 				sim.round_log.append(
-					"The year is up and the contract is not complete. The investor is done with you."
+					"The deadline is up and the target is not met. The investor is done with you."
 				)
 				end_run(sim, false, "contract_expired")
 				return
@@ -862,16 +751,15 @@ func _escalate_endless_costs(sim: Node) -> void:
 	sim.run_state.statistics["endless_rounds"] = int(sim.run_state.statistics.get("endless_rounds", 0)) + 1
 
 
-## The last round the contract can be finished in. A won run carrying on into
-## endless mode is past its deadline by definition, so the calendar length is
-## used there instead.
+## The last round the live target can be finished in, on the run's continuous
+## calendar. A run with no target at all (content missing) falls back to the
+## old calendar length.
 func _contract_deadline_round(sim: Node) -> int:
-	var contract: Dictionary = sim.ascension_system().current_contract(sim.run_state, ContentDatabase)
-	if contract.is_empty():
-		contract = sim.ascension_system().location_contract(sim.run_state, ContentDatabase)
-	if contract.is_empty():
+	var investor: InvestorProgression = sim.investor_progression()
+	var target: Dictionary = investor.current_target(sim.run_state, ContentDatabase)
+	if target.is_empty():
 		return sim.ROUNDS_PER_RUN
-	return sim.ascension_system().deadline_round(contract)
+	return investor.deadline_round(sim.run_state, target)
 
 
 ## Rounds left before the contract's deadline, this round included.
@@ -905,7 +793,7 @@ func after_angel_round(sim: Node) -> void:
 
 
 ## `outcome` names how the run ended. "ascended" is the only way to win: an
-## Ascension Contract completed. "retired" survives only for saves and profiles
+## Investor Target completed. "retired" survives only for saves and profiles
 ## written before overtime existed — the calendar no longer ends a run, so
 ## nothing reaches it any more. Left blank it falls back to the old two-state
 ## behaviour ("ascended" on victory, "lost" otherwise), which is what the batch
@@ -926,22 +814,14 @@ func end_run(sim: Node, victory: bool, outcome: String = "") -> void:
 	MetaProgress.record_best_score(RunScore.compute(sim.run_state, ContentDatabase))
 	match outcome:
 		"ascended":
-			var contract: Dictionary = sim.ascension_system().current_contract(sim.run_state, ContentDatabase)
-			sim.run_state.flags["ascension_tier"] = int(contract.get("tier", 1))
-			MetaProgress.record_ascension(str(contract.get("id", "")))
-			_complete_run_location(sim)
-			# Same rule as `_reach_victory`: only finishing the campaign's last
-			# chapter pays out anything permanent.
-			if _run_is_final_chapter(sim):
-				MetaProgress.bank_victory(
-					maxi(1, int(contract.get("picks", 1))),
-					str(sim.run_state.flags.get("difficulty", "normal"))
-				)
-				if bool(contract.get("unlocks_age", false)):
-					MetaProgress.advance_age(Ages.max_age_index())
-				var ending_unlock: String = str(contract.get("ending_unlock", ""))
-				if ending_unlock != "":
-					MetaProgress.grant_ending_unlock(ending_unlock)
+			var target: Dictionary = sim.investor_progression().current_target(sim.run_state, ContentDatabase)
+			sim.run_state.flags["target_complete"] = true
+			MetaProgress.record_ascension(str(target.get("id", "")))
+			# Same rule as `reach_target_complete`: only the final target pays
+			# out anything permanent.
+			if bool(target.get("final", false)):
+				sim.run_state.flags["game_completed"] = true
+				_pay_permanent_unlocks(sim, target)
 		"retired":
 			MetaProgress.record_retirement()
 		_:
@@ -958,7 +838,13 @@ func end_run(sim: Node, victory: bool, outcome: String = "") -> void:
 ## Lifetime counters are folded in before the awards are judged, so an achievement
 ## that asks for ten losses can be earned by the tenth loss rather than the
 ## eleventh.
+##
+## The profile's records (deepest Deep Burn, biggest batch, richest run, fastest
+## completion) only ever move up, so they are taken on every ending — a run
+## that completed the game and went on into Deep Burn sets its depth record on
+## the ending that finally closes it, not the one that banked its picks.
 func _bank_run_legacy(sim: Node, victory: bool) -> void:
+	MetaProgress.record_run_records(sim.run_state)
 	if bool(sim.run_state.flags.get("legacy_banked", false)):
 		return
 	sim.run_state.flags["legacy_banked"] = true
@@ -998,11 +884,10 @@ func load_saved_run(sim: Node) -> bool:
 	# Saves written before the redesign called the round a month.
 	round_end_pending = bool(data.get("round_end_pending", data.get("month_end_pending", false)))
 	sim.debug_invalidate_subscriptions()
-	# A save from before the campaign existed can be mid-warehouse, having
-	# climbed there with cash. That rung and everything under it is earned, so
-	# the profile catches up rather than stranding the run somewhere it is no
-	# longer allowed to be.
-	MetaProgress.ensure_location_unlocked_through(str(sim.run_state.build.get("dwelling", "")))
+	# The tier is the authority and the room is derived from it. The v26
+	# migration has already read a room-only save back into its tier; this only
+	# refreshes the derived room cache against the content that is loaded.
+	InfrastructureSystem.ensure_state(sim.run_state, ContentDatabase)
 	# Cooling from permanent unlocks is a function of the profile, not of the
 	# run, so it is read back rather than restored from the save.
 	sim.run_state.compute["meta_cooling"] = MetaProgress.cooling_bonus()
@@ -1059,10 +944,6 @@ func board_stamp(sim: Node) -> String:
 	return _board_stamp(sim)
 
 
-func grant_location_starter_rig(sim: Node, state: RunState, stats: Dictionary) -> void:
-	_grant_location_starter_rig(sim, state, stats)
-
-
 func install_permanent_rig(sim: Node) -> void:
 	_install_permanent_rig(sim)
 
@@ -1075,12 +956,8 @@ func pay_ascension_bonus(sim: Node, contract: Dictionary) -> void:
 	_pay_ascension_bonus(sim, contract)
 
 
-func complete_run_location(sim: Node) -> void:
-	_complete_run_location(sim)
-
-
-func run_is_final_chapter(sim: Node) -> bool:
-	return _run_is_final_chapter(sim)
+func run_is_final_target(sim: Node) -> bool:
+	return _run_is_final_target(sim)
 
 
 func spend_draft_pick(sim: Node, offer_type: String, offer_id: String) -> void:
@@ -1105,10 +982,6 @@ func angel_draw_rng(sim: Node) -> DeterministicRng:
 
 func redraw_angel_offers(sim: Node) -> void:
 	_redraw_angel_offers(sim)
-
-
-func location_major_purchase(location: String) -> float:
-	return _location_major_purchase(location)
 
 
 func escalate_endless_costs(sim: Node) -> void:

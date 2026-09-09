@@ -48,8 +48,8 @@ func acquire_block_reason(run_state: RunState, perk_id: String, content_db: Node
 		return "Not unlocked"
 	if not _difficulty_allows(run_state, perk):
 		return "Not on this difficulty"
-	if not _location_tier_allows(run_state, perk, content_db):
-		return "Not in this chapter"
+	if not _investor_level_allows(run_state, perk):
+		return "Investor Target %d" % perk.min_investor_level
 	if perk_id in _owned(run_state):
 		return "Already owned"
 	return _compatibility_reason(run_state, content_db, perk)
@@ -103,7 +103,7 @@ func blocked_ids(run_state: RunState, content_db: Node) -> Array:
 ## compatible with the ones kept before it. Used by the save migration that
 ## folds the old bench into the permanent set: two rival keystones that could
 ## coexist on a bench cannot coexist in a build, so the earlier one wins.
-## Unlock, difficulty and chapter gates are deliberately not applied, and nor
+## Unlock, difficulty and level gates are deliberately not applied, and nor
 ## are `requires_tags` — a perk already in the run was legitimately earned and
 ## met its requirement when it was taken. Only mutual exclusions are enforced.
 func legal_subset(run_state: RunState, candidate_ids: Array, content_db: Node) -> Array:
@@ -311,21 +311,19 @@ func _difficulty_allows(run_state: RunState, perk: PerkDefinition) -> bool:
 	return run_difficulty in perk.difficulty
 
 
-func _location_tier_allows(run_state: RunState, perk: PerkDefinition, content_db: Node) -> bool:
-	var tier: int = _current_location_tier(run_state, content_db)
-	if perk.min_location_tier > 0 and tier < perk.min_location_tier:
+## The perk's Investor Level window against the run's level. A minimum of 0 or
+## 1 is open from the first target; a maximum of -1 has no ceiling.
+func _investor_level_allows(run_state: RunState, perk: PerkDefinition) -> bool:
+	var level: int = _current_investor_level(run_state)
+	if perk.min_investor_level > InvestorProgression.FIRST_LEVEL and level < perk.min_investor_level:
 		return false
-	if perk.max_location_tier >= 0 and tier > perk.max_location_tier:
+	if perk.max_investor_level >= 0 and level > perk.max_investor_level:
 		return false
 	return true
 
 
-func _current_location_tier(run_state: RunState, content_db: Node) -> int:
-	var order: Array = []
-	if MetaProgress.has_method("location_order"):
-		order = MetaProgress.location_order()
-	if order.is_empty():
-		order = Array(content_db.balance.get("economy", {}).get("location_order", []))
-	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
-	var index: int = order.find(dwelling)
-	return maxi(0, index)
+func _current_investor_level(run_state: RunState) -> int:
+	return maxi(
+		InvestorProgression.FIRST_LEVEL,
+		int(run_state.investor.get("level", InvestorProgression.FIRST_LEVEL))
+	)

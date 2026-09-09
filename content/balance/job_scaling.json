@@ -16,17 +16,8 @@
     "base_quality_ratio": 0.2,
     "hidden_bug_discovery_chance": 0.6,
     "overflow": {
-      "unlock_location_index": 2,
+      "unlock_infrastructure_tier": 2,
       "max_pipeline": 24,
-      "base_allowance": {
-        "bedroom": 0,
-        "garage": 0,
-        "office_unit": 2,
-        "warehouse": 3,
-        "datacentre_campus": 4,
-        "private_power_grid": 5,
-        "moon_facility": 6
-      },
       "instability": 0.05,
       "cascade_chance": 0.03,
       "heat_pct": 0.04,
@@ -64,51 +55,51 @@
     "session_gain_under": 0,
     "excellent_margin": 20
   },
-  "location_bands": [
+  "scale_bands": [
     {
-      "location": "bedroom",
+      "tier": 0,
       "expected_token_rate": 1500000,
       "target_work_prompts": 5,
       "base_reward": 500,
       "major_purchase": 1200
     },
     {
-      "location": "garage",
+      "tier": 1,
       "expected_token_rate": 8000000,
       "target_work_prompts": 6,
       "base_reward": 5000,
       "major_purchase": 15000
     },
     {
-      "location": "office_unit",
+      "tier": 2,
       "expected_token_rate": 60000000,
       "target_work_prompts": 7,
       "base_reward": 50000,
       "major_purchase": 150000
     },
     {
-      "location": "warehouse",
+      "tier": 3,
       "expected_token_rate": 600000000,
       "target_work_prompts": 7,
       "base_reward": 500000,
       "major_purchase": 1500000
     },
     {
-      "location": "datacentre_campus",
+      "tier": 4,
       "expected_token_rate": 6000000000,
       "target_work_prompts": 8,
       "base_reward": 6000000,
       "major_purchase": 20000000
     },
     {
-      "location": "private_power_grid",
+      "tier": 5,
       "expected_token_rate": 120000000000,
       "target_work_prompts": 8,
       "base_reward": 80000000,
       "major_purchase": 250000000
     },
     {
-      "location": "moon_facility",
+      "tier": 6,
       "expected_token_rate": 2500000000000,
       "target_work_prompts": 9,
       "base_reward": 500000000,

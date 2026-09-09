@@ -8,10 +8,10 @@ extends RefCounted
 ## the endgame. What matters is the *shape* of the outcomes: how many ascended,
 ## how many collapsed, and how many never terminated at all.
 ##
-## Every location has one contract and it is live from the first prompt, so the
-## thing to read is how close the sample got: `avg_burn_ratio` is the share of
-## the contract an average run finished. A sample that lands well under 1.0 means
-## the contract is priced above what the chapter can build.
+## The investor's target is live from the first prompt, so the thing to read is
+## how close the sample got: `avg_burn_ratio` is the share of the target an
+## average run finished. A sample that lands well under 1.0 means the target is
+## priced above what a machine of that Infrastructure Tier can build.
 
 ## A run that has not resolved in this many policy steps is stuck, not slow, and
 ## is reported as such rather than being quietly dropped from the sample.
@@ -39,10 +39,11 @@ var verbose: bool = false
 var _active_metrics: Dictionary = {}
 
 
-## `location` is the chapter of the campaign every run in the sweep is set in.
-## A run can no longer buy its way to bigger premises, so the sweep has to be
-## told where it is happening the same way the campaign would tell it.
-func run(count: int = 1000, policy: String = "random", location: String = MetaProgress.DEFAULT_LOCATION) -> Dictionary:
+## `tier` is the Infrastructure Tier every run in the sweep stands on, measured
+## against the Investor Level that scale was authored for (`tier + 1`): the
+## same pairing the room of that tier used to own. Runs do not buy up from
+## there, so the sample reads one scale at a time.
+func run(count: int = 1000, policy: String = "random", tier: int = InfrastructureSystem.MIN_TIER) -> Dictionary:
 	var wins: int = 0
 	var total_rounds: int = 0
 	var stuck: int = 0
@@ -63,7 +64,7 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 		var seed_value: int = 1000 + i
 		var started_at: int = Time.get_ticks_msec()
 		sim.start_run(seed_value)
-		sim.apply_run_location(sim.run_state, location)
+		_stand_at_tier(sim, tier)
 		var safety: int = 0
 		while sim.phase != sim.Phase.RUN_END and safety < SAFETY_STEPS:
 			safety += 1
@@ -90,11 +91,11 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 			wins += 1
 		if outcome == "contract_expired":
 			expired_runs += 1
-		# What the run actually burned against what its contract asked for, which
+		# What the run actually burned against what its target asked for, which
 		# is the number `total_burn` has to be priced against.
 		var burned: float = float(sim.run_state.statistics.get("lifetime_tokens", 0.0))
 		lifetime_tokens.append(burned)
-		var target: float = float(sim.ascension_boss_contract().get("total_burn", 0.0))
+		var target: float = float(sim.investor_target().get("total_burn", 0.0))
 		if target > 0.0:
 			burn_ratios.append(burned / target)
 		peak_token_rates.append(float(sim.run_state.statistics.get("peak_token_rate", 0.0)))
@@ -107,7 +108,7 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 	return {
 		"runs": count,
 		"policy": policy,
-		"location": location,
+		"tier": tier,
 		"win_rate": float(wins) / float(runs),
 		"ascended_rate": float(int(outcomes.get("ascended", 0))) / float(runs),
 		"expired_rate": float(expired_runs) / float(runs),
@@ -125,10 +126,24 @@ func run(count: int = 1000, policy: String = "random", location: String = MetaPr
 	}
 
 
-## Plays the actual campaign continuation path rather than seven unrelated
-## rooms. A victory carries the bought rig, cash, workflows, perks and modules
-## into the next chapter exactly as the UI does. Permanent-power profiles are
-## deterministic fixtures from pacing_targets.json, never the developer's save.
+## Stands a run on an Infrastructure Tier under the Investor Level that scale
+## was authored for, without charging for either.
+func _stand_at_tier(sim: Node, tier: int) -> void:
+	sim.apply_infrastructure_tier(sim.run_state, tier)
+	sim.investor_progression().activate_level(sim.run_state, tier + 1, ContentDatabase)
+	sim.board_system().ensure_board(sim.run_state, ContentDatabase)
+	sim._compute_system.recalculate(
+		sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
+	)
+	sim._job_system.refresh_contract_board(sim.run_state, sim.rng, ContentDatabase, sim.tuning)
+
+
+## Plays the actual continuous run: one company, one calendar, the investor's
+## targets one after another, and the machine's scale bought in the Market as
+## the builder can afford it. Metrics are bucketed by the Infrastructure Tier
+## the run stood on when each target was met or the run ended. Permanent-power
+## profiles are deterministic fixtures from pacing_targets.json, never the
+## developer's save.
 func run_campaign(
 	count: int = 50,
 	policy: String = "builder",
@@ -142,7 +157,7 @@ func run_campaign(
 		"policy": policy,
 		"profile": profile_id,
 		"difficulty": difficulty,
-		"chapters": {},
+		"tiers": {},
 		"outcomes": {},
 		"stuck_count": 0,
 		"invalid_number_count": 0,
@@ -153,17 +168,17 @@ func run_campaign(
 		var sim := _create_headless_sim()
 		sim.start_run(seed_start + run_index, difficulty)
 		_apply_profile(sim, profile_id)
-		_active_metrics = _new_chapter_metrics()
+		_active_metrics = _new_tier_metrics()
 		_record_hardware_round(sim)
 		var safety: int = 0
 		var finished: bool = false
-		# A full campaign needs more room than one chapter, but a phase that has
+		# A full campaign needs more room than one target, but a phase that has
 		# not advanced in a thousand policy decisions is a bug, not a slow build.
 		while safety < 400:
 			safety += 1
 			if _has_invalid_numbers(sim.run_state):
 				summary["invalid_number_count"] = int(summary["invalid_number_count"]) + 1
-				_finalize_campaign_chapter(summary, sim, "invalid")
+				_finalize_campaign_tier(summary, sim, "invalid")
 				finished = true
 				break
 			if sim.phase == sim.Phase.RUN_END:
@@ -171,10 +186,13 @@ func run_campaign(
 				var outcome: String = str(sim.run_state.flags.get("outcome", ""))
 				if outcome == "":
 					outcome = "ascended" if won else "lost"
-				_finalize_campaign_chapter(summary, sim, outcome)
+				_finalize_campaign_tier(summary, sim, outcome)
 				if verbose:
-					print("    seed %d %s: %s at round %d" % [seed_start + run_index, str(sim.run_state.build.get("dwelling", "")), outcome, int(sim.run_state.calendar.get("round", 1))])
-				if not won or sim.next_location_unlocked() == "":
+					print("    seed %d tier %d level %d: %s at round %d" % [
+						seed_start + run_index, sim.infrastructure_tier(), sim.investor_level(),
+						outcome, int(sim.run_state.calendar.get("round", 1)),
+					])
+				if not won or sim.game_completed():
 					summary["outcomes"][outcome] = int(summary["outcomes"].get(outcome, 0)) + 1
 					finished = true
 					break
@@ -182,35 +200,28 @@ func run_campaign(
 				# company can move on; the policy takes the first legal card.
 				if sim.investor_draft_pending():
 					_angel_pick_perk(sim)
-				if not sim.advance_to_next_chapter():
+				if not sim.continue_after_target():
 					summary["outcomes"]["advance_failed"] = int(
 						summary["outcomes"].get("advance_failed", 0)
 					) + 1
 					finished = true
 					break
-				_install_profile_rig(sim, profile_id)
-				sim.board_system().ensure_board(sim.run_state, ContentDatabase)
-				sim._compute_system.recalculate(
-					sim.run_state, sim.effect_resolver, sim._collect_subscriptions(), sim.rng
-				)
-				sim._job_system.refresh_contract_board(
-					sim.run_state, sim.rng, ContentDatabase, sim.tuning
-				)
-				_active_metrics = _new_chapter_metrics()
+				_active_metrics = _new_tier_metrics()
 				_record_hardware_round(sim)
 				continue
 			_play_policy_step(sim, policy)
 			_record_hardware_round(sim)
 		if not finished:
 			if verbose:
-				print("    campaign seed %d stuck in %s / phase %d after %d steps" % [
+				print("    campaign seed %d stuck at tier %d level %d / phase %d after %d steps" % [
 					seed_start + run_index,
-					str(sim.run_state.build.get("dwelling", "")),
+					sim.infrastructure_tier(),
+					sim.investor_level(),
 					int(sim.phase),
 					safety,
 				])
 			summary["stuck_count"] = int(summary["stuck_count"]) + 1
-			_finalize_campaign_chapter(summary, sim, "stuck")
+			_finalize_campaign_tier(summary, sim, "stuck")
 			summary["outcomes"]["stuck"] = int(summary["outcomes"].get("stuck", 0)) + 1
 		sim.free()
 	_active_metrics = {}
@@ -258,7 +269,7 @@ func _install_profile_rig(sim: Node, profile_id: String) -> void:
 
 
 
-func _new_chapter_metrics() -> Dictionary:
+func _new_tier_metrics() -> Dictionary:
 	return {
 		"burns": 0,
 		"cooling_prompts": 0,
@@ -284,10 +295,12 @@ func _record_hardware_round(sim: Node) -> void:
 			rounds[text_key] = current_round
 
 
-func _finalize_campaign_chapter(summary: Dictionary, sim: Node, outcome: String) -> void:
-	var location: String = str(sim.run_state.build.get("dwelling", "bedroom"))
-	var chapters: Dictionary = summary["chapters"]
-	var aggregate: Dictionary = Dictionary(chapters.get(location, {
+## Folds the metrics of the target just settled into the bucket of the
+## Infrastructure Tier the run stood on when it was.
+func _finalize_campaign_tier(summary: Dictionary, sim: Node, outcome: String) -> void:
+	var tier_key: String = str(sim.infrastructure_tier())
+	var tiers: Dictionary = summary["tiers"]
+	var aggregate: Dictionary = Dictionary(tiers.get(tier_key, {
 		"attempts": 0, "wins": 0, "victory_rounds": [], "burns_per_job": [],
 		"prompts": 0, "round_sessions": 0, "cooling_prompts": 0,
 		"dangerous_forecasts": 0, "fires": 0, "peak_heat_ratio": 0.0,
@@ -297,8 +310,8 @@ func _finalize_campaign_chapter(summary: Dictionary, sim: Node, outcome: String)
 		"outcomes": {},
 	}))
 	aggregate["attempts"] = int(aggregate["attempts"]) + 1
-	# Perks are permanent and only ever dealt on a won chapter, so the count
-	# walking out of a chapter is a direct read on the campaign's perk pacing.
+	# Perks are only ever dealt on a met target, so the count walking out of
+	# one is a direct read on the campaign's perk pacing.
 	var perk_count: int = Array(sim.run_state.build.get("perks", [])).size()
 	aggregate["perk_counts"].append(perk_count)
 	summary["max_perks_owned"] = maxi(int(summary.get("max_perks_owned", 0)), perk_count)
@@ -314,7 +327,7 @@ func _finalize_campaign_chapter(summary: Dictionary, sim: Node, outcome: String)
 	)
 	aggregate["peak_token_rates"].append(float(sim.run_state.statistics.get("peak_token_rate", 0.0)))
 	aggregate["peak_cash"].append(float(sim.run_state.statistics.get("peak_cash", 0.0)))
-	var progress: Dictionary = sim.ascension_progress()
+	var progress: Dictionary = sim.investor_progress()
 	aggregate["ascension_burn_ratios"].append(float(progress.get("burn_ratio", 0.0)))
 	aggregate["ascension_qualities"].append(float(progress.get("quality_average", 0.0)))
 	var acquisition: Dictionary = _active_metrics.get("hardware_acquisition_round", {})
@@ -322,39 +335,39 @@ func _finalize_campaign_chapter(summary: Dictionary, sim: Node, outcome: String)
 		if not aggregate["hardware_acquisition_rounds"].has(hardware_id):
 			aggregate["hardware_acquisition_rounds"][hardware_id] = []
 		aggregate["hardware_acquisition_rounds"][hardware_id].append(int(acquisition[hardware_id]))
-	chapters[location] = aggregate
+	tiers[tier_key] = aggregate
 	summary["fires"] = int(summary["fires"]) + int(_active_metrics.get("fires", 0))
 
 
 func _finalize_campaign_averages(summary: Dictionary) -> void:
-	for location in summary["chapters"].keys():
-		var chapter: Dictionary = summary["chapters"][location]
-		var samples: Array = chapter.get("burns_per_job", [])
+	for tier_key in summary["tiers"].keys():
+		var tier_summary: Dictionary = summary["tiers"][tier_key]
+		var samples: Array = tier_summary.get("burns_per_job", [])
 		var one_burn: int = 0
 		for sample in samples:
 			if int(sample) <= 1:
 				one_burn += 1
-		chapter["win_rate"] = float(chapter.get("wins", 0)) / maxf(1.0, float(chapter.get("attempts", 0)))
-		chapter["avg_victory_round"] = _average(chapter.get("victory_rounds", []))
-		chapter["median_victory_round"] = _median(chapter.get("victory_rounds", []))
-		chapter["avg_burns_per_completed_job"] = _average(samples)
-		chapter["one_burn_job_rate"] = float(one_burn) / maxf(1.0, float(samples.size()))
-		chapter["prompts_per_round"] = float(chapter.get("prompts", 0)) / maxf(
-			1.0, float(chapter.get("round_sessions", 0))
+		tier_summary["win_rate"] = float(tier_summary.get("wins", 0)) / maxf(1.0, float(tier_summary.get("attempts", 0)))
+		tier_summary["avg_victory_round"] = _average(tier_summary.get("victory_rounds", []))
+		tier_summary["median_victory_round"] = _median(tier_summary.get("victory_rounds", []))
+		tier_summary["avg_burns_per_completed_job"] = _average(samples)
+		tier_summary["one_burn_job_rate"] = float(one_burn) / maxf(1.0, float(samples.size()))
+		tier_summary["prompts_per_round"] = float(tier_summary.get("prompts", 0)) / maxf(
+			1.0, float(tier_summary.get("round_sessions", 0))
 		)
-		chapter["cooling_share"] = float(chapter.get("cooling_prompts", 0)) / maxf(
-			1.0, float(chapter.get("prompts", 0))
+		tier_summary["cooling_share"] = float(tier_summary.get("cooling_prompts", 0)) / maxf(
+			1.0, float(tier_summary.get("prompts", 0))
 		)
-		chapter["avg_peak_token_rate"] = _average(chapter.get("peak_token_rates", []))
-		chapter["avg_peak_cash"] = _average(chapter.get("peak_cash", []))
-		chapter["avg_ascension_burn_ratio"] = _average(
-			chapter.get("ascension_burn_ratios", [])
+		tier_summary["avg_peak_token_rate"] = _average(tier_summary.get("peak_token_rates", []))
+		tier_summary["avg_peak_cash"] = _average(tier_summary.get("peak_cash", []))
+		tier_summary["avg_ascension_burn_ratio"] = _average(
+			tier_summary.get("ascension_burn_ratios", [])
 		)
-		chapter["avg_ascension_quality"] = _average(chapter.get("ascension_qualities", []))
+		tier_summary["avg_ascension_quality"] = _average(tier_summary.get("ascension_qualities", []))
 		var acquisition_avg: Dictionary = {}
-		for hardware_id in chapter["hardware_acquisition_rounds"].keys():
-			acquisition_avg[hardware_id] = _average(chapter["hardware_acquisition_rounds"][hardware_id])
-		chapter["avg_hardware_acquisition_round"] = acquisition_avg
+		for hardware_id in tier_summary["hardware_acquisition_rounds"].keys():
+			acquisition_avg[hardware_id] = _average(tier_summary["hardware_acquisition_rounds"][hardware_id])
+		tier_summary["avg_hardware_acquisition_round"] = acquisition_avg
 
 
 ## Turns the data-owned pacing contract into release-gate failures. Keeping the
@@ -365,8 +378,8 @@ func _evaluate_campaign_acceptance(summary: Dictionary) -> void:
 	var profile_id: String = str(summary.get("profile", "fresh"))
 	var difficulty: String = str(summary.get("difficulty", "normal"))
 	var difficulty_targets: Dictionary = Dictionary(targets.get(difficulty, {}))
-	var chapter_band: Array = Array(
-		difficulty_targets.get("chapter_rounds", {}).get(profile_id, [])
+	var target_band: Array = Array(
+		difficulty_targets.get("target_rounds", {}).get(profile_id, [])
 	)
 	var one_burn_cap: float = float(
 		difficulty_targets.get("one_burn_rate_cap", {}).get(profile_id, 1.0)
@@ -379,17 +392,17 @@ func _evaluate_campaign_acceptance(summary: Dictionary) -> void:
 	)
 	var safety: Dictionary = Dictionary(targets.get("smoke", {}))
 	var failures: Array = []
-	if bool(safety.get("require_all_locations", false)):
-		for required_location in ContentDatabase.balance.get("economy", {}).get("location_order", []):
-			if not summary.get("chapters", {}).has(str(required_location)):
-				failures.append("%s was not reached" % str(required_location))
-	if bool(safety.get("require_all_locations_cleared", false)):
-		for required_location in ContentDatabase.balance.get("economy", {}).get("location_order", []):
-			var required_chapter: Dictionary = Dictionary(
-				summary.get("chapters", {}).get(str(required_location), {})
+	if bool(safety.get("require_all_tiers", false)):
+		for required_tier in range(InfrastructureSystem.max_tier() + 1):
+			if not summary.get("tiers", {}).has(str(required_tier)):
+				failures.append("tier %d was not reached" % required_tier)
+	if bool(safety.get("require_all_tiers_cleared", false)):
+		for required_tier in range(InfrastructureSystem.max_tier() + 1):
+			var required_tier_summary: Dictionary = Dictionary(
+				summary.get("tiers", {}).get(str(required_tier), {})
 			)
-			if int(required_chapter.get("wins", 0)) < int(required_chapter.get("attempts", 0)):
-				failures.append("%s was not cleared in every campaign" % str(required_location))
+			if int(required_tier_summary.get("wins", 0)) < int(required_tier_summary.get("attempts", 0)):
+				failures.append("tier %d was not cleared in every campaign" % required_tier)
 	if bool(safety.get("require_no_stuck_runs", false)) and int(summary.get("stuck_count", 0)) > 0:
 		failures.append("campaign has stuck runs")
 	if bool(safety.get("require_no_invalid_numbers", false)) and int(
@@ -399,24 +412,24 @@ func _evaluate_campaign_acceptance(summary: Dictionary) -> void:
 	if bool(safety.get("require_no_safe_policy_fires", false)) and int(summary.get("fires", 0)) > 0:
 		failures.append("safe builder policy caused hardware fires")
 	var minimum_round: int = int(safety.get("minimum_victory_round", 1))
-	for location in summary.get("chapters", {}).keys():
-		var chapter: Dictionary = summary["chapters"][location]
-		if chapter.get("burns_per_job", []).size() >= minimum_job_samples and float(
-			chapter.get("one_burn_job_rate", 0.0)
+	for tier_key in summary.get("tiers", {}).keys():
+		var tier_summary: Dictionary = summary["tiers"][tier_key]
+		if tier_summary.get("burns_per_job", []).size() >= minimum_job_samples and float(
+			tier_summary.get("one_burn_job_rate", 0.0)
 		) > one_burn_cap:
-			failures.append("%s matched one-burn rate exceeds %.0f%%" % [
-				str(location), one_burn_cap * 100.0,
+			failures.append("tier %s matched one-burn rate exceeds %.0f%%" % [
+				str(tier_key), one_burn_cap * 100.0,
 			])
-		for victory_round in chapter.get("victory_rounds", []):
+		for victory_round in tier_summary.get("victory_rounds", []):
 			if int(victory_round) < minimum_round:
-				failures.append("%s cleared before round %d" % [str(location), minimum_round])
-		if chapter_band.size() >= 2 and int(chapter.get("attempts", 0)) >= minimum_campaign_runs:
-			var median_round: float = float(chapter.get("median_victory_round", 0.0))
+				failures.append("tier %s cleared before round %d" % [str(tier_key), minimum_round])
+		if target_band.size() >= 2 and int(tier_summary.get("attempts", 0)) >= minimum_campaign_runs:
+			var median_round: float = float(tier_summary.get("median_victory_round", 0.0))
 			if median_round <= 0.0:
-				failures.append("%s was not cleared" % str(location))
-			elif median_round < float(chapter_band[0]) or median_round > float(chapter_band[1]):
-				failures.append("%s median victory round %.1f is outside %d-%d" % [
-					str(location), median_round, int(chapter_band[0]), int(chapter_band[1]),
+				failures.append("tier %s was not cleared" % str(tier_key))
+			elif median_round < float(target_band[0]) or median_round > float(target_band[1]):
+				failures.append("tier %s median victory round %.1f is outside %d-%d" % [
+					str(tier_key), median_round, int(target_band[0]), int(target_band[1]),
 				])
 	summary["acceptance_failures"] = failures
 	summary["accepted"] = failures.is_empty()
@@ -554,7 +567,7 @@ func _work_round(sim: Node, policy: String) -> void:
 				continue
 		var job_meta: Dictionary = {}
 		var current_matched_tier: int = maxi(
-			JobSystem.location_tier(sim.run_state, ContentDatabase),
+			JobSystem.scale_tier(sim.run_state, ContentDatabase),
 			JobSystem.rig_work_tier(sim.run_state, ContentDatabase)
 		)
 		for job in sim.run_state.business.get("active_jobs", []):
@@ -650,7 +663,9 @@ func _builder_take_contracts(sim: Node, offers: Array) -> void:
 
 ## Buys the way a player does: cooling before the machine that needs it, space
 ## before the machine that will not fit, and never everything at once. Also
-## picks up at most one affordable, tag-relevant Market module per round.
+## picks up at most one affordable, tag-relevant Market module per round, and
+## the next Infrastructure Tier when the budget reaches it — the scale is
+## bought, not granted, so the sweep has to buy it too.
 func _builder_shop(sim: Node) -> void:
 	if not sim.market_open():
 		return
@@ -661,6 +676,11 @@ func _builder_shop(sim: Node) -> void:
 	# the purchase itself adds.
 	var reserve: float = float(sim.cost_forecast().get("fixed_due", 0.0)) * 2.0
 	var budget: float = maxf(0.0, float(sim.run_state.economy.get("cash", 0.0)) - reserve) * 0.5
+	var infrastructure: Dictionary = InfrastructureSystem.can_upgrade(sim.run_state)
+	var infrastructure_cost: float = float(infrastructure.get("cost", -1.0))
+	if bool(infrastructure.get("ok", false)) and infrastructure_cost <= budget:
+		if bool(sim.purchase_infrastructure().get("ok", false)):
+			budget -= infrastructure_cost
 	for system_id in ["cooling", "compute", "power", "backplane", "control"]:
 		var info: Dictionary = CabinetSystems.can_upgrade(sim.run_state, system_id)
 		var cost: float = float(info.get("cost", -1.0))
@@ -795,7 +815,7 @@ func _median(values: Array) -> float:
 
 
 ## Headless balance guidance: first module-market reroll should land around a
-## modest share of a normal contract reward at the bedroom tier.
+## modest share of a normal contract reward at tier 0.
 static func module_reroll_cost_ratio(sim: Node) -> float:
 	var contract_reward: float = maxf(1.0, float(sim.run_state.economy.get("round_rent", 400.0)) * 4.0)
 	return sim.module_market_reroll_cost() / contract_reward

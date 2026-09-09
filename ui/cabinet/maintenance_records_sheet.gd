@@ -1,12 +1,11 @@
 class_name MaintenanceRecordsSheet
 extends ConsoleOverlay
 
-## The records, on a CRT sheet over the maintenance view: the career figures
-## and completion the old Legacy venue printed, then the trophy cabinet — every
-## award, earned or not, with what it hands over. Read-only: the same
-## MetaProgress calls `venue_legacy` and `venue_achievements` make, on one
-## scrolling sheet, with nothing to press but the award rows (which print the
-## award's detail under the list).
+## The records, on a CRT sheet over the maintenance view: the career figures,
+## the player's records and the Permanent Unlocks completion, then the trophy
+## cabinet — every award, earned or not, with what it hands over. Read-only:
+## MetaProgress reads on one scrolling sheet, with nothing to press but the
+## award rows (which print the award's detail under the list).
 
 const REDACTED_NAME := "[ REDACTED ]"
 const REDACTED_HINT := "A secret award. Whatever it is, it is not something you can plan for."
@@ -36,7 +35,7 @@ func _ready() -> void:
 	_column.add_theme_constant_override("separation", 6)
 	_scroll.add_child(_column)
 
-	_column.add_child(_heading("THE LEGACY"))
+	_column.add_child(_heading("PERMANENT UNLOCKS"))
 	_records = VBoxContainer.new()
 	_records.add_theme_constant_override("separation", 1)
 	_column.add_child(_records)
@@ -83,20 +82,28 @@ func _fill(host: VBoxContainer, rows: Array, font: int) -> void:
 			host.add_child(line)
 
 
-## The career figures, as the Legacy venue printed them.
+## The career figures and the player's records.
 func _record_rows() -> Array:
 	var best: Dictionary = MetaProgress.best_scores()
+	var records: Dictionary = MetaProgress.records()
 	var rows: Array = [
+		{"stat": "Games completed", "value": str(int(records.get("games_completed", 0)))},
 		{"stat": "Best burned", "value": NumberFormat.format_tokens(float(best.get("total_tokens_burned", 0.0)))},
-		{"stat": "Best prompt", "value": NumberFormat.format_tokens(float(best.get("peak_prompt_tokens", 0.0)))},
+		{"stat": "Biggest batch", "value": NumberFormat.format_tokens(float(records.get("highest_single_batch", 0.0)))},
 		{"stat": "Best throughput", "value": NumberFormat.format_token_rate(float(best.get("peak_token_rate", 0.0)))},
-		{"stat": "Ascensions", "value": str(_total_ascensions())},
+		{"stat": "Richest run", "value": NumberFormat.format_cash(float(records.get("highest_profit", 0.0)))},
+		{"stat": "Deepest burn", "value": "DEPTH %d" % int(records.get("highest_depth", 0))},
+		{"stat": "Best multiplier", "value": "x%.2f" % float(records.get("highest_multiplier", 1.0))},
+		{"stat": "Targets met", "value": str(_total_ascensions())},
 		{"stat": "Pending picks", "value": str(MetaProgress.pending_picks())},
 		{"stat": "Won on normal", "value": str(MetaProgress.victories_on("normal"))},
 		{"stat": "Won on hard", "value": str(MetaProgress.victories_on("hard"))},
 	]
+	var fastest: int = int(records.get("fastest_completion_rounds", 0))
+	if fastest > 0:
+		rows.append({"stat": "Fastest completion", "value": "%d ROUNDS" % fastest})
 	if MetaProgress.retirements() > 0:
-		rows.append({"stat": "Retired (legacy)", "value": str(MetaProgress.retirements())})
+		rows.append({"stat": "Retired (old calendar)", "value": str(MetaProgress.retirements())})
 	var age: Dictionary = Ages.get_age(MetaProgress.age())
 	rows.append({"stat": "Age", "value": str(age.get("name", "Bedroom Age")).to_upper()})
 	return rows
@@ -104,7 +111,7 @@ func _record_rows() -> Array:
 
 func _total_ascensions() -> int:
 	var total: int = 0
-	for contract in ContentDatabase.ascension_contracts:
+	for contract in ContentDatabase.investor_targets:
 		total += MetaProgress.ascension_completions(str(contract.get("id", "")))
 	return total
 
@@ -114,13 +121,13 @@ func _completion_rows() -> Array:
 	var achievements: Dictionary = Dictionary(summary.get("achievements", {}))
 	var perks: Dictionary = Dictionary(summary.get("perks", {}))
 	var modules: Dictionary = Dictionary(summary.get("modules", {}))
-	var legacy: Dictionary = Dictionary(summary.get("legacy", {}))
+	var permanent: Dictionary = Dictionary(summary.get("permanent_unlocks", {}))
 	var rows: Array = [
 		{"stat": "Overall", "value": "%.0f%%" % float(summary.get("percent", 0.0))},
 		{"stat": "Awards", "value": _fraction(achievements, "earned", "total")},
 		{"stat": "Perks", "value": _fraction(perks, "unlocked", "total")},
 		{"stat": "Modules", "value": _fraction(modules, "unlocked", "total")},
-		{"stat": "Legacy ranks", "value": _fraction(legacy, "ranks_owned", "total_ranks")},
+		{"stat": "Permanent Unlock ranks", "value": _fraction(permanent, "ranks_owned", "total_ranks")},
 	]
 	if bool(summary.get("overall_complete", false)):
 		rows.append({"stat": "Status", "value": "COMPLETE"})

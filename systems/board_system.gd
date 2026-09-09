@@ -35,7 +35,7 @@ const EVENT_BATCH_FINISHED := "board.batch_finished"
 ## Capacity has two numbers. *Safe capacity* is the Workflow Backplane's bays
 ## and nothing else — the one figure the Market row, the dock and the burn all
 ## agree on. *Overflow allowance* is how many stages the player may bolt on
-## past that: the chapter's base allowance plus meta unlocks, perks and
+## past that: the Infrastructure Tier's base allowance plus meta unlocks, perks and
 ## upgrades. Overflow stages still resolve, but they are unstable, and every
 ## one of them is added deliberately with + STAGE rather than appearing when a
 ## number changes.
@@ -47,8 +47,8 @@ const MAX_PIPELINE_STAGES := 24
 ## stage of overflow allowance in every future run.
 const MAX_META_OVERFLOW_BONUS := 5
 
-## A run opens with one workflow. Capacity is earned: a Market upgrade, a perk,
-## and the Simulation ascension ending each hand over another one.
+## A run opens with one workflow. Capacity is earned: a Market upgrade and a
+## perk each hand over another one.
 const DEFAULT_WORKFLOW_CAPACITY := 1
 const MAX_WORKFLOW_COUNT := 4
 
@@ -301,23 +301,22 @@ func derived_supported_capacity(run_state: RunState, content_db: Node) -> int:
 		if FeatureFlags.is_enabled("workflow_overflow_enabled")
 		else MAX_SLOT_COUNT
 	)
-	return clampi(location_supported_capacity(run_state, content_db), 1, ceiling)
+	return clampi(infrastructure_supported_capacity(run_state, content_db), 1, ceiling)
 
 
 ## The bays the run's backplane tier gives it. With overflow switched off the
 ## board stays at the fixed default it has always had.
-static func location_supported_capacity(run_state: RunState, content_db: Node = null) -> int:
+static func infrastructure_supported_capacity(run_state: RunState, content_db: Node = null) -> int:
 	if content_db == null or not FeatureFlags.is_enabled("workflow_overflow_enabled"):
 		return DEFAULT_SLOT_COUNT
 	return maxi(1, int(CabinetSystems.capacity(run_state, "backplane", "bays", content_db)))
 
 
-## Overflow allowance the chapter itself grants before any bonus: nothing below
-## the office, a few stages from there up.
-static func location_overflow_allowance(run_state: RunState, content_db: Node = null) -> int:
+## Overflow allowance the Infrastructure Tier itself grants before any bonus:
+## nothing on the first two tiers, a few stages from there up.
+static func infrastructure_overflow_allowance(run_state: RunState, content_db: Node = null) -> int:
 	var db: Node = content_db if content_db != null else ContentDatabase
-	var table: Dictionary = Dictionary(overflow_config(db).get("base_allowance", {}))
-	return maxi(0, int(table.get(str(run_state.build.get("dwelling", "")), 0)))
+	return InfrastructureSystem.overflow_allowance(run_state, db)
 
 
 ## Overflow allowance from permanent unlocks ("One More Pipeline Slot" ranks).
@@ -337,15 +336,15 @@ static func upgrade_overflow_bonus(run_state: RunState, content_db: Node) -> int
 	)))
 
 
-## How many stages the pipeline may carry past safe capacity: the chapter's
-## base allowance plus every meta, perk and upgrade bonus. Zero with overflow
+## How many stages the pipeline may carry past safe capacity: the Infrastructure
+## Tier's base allowance plus every meta, perk and upgrade bonus. Zero with overflow
 ## switched off.
 func overflow_allowance(run_state: RunState, content_db: Node = null) -> int:
 	if not FeatureFlags.is_enabled("workflow_overflow_enabled"):
 		return 0
 	var db: Node = content_db if content_db != null else ContentDatabase
 	return (
-		location_overflow_allowance(run_state, db)
+		infrastructure_overflow_allowance(run_state, db)
 		+ meta_overflow_bonus(run_state)
 		+ perk_overflow_bonus(run_state, db)
 		+ upgrade_overflow_bonus(run_state, db)
@@ -369,10 +368,11 @@ func capacity_debug(run_state: RunState, content_db: Node = null) -> Dictionary:
 	var db: Node = content_db if content_db != null else ContentDatabase
 	var tier: int = CabinetSystems.tier(run_state, "backplane", db)
 	return {
-		"dwelling": str(run_state.build.get("dwelling", "")),
+		"room": RoomProgression.room_for(run_state, db),
+		"infrastructure_tier": InfrastructureSystem.tier(run_state, db),
 		"backplane_tier": tier,
 		"backplane_safe_capacity": int(CabinetSystems.tier_value("backplane", "bays", tier, db)),
-		"base_overflow": location_overflow_allowance(run_state, db),
+		"base_overflow": infrastructure_overflow_allowance(run_state, db),
 		"legacy_bonus": meta_overflow_bonus(run_state),
 		"perk_bonus": perk_overflow_bonus(run_state, db),
 		"upgrade_bonus": upgrade_overflow_bonus(run_state, db),
@@ -385,7 +385,7 @@ func capacity_debug(run_state: RunState, content_db: Node = null) -> Dictionary:
 
 ## The workflows the run's Control Rack tier gives it before perks, upgrades
 ## and meta unlocks add theirs.
-static func location_workflow_capacity(run_state: RunState, content_db: Node = null) -> int:
+static func infrastructure_workflow_capacity(run_state: RunState, content_db: Node = null) -> int:
 	return clampi(
 		int(CabinetSystems.capacity(run_state, "control", "workflows", content_db)),
 		DEFAULT_WORKFLOW_CAPACITY,
@@ -400,15 +400,16 @@ static func overflow_config(content_db: Node = null) -> Dictionary:
 	).get("overflow", {})
 
 
-## Overflow opens with the chapter (the office and up), or earlier for a run
-## that has been handed allowance by an unlock, a perk or a monitor — a Second
-## Monitor bought in the bedroom would otherwise do nothing until the office.
+## Overflow opens with the Infrastructure Tier (the server room and up), or
+## earlier for a run that has been handed allowance by an unlock, a perk or a
+## monitor — a Second Monitor bought on the starting rig would otherwise do
+## nothing until then.
 func overflow_unlocked(run_state: RunState, content_db: Node = null) -> bool:
 	if not FeatureFlags.is_enabled("workflow_overflow_enabled"):
 		return false
 	var db: Node = content_db if content_db != null else ContentDatabase
-	var unlock_at: int = int(overflow_config(db).get("unlock_location_index", 2))
-	if JobSystem.location_tier(run_state, db) >= unlock_at:
+	var unlock_at: int = int(overflow_config(db).get("unlock_infrastructure_tier", 2))
+	if InfrastructureSystem.tier(run_state, db) >= unlock_at:
 		return true
 	return overflow_allowance(run_state, db) > 0
 
@@ -453,7 +454,7 @@ func derived_workflow_capacity(run_state: RunState, content_db: Node) -> int:
 		run_state, content_db, "build.workflow_capacity"
 	))
 	return clampi(
-		location_workflow_capacity(run_state, content_db) + meta_bonus + perk_bonus + upgrade_bonus,
+		infrastructure_workflow_capacity(run_state, content_db) + meta_bonus + perk_bonus + upgrade_bonus,
 		1,
 		MAX_WORKFLOW_COUNT
 	)
@@ -480,7 +481,7 @@ func _migrate_legacy_board_bonuses(run_state: RunState, content_db: Node) -> voi
 		))
 		run_state.build["meta_workflow_bonus"] = maxi(
 			0,
-			stored_capacity - location_workflow_capacity(run_state, content_db) \
+			stored_capacity - infrastructure_workflow_capacity(run_state, content_db) \
 				- perk_capacity_bonus - upgrade_capacity_bonus
 		)
 

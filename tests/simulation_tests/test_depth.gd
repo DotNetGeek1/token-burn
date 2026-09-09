@@ -1,13 +1,14 @@
 extends TestCase
 
-## Wave 4.B: beating the moon unlocks a voluntary Deep Burn ladder. No new room.
+## Deep Burn: completing the game opens a voluntary, endless affix ladder. No
+## new room — the run simply keeps going.
 
 
 func run() -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
 	_test_reset_clears_depth()
-	_test_only_the_last_chapter_can_begin()
+	_test_only_a_completed_game_can_begin()
 	_test_picking_an_affix_stacks()
 	_test_jobs_grow_by_the_depth_multiplier()
 	_test_scoreboard_names_depth()
@@ -47,7 +48,7 @@ func _test_affixes_author_pressure_multipliers() -> void:
 func _test_affix_pressure_reaches_heat_and_faults() -> void:
 	var depth := DepthSystem.new()
 	var state := RunState.new()
-	state.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(state, InfrastructureSystem.max_tier())
 	assert_eq(HeatSystem.heat_gain_mult(state), 1.0, "No depth, no heat pressure")
 	var cooling := _affix_named("depth.thin_cooling")
 	state.depth["pending_picks"] = [cooling.duplicate(true)]
@@ -63,7 +64,7 @@ func _test_affix_pressure_reaches_heat_and_faults() -> void:
 	state.compute["cooling"] = 0.0
 	state.compute["power_draw"] = 100.0
 	var plain := RunState.new()
-	plain.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(plain, InfrastructureSystem.max_tier())
 	plain.build["hardware"] = ["compute_cluster"]
 	plain.compute["heat_capacity"] = 100.0
 	plain.compute["cooling"] = 0.0
@@ -96,7 +97,7 @@ func _test_affix_pressure_reaches_overflow_instability() -> void:
 	var depth := DepthSystem.new()
 	var board := BoardSystem.new()
 	var state := RunState.new()
-	Simulation.apply_run_location(state, "moon_facility", false)
+	Simulation.apply_infrastructure_tier(state, InfrastructureSystem.tier_for_room("moon_facility"))
 	board.ensure_board(state, ContentDatabase)
 	var safe: int = board.derived_supported_capacity(state, ContentDatabase)
 	var index: int = board.append_overflow_stage(state, ContentDatabase)
@@ -155,20 +156,20 @@ func _test_reset_clears_depth() -> void:
 	assert_eq(state.depth, state._default_depth(), "reset() restores the whole depth dictionary")
 
 
-func _test_only_the_last_chapter_can_begin() -> void:
+func _test_only_a_completed_game_can_begin() -> void:
 	var depth := DepthSystem.new()
-	var bedroom := RunState.new()
-	bedroom.build["dwelling"] = "bedroom"
-	assert_false(depth.can_begin(bedroom), "The bedroom cannot open Deep Burn")
-	var moon := RunState.new()
-	moon.build["dwelling"] = "moon_facility"
-	assert_true(depth.can_begin(moon), "The moon can")
+	var mid_run := RunState.new()
+	InfrastructureSystem.set_tier(mid_run, InfrastructureSystem.max_tier())
+	assert_false(depth.can_begin(mid_run), "No room opens Deep Burn; only completing the game does")
+	var completed := RunState.new()
+	completed.flags["game_completed"] = true
+	assert_true(depth.can_begin(completed), "A completed game can")
 
 
 func _test_picking_an_affix_stacks() -> void:
 	var depth := DepthSystem.new()
 	var state := RunState.new()
-	state.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(state, InfrastructureSystem.max_tier())
 	var picks: Array = depth.offer_picks(state, DeterministicRng.new(9701), ContentDatabase)
 	assert_eq(picks.size(), 3, "Deep Burn offers three affixes")
 	var first_id: String = str(Dictionary(picks[0]).get("id", ""))
@@ -266,7 +267,7 @@ func _test_depth_one_completes_into_depth_two() -> void:
 func _test_choose_affix_refuses_ids_that_were_not_offered() -> void:
 	var depth := DepthSystem.new()
 	var state := RunState.new()
-	state.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(state, InfrastructureSystem.max_tier())
 	depth.offer_picks(state, DeterministicRng.new(9704), ContentDatabase)
 	assert_false(
 		depth.choose_affix(state, "depth.not_a_real_affix", ContentDatabase),
@@ -277,7 +278,7 @@ func _test_choose_affix_refuses_ids_that_were_not_offered() -> void:
 func _test_affixes_stack_when_authored_repeatable() -> void:
 	var depth := DepthSystem.new()
 	var state := RunState.new()
-	state.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(state, InfrastructureSystem.max_tier())
 	var cooling := _affix_named("depth.thin_cooling")
 	assert_false(cooling.is_empty(), "Thin Cooling is authored")
 	assert_true(bool(cooling.get("repeatable", false)), "Thin Cooling is intentionally repeatable")
@@ -298,7 +299,7 @@ func _test_continue_after_depth_resumes_without_victory() -> void:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(9705)
-	sim.run_state.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(sim.run_state, InfrastructureSystem.max_tier())
 	sim.run_state.flags["post_victory"] = true
 	sim.run_state.flags["post_victory_phase"] = "ROUND_PREP"
 	sim.run_state.flags["outcome"] = "depth_complete"
@@ -306,7 +307,7 @@ func _test_continue_after_depth_resumes_without_victory() -> void:
 	sim.run_state.depth["level"] = 1
 	sim.run_state.depth["status"] = DepthSystem.STATUS_COMPLETE
 	sim.phase = sim.Phase.RUN_END
-	assert_true(sim.continue_after_depth(), "A completed depth can resume without a chapter victory")
+	assert_true(sim.continue_after_depth(), "A completed depth can resume without a fresh target victory")
 	assert_eq(sim.phase, sim.Phase.ROUND_PREP, "Play resumes at the remembered boundary")
 	assert_false(bool(sim.run_state.flags.get("depth_complete", true)), "The complete flag is cleared")
 	assert_eq(str(sim.run_state.flags.get("outcome", "x")), "", "The depth-complete outcome is cleared")
@@ -337,7 +338,7 @@ func _test_target_x5_is_unlimited() -> void:
 	assert_eq(int(target.get("max_stacks", -1)), 0, "Zero stacks means the generic escalation never caps")
 	var depth := DepthSystem.new()
 	var state := RunState.new()
-	state.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(state, InfrastructureSystem.max_tier())
 	state.depth["stacks"] = {
 		"depth.target_x5": 20,
 		"depth.thin_cooling": 5,
@@ -368,8 +369,9 @@ func _test_depth_complete_settles_the_active_session() -> void:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(9709)
-	sim.run_state.ascension["status"] = AscensionSystem.STATUS_COMPLETED
+	sim.run_state.investor["status"] = InvestorProgression.STATUS_COMPLETED
 	sim.run_state.flags["post_victory"] = true
+	sim.run_state.flags["game_completed"] = true
 	sim.run_state.economy["cash"] = 1e15
 	var depth: DepthSystem = sim.depth_system()
 	var opening: Array = depth.offer_picks(sim.run_state, DeterministicRng.new(9709), ContentDatabase)
@@ -469,13 +471,13 @@ func _test_depth_score_accrues_at_the_live_multiplier() -> void:
 	var score: Dictionary = RunScore.compute(state, ContentDatabase)
 	assert_almost_eq(
 		float(score.get("depth_score", 0.0)), 7000.0, 0.01,
-		"Campaign tokens burned before Deep Burn are not multiplied in"
+		"Tokens burned before Deep Burn are not multiplied in"
 	)
 
 
 func _moon_at_depth(depth: DepthSystem, seed_value: int) -> RunState:
 	var state := RunState.new()
-	state.build["dwelling"] = "moon_facility"
+	InfrastructureSystem.set_tier(state, InfrastructureSystem.max_tier())
 	var picks: Array = depth.offer_picks(state, DeterministicRng.new(seed_value), ContentDatabase)
 	var first_id: String = str(Dictionary(picks[0]).get("id", ""))
 	depth.choose_affix(state, first_id, ContentDatabase)

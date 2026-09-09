@@ -137,26 +137,53 @@ Market purchase.
 
 `content/upgrades/cabinet_systems.json` (loaded and validated by
 `ContentDatabase`) declares the five systems with `tier_names`, `tier_values`
-per stat, per-tier `cost`, the `generation_thresholds`, the
-`migration_from_dwelling` table and `chapter_max_tier`.
+per stat, per-tier `cost` and the `generation_thresholds`.
 `systems/cabinet_systems.gd` is the only place a tier becomes a number:
 
 - `BoardSystem` reads `backplane.bays` and `control.workflows`.
 - `UpgradeSystem.hardware_slots_total` reads `power.hardware_slots`;
-  `location_cooling` reads `cooling.cooling_capacity`; `heat_capacity` is
+  `infrastructure_cooling` reads `cooling.cooling_capacity`; `heat_capacity` is
   written from `cooling.heat_capacity`.
 - `ComputeSystem` adds `compute.base_token_rate` to the hardware curves.
 - `UpgradeSystem.upgrade_cabinet_system()` charges cash, raises the tier and
   returns the before/after delta for the reveal.
 
-`content/balance/dwelling_costs.json` is the chapter table. `RunLifecycle.apply_run_location`
-reads `rent`, `starting_cash`, `starting_hardware` and the chapter key itself
-(`build.dwelling`) from it. Its `hardware_slots`, `cooling_capacity` and
-`heat_capacity` columns survive as a per-chapter **floor** under the tier table
-(`CabinetSystems.chapter_floor`): the tier is the primary source of every
-capacity, but the three late chapters (Datacentre, Grid, Moon) out-size tier 4
-(40/80/160 slots against 16; 5,280/36,000/216,000 cooling against 1,248), and
-the floor is what keeps their numbers. Capacities never decrease on migration.
+### Progression and infrastructure
+
+Three systems own progression, and none of them reads a room key:
+
+- **`InvestorProgression`** (`systems/investor_progression.gd`,
+  `content/investor/targets.json`) is the only gameplay progression
+  authority. `run_state.investor.level` is the Investor Level (1..7); the
+  target for the level is live from its `activated_round` and has to be met
+  by `deadline_round` on the run's continuous calendar. Meeting it advances
+  the level exactly once, deals the perk draft (`flags.draft_kind`), and
+  `Simulation.continue_after_target()` activates the next target on the same
+  calendar. The target marked `final` (level 7, The Final Prompt) is the win;
+  `continue_after_victory()` hands the run to `DepthSystem` (Deep Burn, the
+  endless mode) with targets generated from `balance.investor_targets` curves.
+- **Run Perks** (`systems/perk_system.gd`) live in `build.perks` for the rest
+  of the run, through level-ups, Infrastructure purchases and the win, and
+  are dropped by `start_run`. They never write to `MetaProgress`.
+- **Permanent Unlocks** (`core/meta_progress.gd`, `content/meta/unlocks.json`)
+  are cross-run: only `bank_victory` on the final target banks picks, spent
+  in the debrief and applied to every later run by `apply_to_run`.
+- **`InfrastructureSystem`** (`systems/infrastructure_system.gd`,
+  `content/upgrades/infrastructure.json`) is the machine's scale, bought in
+  the Market's INFRASTRUCTURE row as `build.infrastructure_tier` 0..6. Each
+  tier carries the cabinet scale `profile`, `cabinet_max_tier`,
+  `cabinet_entry_tiers`, the permanent capacity `floors`
+  (`CabinetSystems.infrastructure_floor`), `overflow_allowance` and the
+  `facility_cost` rent is set from (`facility_cost × rent_multiplier`).
+  Buying a tier emits an `infrastructure` event and changes nothing in
+  `run_state.investor`, `build.perks` or `calendar`.
+- **`RoomProgression.room_for(run_state)`** derives the room (Bedroom …
+  Moon Facility) from the Infrastructure Tier for `AssetCatalog` art and the
+  investor's "new premises" call. The room is presentation only.
+
+Cabinet systems sit on top: the tier is the primary source of every
+capacity, floored by the Infrastructure Tier's `floors` so a large scale never
+loses its numbers to a low cabinet tier. Capacities never decrease on migration.
 Backplane bays are the exception: the safe pipeline capacity is the tier's bay
 count and nothing else. Meta ranks, Wide Bus and monitor/desk upgrades only
 widen the **overflow allowance** (`BoardSystem.overflow_allowance`,
@@ -184,13 +211,19 @@ RunState
 │   └── heat
 ├── business
 │   ├── reputation
-│   └── active_jobs
+│   ├── active_jobs
+│   └── module_market     shelf + `stamp` (tier/round the shelf was drawn for)
+├── investor
+│   ├── level             Investor Level 1..7 — the progression authority
+│   ├── contract_id       the live target
+│   ├── activated_round / deadline_round   on the continuous calendar
+│   └── tokens_burned, quality_*, targets_completed, ...
 ├── build
-│   ├── perks
+│   ├── perks             Run Perks, permanent for the run
 │   ├── hardware
 │   ├── upgrades
+│   ├── infrastructure_tier   0..6, the machine's scale (room is derived)
 │   ├── cabinet_systems   {compute, cooling, power, backplane, control} tiers 1–4
-│   ├── dwelling          the campaign chapter the run is staked in
 │   └── status_effects
 └── statistics
     ├── lifetime_tokens
@@ -200,14 +233,25 @@ RunState
 
 ### Save versions
 
-`RunState.SAVE_VERSION` is 25. `_migrate_to_v23` derives
-`build.cabinet_systems` from the save's `build.dwelling` through the
-`migration_from_dwelling` table, clamps every tier to the tier range, and
-never loses capacity: a tier is raised until it covers the bays, workflows and
-floor the save was demonstrably using. The dwelling key is kept in
-`build.migration_debug` for one version. Fixtures for all seven chapters live
-in `tests/fixtures/saves/dwelling_<key>.json` and are replayed by
+`RunState.SAVE_VERSION` is 26 and `MetaProgress.PROFILE_VERSION` is 8.
+
+`_migrate_to_v23` derives `build.cabinet_systems` from the save's legacy room
+key through `CabinetSystems._legacy_tiers_for_room` (the Infrastructure
+Tier's `cabinet_entry_tiers`), clamps every tier to the tier range, and never
+loses capacity: a tier is raised until it covers the bays, workflows and floor
+the save was demonstrably using. Fixtures for all seven rooms live in
+`tests/fixtures/saves/dwelling_<key>.json` and are replayed by
 `test_save_migration_fixtures.gd`.
+
+`_migrate_to_v26` retires rooms and Ascension Contracts as progression: the
+old `ascension` section is read as `investor`, the Investor Level is derived
+from the contract id (`RunState.LEGACY_CONTRACT_LEVELS`), the Infrastructure
+Tier from the room's index (`RunState.LEGACY_ROOM_ORDER`), the campaign flags
+(`location_completed`, `next_location`, `ascension_tier`) are dropped for
+`target_complete` / `game_completed`, the module shelf's stamp is reset, and
+`build.dwelling` is erased — the room is presentation read off the tier from
+here on. Profile v8 drops the campaign `locations` block and adds the player's
+records (deepest Deep Burn, biggest batch, richest run, fastest completion).
 
 The v25 migration covers the backplane-authoritative capacity and permanent
 perk changes together: `board.meta_slot_bonus` is renamed to
@@ -411,7 +455,7 @@ balance/
 ├── economy.json
 ├── job_scaling.json
 ├── rarity_weights.json
-├── dwelling_costs.json        # per chapter: rent, starting_cash, starting_hardware
+├── investor_targets.json      # generated-target curves past the authored ladder
 ├── hardware_curves.json
 └── difficulty_profiles.json
 ```

@@ -2,7 +2,7 @@ class_name TabPerks
 extends CabinetTab
 
 ## The perk rack on the glass: every perk the run owns and the combos they are
-## producing. Perks are permanent — the investor deals one per chapter and it
+## producing. Perks are permanent — the investor deals one per target and it
 ## stays fitted for the rest of the run — so this tab is a read-only reference
 ## and the big red button has nothing to commit while it is up.
 
@@ -165,7 +165,7 @@ func _refresh_detail() -> void:
 		_title.text = "—"
 		_kicker.text = ""
 		detail_rows(_rows, [{
-			"text": "Perks are dealt by the investor when a chapter's goal is met. Each one is permanent: it stays fitted for the rest of the run.",
+			"text": "Perks are dealt by the investor when a target is met. Each one is permanent: it stays fitted for the rest of the run.",
 		}])
 	else:
 		_title.text = perk.name.to_upper()

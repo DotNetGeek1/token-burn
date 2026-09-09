@@ -163,11 +163,11 @@ func _test_curve_stays_in_scale() -> void:
 	sim.start_run(912)
 	sim.run_state.economy["cash"] = 500000.0
 	for system_id in CabinetSystems.system_ids():
-		CabinetSystems.set_tier(sim.run_state, str(system_id), CabinetSystems.max_tier_for_chapter(sim.run_state))
+		CabinetSystems.set_tier(sim.run_state, str(system_id), CabinetSystems.max_tier_for_infrastructure(sim.run_state))
 	sim.compute_system().recalculate(sim.run_state, sim.effect_resolver, [], sim.rng)
 	var sustained: float = float(sim.run_state.compute.get("token_rate", 0.0))
-	var tier: int = JobSystem.location_tier(sim.run_state, ContentDatabase)
-	var band: Dictionary = Dictionary(JobSystem.location_bands(ContentDatabase)[tier])
+	var tier: int = JobSystem.scale_tier(sim.run_state, ContentDatabase)
+	var band: Dictionary = Dictionary(JobSystem.scale_bands(ContentDatabase)[tier])
 	var expected: float = float(band.get("expected_token_rate", 0.0))
 	assert_true(
 		sustained >= expected,
@@ -178,7 +178,7 @@ func _test_curve_stays_in_scale() -> void:
 	)
 	# Contracts are sized against the bands, so a shopping trip that runs past
 	# the last rung of the ladder is a rig the game has no work left to give.
-	var bands: Array = JobSystem.location_bands(ContentDatabase)
+	var bands: Array = JobSystem.scale_bands(ContentDatabase)
 	var top: float = float(Dictionary(bands[bands.size() - 1]).get("expected_token_rate", 0.0))
 	assert_true(
 		sustained <= top,

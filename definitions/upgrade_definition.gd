@@ -21,9 +21,10 @@ extends Resource
 ## that needs floor space asks for a power tier; a plant that needs headroom
 ## asks for a cooling tier.
 @export var requires_system: Dictionary = {}
-## Chapter the campaign must have reached (a `dwelling_costs` key). Gates that
-## are about the campaign rather than about a capacity live here.
-@export var requires_chapter: String = ""
+## Infrastructure Tier the run must have bought (0..6, see InfrastructureSystem).
+## Gates that are about the machine's scale rather than a single cabinet
+## capacity live here. 0 means no gate.
+@export var requires_infrastructure: int = 0
 ## Upgrade that must already be owned. Cloud stock hangs off the cloud account.
 @export var requires_upgrade: String = ""
 @export var repeatable: bool = false
@@ -45,7 +46,7 @@ func to_dict() -> Dictionary:
 		"component_key": component_key,
 		"requires_hardware": requires_hardware,
 		"requires_system": requires_system.duplicate(),
-		"requires_chapter": requires_chapter,
+		"requires_infrastructure": requires_infrastructure,
 		"requires_upgrade": requires_upgrade,
 		"repeatable": repeatable,
 		"cost_growth": cost_growth,

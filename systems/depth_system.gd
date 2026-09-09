@@ -1,8 +1,10 @@
 class_name DepthSystem
 extends RefCounted
 
-## Post-Moon score-attack ladder. Beating the last authored chapter unlocks
-## voluntary depths: harder work and stacked affixes in exchange for score.
+## Deep Burn: the endless score-attack ladder past the end of the game.
+## Completing the final Investor Target unlocks voluntary depths — harder work
+## and stacked affixes in exchange for score — and the run carries on for as
+## long as the company survives.
 
 const STATUS_NONE := ""
 const STATUS_ACTIVE := "active"
@@ -39,7 +41,7 @@ static func growth_for(level: int, content_db: Node) -> float:
 
 
 ## Score is earned as tokens land, at the multiplier that was live then.
-## A later Depth 8 stack must not retrospectively multiply the campaign or
+## A later Depth 8 stack must not retrospectively multiply the main game or
 ## Depth 1.
 static func record_tokens(run_state: RunState, tokens: float) -> void:
 	if not is_active(run_state):
@@ -78,7 +80,7 @@ static func is_complete(run_state: RunState) -> bool:
 func can_begin(run_state: RunState) -> bool:
 	if not FeatureFlags.is_enabled("depth_ladder_enabled"):
 		return false
-	return MetaProgress.next_location_after(str(run_state.build.get("dwelling", ""))) == ""
+	return bool(run_state.flags.get("game_completed", false))
 
 
 func progress(run_state: RunState) -> Dictionary:
@@ -176,12 +178,8 @@ func choose_affix(
 	) * float(chosen.get("requirement_mult", 1.0))
 	run_state.depth["pending_picks"] = []
 	run_state.depth["baseline_tokens"] = float(run_state.statistics.get("lifetime_tokens", 0.0))
-	var moon: Dictionary = {}
-	for contract in content_db.ascension_contracts:
-		if str(contract.get("location", "")) == "moon_facility":
-			moon = contract
-			break
-	var base_need: float = float(moon.get("total_burn", 25000000000000.0))
+	var final_target: Dictionary = InvestorProgression.final_target(content_db)
+	var base_need: float = float(final_target.get("total_burn", 25000000000000.0))
 	run_state.depth["tokens_needed"] = base_need * float(run_state.depth["requirement_mult"])
 	run_state.statistics["depth_reached"] = maxi(
 		int(run_state.statistics.get("depth_reached", 0)), next_level

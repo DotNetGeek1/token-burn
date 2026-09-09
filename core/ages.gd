@@ -1,8 +1,8 @@
 class_name Ages
 extends RefCounted
 
-## Compute Ages: the run-to-run progression layer above individual Ascension
-## Contracts. Completing a Tier 3 contract that unlocks the next age is what
+## Compute Ages: the run-to-run progression layer above individual Investor
+## Targets. Completing a tier 3 target that unlocks the next age is what
 ## actually advances it; everything here is just the read side.
 
 const PATH := "res://content/meta/ages.json"

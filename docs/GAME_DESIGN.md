@@ -16,8 +16,8 @@ Everything happens on one machine: the **Burn Cabinet**. Contracts, modules, the
 4. Resolve complications such as bugs, scope creep, outages, and revisions.
 5. Get paid and gain reputation.
 6. Pay rent, electricity, debt, and other overhead.
-7. Buy modules, hardware and cabinet system tiers in the Market and route contracts through trained workflows. Perks are permanent and are only dealt once per chapter goal: meeting the investor's contract offers a table of perks (take one or decline) before the company can move on.
-8. Repeat until the run is won or collapses.
+7. Buy modules, hardware, Infrastructure Tiers and cabinet system tiers in the Market and route contracts through trained workflows. Perks are permanent for the run and are only dealt once per Investor Target: meeting the investor's figure offers a table of perks (take one or decline) before the company can move on.
+8. Repeat until the final Investor Target is met (the win) or the company collapses.
 
 ## 3. Primary resources
 
@@ -30,7 +30,7 @@ Everything happens on one machine: the **Burn Cabinet**. Contracts, modules, the
 - **Power:** Determines operating cost and hardware constraints.
 - **Space:** Limits hardware, cooling, and staff capacity. Floor slots come from the cabinet's Power Bus tier.
 - **Job slots:** How many contracts the installed machines can take at once.
-- **Reputation:** Opens stretch contracts on the band above the current chapter.
+- **Reputation:** Opens stretch contracts on the band above the current Infrastructure Tier.
 - **Workflow mastery:** Each named pipeline trains run-long OUTPUT, QUALITY, and THERMAL multipliers. Hardware sets the raw token rate; the workflow decides how obscene that output becomes.
 
 Mastery is scored once, the first time a contract's remaining tokens hit zero. Clean and cool are the whole contract's history: bugs created on any burn, and peak heat across every burn. Shipping or polishing after that cannot train the same contract again.
@@ -89,8 +89,8 @@ Players may eventually bid on contracts, trading a higher chance of winning work
 
 Hardware increases local throughput but raises power, heat, maintenance, and space requirements.
 
-Early desktops still cap at four copies so the first two chapters teach floor
-space. From GPU Rack onward the shop does not invent a MAX_LEVEL: money, floor
+Early desktops still cap at four copies so the first two Infrastructure Tiers
+teach floor space. From GPU Rack onward the shop does not invent a MAX_LEVEL: money, floor
 slots, electricity, cooling and instability are the limits. A bigger Power Bus
 can hold more of the same machine and run more contracts in parallel. When a
 rig reaches the next compute era, the board keeps one familiar local posting
@@ -115,7 +115,7 @@ the same mount (`content/upgrades/cabinet_systems.json`):
 Rules:
 
 - A tier is only ever bought upward. Nothing sells a system back down and no
-  chapter change lowers a tier.
+  Infrastructure purchase lowers a tier.
 - Perk, module, upgrade and meta bonuses stay additive on top of the tier
   value. The tier is the baseline, not the ceiling. The Workflow Backplane
   is the one exception: its bay count *is* the safe pipeline capacity, and
@@ -129,31 +129,42 @@ Rules:
   Maintenance view, the old part flickers out, the new part seats, and the
   stat delta is printed. It is skippable and crossfades under reduced motion.
 
-### Campaign chapters
+### Infrastructure Tier
 
-The seven chapters — Bedroom, Garage, Office Unit, Warehouse, Data Centre
-Campus, Private Power Grid, Moon Facility — are where a run is staked, not a
-ladder of properties to buy. A run starts in one chapter, beats that chapter's
-ascension contract, and the next chapter unlocks for the next run. Nothing in
-a run buys the next room.
+The machine's scale is bought, not awarded. The Market's INFRASTRUCTURE row
+sells tiers 0 to 6 upward whenever the run can afford the next one
+(`content/upgrades/infrastructure.json`; tier 0 is free, tier 1 costs $7,500,
+tier 6 $750M). A tier sets, 1:1, what the room of the same index used to
+grant:
 
-A chapter sets:
+- The cabinet **scale profile**: base token rate, power draw, work tier,
+  cooling and heat capacity, and the cost scale the cabinet tier values are
+  multiplied by.
+- The **cabinet tier cap** the Market will sell: tier 0 caps cabinet systems
+  at tier 2, tiers 1–2 at 3, tiers 3+ at 4. A capped row explains itself
+  (`NEEDS INFRASTRUCTURE TIER 3`) rather than disappearing.
+- The **cabinet entry tiers** the scale opens with (a system already bought
+  higher keeps what it had), permanent **capacity floors**, the board's
+  **overflow allowance**, and the **facility cost** the rent is set from.
 
-- **Rent** and the investor's **starting cash**.
-- The **starting hardware** the room comes with, so contracts are sized to a
-  rig the room expects rather than whatever the player happens to own.
-- The **starting system tiers**: a fresh Garage run opens with Garage-grade
-  systems; a run that had already bought higher keeps what it had.
-- The **maximum system tier** the Market will sell: Bedroom and Garage cap at
-  tier 2, Office Unit and Warehouse at tier 3, Data Centre Campus onward at
-  tier 4. A capped row explains itself (`NEXT CHAPTER UNLOCKS TIER 3`)
-  rather than disappearing.
+The room — Bedroom, Garage, Office Unit, Warehouse, Data Centre Campus,
+Private Power Grid, Moon Facility — is presentation for the tier: the art the
+shell is drawn in and the investor's "new premises" call. Nothing in gameplay
+reads a room key for a number.
 
-Cabinet systems are infrastructure. Modules and perks remain the strategic
-build: the systems decide how much of a pipeline the cabinet can hold and how
-hot it may run; the pipeline decides what happens to the tokens.
+Cabinet systems sit on top of the Infrastructure Tier. Modules and perks
+remain the strategic build: the systems decide how much of a pipeline the
+cabinet can hold and how hot it may run; the pipeline decides what happens to
+the tokens.
 
 ## 7. Perks
+
+Perks are **Run Perks**: the investor deals a table of three (four or five
+with Rolodex ranks) each time an Investor Target is met, the player takes one
+or declines, and the pick is permanent for the rest of the run — no bench, no
+swap, no cap. Perks survive level-ups, Infrastructure purchases and the final
+victory (they carry into Deep Burn) and are gone when a new run starts. They
+never touch the profile.
 
 Perks should change rules rather than merely increase percentages.
 
@@ -189,9 +200,8 @@ Large numbers should be paired with comic comparisons:
 
 ## 9. Run structure
 
-A strong initial structure is a twelve-month company run.
-
-Each month contains:
+A run is one continuous company on one continuous calendar. Each round
+contains:
 
 - Job selection
 - Production rounds
@@ -200,19 +210,39 @@ Each month contains:
 - Bills
 - Performance review
 
-The final month presents a capstone contract. Winning unlocks a higher compute age and more extreme mechanics.
+### Investor Targets
+
+Progression inside the run is the investor's ladder
+(`content/investor/targets.json`). The run starts at **Investor Level 1** with
+target 1 live from the first prompt; each target names a total burn (plus
+optional quality, heat, catastrophe and profit conditions) and a deadline of
+twelve rounds counted from the round it went live. Meeting it is a level-up:
+the perk table is dealt, and on Continue the next target activates on the same
+calendar — nothing resets, nothing moves, the terms simply get bigger
+(30M tokens at level 1, 25T at level 7). Missing a deadline ends the run.
+
+Level 7, **The Final Prompt**, is marked `final`: meeting it is the win. The
+run may then Keep Burning into Deep Burn. Ordinary contracts never advance the
+level; only the target does.
+
+### Deep Burn
+
+Deep Burn is the endless mode past the win: voluntary depths that stack
+harder work and affixes in exchange for score, with targets generated from
+the balance curves off the last authored one. The run carries on for as long
+as the company survives; the deepest depth is a profile record.
 
 ### Pacing contract
 
-- A matched ordinary job takes roughly 4-6 burns on chapter entry and 2-3
-  after the chapter's meaningful hardware upgrades.
-- A normal fresh chapter targets 5-8 rounds; established permanent progression
-  targets 4-7 and the supported veteran profile targets 3-6.
+- A matched ordinary job takes roughly 4-6 burns on entering an Infrastructure
+  Tier and 2-3 after that tier's meaningful hardware upgrades.
+- A normal fresh run targets 5-8 rounds per Investor Target; established
+  permanent progression targets 4-7 and the supported veteran profile 3-6.
 - Permanent power may make deliberately older postings trivial, but every board
   must still advertise work that exercises the installed rig.
 - The authoritative thresholds and deterministic profile fixtures live in
   `content/balance/pacing_targets.json`; `tests/run_balance.tscn` plays real
-  chapter transitions and reports pacing, heat, purchases and outcomes.
+  campaigns through every tier and reports pacing, heat, purchases and outcomes.
 
 ## 10. Failure states
 
@@ -234,9 +264,15 @@ loses the run.
 
 ## 11. Meta-progression
 
-Permanent unlocks may include:
+Only completing the game — meeting the final Investor Target — banks
+**Permanent Unlock** picks (`content/meta/unlocks.json`). Targets cleared on
+the way up are level-ups inside the run, not sources of permanent power. A
+pick is spent in the debrief on any area still open (rig, cooling, cash,
+workflows, board width, Rolodex) and applies to every run from then on;
+Run Perks never touch the profile.
 
-- The next campaign chapter, and with it a higher system-tier cap
+Permanent unlocks include:
+
 - New job sectors
 - Starting hardware
 - New perks

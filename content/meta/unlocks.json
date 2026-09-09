@@ -39,7 +39,7 @@
     "id": "unlock.starting_rig",
     "name": "The Rig Comes Home",
     "kind": "starting_hardware",
-    "description": "Every future run inherits more compute capacity in its cabinet. Earned capacity waits until the chapter can safely power and cool it.",
+    "description": "Every future run inherits more compute capacity in its cabinet. Earned capacity waits until the infrastructure can safely power and cool it.",
     "flavour": "The liquidators never checked the storage unit. The storage unit hums.",
     "repeatable": true,
     "ladder": ["upgrade.custom_desktop", "upgrade.gpu_rack", "upgrade.compute_cluster", "upgrade.garage_datacentre", "upgrade.compute_warehouse"]

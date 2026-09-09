@@ -340,7 +340,7 @@ func _sim_office(seed_value: int) -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(seed_value)
-	sim.apply_run_location(sim.run_state, "office_unit")
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room("office_unit"))
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)

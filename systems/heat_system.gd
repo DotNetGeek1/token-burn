@@ -20,8 +20,8 @@ func add_heat(run_state: RunState, amount: float) -> float:
 ## being the only place the ceiling is decided literally true.
 func set_heat(run_state: RunState, value: float) -> float:
 	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
-	# Capped at twice the room's tolerance rather than a fixed number, so a
-	# location with more headroom does not silently lose it to the clamp.
+	# Capped at twice the machine's tolerance rather than a fixed number, so an
+	# Infrastructure Tier with more headroom does not silently lose it to the clamp.
 	run_state.compute["heat"] = clampf(value, 0.0, capacity * 2.0)
 	return float(run_state.compute["heat"])
 

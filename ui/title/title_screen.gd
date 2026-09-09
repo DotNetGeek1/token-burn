@@ -336,7 +336,7 @@ func _entries() -> Array[Dictionary]:
 	if has_save:
 		entries.append({"id": "continue", "label": "CONTINUE", "value": _save_summary()})
 	entries.append({
-		"id": "new_run", "label": "NEW RUN", "value": "Start again from the bedroom",
+		"id": "new_run", "label": "NEW RUN", "value": "Start again from nothing",
 	})
 	entries.append({
 		"id": "sound",
@@ -698,7 +698,7 @@ func _confirm_delete_save() -> void:
 		"Delete your save?",
 		"This cannot be undone",
 		[
-			{"text": "The run in progress is erased. Permanent unlocks in The Legacy are kept."},
+			{"text": "The run in progress is erased. Your Permanent Unlocks are kept."},
 			{"stat": "Progress", "value": _save_summary()},
 		],
 		[],

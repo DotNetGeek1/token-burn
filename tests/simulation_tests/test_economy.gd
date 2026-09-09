@@ -33,6 +33,81 @@ func run() -> void:
 	_test_rent_is_flat_however_long_the_round_runs(economy)
 	_test_power_scales_with_hardware()
 	_test_rent_scales_with_dwelling()
+	_test_investor_pressure_curves(economy)
+
+
+## `investor_targets.rent_mult_by_level` / `reward_mult_by_level` are the
+## investor's pressure on the economy, indexed by Investor Level with the last
+## entry extending. Shipped flat at 1.0 they change nothing; a 2.0 entry
+## doubles the rent billed and the reward a contract is posted at.
+func _test_investor_pressure_curves(economy: EconomySystem) -> void:
+	if ContentDatabase.jobs.is_empty():
+		ContentDatabase.reload()
+	var curves: Dictionary = Dictionary(ContentDatabase.balance.get("investor_targets", {}))
+	var original_rent: Variant = curves.get("rent_mult_by_level", null)
+	var original_reward: Variant = curves.get("reward_mult_by_level", null)
+	var job_system := JobSystem.new()
+	var job_def: JobDefinition = ContentDatabase.get_job("job.product_descriptions")
+	assert_true(job_def != null, "Pressure test job exists")
+
+	# The helper itself: missing curve, clamp below, clamp past the end.
+	curves["rent_mult_by_level"] = [1.0, 2.0, 3.0]
+	assert_eq(InvestorProgression.pressure(ContentDatabase, "no_such_curve", 4), 1.0, "A missing curve is no pressure")
+	assert_eq(InvestorProgression.pressure(ContentDatabase, "rent_mult_by_level", 0), 1.0, "Level 0 clamps to the first entry")
+	assert_eq(InvestorProgression.pressure(ContentDatabase, "rent_mult_by_level", 1), 1.0, "Level 1 reads index 0")
+	assert_eq(InvestorProgression.pressure(ContentDatabase, "rent_mult_by_level", 2), 2.0, "Level 2 reads index 1")
+	assert_eq(InvestorProgression.pressure(ContentDatabase, "rent_mult_by_level", 9), 3.0, "The last entry extends")
+
+	# All-1.0 curves: the flat baseline.
+	curves["rent_mult_by_level"] = [1.0, 1.0, 1.0]
+	curves["reward_mult_by_level"] = [1.0, 1.0, 1.0]
+	var flat := RunState.new()
+	flat.investor["level"] = 2
+	flat.economy["cash"] = 10_000.0
+	flat.economy["round_rent"] = 400.0
+	flat.economy["recurring_costs"] = 0.0
+	assert_eq(EconomySystem.billed_rent(flat), 400.0, "Flat curves leave the rent alone")
+	economy.apply_round_bills(flat, {})
+	assert_eq(float(flat.economy.get("cash", 0.0)), 9600.0, "Flat curves bill the plain rent")
+	var flat_offer: Dictionary = job_system._scale_job(job_def, 1, ContentDatabase, {}, flat)
+
+	# A 2.0 entry at the run's level: rent and reward double, nothing else moves.
+	curves["rent_mult_by_level"] = [1.0, 2.0, 1.0]
+	curves["reward_mult_by_level"] = [1.0, 2.0, 1.0]
+	var pressed := RunState.new()
+	pressed.investor["level"] = 2
+	pressed.economy["cash"] = 10_000.0
+	pressed.economy["round_rent"] = 400.0
+	pressed.economy["recurring_costs"] = 0.0
+	assert_eq(EconomySystem.billed_rent(pressed), 800.0, "A 2.0 entry doubles the billed rent")
+	economy.apply_round_bills(pressed, {})
+	assert_eq(float(pressed.economy.get("cash", 0.0)), 9200.0, "The doubled rent is what the bills charge")
+	var pressed_offer: Dictionary = job_system._scale_job(job_def, 1, ContentDatabase, {}, pressed)
+	# Rewards are snapped to the nearest 5, so the doubled figure lands within
+	# one snap of exactly twice the flat one.
+	assert_almost_eq(
+		float(pressed_offer.get("reward", 0.0)), float(flat_offer.get("reward", 0.0)) * 2.0, 5.0,
+		"A 2.0 entry doubles the posted reward"
+	)
+	assert_eq(
+		float(pressed_offer.get("token_requirement", 0.0)), float(flat_offer.get("token_requirement", 0.0)),
+		"Reward pressure does not resize the work"
+	)
+	# Level 1 sits on the 1.0 entry either side, so the pressure is felt only
+	# at the level it is authored for.
+	var unpressed := RunState.new()
+	unpressed.investor["level"] = 1
+	unpressed.economy["round_rent"] = 400.0
+	assert_eq(EconomySystem.billed_rent(unpressed), 400.0, "Other levels read their own entry")
+
+	if original_rent == null:
+		curves.erase("rent_mult_by_level")
+	else:
+		curves["rent_mult_by_level"] = original_rent
+	if original_reward == null:
+		curves.erase("reward_mult_by_level")
+	else:
+		curves["reward_mult_by_level"] = original_reward
 
 
 func _test_can_afford(economy: EconomySystem) -> void:
@@ -179,16 +254,16 @@ func _test_power_scales_with_hardware() -> void:
 	assert_eq(state.compute.get("power_draw", 0.0), 2065.0, "Power draw sums the installed hardware")
 
 
-## Rent is a property of the chapter the run is set in, settled when it starts
-## and never renegotiated.
+## Rent is a property of the Infrastructure Tier the run stands on, settled
+## when the tier is bought and never renegotiated.
 func _test_rent_scales_with_dwelling() -> void:
 	var state := RunState.new()
 	var starting_rent: float = float(state.economy.get("round_rent", 0.0))
-	Simulation.apply_run_location(state, "garage")
-	var dwelling_rent: float = float(ContentDatabase.balance.get("dwelling_costs", {}).get("garage", {}).get("rent", 0.0))
+	Simulation.apply_infrastructure_tier(state, 1)
+	var facility_cost: float = InfrastructureSystem.facility_cost_at(1)
 	var multiplier: float = float(state.economy.get("rent_multiplier", 1.0))
-	assert_eq(state.economy.get("round_rent", 0.0), dwelling_rent * multiplier, "Rent follows the location and difficulty")
-	assert_true(float(state.economy.get("round_rent", 0.0)) > starting_rent, "A bigger space costs more to keep")
+	assert_eq(state.economy.get("round_rent", 0.0), facility_cost * multiplier, "Rent follows the tier's facility cost and difficulty")
+	assert_true(float(state.economy.get("round_rent", 0.0)) > starting_rent, "A bigger machine costs more to keep")
 
 
 func _test_pending_bills_processing(economy: EconomySystem) -> void:

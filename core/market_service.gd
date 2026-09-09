@@ -111,6 +111,81 @@ static func upgrade_cabinet_system(sim: Node, system_id: String) -> Dictionary:
 	return result
 
 
+# --- Infrastructure ----------------------------------------------------------
+
+## Buys the next Infrastructure Tier: the machine's scale. The tier's cabinet
+## entry tiers are raised into place, the rent becomes the tier's facility
+## cost, the rig's rate and heat are re-derived, a permanent-rig rung that
+## had no floor before is racked, and the module shelf is restocked for the
+## new scale. Returns the same shape as `upgrade_cabinet_system` — `ok`,
+## `reason`, `tier`, `previous_tier`, `cost`, `effect` — so the SYSTEMS shelf
+## can print the reveal without asking again.
+static func purchase_infrastructure(sim: Node) -> Dictionary:
+	var state: RunState = sim.run_state
+	var previous: int = InfrastructureSystem.tier(state)
+	var result: Dictionary = {
+		"ok": false,
+		"reason": "",
+		"tier": previous,
+		"previous_tier": previous,
+		"cost": InfrastructureSystem.next_tier_cost(state),
+		"effect": "",
+	}
+	if not market_open(sim):
+		result["reason"] = "MARKET CLOSED"
+		return result
+	var verdict: Dictionary = InfrastructureSystem.can_upgrade(state)
+	result["reason"] = str(verdict.get("reason", ""))
+	result["cost"] = float(verdict.get("cost", -1.0))
+	if not bool(verdict.get("ok", false)):
+		return result
+	var cost: float = float(verdict.get("cost", 0.0))
+	if not sim.economy_system().purchase(state, cost, "infrastructure"):
+		result["reason"] = "NEED %s MORE" % NumberFormat.format_cash(
+			ceilf(cost - float(state.economy.get("cash", 0.0)))
+		)
+		return result
+	var reached: int = previous + 1
+	sim._life.apply_infrastructure_tier(sim, state, reached)
+	# A permanent rig rung the old scale had no floor for is racked now that
+	# there is room for it.
+	sim._life.install_permanent_rig(sim)
+	sim.board_system().ensure_board(state, ContentDatabase)
+	sim.compute_system().recalculate(
+		state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
+	)
+	# The shelf is stamped by scale (Investor Level and Infrastructure Tier)
+	# and round; a new tier is a new scale, so it is restocked here.
+	restock_modules(sim, false)
+	state.statistics["infrastructure_purchases"] = int(state.statistics.get("infrastructure_purchases", 0)) + 1
+	var effect: String = InfrastructureSystem.effect_text(previous, reached)
+	sim.round_log.append(
+		"Infrastructure: %s for %s. %s"
+		% [InfrastructureSystem.tier_name(reached), NumberFormat.format_cash(cost), effect]
+	)
+	EventBus.emit_event(EventBus.EVENT_INFRASTRUCTURE_UPGRADED, {
+		"tier": reached, "previous_tier": previous, "cost": cost,
+	})
+	sim.achievement_system().evaluate_tick(state, ContentDatabase)
+	sim._autosave()
+	result["ok"] = true
+	result["reason"] = ""
+	result["tier"] = reached
+	result["cost"] = cost
+	result["effect"] = effect
+	return result
+
+
+## Everything the INFRASTRUCTURE row needs; when the Market is closed the row
+## is still described, only the button is dead.
+static func infrastructure_next(sim: Node) -> Dictionary:
+	var info: Dictionary = InfrastructureSystem.next_tier_info(sim.run_state)
+	if not market_open(sim) and bool(info.get("can_upgrade", false)):
+		info["can_upgrade"] = false
+		info["reason"] = "MARKET CLOSED"
+	return info
+
+
 static func cabinet_system_tiers(sim: Node) -> Dictionary:
 	return CabinetSystems.tiers(sim.run_state)
 
@@ -143,8 +218,8 @@ static func ensure_module_market_state(sim: Node) -> Dictionary:
 	var market: Dictionary = state
 	if not market.has("stock") or not market["stock"] is Array:
 		market["stock"] = []
-	if not market.has("location"):
-		market["location"] = ""
+	if not market.has("stamp"):
+		market["stamp"] = ""
 	if not market.has("round"):
 		market["round"] = 0
 	if not market.has("sequence"):
@@ -155,12 +230,22 @@ static func ensure_module_market_state(sim: Node) -> Dictionary:
 	return market
 
 
+## How many cards the shelf holds: `economy.module_market.slots_by_investor_level`
+## indexed by Investor Level - 1, the last entry extending past the table.
 static func module_stock_size(sim: Node) -> int:
-	var slots: Array = Array(_module_market_tuning().get("slots_by_location_tier", [3]))
-	var tier: int = ContentDatabase.location_tier_for_run(sim.run_state)
+	var slots: Array = Array(_module_market_tuning().get("slots_by_investor_level", [3]))
 	if slots.is_empty():
 		return 3
-	return maxi(1, int(slots[clampi(tier, 0, slots.size() - 1)]))
+	var level: int = maxi(InvestorProgression.FIRST_LEVEL, int(sim.investor_level()))
+	return maxi(1, int(slots[clampi(level - 1, 0, slots.size() - 1)]))
+
+
+## The shelf's scale stamp: "<investor level>.<infrastructure tier>". Either
+## moving is a new market — a bigger machine wants bigger kit, and a new target
+## opens a new tier of it — so either restocks the shelf. Stored under the
+## market state's `stamp` key.
+static func _scale_stamp(sim: Node) -> String:
+	return "%d.%d" % [int(sim.investor_level()), int(sim.infrastructure_tier())]
 
 
 static func module_stock(sim: Node) -> Array:
@@ -168,19 +253,19 @@ static func module_stock(sim: Node) -> Array:
 	return Array(ensure_module_market_state(sim).get("stock", [])).duplicate()
 
 
-## Restock when missing, or when the current location/round stamp no longer
+## Restock when missing, or when the current scale/round stamp no longer
 ## matches. Opening the Market never regenerates the shelf.
 static func ensure_module_stock(sim: Node) -> void:
 	var market: Dictionary = ensure_module_market_state(sim)
-	var location: String = str(sim.run_state.build.get("dwelling", "bedroom"))
+	var scale: String = _scale_stamp(sim)
 	var round_number: int = int(sim.run_state.calendar.get("round", 1))
 	var needs_restock: bool = (
-		str(market.get("location", "")) != location
+		str(market.get("stamp", "")) != scale
 		or int(market.get("round", 0)) != round_number
 	)
-	# Missing state (empty location stamp) always restocks. An already-current
+	# Missing state (empty scale stamp) always restocks. An already-current
 	# empty shelf from purchases must not refill until the stamp changes.
-	if str(market.get("location", "")) == "" and int(market.get("round", 0)) == 0:
+	if str(market.get("stamp", "")) == "" and int(market.get("round", 0)) == 0:
 		needs_restock = true
 	if needs_restock:
 		restock_modules(sim, false)
@@ -188,7 +273,7 @@ static func ensure_module_stock(sim: Node) -> void:
 
 static func restock_modules(sim: Node, paid_reroll: bool = false) -> void:
 	var market: Dictionary = ensure_module_market_state(sim)
-	var location: String = str(sim.run_state.build.get("dwelling", "bedroom"))
+	var scale: String = _scale_stamp(sim)
 	var round_number: int = int(sim.run_state.calendar.get("round", 1))
 	var blocked: Array = []
 	if paid_reroll:
@@ -199,7 +284,7 @@ static func restock_modules(sim: Node, paid_reroll: bool = false) -> void:
 	market["sequence"] = int(market.get("sequence", 0)) + 1
 	if not paid_reroll:
 		market["rerolls"] = 0
-		market["location"] = location
+		market["stamp"] = scale
 		market["round"] = round_number
 	var capacity: int = module_stock_size(sim)
 	var drawn: Array[ModuleDefinition] = _draw_shelf(sim, market, capacity, blocked)
@@ -230,20 +315,20 @@ static func _draw_shelf(
 
 
 static func _module_market_rng(sim: Node, market: Dictionary) -> DeterministicRng:
-	var location: String = str(market.get("location", sim.run_state.build.get("dwelling", "bedroom")))
+	var scale: String = str(market.get("stamp", _scale_stamp(sim)))
 	var round_number: int = int(market.get("round", sim.run_state.calendar.get("round", 1)))
 	var sequence: int = int(market.get("sequence", 0))
 	var rerolls: int = int(market.get("rerolls", 0))
 	return sim.rng.derive(
-		"module_market.%s.%d.sequence.%d.reroll.%d" % [location, round_number, sequence, rerolls]
+		"module_market.%s.%d.sequence.%d.reroll.%d" % [scale, round_number, sequence, rerolls]
 	)
 
 
 ## A module costs the larger of two anchors: a share of the round's rent
-## (which keeps the bedroom shelf priced against the bills) and a share of the
-## chapter's `major_purchase` (which keeps late shelves priced against the
-## wealth a chapter actually generates, where rent alone would make a
-## legendary pocket change next to a single contract).
+## (which keeps the starting rig's shelf priced against the bills) and a share
+## of the scale band's `major_purchase` (which keeps late shelves priced against
+## the wealth a machine of that scale actually generates, where rent alone would
+## make a legendary pocket change next to a single contract).
 static func module_price(sim: Node, module_id: String) -> float:
 	var module: ModuleDefinition = ContentDatabase.get_module(module_id)
 	if module == null:
@@ -254,7 +339,7 @@ static func module_price(sim: Node, module_id: String) -> float:
 	var rent: float = float(sim.run_state.economy.get("round_rent", 400.0))
 	var rent_based: float = rent * mult
 	var major_ratios: Dictionary = Dictionary(tuning.get("rarity_price_major_purchase_ratio", {}))
-	var major_based: float = _location_major_purchase(sim) * float(major_ratios.get(module.rarity, 0.0))
+	var major_based: float = _scale_major_purchase(sim) * float(major_ratios.get(module.rarity, 0.0))
 	var floor_price: float = float(tuning.get("price_floor", 25.0))
 	return maxf(floor_price, snappedf(maxf(rent_based, major_based), 1.0))
 
@@ -306,13 +391,13 @@ static func module_reroll_cost(sim: Node) -> float:
 	var rent: float = float(sim.run_state.economy.get("round_rent", 400.0))
 	var base: float = maxf(
 		rent * float(tuning.get("reroll_rent_mult", 0.15)),
-		_location_base_job_reward(sim) * float(tuning.get("reroll_job_reward_mult", 0.05))
+		_scale_base_job_reward(sim) * float(tuning.get("reroll_job_reward_mult", 0.05))
 	)
-	# Late chapters: the shelf's reroll tracks the same wealth anchor as its
+	# Late tiers: the shelf's reroll tracks the same wealth anchor as its
 	# prices, so a refresh never becomes free relative to what it sells.
 	base = maxf(
 		base,
-		_location_major_purchase(sim) * float(tuning.get("reroll_major_purchase_ratio", 0.02))
+		_scale_major_purchase(sim) * float(tuning.get("reroll_major_purchase_ratio", 0.02))
 	)
 	var growth: float = float(tuning.get("reroll_growth", 2.0))
 	var rerolls: int = int(market.get("rerolls", 0))
@@ -339,31 +424,32 @@ static func reroll_modules(sim: Node) -> bool:
 	return true
 
 
-static func _location_base_job_reward(sim: Node) -> float:
-	var bands: Array = JobSystem.location_bands(ContentDatabase)
-	if not bands.is_empty():
-		var tier: int = JobSystem.location_tier(sim.run_state, ContentDatabase)
-		return float(Dictionary(bands[clampi(tier, 0, bands.size() - 1)]).get(
-			"base_reward", sim.run_state.economy.get("round_rent", 400.0)
-		))
-	return float(sim.run_state.economy.get("round_rent", 400.0))
-
-
-## The chapter's `major_purchase` from `job_scaling.location_bands` — the
-## price of the big buy a chapter is meant to fund. Zero when the band data
-## is absent, so the rent-based anchors win unchanged.
-static func _location_major_purchase(sim: Node) -> float:
-	var bands: Array = JobSystem.location_bands(ContentDatabase)
+## The scale band the run's Infrastructure Tier stands in; empty without data.
+static func _scale_band(sim: Node) -> Dictionary:
+	var bands: Array = JobSystem.scale_bands(ContentDatabase)
 	if bands.is_empty():
-		return 0.0
-	var tier: int = JobSystem.location_tier(sim.run_state, ContentDatabase)
-	return float(Dictionary(bands[clampi(tier, 0, bands.size() - 1)]).get("major_purchase", 0.0))
+		return {}
+	var tier: int = JobSystem.scale_tier(sim.run_state, ContentDatabase)
+	return Dictionary(bands[clampi(tier, 0, bands.size() - 1)])
+
+
+## What an ordinary contract pays at this scale; the rent when the band data
+## is absent.
+static func _scale_base_job_reward(sim: Node) -> float:
+	return float(_scale_band(sim).get("base_reward", sim.run_state.economy.get("round_rent", 400.0)))
+
+
+## The scale band's `major_purchase` from `job_scaling.scale_bands` — the
+## price of the big buy a machine of this tier is meant to fund. Zero when the
+## band data is absent, so the rent-based anchors win unchanged.
+static func _scale_major_purchase(sim: Node) -> float:
+	return float(_scale_band(sim).get("major_purchase", 0.0))
 
 
 ## Public spelling of the wealth anchor, for the sinks priced off it
 ## (module calibration) that live outside this file.
-static func location_major_purchase(sim: Node) -> float:
-	return _location_major_purchase(sim)
+static func scale_major_purchase(sim: Node) -> float:
+	return _scale_major_purchase(sim)
 
 
 static func next_module_restock_round(sim: Node) -> int:
@@ -374,13 +460,13 @@ static func next_module_restock_round(sim: Node) -> int:
 
 # --- Module calibration ------------------------------------------------------
 ##
-## Consumes owned, benched modules plus a share of the chapter's
+## Consumes owned, benched modules plus a share of the scale band's
 ## `major_purchase` to raise one owned module's calibration rank. The rules
 ## and the state live in `CalibrationSystem`; this layer adds the Market's
 ## opening hours, the cash anchor and the post-trade bookkeeping.
 
 static func module_calibration_cost(sim: Node, target: String) -> float:
-	return CalibrationSystem.cost(sim.run_state, _location_major_purchase(sim), target)
+	return CalibrationSystem.cost(sim.run_state, _scale_major_purchase(sim), target)
 
 
 static func module_calibration_rank(sim: Node, target: String) -> int:
@@ -392,7 +478,7 @@ static func calibration_block_reason(sim: Node, target: String, consumed: Array)
 		return "MARKET CLOSED"
 	return CalibrationSystem.block_reason(
 		sim.run_state, target, consumed,
-		float(sim.run_state.economy.get("cash", 0.0)), _location_major_purchase(sim)
+		float(sim.run_state.economy.get("cash", 0.0)), _scale_major_purchase(sim)
 	)
 
 
@@ -404,7 +490,7 @@ static func calibrate_module(sim: Node, target: String, consumed: Array) -> bool
 	if not can_calibrate_module(sim, target, consumed):
 		return false
 	if not CalibrationSystem.calibrate(
-		sim.run_state, target, consumed, sim.economy_system(), _location_major_purchase(sim)
+		sim.run_state, target, consumed, sim.economy_system(), _scale_major_purchase(sim)
 	):
 		return false
 	# The rank is carried by a status-effect subscription, so the cached

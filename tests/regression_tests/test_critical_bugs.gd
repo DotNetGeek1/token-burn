@@ -325,7 +325,7 @@ func _test_previews_emit_no_domain_events() -> void:
 func _test_preview_cascade_does_not_hit_the_bus() -> void:
 	var sim := _make_sim()
 	sim.start_run(141)
-	sim.apply_run_location(sim.run_state, "warehouse")
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room("warehouse"))
 	sim.run_state.economy["cash"] = 1000000.0
 	sim._board_system.ensure_board(sim.run_state, ContentDatabase)
 	sim.run_state.build["modules"] = ["op.prompt", "op.recursive_compiler"]

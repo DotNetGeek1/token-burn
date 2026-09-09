@@ -4,16 +4,15 @@ extends ConsoleOverlay
 ## always the means, so the run's legacy is reported here as tokens burned,
 ## not dollars banked.
 ##
-## A win mid-campaign is a level-up, not the end of the game: the location is
-## complete, the next one is unlocked, and the company moves there with
-## everything it owns — cash, perks, modules and rig alike — less the cost of
-## commissioning the new room. Every win also brings the investor's perk table,
-## which has to be answered (one permanent pick, or nothing) before any exit
-## opens. Only the last chapter's win is the ending proper: it banks the
-## picks this screen doubles as the spend screen for — choose which area to
-## boost permanently — and only it offers the endless tail. A fresh run after
-## any of this starts back in the bedroom, carrying the permanent unlocks and
-## nothing else.
+## Meeting a target is a level-up, not the end of the game: the same business
+## carries on, in the same room and on the same calendar, against the next
+## Investor Target. Every target met also brings the investor's perk table,
+## which has to be answered (one run perk, or nothing) before any exit opens.
+## Only the final target's completion is the ending proper: it banks the
+## Permanent Unlock picks this screen doubles as the spend screen for — choose
+## which area to boost permanently — and only it offers Deep Burn, the endless
+## tail. A fresh run after any of this starts from nothing, carrying the
+## Permanent Unlocks and nothing else.
 ##
 ## The verdict is the machine's closing report and is printed as one, but the
 ## picks under it are deliberately not: what you keep out of a dead company is
@@ -41,7 +40,7 @@ var _loss_reason: String = ""
 ## An aside the player's own last choice wrote, which survives the redraws that
 ## spending a pick triggers.
 var _keep_note: String = ""
-## Moon victory can open a Deep Burn affix picker before the endless tail.
+## Completing the game can open a Deep Burn affix picker before the endless tail.
 var _picking_depth: bool = false
 
 
@@ -97,8 +96,8 @@ func show_from_state(victory: bool, loss_reason: String) -> void:
 		outcome = "ascended"
 	_earned_this_run = outcome == "ascended"
 	# A leftover loss verdict used to stick because a redraw skipped the report
-	# and only refreshed the picks. Reprint every time: LOCATION COMPLETE must
-	# replace COMPANY CLOSED when the outcome is an ascension.
+	# and only refreshed the picks. Reprint every time: TARGET COMPLETE must
+	# replace COMPANY CLOSED when the outcome is a met target.
 	if visible:
 		refresh()
 		return
@@ -153,25 +152,25 @@ func _apply_verdict(score: Dictionary) -> void:
 		outcome = "ascended"
 	match outcome:
 		"ascended":
-			var next_location: String = Simulation.next_location_unlocked()
 			_statement.set_title(
-				"ASCENDED" if next_location == "" else "LOCATION COMPLETE", ConsoleStyle.PHOSPHOR
+				"TOKEN BURN COMPLETE" if Simulation.game_completed() else "TARGET COMPLETE",
+				ConsoleStyle.PHOSPHOR
 			)
-			set_context("CONTRACT MET")
-			var contract_name: String = str(score.get("contract_name", ""))
+			set_context("INVESTOR TARGET MET")
+			var target_name: String = str(score.get("contract_name", ""))
 			var opening: String = (
-				"%s: requirement met." % contract_name
-				if contract_name != "" else "The contract is complete."
+				"%s: requirement met." % target_name
+				if target_name != "" else "The target is complete."
 			)
 			_statement.set_note("%s %s%s" % [
-				opening, _campaign_progress_text(), _victory_module_unlock_text(),
+				opening, _target_progress_text(), _victory_module_unlock_text(),
 			])
 		"depth_complete":
 			_statement.set_title("DEPTH COMPLETE", ConsoleStyle.PHOSPHOR)
-			set_context("DEEP BURN")
 			var depth_level: int = int(Simulation.run_state.depth.get("level", 0))
+			set_context("DEEP BURN // TARGET %d" % depth_level)
 			_statement.set_note(
-				"Depth %d is done. Keep playing to take another affix and go deeper."
+				"Deep Burn target %d is done. Keep burning to take another affix and go deeper."
 				% depth_level
 			)
 		"contract_expired":
@@ -217,9 +216,9 @@ func _victory_module_unlock_text() -> String:
 ## How close the run came, which is the only useful thing to say to somebody who
 ## has just run out of year.
 func _contract_shortfall_text() -> String:
-	var progress: Dictionary = Simulation.ascension_progress()
+	var progress: Dictionary = Simulation.investor_progress()
 	if progress.is_empty():
-		progress = Dictionary(Simulation.ascension_summary().get("progress", {}))
+		progress = Dictionary(Simulation.investor_summary().get("progress", {}))
 	var total: float = float(progress.get("total_burn", 0.0))
 	if total <= 0.0:
 		return ""
@@ -229,23 +228,20 @@ func _contract_shortfall_text() -> String:
 	]
 
 
-## A win is a chapter, not just a score: the location is behind the player and
-## the next one is open. Naming it here is the only place the campaign's shape
-## is visible at the moment it changes.
-func _campaign_progress_text() -> String:
-	var location: String = MetaProgress.location_name(
-		str(Simulation.run_state.build.get("dwelling", ""))
-	)
-	var next_location: String = MetaProgress.location_name(Simulation.next_location_unlocked())
-	if next_location == "":
-		return "%s is behind you, and there is nowhere further up to go. You have beaten the game — and the company does not have to stop here." % location
-	var text: String = "%s is behind you. %s took the meeting and bought you the %s — the company moves there with everything it owns, against a bigger contract." % [
-		location, InvestorVoice.investor_name(), next_location
-	]
-	var commissioning: float = Simulation.chapter_commissioning_preview()
-	if commissioning > 0.0:
-		text += " Commissioning the room — power, racks, the move itself — comes to %s." % NumberFormat.format_cash(commissioning)
-	return text
+## A met target is a level, not just a score: the Investor Level behind the
+## player, and the one ahead. The next target itself is not live until the
+## player takes it, so it is named by number rather than by its terms.
+func _target_progress_text() -> String:
+	var level: int = Simulation.investor_level()
+	if Simulation.game_completed():
+		return (
+			"Investor Target %d is behind you, and there is nothing left to prove. "
+			+ "Token Burn is complete — and the company does not have to stop here."
+		) % level
+	return (
+		"Investor Target %d is behind you. Investor Target %d is next: the same business, "
+		+ "the same room, the same calendar, against a bigger figure from %s."
+	) % [level, level + 1, InvestorVoice.investor_name()]
 
 
 ## A banked pick has to be spent before the next run starts, so every way off
@@ -265,8 +261,8 @@ func _refresh_debrief() -> void:
 	_pick_caption.visible = has_pick
 	_pick_list.visible = has_pick
 	_pick_caption.text = (
-		"CHOOSE YOUR REWARD FOR ASCENDING" if _earned_this_run
-		else "AN UNCLAIMED REWARD FROM AN EARLIER ASCENSION"
+		"CHOOSE YOUR PERMANENT UNLOCK" if _earned_this_run
+		else "AN UNCLAIMED PERMANENT UNLOCK FROM AN EARLIER COMPLETION"
 	)
 	_set_exits(has_pick)
 	if not has_pick:
@@ -317,15 +313,25 @@ func _set_exits(has_pick: bool) -> void:
 			],
 			"pressed": _on_meet_investor,
 		})
-	# Carrying on into the endless tail is only on the table for the run that
-	# beat the last chapter: a mid-campaign win's continuation is the next
-	# location, and the build has to still exist for there to be anything to
-	# carry.
+	# A met target that is not the final one continues in place: the next
+	# Investor Target, same business, same calendar. Nothing else is on offer
+	# for it — no endless tail, no fresh start — because the run is not over.
+	if _target_ahead():
+		entries.append({
+			"index": str(entries.size() + 1),
+			"headline": "NEXT TARGET",
+			"value": "Investor Target %d, with everything you own" % (Simulation.investor_level() + 1),
+			"enabled": not draft_open,
+			"pressed": _on_next_target,
+		})
+	# Deep Burn is only on the table for the run that completed the game (or
+	# is already in it): the build has to still exist for there to be anything
+	# to carry.
 	if _can_keep_playing():
 		entries.append({
 			"index": str(entries.size() + 1),
-			"headline": "KEEP PLAYING",
-			"value": "Deep Burn" if FeatureFlags.is_enabled("depth_ladder_enabled") else "Endless",
+			"headline": "KEEP BURNING",
+			"value": _keep_burning_subtitle(),
 			"enabled": not held,
 			"pressed": _on_continue,
 		})
@@ -338,11 +344,11 @@ func _set_exits(has_pick: bool) -> void:
 			),
 			"enabled": false,
 		})
-	else:
+	elif not _target_ahead():
 		entries.append({
 			"index": str(entries.size() + 1),
-			"headline": "NEXT CHAPTER" if _chapter_ahead() else "NEW RUN",
-			"value": _new_run_subtitle(),
+			"headline": "NEW RUN",
+			"value": "Start again from nothing, with your Permanent Unlocks",
 			"enabled": not draft_open,
 			"pressed": _on_restart,
 		})
@@ -367,7 +373,7 @@ func _keep(unlock_id: String) -> void:
 		return
 	var unlock: Dictionary = MetaProgress.get_unlock(unlock_id)
 	_keep_note = (
-		"%s stays with you. Everything else was the company's, and there is no company."
+		"%s is yours for good, in every run from here. Everything else belongs to this company."
 		% str(unlock.get("name", "It"))
 	)
 	_statement.set_aside(_keep_note)
@@ -387,7 +393,24 @@ func _on_continue() -> void:
 func _can_keep_playing() -> bool:
 	if _is_depth_complete_overlay():
 		return true
-	return _earned_this_run and Simulation.next_location_unlocked() == ""
+	return _earned_this_run and Simulation.game_completed()
+
+
+## Whether this win opened a next Investor Target the company can take.
+func _target_ahead() -> bool:
+	return (
+		_earned_this_run
+		and not Simulation.game_completed()
+		and bool(Simulation.run_state.flags.get("target_complete", false))
+	)
+
+
+## What KEEP BURNING leads into: the Deep Burn target the next affix opens.
+func _keep_burning_subtitle() -> String:
+	if not FeatureFlags.is_enabled("depth_ladder_enabled"):
+		return "Endless"
+	var depth_level: int = int(Simulation.run_state.depth.get("level", 0))
+	return "DEEP BURN // TARGET %d" % (depth_level + 1)
 
 
 func _is_depth_complete_overlay() -> bool:
@@ -416,7 +439,7 @@ func _show_depth_picks() -> void:
 	set_actions([{
 		"index": "1",
 		"headline": "PICK AN AFFIX",
-		"value": "The next contract grows",
+		"value": "%s · the next target grows" % _keep_burning_subtitle(),
 		"enabled": false,
 	}])
 	for affix in picks:
@@ -457,39 +480,30 @@ func _leave_into_continuation() -> void:
 	get_tree().call_group("main_ui", "refresh_all")
 
 
-## Whether this win opened a next chapter the current company can move into.
-func _chapter_ahead() -> bool:
-	return _earned_this_run and Simulation.next_location_unlocked() != ""
+## Takes the next Investor Target: the same company carries on in place, one
+## level higher. The sim refuses while the investor's table is unanswered, so
+## the table is raised instead of the exit silently doing nothing.
+func _on_next_target() -> void:
+	if Simulation.investor_draft_pending():
+		_on_meet_investor()
+		return
+	if not Simulation.continue_after_target():
+		refresh()
+		return
+	hide_overlay()
+	get_tree().call_group("flow_overlay", "hide_overlay")
+	get_tree().call_group("ui_refresh", "refresh")
+	get_tree().call_group("main_ui", "refresh_all")
 
 
-## What the main exit leads to. After a mid-campaign win it is the next
-## chapter, carrying the whole rig; otherwise it is a fresh game from the
-## bottom of the campaign, carrying only the permanent unlocks.
-func _new_run_subtitle() -> String:
-	if _chapter_ahead():
-		var next_name: String = MetaProgress.location_name(Simulation.next_location_unlocked())
-		var commissioning: float = Simulation.chapter_commissioning_preview()
-		if commissioning > 0.0:
-			return "Next chapter: the %s · commissioning %s" % [
-				next_name, NumberFormat.format_cash(commissioning)
-			]
-		return "Next chapter: the %s, with everything you own" % next_name
-	var location: String = MetaProgress.location_name(MetaProgress.selected_location())
-	if location == "":
-		return "Start again"
-	return "Start again from the %s" % location
-
-
+## A fresh game from nothing, carrying only the Permanent Unlocks.
 func _on_restart() -> void:
 	if Simulation.investor_draft_pending():
 		_on_meet_investor()
 		return
 	hide_overlay()
 	get_tree().call_group("flow_overlay", "hide_overlay")
-	# A mid-campaign win continues as the same business in the next location;
-	# only a loss (or the final chapter) starts over.
-	if not Simulation.advance_to_next_chapter():
-		Simulation.start_run()
+	Simulation.start_run()
 	get_tree().call_group("ui_refresh", "refresh")
 	get_tree().call_group("main_ui", "refresh_all")
 

@@ -81,7 +81,7 @@ func _sim_at(location: String, seed_value: int) -> Node:
 	sim.autosave_enabled = false
 	sim.start_run(seed_value)
 	if location != "bedroom":
-		sim.apply_run_location(sim.run_state, location)
+		sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room(location))
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)

@@ -1,0 +1,15 @@
+{
+  "design_note": "Curves for the investor's targets past the authored list in content/investor/targets.json, and the pressure hooks the economy reads per Investor Level. Generated targets start from the last authored non-alternate target and grow by `token_growth` per level; `quality_step` is added to quality_min per level (capped at `quality_cap`); `deadline_rounds` is the deadline of every generated target. `rent_mult_by_level` and `reward_mult_by_level` are indexed by level - 1 (the last entry repeats) and ship at 1.0 so balance is unchanged until they are tuned.",
+  "token_growth": 5.0,
+  "quality_step": 3,
+  "quality_cap": 90,
+  "deadline_rounds": 12,
+  "archetypes": [
+    {"id": "volume", "weight": 3},
+    {"id": "quality", "weight": 2},
+    {"id": "clean", "weight": 1, "max_heat_ratio": 0.95},
+    {"id": "profit", "weight": 1, "min_profit_rent_multiple": 3.0}
+  ],
+  "rent_mult_by_level": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+  "reward_mult_by_level": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+}

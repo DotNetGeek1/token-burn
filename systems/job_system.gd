@@ -2,7 +2,7 @@ class_name JobSystem
 extends RefCounted
 
 ## How many authored contracts a band needs before the board stops borrowing
-## from the band below it. Under this a thin location shows the same posting
+## from the band below it. Under this a thin tier shows the same posting
 ## three times, which reads as a bug rather than as a quiet week.
 const MIN_BAND_POOL := 3
 
@@ -24,7 +24,7 @@ static func normalize_job_evidence(job: Dictionary) -> Dictionary:
 func generate_offers(run_state: RunState, rng: DeterministicRng, content_db: Node, tuning: Dictionary) -> void:
 	var count: int = ComputeSystem.job_slots(run_state)
 	var round_number: int = int(run_state.calendar.get("round", 1))
-	var here: int = location_tier(run_state, content_db)
+	var here: int = scale_tier(run_state, content_db)
 	var eligible: Array = _collect_eligible_jobs(content_db, round_number, here)
 	if eligible.is_empty():
 		run_state.business["job_offers"] = []
@@ -97,7 +97,7 @@ static func rig_work_tier(run_state: RunState, content_db: Node) -> int:
 	for hardware_id in run_state.build.get("hardware", []):
 		var curve: Dictionary = Dictionary(curves.get(str(hardware_id), {}))
 		tier = maxi(tier, int(curve.get("work_tier", 0)))
-	var bands: Array = location_bands(content_db)
+	var bands: Array = scale_bands(content_db)
 	return clampi(tier, 0, maxi(0, bands.size() - 1))
 
 
@@ -143,7 +143,7 @@ func _rig_matched_offers(
 	return result
 
 
-## The board is drawn from the location's own band. The capstone is a
+## The board is drawn from the machine's own band. The capstone is a
 ## round-twelve headliner, not the whole board: overtime still has rent to pay,
 ## so the ordinary pool stays open alongside it rather than the run being left
 ## with one impossible contract and no way to earn.
@@ -202,7 +202,7 @@ func _classify_offers(offers: Array, run_state: RunState, content_db: Node) -> A
 	return offers
 
 
-## One posting from the band above, paying a premium for work the location was
+## One posting from the band above, paying a premium for work the machine was
 ## not built for. Empty until reputation opens the rung.
 func _stretch_offer(
 	run_state: RunState,
@@ -1096,7 +1096,7 @@ static func quality_payout_multiplier(quality: float, threshold: float) -> float
 ## The quality the client actually receives, as opposed to the quality the
 ## pipeline produced: work cut short is only worth the fraction that shipped,
 ## and defects the player knew about and shipped anyway cost three points each.
-## Read without mutating so the Ascension contract can be judged on the same
+## Read without mutating so the Investor Target can be judged on the same
 ## number the fee is paid against, before payout has settled it.
 static func delivered_quality(job: Dictionary) -> float:
 	var quality: float = float(job.get("quality", 0.0))
@@ -1206,7 +1206,7 @@ func _delivery_penalty(
 	var job_name: String = str(job.get("name", "Job"))
 
 	# Settled in one place so the recorded figure can never drift from the one
-	# the Ascension contract was judged against.
+	# the Investor Target was judged against.
 	job["quality"] = delivered_quality(job)
 
 	if bool(job.get("shipped_unfinished", false)):
@@ -1382,6 +1382,13 @@ func _scale_job(
 	# A studio clients have heard of can charge more for the same work, so
 	# reputation is felt on every offer rather than only at a tier threshold.
 	reward_mult *= reputation_reward_multiplier(run_state, content_db)
+	# Investor pressure: the fee curve keyed by Investor Level
+	# (`investor_targets.reward_mult_by_level`). Ships at 1.0 everywhere, so
+	# this is the hook for tuning rather than a balance change.
+	reward_mult *= InvestorProgression.reward_multiplier(
+		maxi(InvestorProgression.FIRST_LEVEL, int(run_state.investor.get("level", InvestorProgression.FIRST_LEVEL))),
+		content_db
+	)
 
 	var work_prompts: float = target_prompts * maxf(0.1, job_def.work_units)
 	var token_requirement: float = expected_rate * work_prompts * token_mult * float(
@@ -1479,7 +1486,7 @@ static func reputation_reward_multiplier(run_state: RunState, content_db: Node) 
 
 
 ## The reputation the next band's stretch contract is waiting on, for the job
-## board's header. The ordinary board is set by the location; reputation is what
+## board's header. The ordinary board is set by the Infrastructure Tier; reputation is what
 ## buys a look at the work above it. Empty when every band is already reachable.
 static func next_reputation_tier(run_state: RunState, content_db: Node) -> Dictionary:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
@@ -1506,44 +1513,45 @@ func refresh_contract_board(run_state: RunState, rng: DeterministicRng, content_
 	generate_offers(run_state, rng.derive("job_offers"), content_db, tuning)
 
 
-static func location_bands(content_db: Node) -> Array:
-	return Array(content_db.balance.get("job_scaling", {}).get("location_bands", []))
+## `job_scaling.scale_bands`: one row per Infrastructure Tier, carrying the
+## expected rig (`expected_token_rate`), how long its work runs
+## (`target_work_prompts`), what an ordinary contract pays (`base_reward`) and
+## the big buy that work is priced against (`major_purchase`). Row `n` is also
+## the band authored contracts of `tier` n are sized by.
+static func scale_bands(content_db: Node) -> Array:
+	return Array(content_db.balance.get("job_scaling", {}).get("scale_bands", []))
 
 
 static func _band_for_tier(tier: int, content_db: Node) -> Dictionary:
-	var bands: Array = location_bands(content_db)
+	var bands: Array = scale_bands(content_db)
 	if bands.is_empty():
 		return {}
 	return Dictionary(bands[clampi(tier, 0, bands.size() - 1)])
 
 
-## The band the run is currently standing in. Contracts are offered from here,
-## so moving up a location is what puts bigger work on the board — the job pool
-## follows the seven-chapter ladder rather than a round counter that ran out of
-## rungs after twelve.
-static func location_tier(run_state: RunState, content_db: Node) -> int:
-	var bands: Array = location_bands(content_db)
-	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
-	for index in range(bands.size()):
-		if str(Dictionary(bands[index]).get("location", "")) == dwelling:
-			return index
-	return 0
+## The band the run is currently standing in: its Infrastructure Tier. Work has
+## to match the machine the player owns, so buying a bigger tier is what puts
+## bigger work on the board — the job pool follows the machine's scale rather
+## than a round counter that ran out of rungs after twelve.
+static func scale_tier(run_state: RunState, content_db: Node) -> int:
+	var top: int = maxi(0, scale_bands(content_db).size() - 1)
+	return clampi(InfrastructureSystem.tier(run_state, content_db), 0, top)
 
 
 func _job_tier(job_def: JobDefinition, content_db: Node) -> int:
-	var bands: Array = location_bands(content_db)
+	var bands: Array = scale_bands(content_db)
 	var top: int = maxi(0, bands.size() - 1)
 	return clampi(job_def.tier, 0, top)
 
 
 ## The band above the run's own, offered at most once a board as a temptation:
-## work the location was not built for, paying enough to be worth the risk.
+## work the machine was not built for, paying enough to be worth the risk.
 ## Reputation is what opens it, so the ladder still has something to climb.
 func _stretch_tier_available(run_state: RunState, content_db: Node) -> int:
 	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
-	var here: int = location_tier(run_state, content_db)
+	var here: int = scale_tier(run_state, content_db)
 	var stretch: int = here + 1
-	if stretch > maxi(0, location_bands(content_db).size() - 1):
+	if stretch > maxi(0, scale_bands(content_db).size() - 1):
 		return -1
 	var thresholds: Array = scaling.get("tier_unlock_by_reputation", [])
 	if stretch >= thresholds.size():

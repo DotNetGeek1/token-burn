@@ -658,6 +658,13 @@ func _on_maintenance_closed() -> void:
 func _on_system_upgraded(system_id: String, old_tier: int, new_tier: int) -> void:
 	if _maintenance == null or _flow.title_active or _is_burning():
 		return
+	if system_id == TabMarket.INFRASTRUCTURE:
+		# A scale change has no mount to reveal, and the cabinet shell carries
+		# no room backdrop: its one "room" is the maintenance view. The room
+		# key `board_dwelling()` reports is derived from the tier on every
+		# read, so it is already the new room; the investor's call about the
+		# move is the flow's (`CabinetFlow._on_infrastructure_upgraded`).
+		return
 	if not _reveal.is_empty() or _maintenance.is_transitioning():
 		# A second sale during a reveal: the mounts already show it; the
 		# camera is not restarted for it.
@@ -786,8 +793,10 @@ func room_focused_on(_key: String) -> bool:
 	return is_maintenance()
 
 
+## The room the shell is drawn in: presentation derived from the run's
+## Infrastructure Tier, never a stored key.
 func board_dwelling() -> String:
-	return str(Simulation.run_state.build.get("dwelling", AssetCatalog.DEFAULT_DWELLING))
+	return RoomProgression.room_for(Simulation.run_state)
 
 
 func _on_title_start() -> void:

@@ -29,8 +29,11 @@ extends Resource
 @export var min_victories: int = 0
 ## Hard-difficulty victories required before this module can appear in the Market.
 @export var min_hard_victories: int = 0
-@export var min_location_tier: int = 0
-@export var max_location_tier: int = -1
+## The lowest Investor Level (1-based) the module can reach the Market at. 0
+## or 1 means from the first target.
+@export var min_investor_level: int = 0
+## The highest Investor Level the module is stocked at; -1 for no ceiling.
+@export var max_investor_level: int = -1
 @export var draft_weight: float = 1.0
 @export var difficulty: PackedStringArray = ["normal", "hard"]
 ## Named adjacency pairings, declared so the pipeline editor can show them
@@ -72,8 +75,8 @@ func to_dict() -> Dictionary:
 		"unlock_achievement": unlock_achievement,
 		"min_victories": min_victories,
 		"min_hard_victories": min_hard_victories,
-		"min_location_tier": min_location_tier,
-		"max_location_tier": max_location_tier,
+		"min_investor_level": min_investor_level,
+		"max_investor_level": max_investor_level,
 		"draft_weight": draft_weight,
 		"difficulty": Array(difficulty),
 		"combos": combos,

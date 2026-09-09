@@ -436,7 +436,7 @@ func _refresh_inspect() -> void:
 		if effect != "":
 			lines.append({"text": effect})
 		var reason: String = str(info.get("reason", ""))
-		# The blocker is already the Market's capitals ("NEXT CHAPTER UNLOCKS
+		# The blocker is already the Market's capitals ("NEEDS INFRASTRUCTURE
 		# TIER 3"); every other line on this panel is caps too.
 		lines.append({"text": "BOUGHT AT THE MARKET." if reason == "" else reason.to_upper(), "role": "warning" if reason != "" else "success"})
 	CabinetTab.detail_rows(_inspect_lines, lines, CabinetStyle.FONT_MIN_BODY)

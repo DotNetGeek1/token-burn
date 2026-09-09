@@ -6,12 +6,13 @@ extends Resource
 @export var id: String = ""
 @export var name: String = ""
 @export var description: String = ""
-## Which location's band this contract belongs to, as an index into
-## job_scaling.location_bands. A contract is sized and paid by its band, so this
-## is the single thing that decides how big a piece of work it is.
+## Which scale band this contract belongs to, as an index into
+## job_scaling.scale_bands (the same index as an Infrastructure Tier). A
+## contract is sized and paid by its band, so this is the single thing that
+## decides how big a piece of work it is.
 @export var tier: int = 0
 ## Workload relative to the band's target burn count. 1.0 is an ordinary
-## contract for the location; 0.6 is a quick one, 1.5 a slog.
+## contract for the band; 0.6 is a quick one, 1.5 a slog.
 @export var work_units: float = 1.0
 ## Fee relative to the band's base reward, on the same scale.
 @export var reward_units: float = 1.0

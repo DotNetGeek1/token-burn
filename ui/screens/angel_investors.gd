@@ -1,13 +1,13 @@
 extends PhoneOverlay
 
-## The investor's perk draft. When a chapter's goal is met he puts three (or,
+## The investor's perk draft. When a target is met he puts three (or,
 ## with a Rolodex, four or five) perks on the table and expects to be thanked
 ## for one of them — or for the honesty of walking away. Whatever is taken is
 ## permanent: there is no bench and no swap, so a pick is for the rest of the
 ## run. Modules are sold on the Market; nothing here has a price, and the table
 ## cannot be rerolled.
 ##
-## The verdict screen raises this once the chapter is won, and the company
+## The verdict screen raises this once the target is met, and the company
 ## cannot move on until the table is answered. The same overlay also serves a
 ## save written with the old round-end angel table still open.
 ##

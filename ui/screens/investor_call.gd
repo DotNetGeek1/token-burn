@@ -173,8 +173,8 @@ func call_player(trigger: String, context: Dictionary = {}) -> void:
 ## rounds or lose the {rent} a round I'm covering" is the real contract rather
 ## than a number the writer guessed at when the line was written.
 func _fill_terms(lines: Array) -> Array:
-	var contract: Dictionary = Simulation.ascension_boss_contract()
-	var progress: Dictionary = Simulation.ascension_progress()
+	var contract: Dictionary = Simulation.investor_target()
+	var progress: Dictionary = Simulation.investor_progress()
 	var replacements: Dictionary = {
 		# The figure itself rather than the contract's "30 Megatokens" label, in
 		# the same notation the cabinet's readouts use, so what he asks for is
@@ -213,9 +213,14 @@ static func _burn_text(total: float) -> String:
 func _variant_for(trigger: String, context: Dictionary) -> String:
 	match trigger:
 		"run_intro", "ascension_complete":
-			return MetaProgress.selected_location()
+			# Keyed by the room the run is drawn in, which follows the
+			# Infrastructure Tier.
+			return RoomProgression.room_for(Simulation.run_state)
+		"room_changed":
+			var room: String = str(context.get("room", ""))
+			return room if not room.is_empty() else RoomProgression.room_for(Simulation.run_state)
 		"terms":
-			var progress: Dictionary = Simulation.ascension_progress()
+			var progress: Dictionary = Simulation.investor_progress()
 			if progress.is_empty():
 				return "default"
 			var deadline: int = maxi(1, int(progress.get("deadline_round", 12)))

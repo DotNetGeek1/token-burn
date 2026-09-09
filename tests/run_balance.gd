@@ -47,29 +47,28 @@ func _print_summary(summary: Dictionary) -> void:
 		int(summary.get("runs", 0)),
 		BatchRunner.describe_outcomes(summary),
 	])
-	var order: Array = Array(ContentDatabase.balance.get("economy", {}).get("location_order", []))
-	for location in order:
-		var chapter: Dictionary = Dictionary(summary.get("chapters", {}).get(str(location), {}))
-		if chapter.is_empty():
+	for tier in range(InfrastructureSystem.max_tier() + 1):
+		var tier_summary: Dictionary = Dictionary(summary.get("tiers", {}).get(str(tier), {}))
+		if tier_summary.is_empty():
 			continue
-		print("  %s: win %.0f%%, round median %.1f / mean %.1f, boss %.0f%% / quality %.0f, %.1f burns/job, one-burn %.0f%%, %.1f prompts/round, cool %.0f%%, peak heat %.0f%%, forecasts %d, fires %d, rate %.1f, cash %.1f, outcomes %s, hardware %s" % [
-			str(location),
-			float(chapter.get("win_rate", 0.0)) * 100.0,
-			float(chapter.get("median_victory_round", 0.0)),
-			float(chapter.get("avg_victory_round", 0.0)),
-			float(chapter.get("avg_ascension_burn_ratio", 0.0)) * 100.0,
-			float(chapter.get("avg_ascension_quality", 0.0)),
-			float(chapter.get("avg_burns_per_completed_job", 0.0)),
-			float(chapter.get("one_burn_job_rate", 0.0)) * 100.0,
-			float(chapter.get("prompts_per_round", 0.0)),
-			float(chapter.get("cooling_share", 0.0)) * 100.0,
-			float(chapter.get("peak_heat_ratio", 0.0)) * 100.0,
-			int(chapter.get("dangerous_forecasts", 0)),
-			int(chapter.get("fires", 0)),
-			float(chapter.get("avg_peak_token_rate", 0.0)),
-			float(chapter.get("avg_peak_cash", 0.0)),
-			str(chapter.get("outcomes", {})),
-			str(chapter.get("avg_hardware_acquisition_round", {})),
+		print("  tier %d: win %.0f%%, round median %.1f / mean %.1f, target %.0f%% / quality %.0f, %.1f burns/job, one-burn %.0f%%, %.1f prompts/round, cool %.0f%%, peak heat %.0f%%, forecasts %d, fires %d, rate %.1f, cash %.1f, outcomes %s, hardware %s" % [
+			tier,
+			float(tier_summary.get("win_rate", 0.0)) * 100.0,
+			float(tier_summary.get("median_victory_round", 0.0)),
+			float(tier_summary.get("avg_victory_round", 0.0)),
+			float(tier_summary.get("avg_ascension_burn_ratio", 0.0)) * 100.0,
+			float(tier_summary.get("avg_ascension_quality", 0.0)),
+			float(tier_summary.get("avg_burns_per_completed_job", 0.0)),
+			float(tier_summary.get("one_burn_job_rate", 0.0)) * 100.0,
+			float(tier_summary.get("prompts_per_round", 0.0)),
+			float(tier_summary.get("cooling_share", 0.0)) * 100.0,
+			float(tier_summary.get("peak_heat_ratio", 0.0)) * 100.0,
+			int(tier_summary.get("dangerous_forecasts", 0)),
+			int(tier_summary.get("fires", 0)),
+			float(tier_summary.get("avg_peak_token_rate", 0.0)),
+			float(tier_summary.get("avg_peak_cash", 0.0)),
+			str(tier_summary.get("outcomes", {})),
+			str(tier_summary.get("avg_hardware_acquisition_round", {})),
 		])
 	if bool(summary.get("accepted", false)):
 		print("  ACCEPTED")

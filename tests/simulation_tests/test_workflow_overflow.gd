@@ -1,13 +1,13 @@
 extends TestCase
 
 ## Safe capacity is the Workflow Backplane's bays and nothing else. Everything
-## that used to widen the board — the chapter, meta unlocks, Wide Bus, monitors
-## — now widens the overflow allowance instead, and every overflow stage is
-## added deliberately with + STAGE. Overflow stages still resolve, but they
-## cost instability, cascade chance and heat. Bedroom and garage stay scarce.
+## that used to widen the board — the infrastructure, meta unlocks, Wide Bus,
+## monitors — now widens the overflow allowance instead, and every overflow
+## stage is added deliberately with + STAGE. Overflow stages still resolve, but
+## they cost instability, cascade chance and heat. The first tiers stay scarce.
 
-## The backplane tier each room opens with (cabinet_systems.json
-## `migration_from_dwelling`) and the bays that tier is worth.
+## The backplane tier each Infrastructure Tier opens with, by its room
+## (infrastructure.json `cabinet_entry_tiers`), and the bays that tier is worth.
 const SAFE_BY_DWELLING := {
 	"bedroom": 3,
 	"garage": 5,
@@ -18,7 +18,7 @@ const SAFE_BY_DWELLING := {
 	"moon_facility": 10,
 }
 
-## `job_scaling.board.overflow.base_allowance`.
+## `infrastructure.json` `overflow_allowance` per tier, keyed by the tier's room.
 const BASE_ALLOWANCE_BY_DWELLING := {
 	"bedroom": 0,
 	"garage": 0,
@@ -147,10 +147,12 @@ func _test_deeper_overflow_stages_pay_more() -> void:
 	)
 
 
+## A board standing on the Infrastructure Tier whose presentation room is
+## `location`; the tables above are keyed by room for readability.
 func _board(location: String = "bedroom") -> Dictionary:
 	var state := RunState.new()
 	var board := BoardSystem.new()
-	Simulation.apply_run_location(state, location, false)
+	Simulation.apply_infrastructure_tier(state, InfrastructureSystem.tier_for_room(location))
 	board.ensure_board(state, ContentDatabase)
 	return {"state": state, "board": board}
 
@@ -385,15 +387,16 @@ func _test_buying_the_backplane_widens_safe_capacity() -> void:
 	assert_eq(board.overflow_allowance(state, ContentDatabase), 0, "The tier adds no allowance")
 
 
-## Moving up a chapter lifts the tier (so the pipeline widens to the new rail)
-## but never bolts on the chapter's overflow allowance by itself.
+## Buying a bigger Infrastructure Tier lifts the backplane (so the pipeline
+## widens to the new rail) but never bolts on the tier's overflow allowance by
+## itself.
 func _test_chapter_move_does_not_lengthen_the_pipeline() -> void:
 	var pack: Dictionary = _board("garage")
 	var board: BoardSystem = pack["board"]
 	var state: RunState = pack["state"]
-	Simulation.apply_run_location(state, "warehouse", false)
+	Simulation.apply_infrastructure_tier(state, InfrastructureSystem.tier_for_room("warehouse"))
 	board.ensure_board(state, ContentDatabase)
-	assert_eq(CabinetSystems.tier(state, "backplane"), 3, "The warehouse lifts the backplane to tier 3")
+	assert_eq(CabinetSystems.tier(state, "backplane"), 3, "The warehouse tier lifts the backplane to tier 3")
 	assert_eq(board.derived_supported_capacity(state, ContentDatabase), 7, "Safe capacity follows the tier")
 	assert_eq(board.slots(state).size(), 7, "The pipeline is exactly safe capacity, no overflow bolted on")
 	assert_eq(board.overflow_allowance(state, ContentDatabase), 3, "The allowance is there to be used")
@@ -423,12 +426,13 @@ func _test_capacity_debug_adds_up() -> void:
 	board.append_overflow_stage(state, ContentDatabase)
 	var debug: Dictionary = board.capacity_debug(state, ContentDatabase)
 	for key in [
-		"dwelling", "backplane_tier", "backplane_safe_capacity", "legacy_bonus", "perk_bonus",
-		"upgrade_bonus", "safe_capacity", "overflow_capacity", "max_pipeline_length",
+		"room", "infrastructure_tier", "backplane_tier", "backplane_safe_capacity", "legacy_bonus",
+		"perk_bonus", "upgrade_bonus", "safe_capacity", "overflow_capacity", "max_pipeline_length",
 		"workflow_slots_size",
 	]:
 		assert_true(debug.has(key), "capacity_debug carries %s" % key)
-	assert_eq(str(debug.get("dwelling", "")), "office_unit", "Debug names the room")
+	assert_eq(str(debug.get("room", "")), "office_unit", "Debug names the room")
+	assert_eq(int(debug.get("infrastructure_tier", -1)), 2, "Debug names the Infrastructure Tier")
 	assert_eq(int(debug.get("backplane_tier", 0)), 2, "Debug names the tier")
 	assert_eq(int(debug.get("backplane_safe_capacity", 0)), 5, "Debug quotes the tier's bays")
 	assert_eq(int(debug.get("safe_capacity", 0)), 5, "Safe capacity is the tier's bays")

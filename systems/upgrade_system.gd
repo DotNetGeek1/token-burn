@@ -132,15 +132,14 @@ static func installed_key(upgrade: UpgradeDefinition) -> String:
 
 ## Whether the run has the thing this upgrade sits on top of: the cabinet
 ## system tiers it names (a rack wants the power bus that gives it floor space,
-## a plant wants the cooling loop it feeds), the chapter of the campaign it
+## a plant wants the cooling loop it feeds), the Infrastructure Tier it
 ## belongs to, or the machine it bolts onto.
 static func prerequisites_met(run_state: RunState, upgrade: UpgradeDefinition, content_db: Node) -> bool:
 	for system_id in upgrade.requires_system.keys():
 		if CabinetSystems.tier(run_state, str(system_id), content_db) < int(upgrade.requires_system[system_id]):
 			return false
-	if upgrade.requires_chapter != "":
-		var have: int = chapter_rank(str(run_state.build.get("dwelling", "")), content_db)
-		if have < chapter_rank(upgrade.requires_chapter, content_db):
+	if upgrade.requires_infrastructure > 0:
+		if InfrastructureSystem.tier(run_state, content_db) < upgrade.requires_infrastructure:
 			return false
 	if upgrade.requires_upgrade != "":
 		if not (upgrade.requires_upgrade in run_state.build.get("upgrades", [])):
@@ -149,13 +148,6 @@ static func prerequisites_met(run_state: RunState, upgrade: UpgradeDefinition, c
 		if installed_count(run_state, upgrade.requires_hardware) <= 0:
 			return false
 	return true
-
-
-## Where a chapter sits in the campaign order (`economy.infrastructure_tiers`),
-## so a chapter gate can be compared with the run's own chapter.
-static func chapter_rank(key: String, content_db: Node) -> int:
-	var tiers: Dictionary = content_db.balance.get("economy", {}).get("infrastructure_tiers", {})
-	return int(Dictionary(tiers.get("dwelling", {})).get(key, 0))
 
 
 static func installed_count(run_state: RunState, key: String) -> int:
@@ -187,8 +179,8 @@ static func hardware_slots_used(run_state: RunState, content_db: Node) -> int:
 	return used
 
 
-## Floor space comes from the Power Bus tier, floored by the chapter table
-## (see CabinetSystems).
+## Floor space comes from the Power Bus tier, floored by the Infrastructure
+## Tier's capacity floors (see CabinetSystems).
 static func hardware_slots_total(run_state: RunState, content_db: Node) -> int:
 	return int(CabinetSystems.capacity(run_state, "power", "hardware_slots", content_db))
 
@@ -196,7 +188,7 @@ static func hardware_slots_total(run_state: RunState, content_db: Node) -> int:
 ## What the cabinet's Cooling Loop keeps cool on its own, before anything is
 ## installed. Read from the tier every time rather than banked into a running
 ## total, so it can only ever count once however often the rig is recalculated.
-static func location_cooling(run_state: RunState, content_db: Node) -> float:
+static func infrastructure_cooling(run_state: RunState, content_db: Node) -> float:
 	return CabinetSystems.capacity(run_state, "cooling", "cooling_capacity", content_db)
 
 
@@ -316,60 +308,6 @@ func purchase(run_state: RunState, upgrade_id: String, content_db: Node, effect_
 	return true
 
 
-## Installs an upgrade the run did not pay for: the kit carried over from the
-## location the player just beat. It is otherwise a purchase — the standing bill,
-## the floor space and the effects all land the same way — because a machine that
-## costs nothing to keep would make moving up strictly free.
-##
-## The affordability and one-per-run gates are deliberately skipped: this kit was
-## already bought and already passed them, and re-checking cash against a stake
-## that has not been paid in yet would drop half the rig on the way.
-func install_carried(
-	run_state: RunState, upgrade_id: String, content_db: Node, effect_resolver: EffectResolver
-) -> bool:
-	var upgrade: UpgradeDefinition = content_db.get_upgrade(upgrade_id)
-	if upgrade == null:
-		return false
-	# Floor space is the one gate that still applies: it belongs to the new
-	# chapter's cabinet rather than to the kit, and capacities never decrease.
-	if hardware_space_full(run_state, upgrade, content_db):
-		return false
-	run_state.economy["recurring_costs_base"] = (
-		float(run_state.economy.get("recurring_costs_base", 0.0)) + upgrade.recurring_cost_delta
-	)
-	if upgrade.repeatable:
-		if not run_state.build.has("upgrade_levels"):
-			run_state.build["upgrade_levels"] = {}
-		run_state.build["upgrade_levels"][upgrade_id] = upgrade_level(run_state, upgrade_id) + 1
-	match upgrade.category:
-		"hardware", "component":
-			var key: String = installed_key(upgrade)
-			if key != "":
-				run_state.build["hardware"].append(key)
-	if not upgrade.repeatable and not (upgrade_id in run_state.build["upgrades"]):
-		run_state.build["upgrades"].append(upgrade_id)
-	_increment_upgrade_count(run_state, upgrade_id)
-	effect_resolver.apply_effects(run_state, upgrade.effects, "upgrade.%s" % upgrade_id)
-	return true
-
-
-## Everything the run bought, as a level count per upgrade id, in the order the
-## campaign has to reinstall it: a component cannot go into a machine that has
-## not been racked yet.
-##
-## Only hardware and the components that bolt onto it are rig: cash, modules
-## and perks reset every chapter by design, and so must anything else the
-## Market sells — workspace upgrades — or it
-## arrives in the next location already installed and already billing.
-static func carriable_rig_levels(run_state: RunState, content_db: Node) -> Dictionary:
-	var levels: Dictionary = upgrade_counts(run_state).duplicate(true)
-	for upgrade_id in levels.keys():
-		var upgrade: UpgradeDefinition = content_db.get_upgrade(str(upgrade_id))
-		if upgrade == null or not (upgrade.category == "hardware" or upgrade.category == "component"):
-			levels.erase(upgrade_id)
-	return levels
-
-
 func can_purchase(run_state: RunState, upgrade_id: String, content_db: Node) -> bool:
 	var upgrade: UpgradeDefinition = content_db.get_upgrade(upgrade_id)
 	if upgrade == null:
@@ -484,7 +422,7 @@ func sell(run_state: RunState, key: String, content_db: Node, economy_system: Ec
 	# Nothing is done about cooling here: it is derived from what is installed,
 	# so removing the unit has already removed its contribution.
 	# Credited rather than booked as income: selling the furniture is not the
-	# business earning, and ascension qualification reads income.
+	# business earning, and the investor's targets read income.
 	economy_system.credit(run_state, refund, "hardware_sale:%s" % key)
 	return true
 

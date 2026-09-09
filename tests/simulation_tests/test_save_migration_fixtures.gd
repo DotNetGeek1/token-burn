@@ -16,17 +16,138 @@ func run() -> void:
 	_test_corrupt_fixture_is_rejected()
 	_test_current_save_round_trips()
 	_test_dwelling_fixtures_migrate_to_cabinet_systems()
+	_test_dwelling_fixtures_migrate_to_investor_levels()
+	_test_v25_victory_fixture_has_completed_the_game()
+	_test_v26_migration_is_idempotent()
 
 
-## Seven v22 saves, one parked in each chapter's room, from before the cabinet
-## systems existed. Each must come up at v23 with the tiers the migration table
-## says the room is worth, and nothing the player had — bays, workflows, floor,
+## The v26 half of the room fixtures: rooms stop being progression. Each room
+## reads back into the Infrastructure Tier it stood for (its index in the old
+## campaign order), the contract it was playing for names the Investor Level,
+## the campaign flags are gone, the module shelf is stamped for regeneration,
+## and the cabinet's capacity is at least what the room's row promised.
+func _test_dwelling_fixtures_migrate_to_investor_levels() -> void:
+	var previous_bays: float = 0.0
+	var previous_cooling: float = 0.0
+	for index in range(DWELLING_FIXTURES.size()):
+		var dwelling: String = str(DWELLING_FIXTURES[index])
+		var payload: Dictionary = _read_fixture("dwelling_%s.json" % dwelling)
+		var saved: Dictionary = Dictionary(payload.get("run_state", {}))
+		var saved_flags: Dictionary = Dictionary(saved.get("flags", {}))
+		assert_true(saved_flags.has("location_completed"), "%s fixture carries the old campaign flags" % dwelling)
+		assert_false(saved_flags.has("game_completed"), "%s fixture predates game_completed" % dwelling)
+
+		var state := RunState.new()
+		state.from_dict(saved)
+
+		assert_eq(
+			int(state.build.get("infrastructure_tier", -1)), index,
+			"%s: the room reads back as Infrastructure Tier %d" % [dwelling, index]
+		)
+		assert_eq(
+			InfrastructureSystem.room_id(state, ContentDatabase), dwelling,
+			"%s: and that tier shows the same room" % dwelling
+		)
+		assert_eq(
+			int(state.investor.get("level", 0)), index + 1,
+			"%s: the contract names Investor Level %d" % [dwelling, index + 1]
+		)
+		assert_eq(
+			int(state.investor.get("targets_completed", -1)), index,
+			"%s: with %d targets behind it" % [dwelling, index]
+		)
+		assert_eq(int(state.investor.get("activated_round", 0)), 1, "%s: activated_round is filled in" % dwelling)
+		assert_eq(
+			str(state.investor.get("contract_id", "")),
+			str(Dictionary(saved.get("ascension", {})).get("contract_id", "")),
+			"%s: the contract itself is preserved" % dwelling
+		)
+		for stale in ["location_completed", "next_location", "ascension_tier"]:
+			assert_false(state.flags.has(stale), "%s: flags.%s is gone" % [dwelling, stale])
+		assert_true(state.flags.has("game_completed"), "%s: game_completed exists" % dwelling)
+		assert_false(bool(state.flags.get("game_completed", true)), "%s: a run mid-contract has not completed the game" % dwelling)
+		assert_true(state.flags.has("target_complete"), "%s: target_complete exists" % dwelling)
+		assert_false(bool(state.flags.get("target_complete", true)), "%s: nor met its target" % dwelling)
+		var market: Dictionary = Dictionary(state.business.get("module_market", {}))
+		assert_false(market.has("location"), "%s: the module shelf's old room-stamp key is gone" % dwelling)
+		assert_eq(str(market.get("stamp", "x")), "", "%s: the module shelf's scale stamp is cleared" % dwelling)
+		assert_eq(int(market.get("round", -1)), 0, "%s: and its round stamp, so the shelf regenerates" % dwelling)
+		assert_false(state.build.has("dwelling"), "%s: the legacy room key is erased once its tier is derived" % dwelling)
+		assert_eq(RoomProgression.room_for(state, ContentDatabase), dwelling, "%s: the room is drawn from the tier" % dwelling)
+
+		# Capacity: the cabinet the migration derived must hold at least what
+		# the room's old row granted — the tier the room reads back into is
+		# what sizes the cabinet, so a wrong tier would show up here as a
+		# warehouse loading with a bedroom's bays. The row is now the tier's
+		# `floors` block in infrastructure.json.
+		var bays: float = CabinetSystems.capacity(state, "backplane", "bays", ContentDatabase)
+		var cooling: float = CabinetSystems.capacity(state, "cooling", "cooling_capacity", ContentDatabase)
+		var legacy_row: Dictionary = Dictionary(InfrastructureSystem.entry(index, ContentDatabase).get("floors", {}))
+		assert_true(
+			cooling >= float(legacy_row.get("cooling_capacity", 0.0)),
+			"%s: cooling %s >= the tier's floor %s" % [dwelling, str(cooling), str(legacy_row.get("cooling_capacity", 0.0))]
+		)
+		assert_true(
+			bays >= previous_bays and cooling >= previous_cooling,
+			"%s: bays %s / cooling %s never fall below the room before it (%s / %s)" % [
+				dwelling, str(bays), str(cooling), str(previous_bays), str(previous_cooling),
+			]
+		)
+		previous_bays = bays
+		previous_cooling = cooling
+
+
+## A v25 save that beat the Moon and carried on: it has completed the game, so
+## it comes back at the final level with Deep Burn open to it and nothing left
+## of the campaign flags.
+func _test_v25_victory_fixture_has_completed_the_game() -> void:
+	var payload: Dictionary = _read_fixture("v25_victory.json")
+	assert_true(not payload.is_empty(), "v25 victory fixture parses")
+	var saved: Dictionary = Dictionary(payload.get("run_state", {}))
+	assert_eq(int(saved.get("save_version", 0)), 25, "The fixture is a v25 save")
+	assert_true(bool(Dictionary(saved.get("flags", {})).get("post_victory", false)), "The fixture is post-victory")
+	var state := RunState.new()
+	state.from_dict(saved)
+	assert_true(bool(state.flags.get("game_completed", false)), "A post-victory Moon save has completed the game")
+	assert_false(bool(state.flags.get("target_complete", false)), "It is not waiting on a next target")
+	assert_true(bool(state.flags.get("post_victory", false)), "post_victory is kept")
+	assert_eq(
+		int(state.investor.get("level", 0)), InvestorProgression.final_level(ContentDatabase),
+		"The Final Prompt is the final level"
+	)
+	assert_eq(int(state.build.get("infrastructure_tier", -1)), 6, "The Moon is the top Infrastructure Tier")
+	assert_true(DepthSystem.new().can_begin(state), "Deep Burn is open to it")
+	for stale in ["location_completed", "next_location", "ascension_tier"]:
+		assert_false(state.flags.has(stale), "flags.%s is gone" % stale)
+	assert_eq(int(state.to_dict().get("save_version", 0)), RunState.SAVE_VERSION, "Saved back at the current version")
+
+
+## Running a migrated save back through from_dict changes nothing: the level
+## read out of the contract is now carried by the save itself.
+func _test_v26_migration_is_idempotent() -> void:
+	var payload: Dictionary = _read_fixture("dwelling_warehouse.json")
+	var first := RunState.new()
+	first.from_dict(Dictionary(payload.get("run_state", {})))
+	var again := RunState.new()
+	again.from_dict(first.to_dict())
+	assert_eq(again.investor, first.investor, "The investor block round-trips unchanged")
+	assert_eq(again.flags, first.flags, "So do the flags")
+	assert_eq(
+		int(again.build.get("infrastructure_tier", -1)), int(first.build.get("infrastructure_tier", -2)),
+		"And the Infrastructure Tier"
+	)
+
+
+## Seven v22 saves, one parked in each of the old rooms, from before the cabinet
+## systems existed. Each must come up at v23 with the entry tiers of the
+## Infrastructure Tier the room now stands for (`cabinet_entry_tiers` in
+## infrastructure.json), and nothing the player had — bays, workflows, floor,
 ## cash, the contract, the kit on the board — may be smaller than it was.
 func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
-	var table: Dictionary = Dictionary(ContentDatabase.cabinet_systems.get("migration_from_dwelling", {}))
 	var order: Array = Array(ContentDatabase.cabinet_systems.get("migration_value_order", []))
 	var board_system := BoardSystem.new()
 	for dwelling in DWELLING_FIXTURES:
+		var tier: int = InfrastructureSystem.tier_for_room(dwelling, ContentDatabase)
 		var payload: Dictionary = _read_fixture("dwelling_%s.json" % dwelling)
 		assert_true(not payload.is_empty(), "%s fixture parses" % dwelling)
 		var saved: Dictionary = Dictionary(payload.get("run_state", {}))
@@ -41,10 +162,10 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 		state.from_dict(saved)
 
 		# Tiers: present for every system, whole numbers inside the range, and
-		# exactly the table's row for the room.
+		# exactly the entry tiers of the room's Infrastructure Tier.
 		var tiers: Variant = state.build.get("cabinet_systems", null)
 		assert_true(tiers is Dictionary, "%s migrates with a cabinet_systems block" % dwelling)
-		var expected_row: Array = Array(table.get(dwelling, []))
+		var expected_row: Dictionary = InfrastructureSystem.cabinet_entry_tiers_at(tier, ContentDatabase)
 		for i in range(order.size()):
 			var system_id: String = str(order[i])
 			var stored: Variant = Dictionary(tiers).get(system_id, null)
@@ -53,14 +174,14 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 				int(stored) >= 1 and int(stored) <= 4, "%s: %s tier is inside 1..4" % [dwelling, system_id]
 			)
 			assert_eq(
-				int(stored), int(expected_row[i]),
-				"%s: %s tier matches the migration table" % [dwelling, system_id]
+				int(stored), int(expected_row.get(system_id, 0)),
+				"%s: %s tier matches the tier's entry tiers" % [dwelling, system_id]
 			)
 		assert_eq(
-			str(state.build.get("dwelling", "")),
-			dwelling,
-			"%s: migration_debug records the dwelling it was derived from" % dwelling
+			int(state.build.get("infrastructure_tier", -1)), tier,
+			"%s: the room it was derived from is Infrastructure Tier %d" % [dwelling, tier]
 		)
+		assert_false(state.build.has("dwelling"), "%s: the legacy room key does not survive" % dwelling)
 
 		# Capacities never shrink.
 		var saved_slots: int = int(Dictionary(saved_build.get("board", {})).get("slot_count", 0))
@@ -113,16 +234,14 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 				>= UpgradeSystem.hardware_slots_used(state, ContentDatabase),
 			"%s: floor space still holds the kit that was racked" % dwelling
 		)
-		var legacy_row: Dictionary = Dictionary(
-			Dictionary(ContentDatabase.balance.get("dwelling_costs", {})).get(dwelling, {})
-		)
+		var legacy_row: Dictionary = Dictionary(InfrastructureSystem.entry(tier, ContentDatabase).get("floors", {}))
 		assert_true(
 			UpgradeSystem.hardware_slots_total(state, ContentDatabase) >= int(legacy_row.get("hardware_slots", 0)),
-			"%s: hardware slots >= the room's row" % dwelling
+			"%s: hardware slots >= the tier's floor" % dwelling
 		)
 		assert_true(
-			UpgradeSystem.location_cooling(state, ContentDatabase) >= float(legacy_row.get("cooling_capacity", 0.0)),
-			"%s: cooling >= the room's row" % dwelling
+			UpgradeSystem.infrastructure_cooling(state, ContentDatabase) >= float(legacy_row.get("cooling_capacity", 0.0)),
+			"%s: cooling >= the tier's floor" % dwelling
 		)
 		assert_true(
 			float(state.compute.get("heat_capacity", 0.0)) >= saved_heat_capacity,
@@ -142,9 +261,9 @@ func _test_dwelling_fixtures_migrate_to_cabinet_systems() -> void:
 			int(Dictionary(saved.get("calendar", {})).get("round", 0)),
 			"%s: round preserved" % dwelling
 		)
-		assert_true(str(state.ascension.get("contract_id", "")) != "", "%s: fixture carries a contract" % dwelling)
+		assert_true(str(state.investor.get("contract_id", "")) != "", "%s: fixture carries a contract" % dwelling)
 		assert_eq(
-			str(state.ascension.get("contract_id", "")),
+			str(state.investor.get("contract_id", "")),
 			str(Dictionary(saved.get("ascension", {})).get("contract_id", "")),
 			"%s: contract preserved" % dwelling
 		)

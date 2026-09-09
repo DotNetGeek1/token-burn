@@ -204,7 +204,7 @@ func _begin_batch_readout(preview: Dictionary, beats: Array) -> void:
 ## with the beats.
 func _update_feed_readout(multiplier: float, batch_tokens: float) -> void:
 	var rig: float = maxf(0.0, float(Simulation.run_state.compute.get("token_rate", 0.0)))
-	var progress: Dictionary = Simulation.ascension_progress()
+	var progress: Dictionary = Simulation.investor_progress()
 	var burned: float = float(progress.get("tokens_burned", 0.0)) + maxf(0.0, batch_tokens)
 	_feed.set_readout(rig * maxf(0.0, multiplier), burned, float(progress.get("total_burn", 0.0)))
 

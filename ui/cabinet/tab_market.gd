@@ -11,6 +11,8 @@ const MODULES := "modules"
 const SYSTEMS := "systems"
 const CALIBRATE := "calibrate"
 const RESTOCK := "restock"
+## The one Infrastructure row at the head of the SYSTEMS shelf.
+const INFRASTRUCTURE := "infrastructure"
 
 ## The painted tile of a system's next tier, as a row thumbnail.
 const SYSTEM_TILE_PX := 44.0
@@ -178,6 +180,9 @@ func _shelves() -> Dictionary:
 	for module_id in Simulation.module_market_stock():
 		shelves[MODULES].append({"kind": "module", "id": str(module_id)})
 	shelves[MODULES].append({"kind": "restock", "id": RESTOCK})
+	# Infrastructure heads the shelf: it is the scale the five systems sit in,
+	# and the thing that lifts their tier cap.
+	shelves[SYSTEMS].append({"kind": "infrastructure", "id": INFRASTRUCTURE})
 	for system_id in CabinetSystems.system_ids():
 		shelves[SYSTEMS].append({"kind": "system", "id": str(system_id)})
 	# Every owned module is a calibration target; the consume picks come from
@@ -275,10 +280,12 @@ func _rebuild_shelf(shelves: Dictionary) -> void:
 
 ## One cabinet system as a row: the next tier's painted tile, the system's
 ## name, `TIER n → n+1 · <next tier name>`, what that does to the numbers, and
-## the price (or MAXED). A maxed system shows the tier it is on.
+## the price (or MAXED). A maxed system shows the tier it is on. The
+## Infrastructure row is drawn by the same code off the same info shape.
 func _system_entry(item: Dictionary) -> Dictionary:
 	var id: String = str(item["id"])
-	var info: Dictionary = Simulation.cabinet_system_next(id)
+	var is_infrastructure: bool = str(item.get("kind", "")) == "infrastructure"
+	var info: Dictionary = _row_info(item)
 	var tier: int = int(info.get("tier", 1))
 	var next_tier: int = int(info.get("next_tier", tier))
 	var maxed: bool = bool(info.get("maxed", false))
@@ -307,12 +314,19 @@ func _system_entry(item: Dictionary) -> Dictionary:
 		"figure_color": figure_color,
 		"status": "OPEN" if can else _system_status(reason, maxed),
 		"status_color": CabinetStyle.PHOSPHOR if can else CabinetStyle.PHOSPHOR_DIM,
-		"icon": AssetCatalog.cabinet_system_tile(id, tier if maxed else next_tier),
+		"icon": AssetCatalog.stat_icon("power") if is_infrastructure else AssetCatalog.cabinet_system_tile(id, tier if maxed else next_tier),
 		"icon_size": SYSTEM_TILE_PX,
 		"icon_tint": CabinetStyle.WHITE,
 		"accent": CabinetStyle.AMBER,
 		"tooltip": "%s — %s" % [str(info.get("name", id)), str(info.get("effect", "")) if not maxed else "Top tier fitted."],
 	}
+
+
+## The next-tier info for a SYSTEMS shelf row, whichever kind it is.
+func _row_info(item: Dictionary) -> Dictionary:
+	if str(item.get("kind", "")) == "infrastructure":
+		return Simulation.infrastructure_next()
+	return Simulation.cabinet_system_next(str(item["id"]))
 
 
 ## The short word under the price; the full sentence is on the button and in
@@ -324,7 +338,7 @@ func _system_status(reason: String, maxed: bool) -> String:
 		return "CLOSED"
 	if reason.begins_with("NEED "):
 		return "TOO DEAR"
-	if reason.begins_with("NEXT CHAPTER"):
+	if reason.begins_with(CabinetSystems.REASON_NEEDS_INFRASTRUCTURE):
 		return "LOCKED"
 	return "BLOCKED"
 
@@ -411,9 +425,10 @@ func _refresh_detail() -> void:
 				{"stat": "Cost", "value": NumberFormat.format_cash(cost), "color": CabinetStyle.PHOSPHOR if cash >= cost else CabinetStyle.RED},
 				{"stat": "You have", "value": NumberFormat.format_cash(cash)},
 			])
-		"system":
+		"system", "infrastructure":
 			var id: String = str(item["id"])
-			var info: Dictionary = Simulation.cabinet_system_next(id)
+			var is_infrastructure: bool = str(item["kind"]) == "infrastructure"
+			var info: Dictionary = _row_info(item)
 			var tier: int = int(info.get("tier", 1))
 			var maxed: bool = bool(info.get("maxed", false))
 			var can: bool = bool(info.get("can_upgrade", false))
@@ -421,7 +436,7 @@ func _refresh_detail() -> void:
 			_title.text = str(info.get("name", id)).to_upper()
 			_kicker.text = "TIER %d · %s" % [tier, str(info.get("tier_name", "")).to_upper()]
 			_kicker.add_theme_color_override("font_color", CabinetStyle.PHOSPHOR_DIM)
-			var rows: Array = [{"rule": "FITTED", "text": _fitted_stats(id)}]
+			var rows: Array = [{"rule": "FITTED", "text": _infrastructure_fitted() if is_infrastructure else _fitted_stats(id)}]
 			if maxed:
 				rows.append({"rule": "NEXT", "text": "TOP TIER — nothing more to fit"})
 			else:
@@ -435,7 +450,8 @@ func _refresh_detail() -> void:
 				var warning: String = Simulation.purchase_bill_warning(cost)
 				if warning != "":
 					rows.append({"warn": warning})
-			rows.append({"text": _generation_line()})
+			if not is_infrastructure:
+				rows.append({"text": _generation_line()})
 			detail_rows(_rows, rows)
 			var summary: Array = []
 			if maxed:
@@ -533,6 +549,17 @@ func _pct(mult: float) -> String:
 
 
 ## "16 COOLING · 100 HEAT CAP": what the fitted tier is worth right now.
+## "RENT $400 · CABINET CAP 2 · 3 SLOTS": what the current Infrastructure Tier
+## gives the machine, for the detail column.
+func _infrastructure_fitted() -> String:
+	var state: RunState = Simulation.run_state
+	return "RENT %s · CABINET CAP %d · %d SLOTS" % [
+		NumberFormat.format_cash(float(state.economy.get("round_rent", 0.0))),
+		InfrastructureSystem.cabinet_max_tier(state),
+		int(InfrastructureSystem.floor_value(state, "hardware_slots")),
+	]
+
+
 func _fitted_stats(system_id: String) -> String:
 	var parts: PackedStringArray = []
 	for stat_key in CabinetSystems.stat_keys(system_id):
@@ -559,6 +586,16 @@ func primary_action() -> Dictionary:
 				"label": "UPGRADE", "enabled": true,
 				"sub": _spend_sub(float(info.get("cost", 0.0)), cash),
 				"pressed": _upgrade_system.bind(id),
+			})
+		"infrastructure":
+			var info: Dictionary = Simulation.infrastructure_next()
+			if not bool(info.get("can_upgrade", false)):
+				var reason: String = str(info.get("reason", "")).strip_edges()
+				return blocked_action("UPGRADE", reason if reason != "" else "UNAVAILABLE")
+			return normalize_action({
+				"label": "UPGRADE", "enabled": true,
+				"sub": _spend_sub(float(info.get("cost", 0.0)), cash),
+				"pressed": _upgrade_infrastructure,
 			})
 		"module":
 			var id: String = str(item["id"])
@@ -658,6 +695,21 @@ func _upgrade_system(id: String) -> void:
 		_selected = id
 		_after_trade()
 		system_upgraded.emit(id, int(result.get("previous_tier", 0)), int(result.get("tier", 0)))
+	else:
+		UiSound.play("error")
+		refresh()
+		changed.emit()
+
+
+## Buys the next Infrastructure Tier. Same flow as a system upgrade; the shell
+## hears `system_upgraded` with the INFRASTRUCTURE id so it can play the
+## install and redraw the room.
+func _upgrade_infrastructure() -> void:
+	var result: Dictionary = Simulation.purchase_infrastructure()
+	if bool(result.get("ok", false)):
+		_selected = INFRASTRUCTURE
+		_after_trade()
+		system_upgraded.emit(INFRASTRUCTURE, int(result.get("previous_tier", 0)), int(result.get("tier", 0)))
 	else:
 		UiSound.play("error")
 		refresh()

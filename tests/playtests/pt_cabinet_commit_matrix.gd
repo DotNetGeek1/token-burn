@@ -435,7 +435,7 @@ func _systems_shelf(harness: UiHarness, shell: Node, screen: CabinetScreen, butt
 	# No cash: blocked with NEED $N MORE (when the market is open and the tier
 	# is otherwise available).
 	var cash_before: float = float(Simulation.run_state.economy.get("cash", 0.0))
-	if Simulation.market_open() and not bool(info.get("maxed", false)) and int(info.get("next_tier", 9)) <= CabinetSystems.max_tier_for_chapter(Simulation.run_state):
+	if Simulation.market_open() and not bool(info.get("maxed", false)) and int(info.get("next_tier", 9)) <= CabinetSystems.max_tier_for_infrastructure(Simulation.run_state):
 		Simulation.run_state.economy["cash"] = 0.0
 		shell.refresh_all()
 		await harness.settle()

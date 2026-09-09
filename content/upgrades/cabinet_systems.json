@@ -59,7 +59,7 @@
         2000
       ],
       "visual_mount": "system_cooling",
-      "design_note": "Chapter cooling is multiplied by the tier relative to its entry tier; higher tiers always improve cooling and heat headroom."
+      "design_note": "The Infrastructure Tier's profile cooling is multiplied by the tier relative to its entry tier; higher tiers always improve cooling and heat headroom."
     },
     {
       "id": "power",
@@ -109,7 +109,7 @@
         45000
       ],
       "visual_mount": "system_backplane",
-      "design_note": "Safe pipeline stages, and the only source of them: no chapter floor, no bonuses on top. Perks, monitors and meta slot unlocks add overflow allowance (job_scaling.board.overflow.base_allowance + bonuses) instead."
+      "design_note": "Safe pipeline stages, and the only source of them: no infrastructure floor, no bonuses on top. Perks, monitors and meta slot unlocks add overflow allowance (infrastructure.json overflow_allowance + bonuses) instead."
     },
     {
       "id": "control",
@@ -174,123 +174,5 @@
     "power",
     "backplane",
     "control"
-  ],
-  "migration_from_dwelling": {
-    "bedroom": [
-      1,
-      1,
-      1,
-      1,
-      1
-    ],
-    "garage": [
-      2,
-      2,
-      2,
-      2,
-      1
-    ],
-    "office_unit": [
-      2,
-      2,
-      2,
-      2,
-      2
-    ],
-    "warehouse": [
-      3,
-      3,
-      3,
-      3,
-      2
-    ],
-    "datacentre_campus": [
-      3,
-      3,
-      3,
-      3,
-      3
-    ],
-    "private_power_grid": [
-      4,
-      3,
-      4,
-      4,
-      3
-    ],
-    "moon_facility": [
-      4,
-      4,
-      4,
-      4,
-      4
-    ]
-  },
-  "chapter_max_tier": {
-    "bedroom": 2,
-    "garage": 3,
-    "office_unit": 3,
-    "warehouse": 4,
-    "datacentre_campus": 4,
-    "private_power_grid": 4,
-    "moon_facility": 4
-  },
-  "chapter_profiles": {
-    "bedroom": {
-      "base_token_rate": 1000000,
-      "power_draw": 65,
-      "work_tier": 0,
-      "cooling_capacity": 17,
-      "heat_capacity": 100,
-      "cost_scale": 1.0
-    },
-    "garage": {
-      "base_token_rate": 7000000,
-      "power_draw": 415,
-      "work_tier": 1,
-      "cooling_capacity": 110,
-      "heat_capacity": 140,
-      "cost_scale": 12.5
-    },
-    "office_unit": {
-      "base_token_rate": 52000000,
-      "power_draw": 2065,
-      "work_tier": 2,
-      "cooling_capacity": 599,
-      "heat_capacity": 200,
-      "cost_scale": 125.0
-    },
-    "warehouse": {
-      "base_token_rate": 521000000,
-      "power_draw": 8065,
-      "work_tier": 3,
-      "cooling_capacity": 2597,
-      "heat_capacity": 280,
-      "cost_scale": 1250.0
-    },
-    "datacentre_campus": {
-      "base_token_rate": 5521000000,
-      "power_draw": 40065,
-      "work_tier": 4,
-      "cooling_capacity": 14489,
-      "heat_capacity": 400,
-      "cost_scale": 16666.666666666668
-    },
-    "private_power_grid": {
-      "base_token_rate": 105521000000,
-      "power_draw": 300065,
-      "work_tier": 5,
-      "cooling_capacity": 123777,
-      "heat_capacity": 560,
-      "cost_scale": 208333.33333333334
-    },
-    "moon_facility": {
-      "base_token_rate": 2105521000000,
-      "power_draw": 2000065,
-      "work_tier": 6,
-      "cooling_capacity": 960031,
-      "heat_capacity": 800,
-      "cost_scale": 1250000.0
-    }
-  }
+  ]
 }

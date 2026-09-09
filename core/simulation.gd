@@ -16,14 +16,15 @@ enum Phase {
 	ROUND_END,
 	## The pre-v25 round-end angel draft. No longer entered by the round loop;
 	## kept so a save written mid-table can still resolve it. The live perk
-	## draft is the investor's, dealt in RUN_END when a chapter goal is met.
+	## draft is the investor's, dealt in RUN_END when a target is met.
 	ANGEL_ROUND,
 	RUN_END,
 }
 
-## Rounds in the year. The location's contract is the win condition and this is
-## its deadline: finishing the contract wins the run, and reaching the end of
-## the year without it ends the run. There is no overtime.
+## Rounds an investor target allows by default. Each target's deadline is
+## counted from the round it went live on, on the run's continuous calendar:
+## meeting it is a level-up (or, for the final target, the win), and reaching
+## the deadline without it ends the run. There is no overtime.
 const ROUNDS_PER_RUN := 12
 
 ## Stands in for "this layout never delivers" when scoring pipelines.
@@ -64,7 +65,8 @@ var _perk_system: PerkSystem = PerkSystem.new()
 var _upgrade_system: UpgradeSystem = UpgradeSystem.new()
 var _board_system: BoardSystem = BoardSystem.new()
 var _depth_system: DepthSystem = DepthSystem.new()
-var _ascension_system: AscensionSystem = AscensionSystem.new()
+## The investor's ladder: level, live target, draft-per-target bookkeeping.
+var _investor_progression: InvestorProgression = InvestorProgression.new()
 var _achievement_system: AchievementSystem = AchievementSystem.new()
 var _work: WorkSession = WorkSession.new()
 var _life: RunLifecycle = RunLifecycle.new()
@@ -202,8 +204,8 @@ func perk_system() -> PerkSystem:
 	return _perk_system
 
 
-func ascension_system() -> AscensionSystem:
-	return _ascension_system
+func investor_progression() -> InvestorProgression:
+	return _investor_progression
 
 
 func achievement_system() -> AchievementSystem:
@@ -311,22 +313,12 @@ func reset_run(p_seed: int = 0, difficulty_override: String = "") -> void:
 	_life.reset_run(self, p_seed, difficulty_override)
 
 
-## Settles the run into its location. A location is a chapter, not a purchase:
-## its rent, floor space and environmental cooling replace the defaults once,
-## at the start, rather than being added to whatever was already there.
-## `grant_starter_rig` is only turned off by tests that are measuring the room
-## itself — its cooling, its floor space, its shelves — where the machine the
-## room comes with would be counted as part of the answer.
-func apply_run_location(state: RunState, location_id: String, grant_starter_rig: bool = true) -> void:
-	_life.apply_run_location(self, state, location_id, grant_starter_rig)
-
-
-## The machine the room comes with. Contracts are sized against the rig a
-## location expects rather than against whatever the player happens to own, so a
-## run that starts in the warehouse on a second-hand laptop would be handed work
-## a thousand times beyond it.
-func _grant_location_starter_rig(state: RunState, stats: Dictionary) -> void:
-	_life.grant_location_starter_rig(self, state, stats)
+## Settles a run onto an Infrastructure Tier without charging for it: cabinet
+## entry tiers, rent, heat capacity and cooling follow the tier. Tests and
+## tools use it to stand a run up at a given scale; players buy tiers through
+## `purchase_infrastructure`.
+func apply_infrastructure_tier(state: RunState, new_tier: int) -> void:
+	_life.apply_infrastructure_tier(self, state, new_tier)
 
 
 ## Racks the machines earned through the permanent starting-rig unlock ladder.
@@ -334,8 +326,8 @@ func _grant_location_starter_rig(state: RunState, stats: Dictionary) -> void:
 ## bought arrives — so this is the one place hardware crosses runs, and only
 ## because a pick was spent on it after beating the whole campaign.
 ##
-## Free of charge but not of floor space: a small room racks what fits, and the
-## call from `advance_to_next_chapter` racks the rest once a bigger room opens.
+## Free of charge but not of floor space: a small rig racks what fits, and the
+## call from `purchase_infrastructure` racks the rest once a bigger tier opens.
 ## That second call is why a rung already standing is skipped rather than
 ## installed again.
 func _install_permanent_rig() -> void:
@@ -755,75 +747,80 @@ func _layout_score(job: Dictionary) -> float:
 	return (fee - outgoings) / prompts
 
 
-# --- Ascension ----------------------------------------------------------
+# --- Investor progression -------------------------------------------------
 
+## The run's Investor Level, 1-based. The one gameplay progression authority.
+func investor_level() -> int:
+	return _investor_progression.level(run_state)
+
+
+## The target the run is (or was last) measured against; empty only when the
+## content is missing.
+func investor_target() -> Dictionary:
+	return _investor_progression.current_target(run_state, ContentDatabase)
+
+
+## Where the run stands against its target: burn, quality, heat ceiling,
+## deadline and rounds remaining.
+func investor_progress() -> Dictionary:
+	return _investor_progression.progress(run_state, ContentDatabase)
+
+
+## Everything a readout needs about the investor's ladder at once.
+func investor_summary() -> Dictionary:
+	return _investor_progression.summary(run_state, ContentDatabase)
+
+
+func investor_active() -> bool:
+	return _investor_progression.is_active(run_state)
+
+
+## Whether the final target has been met: Token Burn is complete and the run
+## is in (or being offered) Deep Burn.
+func game_completed() -> bool:
+	return bool(run_state.flags.get("game_completed", false))
+
+
+## The run's Infrastructure Tier, 0..6 — the machine's scale, bought in the
+## Market. See InfrastructureSystem.
 func infrastructure_tier() -> int:
-	return _ascension_system.infrastructure_tier(run_state, ContentDatabase)
+	return InfrastructureSystem.tier(run_state, ContentDatabase)
 
 
-func ascension_active() -> bool:
-	return _ascension_system.is_active(run_state)
+## Buys the next Infrastructure Tier. Same result shape as
+## `upgrade_cabinet_system`: {ok, reason, tier, previous_tier, cost, effect}.
+func purchase_infrastructure() -> Dictionary:
+	return MarketService.purchase_infrastructure(self)
 
 
-func ascension_active_contract() -> Dictionary:
-	return _ascension_system.active_contract(run_state, ContentDatabase)
+## The INFRASTRUCTURE row for the Market's SYSTEMS shelf; same shape as
+## `cabinet_system_next`.
+func infrastructure_next() -> Dictionary:
+	return MarketService.infrastructure_next(self)
 
 
-func ascension_progress() -> Dictionary:
-	return _ascension_system.progress(run_state, ContentDatabase)
+## The investor's target has been met. The run is not thrown away with it. The
+## round it happened in is settled properly — the work pays out, the bills are
+## waived, the investor deals his perk draft — and the phase that would have
+## come next is remembered, so continuing resumes from a clean round boundary
+## instead of the middle of a burn. Only the `final` target completes the game.
+func _reach_target_complete(target: Dictionary) -> void:
+	_life.reach_target_complete(self, target)
 
 
-## Where the run stands against the contract of the location it is being played
-## in, for the readouts that have to say so without re-deriving any of the rules.
-func ascension_summary() -> Dictionary:
-	return _ascension_system.summary(run_state, ContentDatabase)
-
-
-## The contract this run is being played for.
-func ascension_boss_contract() -> Dictionary:
-	return _ascension_system.location_contract(run_state, ContentDatabase)
-
-
-## The location's boss has cleared: the game is beaten. The run is not thrown away
-## with it. The round it happened in is settled properly — the work pays out, the
-## bills are waived, the investor deals his perk draft — and the phase that would
-## have come next is remembered, so continuing into endless mode resumes from a
-## clean round boundary instead of the middle of a burn.
-func _reach_victory(contract: Dictionary) -> void:
-	_life.reach_victory(self, contract)
-
-
-## The investor pays for the contract on delivery, and pays more for delivering
+## The investor pays for the target on delivery, and pays more for delivering
 ## early: every round left on the deadline is worth another round's rent. Rent is
-## the scale because it is the one figure that already tracks the chapter — the
-## same formula is pocket money in the bedroom and a fortune on the moon, without
-## a table of per-location numbers to keep in step.
+## the scale because it is the one figure that already tracks the machine's
+## scale — the same formula is pocket money on the starting rig and a fortune
+## at planetary scale, without a table of per-tier numbers to keep in step.
 func _pay_ascension_bonus(contract: Dictionary) -> void:
 	_life.pay_ascension_bonus(self, contract)
 
 
-## Beating the boss retires the chapter and opens the next one. Guarded once-only
-## because `_end_run`'s "ascended" branch settles the same victory from the other
-## direction, and a location must not be completed twice.
-##
-## The profile records the clear, but the campaign selection stays put: the win
-## continues in place through `advance_to_next_chapter`, and a run started fresh
-## afterwards is a fresh game from the bedroom, not a resume.
-func _complete_run_location() -> void:
-	_life.complete_run_location(self)
-
-
-## Whether the run is being played in the campaign's last location — the only
-## place a victory is the end of the game rather than of a chapter, and so the
-## only place permanent rewards are paid out.
-func _run_is_final_chapter() -> bool:
-	return _life.run_is_final_chapter(self)
-
-
-## The location this victory opened up, empty if the run was played in the last
-## chapter there is.
-func next_location_unlocked() -> String:
-	return _life.next_location_unlocked(self)
+## Whether the target the run is playing for is the final one — the only place
+## permanent rewards are paid out.
+func _run_is_final_target() -> bool:
+	return _life.run_is_final_target(self)
 
 
 ## True while a victory is being settled: the bills landing in that window cannot
@@ -832,34 +829,28 @@ func is_settling_victory() -> bool:
 	return _life.is_settling_victory()
 
 
-## Carries a won run on rather than starting over. Everything the run owns stays
-## put; from here the calendar is behind it and the costs climb every round, so
-## the tail lasts exactly as long as the build can hold it up.
-##
-## Only the last chapter offers this. A mid-campaign win is a level-up — the next
-## location is the continuation, and an endless tail there would just be a bigger
-## bedroom. The tail exists for the run with nowhere further up to go.
 func _reach_depth_complete() -> void:
 	_life.reach_depth_complete(self)
 
 
+## Carries a completed game on into Deep Burn rather than starting over.
+## Everything the run owns stays put; from here the calendar is behind it and
+## the costs climb every round, so the tail lasts exactly as long as the build
+## can hold it up. Only the final target offers this.
 func continue_after_victory() -> bool:
 	return _life.continue_after_victory(self)
 
 
-## Whether the run has already beaten a Tier 3 contract and chosen to carry on.
+## Whether the run has completed the game and chosen to carry on (Deep Burn).
 func in_post_victory() -> bool:
 	return _life.in_post_victory(self)
 
 
-## Moves a mid-campaign win into the next chapter as the same business. The
-## angel's goal is the end of a chapter, not the end of the game: cash, perks,
-## modules, workflows, upgrades and reputation all carry forward — what changes
-## is the room, the rent, and the contract the run is measured against, which
-## is the next location's bigger one. Only the last chapter has no next room;
-## its continuation is `continue_after_victory`.
-func advance_to_next_chapter() -> bool:
-	return _life.advance_to_next_chapter(self)
+## Takes the next target after a non-final one is met: same business, same
+## room, same calendar, one Investor Level higher. Nothing is charged and
+## nothing moves except the figure the run is measured against.
+func continue_after_target() -> bool:
+	return _life.continue_after_target(self)
 
 
 # --- Workflows ----------------------------------------------------------
@@ -1069,12 +1060,6 @@ func decline_offers() -> void:
 ## verdict screen routes through it before the company moves on.
 func investor_draft_pending() -> bool:
 	return _life.investor_draft_pending(self)
-
-
-## What moving into the next chapter will charge for commissioning the room,
-## for the verdict screen. Zero when there is no chapter ahead.
-func chapter_commissioning_preview() -> float:
-	return _life.chapter_commissioning_preview(self)
 
 
 ## Spends the draft's one pick and closes it.
@@ -1343,7 +1328,7 @@ func _after_angel_round() -> void:
 
 
 ## `outcome` names how the run ended. "ascended" is the only way to win: an
-## Ascension Contract completed. "retired" survives only for saves and profiles
+## Investor Target completed. "retired" survives only for saves and profiles
 ## written before overtime existed — the calendar no longer ends a run, so
 ## nothing reaches it any more. Left blank it falls back to the old two-state
 ## behaviour ("ascended" on victory, "lost" otherwise), which is what the batch

@@ -111,7 +111,7 @@ func _starter_in(location: String) -> Node:
 	var sim: Node = load("res://core/simulation.gd").new()
 	sim.autosave_enabled = false
 	sim.start_run(6100)
-	sim.apply_run_location(sim.run_state, location)
+	sim.apply_infrastructure_tier(sim.run_state, InfrastructureSystem.tier_for_room(location))
 	sim.compute_system().recalculate(
 		sim.run_state, sim.effect_resolver, sim.debug_collect_subscriptions(), sim.rng
 	)

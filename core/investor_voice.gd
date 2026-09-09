@@ -4,14 +4,14 @@ extends RefCounted
 ## The Angel Investor's script.
 ##
 ## He is the only person in the game the player ever hears from: he sets the
-## terms at the start of a run, weighs in on every round, decides when the
-## Ascension Contract is on the table, and either invests again or walks away at
-## the end. Everything he says lives in `content/narrative/investor.json` so his
-## voice can be rewritten without touching the UI that delivers it.
+## terms at the start of a run, weighs in on every round, names each Investor
+## Target as it goes live, and either invests again or walks away at the end.
+## Everything he says lives in `content/narrative/investor.json` so his voice
+## can be rewritten without touching the UI that delivers it.
 ##
 ## A "call" is one dict: a subject line and the paragraphs he says, in order. A
 ## trigger can have several variants keyed by situation ("strong", "rent_missed",
-## a location id, ...) and each variant can hold several calls so he does not
+## a room id, ...) and each variant can hold several calls so he does not
 ## repeat himself word for word every round.
 
 const SCRIPT_PATH := "res://content/narrative/investor.json"

@@ -57,7 +57,7 @@
     "tags": [
       "hardware"
     ],
-    "requires_chapter": "office_unit",
+    "requires_infrastructure": 2,
     "recurring_cost_delta": 400,
     "effects": [
       {
@@ -103,7 +103,7 @@
     "tags": [
       "hardware"
     ],
-    "requires_chapter": "datacentre_campus",
+    "requires_infrastructure": 4,
     "recurring_cost_delta": 12000,
     "effects": [
       {
@@ -150,7 +150,7 @@
       "hardware",
       "cooling"
     ],
-    "requires_chapter": "datacentre_campus",
+    "requires_infrastructure": 4,
     "recurring_cost_delta": 30000,
     "effects": [
       {
@@ -217,7 +217,7 @@
     "tags": [
       "cooling"
     ],
-    "requires_chapter": "office_unit",
+    "requires_infrastructure": 2,
     "recurring_cost_delta": 400,
     "effects": [
       {
@@ -263,7 +263,7 @@
     "tags": [
       "cooling"
     ],
-    "requires_chapter": "datacentre_campus",
+    "requires_infrastructure": 4,
     "recurring_cost_delta": 40000,
     "effects": [
       {

@@ -2,12 +2,12 @@ extends PlaytestCase
 
 ## The levelling-up test. The builder plays the way the design assumes one is
 ## played: it buys cooling before the machine that needs it and takes the work
-## it can actually deliver. Set in the bedroom, which is chapter one and
-## therefore the campaign gate — if a build there cannot beat First Scale-Up
-## inside a dozen UI rounds, nobody ever reaches the garage.
+## it can actually deliver. Set on the starting rig under Investor Level 1,
+## which is the gate — if a build there cannot beat First Scale-Up inside a
+## dozen UI rounds, nobody ever reaches the second target.
 ##
-## Seed 1001 is the batch runner's first builder seed. A mid-campaign win is
-## NEXT CHAPTER, not a meta pick: picks only land on the final chapter.
+## Seed 1001 is the batch runner's first builder seed. A win on the way up is
+## NEXT TARGET, not a meta pick: picks only land on the final target.
 
 
 const SEED := 1001
@@ -32,12 +32,12 @@ func play(harness: UiHarness) -> void:
 		await _close_round(harness)
 
 	if Simulation.phase == Simulation.Phase.RUN_END and _won():
-		await _advance_from_bedroom(harness)
+		await _advance_to_next_target(harness)
 		return
 
 	assert_true(
 		false,
-		"Builder campaign did not beat the bedroom in 12 UI rounds"
+		"Builder did not meet the first Investor Target in 12 UI rounds"
 	)
 
 
@@ -113,7 +113,7 @@ func _walk_overlays_if_any(harness: UiHarness) -> void:
 		await harness.settle()
 
 
-func _advance_from_bedroom(harness: UiHarness) -> void:
+func _advance_to_next_target(harness: UiHarness) -> void:
 	await _wait_for_desk(harness)
 	await ensure_run_end_overlay(harness)
 	await _wait_for_run_end(harness)
@@ -122,30 +122,31 @@ func _advance_from_bedroom(harness: UiHarness) -> void:
 	else:
 		# Winning inside the sync burn loop fires run_ended on a desk that
 		# already had a session up; the verdict sometimes never opens.
-		# The chapter still has to move, which is what the next lines prove.
-		print("    note: run-end overlay stayed closed after the bedroom win")
+		# The level still has to move, which is what the next lines prove.
+		print("    note: run-end overlay stayed closed after the first target")
 	await _spend_visible_picks(harness)
 	await _answer_investor_table(harness)
-	if harness.driver.command("NEXT CHAPTER") != null:
-		await harness.driver.press_command("NEXT CHAPTER")
-	elif Simulation.next_location_unlocked() != "":
+	if harness.driver.command("NEXT TARGET") != null:
+		await harness.driver.press_command("NEXT TARGET")
+	elif bool(Simulation.run_state.flags.get("target_complete", false)) and not Simulation.game_completed():
 		# The verdict node was found but its footer did not print. Advance
 		# the same way the button would, so a missing row is a UI fail
-		# above and the campaign still moves.
-		Simulation.advance_to_next_chapter()
+		# above and the run still moves.
+		Simulation.continue_after_target()
 	elif harness.driver.command("NEW RUN") != null:
 		await harness.driver.press_command("NEW RUN")
 	await harness.settle()
 	await dismiss_investor(harness)
-	var dwelling: String = str(Simulation.run_state.build.get("dwelling", ""))
-	var location: String = MetaProgress.selected_location()
-	assert_true(
-		location != "bedroom" or dwelling == "garage",
-		"NEXT CHAPTER left the bedroom for the garage (location=%s dwelling=%s)" % [location, dwelling]
+	assert_eq(
+		Simulation.investor_level(), 2,
+		"NEXT TARGET took the company to Investor Level 2 (level=%d tier=%d)" % [
+			Simulation.investor_level(), Simulation.infrastructure_tier(),
+		]
 	)
+	assert_eq(Simulation.infrastructure_tier(), 0, "Without buying any machine scale on the way")
 
 
-## A won chapter deals the investor's perk table, and NEXT CHAPTER stays shut
+## A met target deals the investor's perk table, and NEXT TARGET stays shut
 ## until it is answered. The verdict's THE INVESTOR'S TERMS row raises the
 ## table over it; a card is taken if one is dealt, else the table is refused.
 func _answer_investor_table(harness: UiHarness) -> void:
@@ -171,7 +172,7 @@ func _answer_investor_table(harness: UiHarness) -> void:
 		await harness.settle()
 	if Simulation.investor_draft_pending():
 		# The row was missing or the press did not land: answer through the
-		# simulation so the campaign still moves, with the UI fail recorded.
+		# simulation so the run still moves, with the UI fail recorded.
 		Simulation.decline_offers()
 		harness.get_tree().call_group("main_ui", "refresh_all")
 		await harness.settle()
@@ -179,9 +180,9 @@ func _answer_investor_table(harness: UiHarness) -> void:
 	await _dismiss_bills(harness)
 	# The verdict reprints its exits once the table's close lands.
 	var reopened: bool = await wait_until(
-		harness, func() -> bool: return harness.driver.command("NEXT CHAPTER") != null, 4000
+		harness, func() -> bool: return harness.driver.command("NEXT TARGET") != null, 4000
 	)
-	assert_true(reopened, "NEXT CHAPTER opens once the table is answered")
+	assert_true(reopened, "NEXT TARGET opens once the table is answered")
 
 
 ## Reads any bills statement that is up, so the paper under it is reachable.
@@ -193,7 +194,7 @@ func _dismiss_bills(harness: UiHarness) -> void:
 
 
 func _spend_visible_picks(harness: UiHarness) -> void:
-	# Bedroom wins are mid-campaign: no meta pick. Final-chapter cards say
+	# Early wins are on the way up: no meta pick. Final-target cards say
 	# KEEP THIS; the brief said TAKE. Try both, then the card itself.
 	var deadline: int = Time.get_ticks_msec() + 8000
 	while Time.get_ticks_msec() < deadline:

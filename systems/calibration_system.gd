@@ -95,8 +95,10 @@ static func multiplier(run_state: RunState, module_id: String, stat: String) -> 
 	return pow(per_rank(stat), float(current))
 
 
-## What the next rank costs: a share of the chapter's `major_purchase`, growing
-## linearly with the rank being bought. Zero once the cap is reached.
+## What the next rank costs: a share of the scale band's `major_purchase` (the
+## run's Infrastructure Tier row in `job_scaling.scale_bands`, passed in by
+## `MarketService`), growing linearly with the rank being bought. Zero once the
+## cap is reached.
 static func cost(run_state: RunState, major_purchase: float, module_id: String) -> float:
 	var current: int = rank(run_state, module_id)
 	if current >= max_rank():

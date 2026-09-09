@@ -11,15 +11,19 @@ var events: Array[EventDefinition] = []
 var modules: Array[ModuleDefinition] = []
 var balance: Dictionary = {}
 ## The five tiered cabinet systems (`content/upgrades/cabinet_systems.json`):
-## tier values, costs, generation thresholds and the dwelling migration table.
-## Read through `CabinetSystems`.
+## tier values, costs and generation thresholds. Read through `CabinetSystems`.
 var cabinet_systems: Dictionary = {}
+## The Infrastructure Tiers (`content/upgrades/infrastructure.json`): the
+## machine scale bought in the Market, tier 0..6. Read through
+## `InfrastructureSystem`.
+var infrastructure: Dictionary = {}
 var comparisons: Array = []
 var rarity_weights: Dictionary = {}
 var synergies: Array = []
-## The contract each location is played for. Exactly one per location.
-var ascension_contracts: Array = []
-var _ascension_contracts_by_id: Dictionary = {}
+## The investor's targets (`content/investor/targets.json`), one per Investor
+## Level plus retained alternates. Read through `InvestorProgression`.
+var investor_targets: Array = []
+var _investor_targets_by_id: Dictionary = {}
 ## Permanent awards. Plain dictionaries rather than Resources: nothing reads
 ## them in the hot path, and the gallery wants the raw copy verbatim.
 var achievements: Array = []
@@ -44,7 +48,7 @@ func reload() -> void:
 	events.clear()
 	modules.clear()
 	synergies.clear()
-	ascension_contracts.clear()
+	investor_targets.clear()
 	achievements.clear()
 	_achievements_by_id.clear()
 	_jobs_by_id.clear()
@@ -52,13 +56,13 @@ func reload() -> void:
 	_upgrades_by_id.clear()
 	_events_by_id.clear()
 	_modules_by_id.clear()
-	_ascension_contracts_by_id.clear()
+	_investor_targets_by_id.clear()
 	_load_jobs()
 	_load_perks()
 	_load_upgrades()
 	_load_events()
 	_load_modules()
-	_load_ascension_contracts()
+	_load_investor_targets()
 	_load_achievements()
 	_load_balance()
 	_validate_content()
@@ -84,8 +88,8 @@ func get_module(id: String) -> ModuleDefinition:
 	return _modules_by_id.get(id, null)
 
 
-func get_ascension_contract(id: String) -> Dictionary:
-	return Dictionary(_ascension_contracts_by_id.get(id, {})).duplicate(true)
+func get_investor_target(id: String) -> Dictionary:
+	return Dictionary(_investor_targets_by_id.get(id, {})).duplicate(true)
 
 
 func get_achievement(id: String) -> Dictionary:
@@ -163,8 +167,10 @@ func modules_unlocked_at_victory_counts(total_victories: int, hard_victories: in
 	return result
 
 
-## Human-readable reasons a module is still out of the Market.
-func module_lock_reasons(module: ModuleDefinition) -> PackedStringArray:
+## Human-readable reasons a module is still out of the Market. The Investor
+## Level gate is read off `run_state` when one is given (the live run's
+## level); without a run it is worded as the level to reach.
+func module_lock_reasons(module: ModuleDefinition, run_state: RunState = null) -> PackedStringArray:
 	var reasons: PackedStringArray = []
 	if module.unlock_achievement != "":
 		if not MetaProgress.has_achievement(module.unlock_achievement):
@@ -180,16 +186,16 @@ func module_lock_reasons(module: ModuleDefinition) -> PackedStringArray:
 			reasons.append("Win Hard once")
 		else:
 			reasons.append("Win Hard %d times" % hard_wins)
-	if module.min_location_tier > 0:
-		var order: Array = MetaProgress.location_order()
-		var highest_tier: int = 0
-		for location_id in MetaProgress.unlocked_locations():
-			highest_tier = maxi(highest_tier, order.find(str(location_id)))
-		if highest_tier < module.min_location_tier and module.min_location_tier < order.size():
-			reasons.append(
-				"Requires %s or later" % MetaProgress.location_name(str(order[module.min_location_tier]))
-			)
+	if module.min_investor_level > InvestorProgression.FIRST_LEVEL:
+		var level: int = investor_level_for_run(run_state) if run_state != null else InvestorProgression.FIRST_LEVEL
+		if level < module.min_investor_level:
+			reasons.append(investor_level_lock_text(module.min_investor_level))
 	return reasons
+
+
+## "Investor Target 3": the words every Investor Level gate is refused with.
+func investor_level_lock_text(min_level: int) -> String:
+	return "Investor Target %d" % min_level
 
 
 func perk_is_unlocked(perk: PerkDefinition) -> bool:
@@ -199,7 +205,7 @@ func perk_is_unlocked(perk: PerkDefinition) -> bool:
 
 
 ## Whether a perk is eligible for the investor's table: unlocked, allowed on
-## the current difficulty and location, not already owned, and not blocked.
+## the current difficulty and Investor Level, not already owned, and not blocked.
 func perk_is_eligible(
 	perk: PerkDefinition,
 	run_state: RunState,
@@ -214,8 +220,8 @@ func perk_is_eligible(
 		return false
 	if not _difficulty_allows_run(run_state, perk.difficulty):
 		return false
-	var tier: int = _location_tier_for_run(run_state)
-	if not _location_tier_allows(tier, perk.min_location_tier, perk.max_location_tier):
+	var level: int = investor_level_for_run(run_state)
+	if not _investor_level_allows(level, perk.min_investor_level, perk.max_investor_level):
 		return false
 	return true
 
@@ -235,8 +241,8 @@ func module_is_eligible(
 		return false
 	if not _difficulty_allows_run(run_state, module.difficulty):
 		return false
-	var tier: int = _location_tier_for_run(run_state)
-	if not _location_tier_allows(tier, module.min_location_tier, module.max_location_tier):
+	var level: int = investor_level_for_run(run_state)
+	if not _investor_level_allows(level, module.min_investor_level, module.max_investor_level):
 		return false
 	return true
 
@@ -277,7 +283,7 @@ func draw_angel_offers(
 	return draw_angel_perks(rng, run_state, count, owned_tags, blocked_ids, rarity_bias)
 
 
-## Market shelf draw. Same unlock/location/difficulty gates as profile eligibility,
+## Market shelf draw. Same unlock/level/difficulty gates as profile eligibility,
 ## minus owned modules and any IDs blocked for this draw (e.g. previous shelf).
 func draw_market_modules(
 	rng: DeterministicRng,
@@ -303,18 +309,14 @@ func draw_market_modules(
 	return picks
 
 
-func _location_tier_for_run(run_state: RunState) -> int:
-	var order: Array = MetaProgress.location_order()
-	if order.is_empty():
-		order = Array(balance.get("economy", {}).get("location_order", []))
-	var dwelling: String = str(run_state.build.get("dwelling", "bedroom"))
-	var index: int = order.find(dwelling)
-	return maxi(0, index)
-
-
-func location_tier_for_run(run_state: RunState) -> int:
-	return _location_tier_for_run(run_state)
-
+## The run's Investor Level (1-based), the only thing content gates key off.
+func investor_level_for_run(run_state: RunState) -> int:
+	if run_state == null:
+		return InvestorProgression.FIRST_LEVEL
+	return maxi(
+		InvestorProgression.FIRST_LEVEL,
+		int(run_state.investor.get("level", InvestorProgression.FIRST_LEVEL))
+	)
 
 func _difficulty_allows_run(run_state: RunState, allowed: PackedStringArray) -> bool:
 	if allowed.is_empty():
@@ -322,10 +324,11 @@ func _difficulty_allows_run(run_state: RunState, allowed: PackedStringArray) -> 
 	return str(run_state.flags.get("difficulty", "normal")) in allowed
 
 
-func _location_tier_allows(tier: int, min_tier: int, max_tier: int) -> bool:
-	if min_tier > 0 and tier < min_tier:
+## A gate of 0 or 1 is open from the first target; `max_level` -1 is no ceiling.
+func _investor_level_allows(level: int, min_level: int, max_level: int) -> bool:
+	if min_level > InvestorProgression.FIRST_LEVEL and level < min_level:
 		return false
-	if max_tier >= 0 and tier > max_tier:
+	if max_level >= 0 and level > max_level:
 		return false
 	return true
 
@@ -482,8 +485,8 @@ func _load_perks() -> void:
 		perk.incompatible_ids = PackedStringArray(Array(entry.get("incompatible_ids", [])))
 		perk.stacking = entry.get("stacking", {})
 		perk.unlock_achievement = str(entry.get("unlock_achievement", ""))
-		perk.min_location_tier = int(entry.get("min_location_tier", 0))
-		perk.max_location_tier = int(entry.get("max_location_tier", -1))
+		perk.min_investor_level = int(entry.get("min_investor_level", 0))
+		perk.max_investor_level = int(entry.get("max_investor_level", -1))
 		perk.draft_weight = float(entry.get("draft_weight", 1.0))
 		perk.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
 		perk.grants = entry.get("grants", {})
@@ -512,7 +515,7 @@ func _load_upgrades() -> void:
 			for system_id in Dictionary(system_gate).keys():
 				gates[str(system_id)] = int(Dictionary(system_gate)[system_id])
 		upgrade.requires_system = gates
-		upgrade.requires_chapter = str(entry.get("requires_chapter", ""))
+		upgrade.requires_infrastructure = int(entry.get("requires_infrastructure", 0))
 		upgrade.requires_upgrade = str(entry.get("requires_upgrade", ""))
 		upgrade.repeatable = bool(entry.get("repeatable", false))
 		upgrade.cost_growth = float(entry.get("cost_growth", 1.35))
@@ -573,8 +576,8 @@ func _load_modules() -> void:
 		module.unlock_achievement = str(entry.get("unlock_achievement", ""))
 		module.min_victories = int(entry.get("min_victories", 0))
 		module.min_hard_victories = int(entry.get("min_hard_victories", 0))
-		module.min_location_tier = int(entry.get("min_location_tier", 0))
-		module.max_location_tier = int(entry.get("max_location_tier", -1))
+		module.min_investor_level = int(entry.get("min_investor_level", 0))
+		module.max_investor_level = int(entry.get("max_investor_level", -1))
 		module.draft_weight = float(entry.get("draft_weight", 1.0))
 		module.difficulty = PackedStringArray(Array(entry.get("difficulty", ["normal", "hard"])))
 		module.combos = Array(entry.get("combos", []), TYPE_DICTIONARY, "", null)
@@ -603,12 +606,13 @@ func _build_tuning() -> Dictionary:
 func _load_balance() -> void:
 	balance["economy"] = _load_json_dict("res://content/balance/economy.json")
 	balance["job_scaling"] = _load_json_dict("res://content/balance/job_scaling.json")
-	balance["dwelling_costs"] = _load_json_dict("res://content/balance/dwelling_costs.json")
 	balance["hardware_curves"] = _load_json_dict("res://content/balance/hardware_curves.json")
 	balance["difficulty_profiles"] = _load_json_dict("res://content/balance/difficulty_profiles.json")
 	balance["job_demands"] = _load_json_dict("res://content/balance/job_demands.json")
 	balance["pacing_targets"] = _load_json_dict("res://content/balance/pacing_targets.json")
+	balance["investor_targets"] = _load_json_dict("res://content/balance/investor_targets.json")
 	cabinet_systems = _load_json_dict("res://content/upgrades/cabinet_systems.json")
+	infrastructure = _load_json_dict("res://content/upgrades/infrastructure.json")
 	rarity_weights = _load_json_dict("res://content/balance/rarity_weights.json")
 	comparisons = _load_json_array("res://content/balance/comparisons.json")
 	synergies = _load_json_array("res://content/balance/synergies.json")
@@ -664,7 +668,6 @@ func _validate_content() -> void:
 func collect_validation_errors() -> Array[String]:
 	var errors: Array[String] = []
 	var hardware_curves: Dictionary = balance.get("hardware_curves", {})
-	var dwelling_costs: Dictionary = balance.get("dwelling_costs", {})
 	var known_paths: Dictionary = _known_run_state_paths()
 	var seen_ids: Dictionary = {}
 
@@ -686,8 +689,10 @@ func collect_validation_errors() -> Array[String]:
 				errors.append("upgrade '%s' references missing component_key '%s'" % [upgrade.id, upgrade.component_key])
 			if not hardware_curves.has(upgrade.requires_hardware):
 				errors.append("upgrade '%s' fits missing host hardware '%s'" % [upgrade.id, upgrade.requires_hardware])
-		if upgrade.requires_chapter != "" and not dwelling_costs.has(upgrade.requires_chapter):
-			errors.append("upgrade '%s' requires missing chapter '%s'" % [upgrade.id, upgrade.requires_chapter])
+		if upgrade.requires_infrastructure < 0 or upgrade.requires_infrastructure > InfrastructureSystem.max_tier(self):
+			errors.append("upgrade '%s' requires infrastructure tier %d outside 0..%d" % [
+				upgrade.id, upgrade.requires_infrastructure, InfrastructureSystem.max_tier(self),
+			])
 		_validate_system_gate(errors, "upgrade '%s'" % upgrade.id, upgrade.requires_system)
 		if upgrade.requires_upgrade != "" and not _upgrades_by_id.has(upgrade.requires_upgrade):
 			errors.append("upgrade '%s' requires missing upgrade '%s'" % [upgrade.id, upgrade.requires_upgrade])
@@ -701,7 +706,7 @@ func collect_validation_errors() -> Array[String]:
 				perk.id, perk.unlock_achievement,
 			])
 		_check_draft_gates(
-			errors, "perk", perk.id, perk.difficulty, perk.min_location_tier, perk.max_location_tier
+			errors, "perk", perk.id, perk.difficulty, perk.min_investor_level, perk.max_investor_level
 		)
 		for sub in perk.subscriptions:
 			if sub is Dictionary:
@@ -743,8 +748,8 @@ func collect_validation_errors() -> Array[String]:
 			"module",
 			module.id,
 			module.difficulty,
-			module.min_location_tier,
-			module.max_location_tier
+			module.min_investor_level,
+			module.max_investor_level
 		)
 		if module.unlock_achievement != "" and not _achievements_by_id.has(module.unlock_achievement):
 			errors.append("module '%s' is gated behind missing achievement '%s'" % [
@@ -906,8 +911,9 @@ func collect_validation_errors() -> Array[String]:
 				module.id, module.unlock_achievement,
 			])
 	_validate_module_market_tuning(errors)
-	_validate_ascension_contracts(errors)
+	_validate_investor_targets(errors)
 	_validate_cabinet_systems(errors)
+	_validate_infrastructure(errors)
 	return errors
 
 
@@ -938,29 +944,14 @@ func _validate_system_gate(errors: Array[String], owner: String, gate: Dictionar
 ## `cabinet_systems.json` is the source of every capacity the board, the rig
 ## and the Market read, so a malformed row fails at load: ids unique and
 ## covering the migration order, every tier table exactly tier_range long,
-## costs one shorter than that and non-negative, generation thresholds strictly
-## ascending, and the dwelling tables naming only rooms `dwelling_costs` knows.
+## costs one shorter than that and non-negative, and generation thresholds
+## strictly ascending. The per-scale profile, cap and entry tiers live on the
+## Infrastructure Tiers (`_validate_infrastructure`).
 func _validate_cabinet_systems(errors: Array[String]) -> void:
 	var data: Dictionary = cabinet_systems
 	if data.is_empty():
 		errors.append("cabinet_systems content is missing")
 		return
-	var profiles: Variant = data.get("chapter_profiles", {})
-	if not profiles is Dictionary:
-		errors.append("cabinet_systems.chapter_profiles must be an object")
-	else:
-		for location in balance.get("economy", {}).get("location_order", []):
-			var profile: Variant = profiles.get(str(location), null)
-			if not profile is Dictionary:
-				errors.append("cabinet_systems.chapter_profiles missing " + str(location))
-				continue
-			for key in ["base_token_rate", "power_draw", "cooling_capacity", "heat_capacity", "cost_scale"]:
-				var value: Variant = profile.get(key, null)
-				if not (value is int or value is float) or not is_finite(float(value)) or float(value) <= 0.0:
-					errors.append("cabinet chapter %s needs positive finite %s" % [str(location), key])
-			var work: Variant = profile.get("work_tier", null)
-			if not (work is int or work is float) or float(work) != int(work) or int(work) < 0 or int(work) >= balance.get("economy", {}).get("location_order", []).size():
-				errors.append("cabinet chapter %s has invalid work_tier" % str(location))
 	var range_value: Variant = data.get("tier_range", null)
 	var lo: int = 1
 	var hi: int = 4
@@ -1055,41 +1046,6 @@ func _validate_cabinet_systems(errors: Array[String]) -> void:
 					min_sum, last_sum,
 				])
 			last_sum = min_sum
-	var dwelling_costs: Dictionary = balance.get("dwelling_costs", {})
-	var order_size: int = Array(order).size() if order is Array else system_ids.size()
-	var migration: Variant = data.get("migration_from_dwelling", null)
-	if not migration is Dictionary or Dictionary(migration).is_empty():
-		errors.append("cabinet_systems.migration_from_dwelling is missing")
-	else:
-		for dwelling in Dictionary(migration).keys():
-			if not dwelling_costs.has(str(dwelling)):
-				errors.append("cabinet_systems.migration_from_dwelling names unknown dwelling '%s'" % str(dwelling))
-			var row: Variant = Dictionary(migration)[dwelling]
-			if not row is Array or Array(row).size() != order_size:
-				errors.append("cabinet_systems.migration_from_dwelling.%s needs %d tiers" % [str(dwelling), order_size])
-				continue
-			for value in Array(row):
-				if int(value) < lo or int(value) > hi:
-					errors.append("cabinet_systems.migration_from_dwelling.%s has tier %s outside %d..%d" % [
-						str(dwelling), str(value), lo, hi,
-					])
-					break
-		for dwelling in dwelling_costs.keys():
-			if not Dictionary(migration).has(str(dwelling)):
-				errors.append("cabinet_systems.migration_from_dwelling has no row for dwelling '%s'" % str(dwelling))
-	var caps: Variant = data.get("chapter_max_tier", null)
-	if not caps is Dictionary or Dictionary(caps).is_empty():
-		errors.append("cabinet_systems.chapter_max_tier is missing")
-	else:
-		for dwelling in Dictionary(caps).keys():
-			if not dwelling_costs.has(str(dwelling)):
-				errors.append("cabinet_systems.chapter_max_tier names unknown dwelling '%s'" % str(dwelling))
-			var cap: int = int(Dictionary(caps)[dwelling])
-			if cap < lo or cap > hi:
-				errors.append("cabinet_systems.chapter_max_tier.%s is outside %d..%d" % [str(dwelling), lo, hi])
-		for dwelling in dwelling_costs.keys():
-			if not Dictionary(caps).has(str(dwelling)):
-				errors.append("cabinet_systems.chapter_max_tier has no entry for dwelling '%s'" % str(dwelling))
 
 
 func _validate_module_market_tuning(errors: Array[String]) -> void:
@@ -1098,17 +1054,13 @@ func _validate_module_market_tuning(errors: Array[String]) -> void:
 	if not market is Dictionary or market.is_empty():
 		errors.append("economy.module_market tuning is missing")
 		return
-	var locations: Array = Array(economy.get("location_order", []))
-	var slots: Array = Array(market.get("slots_by_location_tier", []))
-	if slots.size() < locations.size():
-		errors.append(
-			"economy.module_market.slots_by_location_tier has %d entries; need at least %d for location_order"
-			% [slots.size(), locations.size()]
-		)
+	var slots: Array = Array(market.get("slots_by_investor_level", []))
+	if slots.is_empty():
+		errors.append("economy.module_market.slots_by_investor_level must be a non-empty array")
 	for index in range(slots.size()):
 		if int(slots[index]) <= 0:
 			errors.append(
-				"economy.module_market.slots_by_location_tier[%d] must be positive" % index
+				"economy.module_market.slots_by_investor_level[%d] must be positive" % index
 			)
 	var price_mults: Variant = market.get("rarity_price_rent_mult", {})
 	if not price_mults is Dictionary:
@@ -1278,16 +1230,19 @@ func _check_unique_id(errors: Array[String], seen_ids: Dictionary, kind: String,
 
 
 ## The draft gates a perk or module can author. All three fail silently at the
-## table if they are wrong — an unknown difficulty or an out-of-range tier just
+## table if they are wrong — an unknown difficulty or an out-of-range level just
 ## means the card never appears, which reads as missing content rather than a
-## typo, so they are caught here instead.
+## typo, so they are caught here instead. Investor Levels are 1-based: a
+## `min_investor_level` of 0 is the unset default and reads as 1; a
+## `max_investor_level` of -1 is no ceiling; anything else has to sit inside
+## the authored ladder.
 func _check_draft_gates(
 	errors: Array[String],
 	kind: String,
 	id: String,
 	difficulty: PackedStringArray,
-	min_tier: int,
-	max_tier: int
+	min_level: int,
+	max_level: int
 ) -> void:
 	if difficulty.is_empty():
 		errors.append("%s '%s' lists no difficulties, so it can never be drafted" % [kind, id])
@@ -1295,55 +1250,200 @@ func _check_draft_gates(
 	for entry in difficulty:
 		if not known_difficulties.has(str(entry)):
 			errors.append("%s '%s' allows unknown difficulty '%s'" % [kind, id, str(entry)])
-	var top_tier: int = maxi(0, MetaProgress.location_order().size() - 1)
-	if min_tier < 0:
-		errors.append("%s '%s' has negative min_location_tier %d" % [kind, id, min_tier])
-	if min_tier > top_tier:
-		errors.append("%s '%s' needs location tier %d, above the campaign's top tier %d" % [
-			kind, id, min_tier, top_tier,
+	var top_level: int = maxi(InvestorProgression.FIRST_LEVEL, InvestorProgression.max_authored_level(self))
+	if min_level < 0:
+		errors.append("%s '%s' has negative min_investor_level %d" % [kind, id, min_level])
+	if min_level > top_level:
+		errors.append("%s '%s' needs Investor Level %d, above the final target's level %d" % [
+			kind, id, min_level, top_level,
 		])
-	if max_tier >= 0:
-		if max_tier > top_tier:
-			errors.append("%s '%s' caps at location tier %d, above the campaign's top tier %d" % [
-				kind, id, max_tier, top_tier,
+	if max_level >= 0:
+		if max_level < InvestorProgression.FIRST_LEVEL:
+			errors.append("%s '%s' has max_investor_level %d below the first Investor Level" % [
+				kind, id, max_level,
 			])
-		if max_tier < min_tier:
-			errors.append("%s '%s' has max_location_tier %d below min_location_tier %d" % [
-				kind, id, max_tier, min_tier,
+		if max_level > top_level:
+			errors.append("%s '%s' caps at Investor Level %d, above the final target's level %d" % [
+				kind, id, max_level, top_level,
+			])
+		if max_level < min_level:
+			errors.append("%s '%s' has max_investor_level %d below min_investor_level %d" % [
+				kind, id, max_level, min_level,
 			])
 
 
-## Every campaign location the player can actually reach must have exactly
-## one contract to play it for; a location with none is unplayable, and one
-## with two makes ascension evaluate against whichever loaded last.
-func _validate_ascension_contracts(errors: Array[String]) -> void:
+## The investor's authored targets are one per level, levels 1..N without a
+## gap, with exactly one marked `final`: a missing level would leave a run
+## stranded on a generated target mid-campaign, two on one level would make the
+## run evaluate against whichever loaded last, and no final means no win.
+func _validate_investor_targets(errors: Array[String]) -> void:
 	var counts: Dictionary = {}
-	for contract in ascension_contracts:
-		if bool(contract.get("alternate", false)):
+	var finals: int = 0
+	var seen_ids: Dictionary = {}
+	for target in investor_targets:
+		var id: String = str(target.get("id", ""))
+		if id == "":
+			errors.append("investor target has an empty id")
+		elif seen_ids.has(id):
+			errors.append("duplicate investor target id '%s'" % id)
+		seen_ids[id] = true
+		var burn: Variant = target.get("total_burn", null)
+		if not (burn is int or burn is float) or float(burn) <= 0.0:
+			errors.append("investor target '%s' needs a positive total_burn" % id)
+		if target.has("max_heat_ratio") and (float(target["max_heat_ratio"]) <= 0.0 or float(target["max_heat_ratio"]) > 1.0):
+			errors.append("investor target '%s' max_heat_ratio must be in (0, 1]" % id)
+		if bool(target.get("alternate", false)):
 			continue
-		var location_id: String = str(contract.get("location", ""))
-		if location_id == "":
-			errors.append("ascension contract '%s' has no location" % str(contract.get("id", "")))
+		var level: int = int(target.get("level", 0))
+		if level < 1:
+			errors.append("investor target '%s' has no level" % id)
 			continue
-		counts[location_id] = int(counts.get(location_id, 0)) + 1
-	for location_id in counts.keys():
-		if int(counts[location_id]) > 1:
-			errors.append("location '%s' has %d non-alternate ascension contracts, expected 1" % [
-				location_id, counts[location_id],
-			])
-	var dwelling_costs: Dictionary = balance.get("dwelling_costs", {})
-	for location_id in dwelling_costs.keys():
-		if int(counts.get(location_id, 0)) == 0:
-			errors.append("campaign location '%s' has no ascension contract" % location_id)
+		counts[level] = int(counts.get(level, 0)) + 1
+		if bool(target.get("final", false)):
+			finals += 1
+	var top_level: int = 0
+	for level in counts.keys():
+		top_level = maxi(top_level, int(level))
+		if int(counts[level]) > 1:
+			errors.append("investor level %d has %d non-alternate targets, expected 1" % [level, counts[level]])
+	for level in range(1, top_level + 1):
+		if int(counts.get(level, 0)) == 0:
+			errors.append("investor level %d has no target" % level)
+	if top_level > 0 and finals != 1:
+		errors.append("investor targets need exactly one `final` entry, found %d" % finals)
+	var curves: Dictionary = balance.get("investor_targets", {})
+	for key in ["token_growth", "quality_step", "quality_cap", "deadline_rounds"]:
+		var value: Variant = curves.get(key, null)
+		if not (value is int or value is float) or float(value) <= 0.0:
+			errors.append("balance.investor_targets needs positive %s" % key)
+	for key in ["rent_mult_by_level", "reward_mult_by_level"]:
+		var table: Variant = curves.get(key, null)
+		if not table is Array or Array(table).is_empty():
+			errors.append("balance.investor_targets.%s must be a non-empty array" % key)
+			continue
+		for value in Array(table):
+			if not (value is int or value is float) or float(value) <= 0.0:
+				errors.append("balance.investor_targets.%s has a non-positive entry" % key)
+				break
+	var archetypes: Variant = curves.get("archetypes", null)
+	if not archetypes is Array or Array(archetypes).is_empty():
+		errors.append("balance.investor_targets.archetypes must be a non-empty array")
 
 
-func _load_ascension_contracts() -> void:
-	var data: Dictionary = _load_json_dict("res://content/ascension/contracts.json")
+## `infrastructure.json` is the source of the machine scale, so a malformed
+## tier fails at load: tiers 0..N contiguous and in order with unique ids,
+## costs non-decreasing from a free tier 0, a positive finite profile, floors
+## for every capacity stat, a cabinet cap inside the cabinet tier range, one
+## entry tier per cabinet system, and a unique room the art catalog has
+## painted, with the investor's line for arriving in it.
+func _validate_infrastructure(errors: Array[String]) -> void:
+	var data: Dictionary = infrastructure
+	if data.is_empty():
+		errors.append("infrastructure content is missing")
+		return
+	var tiers: Variant = data.get("tiers", null)
+	if not tiers is Array or Array(tiers).is_empty():
+		errors.append("infrastructure.tiers must be a non-empty array")
+		return
+	var cabinet_range: Variant = cabinet_systems.get("tier_range", [1, 4])
+	var lo: int = int(Array(cabinet_range)[0]) if cabinet_range is Array and Array(cabinet_range).size() == 2 else 1
+	var hi: int = int(Array(cabinet_range)[1]) if cabinet_range is Array and Array(cabinet_range).size() == 2 else 4
+	var entry_order: Variant = data.get("cabinet_entry_tier_order", null)
+	var system_count: int = Array(cabinet_systems.get("systems", [])).size()
+	if not entry_order is Array or Array(entry_order).size() != system_count:
+		errors.append("infrastructure.cabinet_entry_tier_order needs one entry per cabinet system (%d)" % system_count)
+	else:
+		for system_id in Array(entry_order):
+			var known: bool = false
+			for system in Array(cabinet_systems.get("systems", [])):
+				if system is Dictionary and str(Dictionary(system).get("id", "")) == str(system_id):
+					known = true
+			if not known:
+				errors.append("infrastructure.cabinet_entry_tier_order names unknown system '%s'" % str(system_id))
+	var seen_ids: Dictionary = {}
+	var seen_rooms: Dictionary = {}
+	var previous_cost: float = -1.0
+	var painted_rooms: Array = AssetCatalog.board_scene_keys()
+	for index in range(Array(tiers).size()):
+		var raw: Variant = Array(tiers)[index]
+		if not raw is Dictionary:
+			errors.append("infrastructure.tiers[%d] is not an object" % index)
+			continue
+		var tier: Dictionary = raw
+		var id: String = str(tier.get("id", ""))
+		if id == "":
+			errors.append("infrastructure tier %d has an empty id" % index)
+		elif seen_ids.has(id):
+			errors.append("duplicate infrastructure tier id '%s'" % id)
+		seen_ids[id] = true
+		if int(tier.get("tier", -1)) != index:
+			errors.append("infrastructure tier '%s' is at index %d but says tier %s" % [id, index, str(tier.get("tier", ""))])
+		if str(tier.get("name", "")).strip_edges() == "":
+			errors.append("infrastructure tier '%s' has an empty name" % id)
+		var cost: Variant = tier.get("cost", null)
+		if not (cost is int or cost is float) or float(cost) < 0.0:
+			errors.append("infrastructure tier '%s' needs a non-negative cost" % id)
+		else:
+			if index == 0 and float(cost) != 0.0:
+				errors.append("infrastructure tier 0 must be free")
+			if float(cost) < previous_cost:
+				errors.append("infrastructure tier '%s' costs less than the tier before it" % id)
+			previous_cost = float(cost)
+		var facility: Variant = tier.get("facility_cost", null)
+		if not (facility is int or facility is float) or float(facility) < 0.0:
+			errors.append("infrastructure tier '%s' needs a non-negative facility_cost" % id)
+		var profile: Variant = tier.get("profile", null)
+		if not profile is Dictionary:
+			errors.append("infrastructure tier '%s' has no profile" % id)
+		else:
+			for key in ["base_token_rate", "power_draw", "cooling_capacity", "heat_capacity", "cost_scale"]:
+				var value: Variant = Dictionary(profile).get(key, null)
+				if not (value is int or value is float) or not is_finite(float(value)) or float(value) <= 0.0:
+					errors.append("infrastructure tier '%s' profile needs positive finite %s" % [id, key])
+			var work: Variant = Dictionary(profile).get("work_tier", null)
+			if not (work is int or work is float) or float(work) != int(work) or int(work) < 0 or int(work) >= Array(tiers).size():
+				errors.append("infrastructure tier '%s' has invalid work_tier" % id)
+		var floors: Variant = tier.get("floors", null)
+		if not floors is Dictionary:
+			errors.append("infrastructure tier '%s' has no floors" % id)
+		else:
+			for key in InfrastructureSystem.FLOOR_STATS:
+				var value: Variant = Dictionary(floors).get(key, null)
+				if not (value is int or value is float) or float(value) < 0.0:
+					errors.append("infrastructure tier '%s' floors needs non-negative %s" % [id, key])
+		var cap: int = int(tier.get("cabinet_max_tier", -1))
+		if cap < lo or cap > hi:
+			errors.append("infrastructure tier '%s' cabinet_max_tier %d is outside %d..%d" % [id, cap, lo, hi])
+		var entry_tiers: Variant = tier.get("cabinet_entry_tiers", null)
+		if not entry_tiers is Array or Array(entry_tiers).size() != system_count:
+			errors.append("infrastructure tier '%s' needs %d cabinet_entry_tiers" % [id, system_count])
+		else:
+			for value in Array(entry_tiers):
+				if int(value) < lo or int(value) > hi or (cap >= lo and int(value) > cap):
+					errors.append("infrastructure tier '%s' has a cabinet entry tier outside its range" % id)
+					break
+		if int(tier.get("overflow_allowance", -1)) < 0:
+			errors.append("infrastructure tier '%s' needs a non-negative overflow_allowance" % id)
+		var room: String = str(tier.get("room", ""))
+		if room == "":
+			errors.append("infrastructure tier '%s' has no room" % id)
+		elif seen_rooms.has(room):
+			errors.append("infrastructure tiers '%s' and '%s' share room '%s'" % [seen_rooms[room], id, room])
+		elif not painted_rooms.is_empty() and not (room in painted_rooms):
+			# The room is presentation, so the only thing it has to be is painted.
+			errors.append("infrastructure tier '%s' names room '%s' with no art in the catalog" % [id, room])
+		seen_rooms[room] = id
+		if str(tier.get("investor_line", "")).strip_edges() == "":
+			errors.append("infrastructure tier '%s' has no investor_line" % id)
+
+
+func _load_investor_targets() -> void:
+	var data: Dictionary = _load_json_dict("res://content/investor/targets.json")
 	for entry in Array(data.get("contracts", [])):
 		if not entry is Dictionary:
 			continue
-		ascension_contracts.append(entry)
-		_ascension_contracts_by_id[str(entry.get("id", ""))] = entry
+		investor_targets.append(entry)
+		_investor_targets_by_id[str(entry.get("id", ""))] = entry
 
 
 ## Content is authored, not generated: a malformed file is a mistake that

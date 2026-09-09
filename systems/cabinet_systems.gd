@@ -5,22 +5,25 @@ extends RefCounted
 ## control — each owned at a tier from 1 to 4 and stored on the run as
 ## `build.cabinet_systems`. This is the one place a tier is turned into a
 ## number: the board asks it how many bays it backs, the rig asks it how much
-## floor and cooling the room has, and the Market asks it what the next tier
-## costs and why it cannot be bought yet.
+## floor and cooling the machine has, and the Market asks it what the next
+## tier costs and why it cannot be bought yet.
 ##
-## The tier is the primary source of every capacity; the chapter table
-## (`dwelling_costs.json`, keyed by `build.dwelling`) is a permanent floor
-## beneath it for the stats chapters out-size the tier table on: floor slots,
-## cooling and heat capacity. The datacentre, the grid and the moon hand out
-## forty, eighty and a hundred and sixty slots against the Unstable Core's
-## sixteen, so those capacities are `max(tier value, chapter floor)` and never
-## decrease when a run moves up a chapter.
+## The tier is the primary source of every capacity; the Infrastructure Tier
+## (`InfrastructureSystem`, bought in the Market) supplies the scale profile
+## the tier values are scaled against, the cap on how high a system may go,
+## and a permanent floor beneath the stats infrastructure out-sizes the tier
+## table on: floor slots, cooling and heat capacity. The datacentre fabric,
+## the grid and planetary scale hand out forty, eighty and a hundred and sixty
+## slots against the Unstable Core's sixteen, so those capacities are
+## `max(tier value, infrastructure floor)` and never decrease when a run buys
+## up a tier.
 ##
 ## Bays are the exception: the Workflow Backplane tier is the *only* source of
-## safe pipeline capacity. No chapter floor, no bonus stacks on top. A chapter
-## move still lifts the tier itself (`raise_to_dwelling`), which is how a
-## warehouse run opens with a 7-Bay Rail. Anything the room, a perk or an
-## unlock adds arrives as overflow allowance instead (see BoardSystem).
+## safe pipeline capacity. No infrastructure floor, no bonus stacks on top. An
+## infrastructure purchase still lifts the tier itself
+## (`raise_to_infrastructure`), which is how an industrial-cluster run has a
+## 7-Bay Rail. Anything the scale, a perk or an unlock adds arrives as overflow
+## allowance instead (see BoardSystem).
 ##
 ## Everything here is static and reads content through `ContentDatabase`
 ## unless a database is passed in, the same way the other systems do.
@@ -29,13 +32,14 @@ const SYSTEM_IDS := ["compute", "cooling", "power", "backplane", "control"]
 const MIN_TIER := 1
 const MAX_TIER := 4
 
-## Which chapter-table column each floored stat is read from.
-const CHAPTER_STATS := ["hardware_slots", "cooling_capacity", "heat_capacity"]
 ## The one stat that is never floored: the backplane tier is authoritative.
 const BACKPLANE_STAT := "bays"
 
 const REASON_MAXED := "MAXED OUT"
 const REASON_UNKNOWN := "UNKNOWN SYSTEM"
+## Format string for a tier the run's infrastructure does not yet admit; the
+## argument is the infrastructure tier that would.
+const REASON_NEEDS_INFRASTRUCTURE := "NEEDS INFRASTRUCTURE TIER %d"
 
 
 # --- Content -----------------------------------------------------------------
@@ -109,7 +113,7 @@ static func stat_keys(system_id: String, content_db: Node = null) -> Array:
 	return Dictionary(values).keys() if values is Dictionary else []
 
 
-## The authored value of one stat at one tier, without the chapter floor.
+## The authored value of one stat at one tier, without the infrastructure floor.
 static func tier_value(system_id: String, stat_key: String, tier: int, content_db: Node = null) -> float:
 	var values: Variant = definition(system_id, content_db).get("tier_values", {})
 	if not values is Dictionary:
@@ -164,12 +168,12 @@ static func set_tier(run_state: RunState, system_id: String, new_tier: int, cont
 
 ## Writes the normalised tiers back onto the run. With `warn` on, a value that
 ## had to be clamped or invented is reported, which is what a migration wants.
-## A run with no tiers at all is derived from the chapter it is in, so a save
-## that somehow lost the block still opens with its room's capacities.
+## A run with no tiers at all is derived from its infrastructure, so a save
+## that somehow lost the block still opens with its scale's capacities.
 static func ensure_state(run_state: RunState, warn: bool = false, content_db: Node = null) -> Dictionary:
 	var stored: Variant = run_state.build.get("cabinet_systems", null)
 	if not stored is Dictionary or Dictionary(stored).is_empty():
-		var derived: Dictionary = derive_from_dwelling(str(run_state.build.get("dwelling", "")), content_db)
+		var derived: Dictionary = InfrastructureSystem.cabinet_entry_tiers(run_state, content_db)
 		run_state.build["cabinet_systems"] = derived
 		return derived
 	var source: Dictionary = stored
@@ -218,40 +222,35 @@ static func generation_for_sum(total: int, content_db: Node = null) -> Dictionar
 
 # --- Capacities --------------------------------------------------------------
 
-## What the run's tier is worth for one stat, with the chapter table as a
-## floor beneath it (see the class note).
+## What the run's tier is worth for one stat, with the infrastructure floors
+## beneath it (see the class note).
 static func capacity(run_state: RunState, system_id: String, stat_key: String, content_db: Node = null) -> float:
 	return capacity_at_tier(run_state, system_id, stat_key, tier(run_state, system_id, content_db), content_db)
 
 
-static func chapter_profile(run_state: RunState, content_db: Node = null) -> Dictionary:
-	var profiles: Dictionary = data(content_db).get("chapter_profiles", {})
-	return Dictionary(profiles.get(str(run_state.build.get("dwelling", "bedroom")), profiles.get("bedroom", {})))
-
-
 static func capacity_at_tier(run_state: RunState, system_id: String, stat_key: String, level: int, content_db: Node = null) -> float:
 	var value: float = tier_value(system_id, stat_key, level, content_db)
-	var profile: Dictionary = chapter_profile(run_state, content_db)
-	var entry_tier: int = int(derive_from_dwelling(str(run_state.build.get("dwelling", "bedroom")), content_db).get(system_id, 1))
+	var profile: Dictionary = InfrastructureSystem.profile(run_state, content_db)
+	var entry_tier: int = InfrastructureSystem.cabinet_entry_tier(run_state, system_id, content_db)
 	if stat_key == "base_token_rate":
 		value = float(profile.get(stat_key, 1000000.0)) * value / maxf(1.0, tier_value(system_id, stat_key, entry_tier, content_db))
 	elif stat_key == "cooling_capacity" or stat_key == "heat_capacity":
-		# Chapter scale cannot mask a purchase: every tier adds 35% cooling and
-		# 15% heat headroom relative to that chapter's starting tier.
+		# Infrastructure scale cannot mask a purchase: every tier adds 35%
+		# cooling and 15% heat headroom relative to the scale's entry tier.
 		var step: float = 0.35 if stat_key == "cooling_capacity" else 0.15
 		value = float(profile.get(stat_key, value)) * (1.0 + step * float(level - 1)) / (1.0 + step * float(entry_tier - 1))
 	elif stat_key == "hardware_slots":
-		value = maxf(float([2, 4, 8, 16][clampi(level - 1, 0, 3)]), chapter_floor(run_state, stat_key, content_db))
+		value = maxf(float([2, 4, 8, 16][clampi(level - 1, 0, 3)]), infrastructure_floor(run_state, stat_key, content_db))
 	elif stat_key == BACKPLANE_STAT:
 		# Bays are the tier's number and nothing else. A legacy save that was
 		# demonstrably running a wider pipeline keeps those stages as overflow
-		# (BoardSystem._migrate_legacy_board_bonuses), so no floor — chapter or
+		# (BoardSystem._migrate_legacy_board_bonuses), so no floor — scale or
 		# `cabinet_legacy_floor` — is needed to preserve what the player had, and
 		# applying one would put the safe figure out of step with the tier the
 		# Market row says the run owns.
 		return value
 	else:
-		value = maxf(value, chapter_floor(run_state, stat_key, content_db))
+		value = maxf(value, infrastructure_floor(run_state, stat_key, content_db))
 	return maxf(value, float(Dictionary(run_state.build.get("cabinet_legacy_floor", {})).get(stat_key, 0.0)))
 
 
@@ -279,7 +278,7 @@ static func absorb_legacy_rig(run_state: RunState) -> void:
 	floor_stats["job_slots"] = maxi(int(floor_stats.get("job_slots", 0)), lanes)
 	floor_stats["work_tier"] = maxi(int(floor_stats.get("work_tier", 0)), work)
 	floor_stats["cooling_capacity"] = maxf(float(floor_stats.get("cooling_capacity", 0.0)),
-		maxf(chapter_floor(run_state, "cooling_capacity"), tier_value("cooling", "cooling_capacity", tier(run_state, "cooling"))) + UpgradeSystem.installed_cooling(run_state, ContentDatabase))
+		maxf(infrastructure_floor(run_state, "cooling_capacity"), tier_value("cooling", "cooling_capacity", tier(run_state, "cooling"))) + UpgradeSystem.installed_cooling(run_state, ContentDatabase))
 	floor_stats["heat_capacity"] = maxf(float(floor_stats.get("heat_capacity", 0.0)), float(run_state.compute.get("heat_capacity", 100.0)))
 	run_state.build["cabinet_legacy_floor"] = floor_stats
 	run_state.build["hardware"] = []
@@ -287,17 +286,18 @@ static func absorb_legacy_rig(run_state: RunState) -> void:
 
 
 static func power_draw(run_state: RunState) -> float:
-	var draw: float = float(chapter_profile(run_state).get("power_draw", 65.0))
+	var draw: float = float(InfrastructureSystem.profile(run_state).get("power_draw", 65.0))
 	return maxf(draw, float(Dictionary(run_state.build.get("cabinet_legacy_floor", {})).get("power_draw", 0.0)))
 
 
 static func work_tier(run_state: RunState, content_db: Node = null) -> int:
-	return maxi(int(chapter_profile(run_state, content_db).get("work_tier", 0)),
+	return maxi(int(InfrastructureSystem.profile(run_state, content_db).get("work_tier", 0)),
 		int(Dictionary(run_state.build.get("cabinet_legacy_floor", {})).get("work_tier", 0)))
 
 
 ## Permanent unlock ids stay valid, but install capacity rather than machines.
-## A chapter that already supplies the earned machine is not charged its draw twice.
+## Infrastructure that already supplies the earned machine is not charged its
+## draw twice.
 static func grant_permanent_upgrade(state: RunState, upgrade: UpgradeDefinition) -> bool:
 	if int(UpgradeSystem.upgrade_counts(state).get(upgrade.id, 0)) > 0:
 		return false
@@ -320,7 +320,7 @@ static func grant_permanent_upgrade(state: RunState, upgrade: UpgradeDefinition)
 		band = maxi(band, int(curve.get("work_tier", 0)))
 	var floor_stats: Dictionary = Dictionary(state.build.get("cabinet_legacy_floor", {})).duplicate(true)
 	var actual_draw: float = maxf(power_draw(state), draw)
-	var actual_cooling: float = maxf(capacity(state, "cooling", "cooling_capacity"), float(chapter_profile(state).get("cooling_capacity", 0.0)) + cooling)
+	var actual_cooling: float = maxf(capacity(state, "cooling", "cooling_capacity"), float(InfrastructureSystem.profile(state).get("cooling_capacity", 0.0)) + cooling)
 	if actual_cooling + float(state.compute.get("meta_cooling", 0.0)) < HeatSystem.cooling_needed_for(actual_draw, maxi(work_tier(state), band)):
 		return false
 	floor_stats["base_token_rate"] = maxf(float(floor_stats.get("base_token_rate", 0.0)), rate)
@@ -333,17 +333,10 @@ static func grant_permanent_upgrade(state: RunState, upgrade: UpgradeDefinition)
 	return true
 
 
-## The chapter table's value for this stat, or 0 for a stat the chapter table
-## does not carry (`bays`, `workflows`, `base_token_rate`).
-static func chapter_floor(run_state: RunState, stat_key: String, content_db: Node = null) -> float:
-	var db: Node = content_db if content_db != null else ContentDatabase
-	var dwelling: String = str(run_state.build.get("dwelling", ""))
-	if dwelling == "":
-		return 0.0
-	if stat_key in CHAPTER_STATS:
-		var row: Dictionary = Dictionary(Dictionary(db.balance.get("dwelling_costs", {})).get(dwelling, {}))
-		return float(row.get(stat_key, 0.0))
-	return 0.0
+## The infrastructure floor for this stat, or 0 for a stat the tier table does
+## not carry (`bays`, `workflows`, `base_token_rate`).
+static func infrastructure_floor(run_state: RunState, stat_key: String, content_db: Node = null) -> float:
+	return InfrastructureSystem.floor_value(run_state, stat_key, content_db)
 
 
 ## Every tiered capacity at once, for before/after deltas.
@@ -355,59 +348,38 @@ static func stat_snapshot(run_state: RunState, content_db: Node = null) -> Dicti
 	return snapshot
 
 
-# --- Dwellings and chapters --------------------------------------------------
+# --- Infrastructure ----------------------------------------------------------
 
-## The tiers a chapter's room is worth, from the pack's migration table. An
-## unknown or missing dwelling is the bottom of everything.
-static func derive_from_dwelling(dwelling_key: String, content_db: Node = null) -> Dictionary:
-	var result: Dictionary = default_tiers(content_db)
-	var table: Variant = data(content_db).get("migration_from_dwelling", {})
-	if not table is Dictionary:
-		return result
-	var row: Variant = Dictionary(table).get(dwelling_key, null)
-	if not row is Array:
-		return result
-	var order: Array = system_ids(content_db)
-	var values: Array = row
-	var lo: int = min_tier(content_db)
-	var hi: int = max_tier(content_db)
-	for i in range(mini(order.size(), values.size())):
-		result[str(order[i])] = clampi(int(values[i]), lo, hi)
-	return result
-
-
-## Settles a run into a chapter: every system is at least what the room is
-## worth. Never lowers a tier, so a system bought in the bedroom survives the
-## move to the garage, and a fresh garage run still opens with garage numbers.
-static func raise_to_dwelling(run_state: RunState, dwelling_key: String, content_db: Node = null) -> Dictionary:
+## Settles the cabinet onto the run's infrastructure: every system is at least
+## the entry tier the scale is stated at. Never lowers a tier, so a system
+## bought early survives the purchase, and the scale profile's numbers are what
+## the run actually has the moment it is bought.
+static func raise_to_infrastructure(run_state: RunState, content_db: Node = null) -> Dictionary:
 	var current: Dictionary = tiers(run_state, content_db)
-	var floor_tiers: Dictionary = derive_from_dwelling(dwelling_key, content_db)
+	var floor_tiers: Dictionary = InfrastructureSystem.cabinet_entry_tiers(run_state, content_db)
 	for system_id in current.keys():
 		current[system_id] = maxi(int(current[system_id]), int(floor_tiers.get(system_id, min_tier(content_db))))
 	run_state.build["cabinet_systems"] = current
 	return current
 
 
-## The highest tier the run's chapter allows. Chapters are the meta gate on
-## systems: the cabinet grows inside a room, and the next room lifts the cap.
-static func max_tier_for_chapter(run_state: RunState, content_db: Node = null) -> int:
-	return max_tier_for_dwelling(str(run_state.build.get("dwelling", "")), content_db)
+## The highest tier the run's infrastructure allows. Infrastructure is the gate
+## on systems: the cabinet grows inside a scale, and the next scale lifts the cap.
+static func max_tier_for_infrastructure(run_state: RunState, content_db: Node = null) -> int:
+	return InfrastructureSystem.cabinet_max_tier(run_state, content_db)
 
 
-static func max_tier_for_dwelling(dwelling_key: String, content_db: Node = null) -> int:
-	var table: Variant = data(content_db).get("chapter_max_tier", {})
-	var hi: int = max_tier(content_db)
-	if not table is Dictionary or Dictionary(table).is_empty():
-		return hi
-	var caps: Dictionary = table
-	if caps.has(dwelling_key):
-		return clampi(int(caps[dwelling_key]), min_tier(content_db), hi)
-	# A room the table does not know is treated as the most modest one rather
-	# than the most generous, so a stray key cannot open the top tier early.
-	var lowest: int = hi
-	for value in caps.values():
-		lowest = mini(lowest, int(value))
-	return clampi(lowest, min_tier(content_db), hi)
+## The cabinet tiers a pre-v26 save's room key was worth: the entry tiers of
+## the Infrastructure Tier that room now stands for. Used only by
+## `RunState._migrate_to_v23`, which reads the legacy `build.dwelling` before
+## the v26 step erases it. An unknown or missing room is the bottom tier.
+static func _legacy_tiers_for_room(room_id: String, content_db: Node = null) -> Dictionary:
+	if room_id == "":
+		return default_tiers(content_db)
+	var infra_tier: int = InfrastructureSystem.tier_for_room(room_id, content_db)
+	if infra_tier == InfrastructureSystem.MIN_TIER and InfrastructureSystem.room_id_at(infra_tier, content_db) != room_id:
+		return default_tiers(content_db)
+	return InfrastructureSystem.cabinet_entry_tiers_at(infra_tier, content_db)
 
 
 # --- Purchasing --------------------------------------------------------------
@@ -417,7 +389,7 @@ static func next_tier_cost(run_state: RunState, system_id: String, content_db: N
 	var current: int = tier(run_state, system_id, content_db)
 	if current >= max_tier(content_db):
 		return -1.0
-	var cost: float = cost_of_tier(system_id, current + 1, content_db) * float(chapter_profile(run_state, content_db).get("cost_scale", 1.0))
+	var cost: float = cost_of_tier(system_id, current + 1, content_db) * float(InfrastructureSystem.profile(run_state, content_db).get("cost_scale", 1.0))
 	return cost * (1.0 - clampf(float(run_state.build.get("system_discount", 0.0)), 0.0, 0.9))
 
 
@@ -432,7 +404,7 @@ static func cost_of_tier(system_id: String, target_tier: int, content_db: Node =
 
 
 ## Whether the next tier can be bought right now, and if not, why, in the
-## words the Market prints: "MAXED OUT", "NEXT CHAPTER UNLOCKS TIER 3",
+## words the Market prints: "MAXED OUT", "NEEDS INFRASTRUCTURE TIER 3",
 ## "NEED $240 MORE".
 static func can_upgrade(run_state: RunState, system_id: String, content_db: Node = null) -> Dictionary:
 	if definition(system_id, content_db).is_empty():
@@ -442,10 +414,10 @@ static func can_upgrade(run_state: RunState, system_id: String, content_db: Node
 	if current >= max_tier(content_db):
 		return {"ok": false, "reason": REASON_MAXED, "cost": -1.0, "next_tier": current}
 	var cost: float = next_tier_cost(run_state, system_id, content_db)
-	if next_tier > max_tier_for_chapter(run_state, content_db):
+	if next_tier > max_tier_for_infrastructure(run_state, content_db):
 		return {
 			"ok": false,
-			"reason": "NEXT CHAPTER UNLOCKS TIER %d" % next_tier,
+			"reason": REASON_NEEDS_INFRASTRUCTURE % InfrastructureSystem.tier_required_for_cabinet(next_tier, content_db),
 			"cost": cost,
 			"next_tier": next_tier,
 		}
@@ -493,7 +465,7 @@ static func next_tier_info(run_state: RunState, system_id: String, content_db: N
 		"tier": current,
 		"tier_name": tier_name(system_id, current, content_db),
 		"max_tier": max_tier(content_db),
-		"chapter_max_tier": max_tier_for_chapter(run_state, content_db),
+		"infrastructure_max_tier": max_tier_for_infrastructure(run_state, content_db),
 		"maxed": maxed,
 		"next_tier": next_tier,
 		"next_tier_name": "" if maxed else tier_name(system_id, next_tier, content_db),

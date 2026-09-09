@@ -36,20 +36,20 @@ func _ready() -> void:
 	_run_batch("random", 12)
 	# The builder plays the game the way the design assumes one is played: it
 	# buys cooling before the machine that needs it and takes the work it can
-	# actually deliver. Set in the bedroom, which is chapter one and therefore
-	# the campaign gate: if a build there cannot beat First Scale-Up, nobody ever
-	# reaches the garage and the campaign has no first step.
-	var bedroom: Dictionary = _run_batch("builder", 8, "bedroom")
+	# actually deliver. Set at Infrastructure Tier 0 under Investor Level 1,
+	# which is the gate: if a build there cannot meet the first target, nobody
+	# ever buys the next tier and the run has no first step.
+	var bedroom: Dictionary = _run_batch("builder", 8, 0)
 	_assert(
 		float(bedroom.get("ascended_rate", 0.0)) > 0.0,
-		"A building policy can beat the bedroom's contract inside the year"
+		"A building policy can meet the first investor target inside the year"
 	)
-	# The garage is the chapter after it, played with the hardware the bedroom
-	# was won with, so the sweep starts it the way the campaign would.
-	var garage: Dictionary = _run_batch("builder", 8, "garage")
+	# Tier 1 under Investor Level 2 is the scale after it, so the sweep starts
+	# it the way a run that just bought up would stand.
+	var garage: Dictionary = _run_batch("builder", 8, 1)
 	_assert(
 		float(garage.get("max_burn_ratio", 0.0)) > 0.5,
-		"And the garage's is within reach of the best run in the garage"
+		"And the second target is within reach of the best run at tier 1"
 	)
 	print("=".repeat(40))
 	print("Results: %d passed, %d failed" % [_passed, _failed])
@@ -57,13 +57,13 @@ func _ready() -> void:
 
 
 ## One policy sweep, reported as an outcome histogram plus how far the sample got
-## against its contract: a win rate alone cannot tell a chapter that is priced
+## against its target: a win rate alone cannot tell a scale that is priced
 ## slightly out of reach from one that is priced absurdly out of reach.
-func _run_batch(policy: String, count: int, location: String = "bedroom") -> Dictionary:
-	var summary: Dictionary = BatchRunner.new().run(count, policy, location)
-	print("Batch [%s in %s] %d runs — ascended %.0f%%, expired %.0f%%, burn %.0f%% avg / %.0f%% best, avg peak %s, avg burned %s, outcomes: %s" % [
+func _run_batch(policy: String, count: int, tier: int = 0) -> Dictionary:
+	var summary: Dictionary = BatchRunner.new().run(count, policy, tier)
+	print("Batch [%s at tier %d] %d runs — ascended %.0f%%, expired %.0f%%, burn %.0f%% avg / %.0f%% best, avg peak %s, avg burned %s, outcomes: %s" % [
 		policy,
-		location,
+		tier,
 		count,
 		float(summary.get("ascended_rate", 0.0)) * 100.0,
 		float(summary.get("expired_rate", 0.0)) * 100.0,

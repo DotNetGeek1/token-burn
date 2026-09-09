@@ -23,7 +23,7 @@ func run() -> void:
 	var requirement_after: float = float(state.business["job_queue"][0].get("token_requirement", 0.0))
 	assert_eq(requirement_before, requirement_after, "Accepted contracts are not rescaled")
 
-	_test_the_board_follows_the_location(job_system)
+	_test_the_board_follows_the_infrastructure_tier(job_system)
 	_test_upgrades_are_not_matched_by_the_work(job_system)
 	_test_rewards_follow_the_hardware_ladder(job_system)
 	_test_hard_pays_less_for_more_work(job_system)
@@ -34,28 +34,29 @@ func run() -> void:
 	_test_a_large_board_keeps_one_local_posting(job_system)
 
 
-## The whole point of the seven-chapter ladder: the garage must not be handed the
-## contracts the moon was written for. Tier used to be read off a round counter
-## with a location offset bolted on, which put every location from the garage up
-## permanently at the top tier from its first round.
-func _test_the_board_follows_the_location(job_system: JobSystem) -> void:
-	var bands: Array = JobSystem.location_bands(ContentDatabase)
-	assert_true(bands.size() >= 7, "Every location has a band of its own")
+## The whole point of the seven-band ladder: a tier-1 machine must not be handed
+## the contracts tier 6 was written for. Tier used to be read off a round
+## counter with an offset bolted on, which put every machine from tier 1 up
+## permanently at the top band from its first round.
+func _test_the_board_follows_the_infrastructure_tier(job_system: JobSystem) -> void:
+	var bands: Array = JobSystem.scale_bands(ContentDatabase)
+	assert_true(bands.size() >= 7, "Every Infrastructure Tier has a band of its own")
 	for tier in range(bands.size()):
+		assert_eq(int(Dictionary(bands[tier]).get("tier", -1)), tier, "Band %d is keyed by its tier" % tier)
 		var state := RunState.new()
-		state.build["dwelling"] = str(Dictionary(bands[tier]).get("location", ""))
+		state.build["infrastructure_tier"] = tier
 		assert_eq(
-			JobSystem.location_tier(state, ContentDatabase),
+			JobSystem.scale_tier(state, ContentDatabase),
 			tier,
-			"%s reads as tier %d" % [str(Dictionary(bands[tier]).get("location", "")), tier]
+			"Infrastructure Tier %d reads as scale tier %d" % [tier, tier]
 		)
-		# Reputation starts far below the stretch threshold, so a fresh run in
-		# the room sees only the room's own work.
+		# Reputation starts far below the stretch threshold, so a fresh run on
+		# the machine sees only the machine's own work.
 		state.business["reputation"] = 0.0
 		for candidate in job_system._collect_eligible_jobs(ContentDatabase, 1, tier):
 			assert_true(
 				job_system._job_tier(candidate, ContentDatabase) <= tier,
-				"%s is not offered work from above its band" % str(state.build["dwelling"])
+				"Tier %d is not offered work from above its band" % tier
 			)
 
 
@@ -85,7 +86,7 @@ func _test_upgrades_are_not_matched_by_the_work(job_system: JobSystem) -> void:
 
 func _test_strong_rigs_open_authored_work_without_rescaling_local_jobs(job_system: JobSystem) -> void:
 	var state := RunState.new()
-	state.build["dwelling"] = "garage"
+	state.build["infrastructure_tier"] = 1
 	state.build["hardware"] = ["custom_desktop", "gpu_rack"]
 	state.business["reputation"] = 0.0
 	job_system.generate_offers(state, DeterministicRng.new(4040), ContentDatabase, {})
@@ -153,7 +154,7 @@ func _test_stretch_thresholds_follow_reputation(job_system: JobSystem) -> void:
 
 func _test_a_large_board_keeps_one_local_posting(job_system: JobSystem) -> void:
 	var state := RunState.new()
-	state.build["dwelling"] = "garage"
+	state.build["infrastructure_tier"] = 1
 	state.build["hardware"] = ["gpu_rack", "gpu_rack", "gpu_rack", "gpu_rack"]
 	state.business["reputation"] = 0.0
 	job_system.generate_offers(state, DeterministicRng.new(4041), ContentDatabase, {})
@@ -180,17 +181,17 @@ func _test_late_bands_have_distinct_ordinary_work(job_system: JobSystem) -> void
 		assert_true(ordinary >= 3, "Tier %d has at least three ordinary authored jobs" % tier)
 
 
-## A location's ordinary work should be a meaningful chunk of its next machine,
+## A tier's ordinary work should be a meaningful chunk of its next machine,
 ## not the whole shop. Only contracts flagged as windfalls are allowed to buy a
 ## rung of the ladder outright.
 func _test_rewards_follow_the_hardware_ladder(job_system: JobSystem) -> void:
-	var bands: Array = JobSystem.location_bands(ContentDatabase)
+	var bands: Array = JobSystem.scale_bands(ContentDatabase)
 	for tier in range(bands.size()):
 		var band: Dictionary = Dictionary(bands[tier])
 		var ceiling: float = float(band.get("major_purchase", 0.0)) * 0.75
-		assert_true(ceiling > 0.0, "%s names the machine its work is priced against" % str(band.get("location", "")))
+		assert_true(ceiling > 0.0, "Tier %d names the machine its work is priced against" % tier)
 		var state := RunState.new()
-		state.build["dwelling"] = str(band.get("location", ""))
+		state.build["infrastructure_tier"] = tier
 		state.business["reputation"] = 0.0
 		for job_def in ContentDatabase.jobs:
 			if job_def.tier != tier or job_def.windfall:
@@ -198,11 +199,11 @@ func _test_rewards_follow_the_hardware_ladder(job_system: JobSystem) -> void:
 			var offer: Dictionary = job_system._scale_job(job_def, 1, ContentDatabase, {}, state)
 			assert_true(
 				float(offer.get("reward", 0.0)) <= ceiling,
-				"%s pays %s, under the %s the %s ladder is priced against" % [
+				"%s pays %s, under the %s the tier %d ladder is priced against" % [
 					job_def.name,
 					NumberFormat.format_cash(float(offer.get("reward", 0.0))),
 					NumberFormat.format_cash(ceiling),
-					str(band.get("location", "")),
+					tier,
 				]
 			)
 

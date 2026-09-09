@@ -3,7 +3,34 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 25
+const SAVE_VERSION := 26
+
+## The rooms in the order the old campaign climbed them. A pre-v26 save knew
+## only its room (`build.dwelling`); its index here is the Infrastructure Tier
+## that room used to grant. Static on purpose: the migration must read the same
+## way whatever the balance data says today.
+const LEGACY_ROOM_ORDER: Array[String] = [
+	"bedroom",
+	"garage",
+	"office_unit",
+	"warehouse",
+	"datacentre_campus",
+	"private_power_grid",
+	"moon_facility",
+]
+
+## Which Investor Level each of the old Ascension Contracts was, by the id's
+## last segment. A pre-v26 save carries the contract it was playing for, and
+## that alone says what level the run had reached.
+const LEGACY_CONTRACT_LEVELS := {
+	"first_scale_up": 1,
+	"million_token_operator": 2,
+	"regional_provider": 3,
+	"datacentre_magnate": 4,
+	"national_backbone": 5,
+	"the_monopoly": 6,
+	"final_prompt": 7,
+}
 
 ## Upgrades that no longer exist in content. Migration refunds the original
 ## purchase total from this table rather than looking the defs up.
@@ -34,8 +61,8 @@ const REMOVED_MODULES := [
 	"op.egress_shield",
 ]
 
-## What a run on Normal starts the first chapter with, and the figure every
-## location's stake and every difficulty profile is expressed relative to.
+## What a run on Normal starts with, and the figure every difficulty profile's
+## stake is expressed relative to.
 const DEFAULT_STARTING_CASH := 500.0
 
 ## A round is one full cycle of the game: take contracts, work them to
@@ -72,7 +99,7 @@ var compute: Dictionary = {
 	"local_rate": 1_000_000.0,
 	"prompt_rate": 1_000_000.0,
 	"power_draw": 65.0,
-	## Derived by ComputeSystem from the run's location, what is installed in it
+	## Derived by ComputeSystem from the run's Infrastructure Tier, what is installed in it
 	## and `meta_cooling`. Never added to directly: see ComputeSystem.derive_cooling.
 	"cooling": 0.0,
 	## Cooling from permanent unlocks, which is the one part of the total that
@@ -96,9 +123,10 @@ var business: Dictionary = {
 	"job_board_stamp": "",
 	"job_board_seq": 0,
 	## Transient Market shelf for purchasable modules. Lazily created on old saves.
+	## `stamp` is the "level.tier" scale the stock was rolled for.
 	"module_market": {
 		"stock": [],
-		"location": "",
+		"stamp": "",
 		"round": 0,
 		"sequence": 0,
 		"rerolls": 0,
@@ -117,7 +145,10 @@ var build: Dictionary = {
 	"board": {"slot_count": BoardSystem.DEFAULT_SLOT_COUNT, "active_workflow": 0},
 	"workflows": [],
 	"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
-	"dwelling": "bedroom",
+	## The Infrastructure Tier bought in the Market, 0..6. See InfrastructureSystem.
+	## The room the run is drawn in is derived from it (`RoomProgression`) and
+	## is not stored.
+	"infrastructure_tier": 0,
 	## The five cabinet systems (compute, cooling, power, backplane, control),
 	## each at a tier 1..4. Capacities — bays, workflows, floor slots, cooling,
 	## heat capacity, base rate — are read from these through CabinetSystems.
@@ -130,8 +161,8 @@ var build: Dictionary = {
 	## `UpgradeSystem.upgrade_counts()` — rather than removed outright, since
 	## UI and save data still address them directly.
 	"upgrade_counts": {},
-	## The subset of upgrade_counts that was actually bought for cash. Location
-	## starters and permanent grants are owned and billable, but cannot be sold.
+	## The subset of upgrade_counts that was actually bought for cash. Starter
+	## kit and permanent grants are owned and billable, but cannot be sold.
 	"purchased_upgrade_counts": {},
 }
 
@@ -172,18 +203,11 @@ var statistics: Dictionary = {
 	"hidden_bugs_revealed": 0,
 }
 
-## The location's contract, which is live from the first prompt of the run; see
-## AscensionSystem for what each field means. There is only ever one contract per
-## run, so nothing here outlives it.
-var ascension: Dictionary = {
-	"status": "",
-	"contract_id": "",
-	"baseline_tokens": 0.0,
-	"tokens_burned": 0.0,
-	"deadline_round": 0,
-	"quality_sum": 0.0,
-	"quality_count": 0,
-}
+## The investor's ladder: the run's Investor Level and the target live against
+## it; see InvestorProgression for what each field means. `level` is the one
+## gameplay progression authority — difficulty, economy pressure and content
+## gates key off it, never off the room.
+var investor: Dictionary = InvestorProgression.default_state()
 
 var depth: Dictionary = {
 	"level": 0,
@@ -201,15 +225,18 @@ var flags: Dictionary = {
 	"loss_reason": "",
 	"victory": false,
 	"outcome": "",
-	"ascension_tier": 0,
 	"fire_risk": false,
 	"post_victory": false,
 	"post_victory_phase": "",
 	"depth_complete": false,
 	"depth_complete_pending": false,
 	"legacy_banked": false,
-	"location_completed": false,
-	"next_location": "",
+	## The live target has just been met and the run is waiting on the player
+	## to take the next one (or, after the final target, to begin Deep Burn).
+	"target_complete": false,
+	## The final target has been met: Token Burn is complete and everything
+	## past this is Deep Burn.
+	"game_completed": false,
 	"draft_kind": "",
 	## Set once the investor's perk draft has been taken or declined, so a
 	## victory screen can tell a fresh win from one whose pick is already made.
@@ -232,7 +259,7 @@ func reset(profile: Dictionary = {}) -> void:
 	business = _default_business()
 	build = _default_build()
 	statistics = _default_statistics()
-	ascension = _default_ascension()
+	investor = _default_investor()
 	depth = _default_depth()
 	flags = _default_flags()
 
@@ -318,20 +345,27 @@ func has_pending_work() -> bool:
 	return has_queued_jobs() or has_active_job()
 
 
-## Vince's halfway and last-call beats fire once per run. Remembered here so a
-## trip to the market — which unloads the desk — cannot ring the same call again.
-func investor_beat_heard(trigger: String) -> bool:
+## Vince's halfway and last-call beats fire once per target. Keyed by trigger
+## and Investor Level so each new target gets its own calls, and remembered
+## here so a trip to the market — which unloads the desk — cannot ring the same
+## call again. `level` 0 means "the run's current level".
+func investor_beat_heard(trigger: String, level: int = 0) -> bool:
 	var beats: Variant = flags.get("investor_beats", {})
-	return beats is Dictionary and beats.has(trigger)
+	return beats is Dictionary and beats.has(_investor_beat_key(trigger, level))
 
 
-func mark_investor_beat(trigger: String) -> void:
+func mark_investor_beat(trigger: String, level: int = 0) -> void:
 	var stored: Variant = flags.get("investor_beats", {})
 	var beats: Dictionary = {}
 	if stored is Dictionary:
 		beats = stored
-	beats[trigger] = true
+	beats[_investor_beat_key(trigger, level)] = true
 	flags["investor_beats"] = beats
+
+
+func _investor_beat_key(trigger: String, level: int) -> String:
+	var resolved: int = level if level > 0 else maxi(1, int(investor.get("level", 1)))
+	return "%s:%d" % [trigger, resolved]
 
 
 func update_peaks() -> void:
@@ -376,7 +410,7 @@ func to_dict() -> Dictionary:
 		"business": business.duplicate(true),
 		"build": build.duplicate(true),
 		"statistics": statistics.duplicate(true),
-		"ascension": ascension.duplicate(true),
+		"investor": investor.duplicate(true),
 		"depth": depth.duplicate(true),
 		"flags": flags.duplicate(true),
 	}
@@ -390,16 +424,49 @@ func from_dict(data: Dictionary) -> void:
 	business = _merge_section(_default_business(), data.get("business", {}))
 	build = _merge_section(_default_build(), data.get("build", {}))
 	statistics = _merge_section(_default_statistics(), data.get("statistics", {}))
-	ascension = _merge_section(_default_ascension(), data.get("ascension", {}))
+	# A save from before v26 carries the investor section as `ascension`; the
+	# v26 migration reads its level out of the contract it names.
+	investor = _merge_section(_default_investor(), data.get("investor", data.get("ascension", {})))
+	# A v25 save written during the investor rework already carries its level;
+	# only the older `ascension` shape has to have it read out of the contract.
+	_saved_investor_level = data.get("investor", null) is Dictionary \
+		and Dictionary(data["investor"]).has("level")
 	depth = _merge_section(_default_depth(), data.get("depth", {}))
 	flags = _merge_section(_default_flags(), data.get("flags", {}))
 	# The merge fills a missing `cabinet_systems` with the all-tier-1 default,
 	# which would hide from the migration that the save never had one. A save
-	# without the block is derived from its dwelling instead (see v23).
+	# without the block is derived from its room instead (see v23).
 	var saved_build: Variant = data.get("build", {})
 	if not (saved_build is Dictionary and Dictionary(saved_build).has("cabinet_systems")):
 		build.erase("cabinet_systems")
+	# v26, part one: the Infrastructure Tier a room-only save had. This has to
+	# be in place before `_migrate` runs, because the v23 cabinet derivation
+	# sizes its capacity off the tier — done inside `_migrate_to_v26` it would
+	# arrive too late and an old warehouse would load with a bedroom's bays.
+	if not (saved_build is Dictionary and Dictionary(saved_build).has("infrastructure_tier")):
+		build["infrastructure_tier"] = legacy_tier_for_room(str(build.get("dwelling", "")))
 	_migrate(version)
+	_saved_investor_level = false
+
+
+## Whether the save being read carried `investor.level` itself (see `from_dict`).
+var _saved_investor_level: bool = false
+
+
+## The Infrastructure Tier a pre-v26 room stood for: its index in the old
+## campaign order. An unknown room is the bottom tier.
+static func legacy_tier_for_room(room_id: String) -> int:
+	return maxi(0, LEGACY_ROOM_ORDER.find(room_id))
+
+
+## The Investor Level a pre-v26 Ascension Contract id stood for, matched on the
+## id's last segment so `ascension.first_scale_up` and `first_scale_up` agree.
+## An id the table does not know falls back to the contract's tier + 1.
+static func legacy_level_for_contract(contract_id: String, tier: int) -> int:
+	var key: String = contract_id.get_slice(".", contract_id.get_slice_count(".") - 1)
+	if LEGACY_CONTRACT_LEVELS.has(key):
+		return int(LEGACY_CONTRACT_LEVELS[key])
+	return maxi(1, tier + 1)
 
 
 func _merge_section(defaults: Dictionary, saved: Variant) -> Dictionary:
@@ -443,7 +510,7 @@ func _migrate(from_version: int) -> void:
 	if from_version < 6:
 		# Ascension Contracts and their score stats are additive: older saves
 		# simply start with no contract underway and a zeroed scoreboard.
-		ascension = _default_ascension()
+		investor = _default_investor()
 		if not statistics.has("hidden_bugs_shipped"):
 			statistics["hidden_bugs_shipped"] = 0
 	if from_version < 7:
@@ -494,9 +561,49 @@ func _migrate(from_version: int) -> void:
 				modifier["prompts_remaining"] = mini(1, int(modifier.get("prompts_remaining", 1)))
 	if from_version < 25:
 		_migrate_to_v25()
+	if from_version < 26:
+		_migrate_to_v26()
 	# Whatever version the save was, the tiers it carries are whole numbers
 	# inside the tier range, and every system is present.
 	CabinetSystems.ensure_state(self)
+
+
+## Rooms stop being progression. The run's place in the game is its Investor
+## Level, read out of the contract the old `ascension` section named (the
+## section itself has already been read in as `investor`); the machine's scale
+## is the Infrastructure Tier the room stood for (set before `_migrate`, see
+## `from_dict`). The campaign flags go, the two completion flags arrive, the
+## module shelf's stamp is cleared so it regenerates for the tier rather than
+## the room, and the legacy room key `build.dwelling` — its tier now derived —
+## is erased: the room is presentation read off the tier from here on.
+func _migrate_to_v26() -> void:
+	var contract_id: String = str(investor.get("contract_id", ""))
+	var tier: int = int(investor.get("tier", 0))
+	var level: int = maxi(InvestorProgression.FIRST_LEVEL, int(investor.get("level", InvestorProgression.FIRST_LEVEL)))
+	if not _saved_investor_level and contract_id != "":
+		level = legacy_level_for_contract(contract_id, tier)
+	investor["level"] = level
+	investor["targets_completed"] = maxi(int(investor.get("targets_completed", 0)), level - 1)
+	if int(investor.get("activated_round", 0)) <= 0:
+		investor["activated_round"] = 1
+	investor.erase("tier")
+	# A save at the final target with the win already taken has completed the
+	# game; one with any other target met is waiting on the next one.
+	var status: String = str(investor.get("status", ""))
+	var completed: bool = status == InvestorProgression.STATUS_COMPLETED \
+		or bool(flags.get("victory", false)) or bool(flags.get("post_victory", false))
+	var at_final: bool = level >= int(LEGACY_CONTRACT_LEVELS["final_prompt"])
+	flags["game_completed"] = bool(flags.get("game_completed", false)) or (completed and at_final)
+	flags["target_complete"] = bool(flags.get("target_complete", false)) \
+		or (completed and not at_final and bool(flags.get("victory", false)))
+	for stale in ["location_completed", "next_location", "ascension_tier"]:
+		flags.erase(stale)
+	var market: Dictionary = Dictionary(business.get("module_market", {}))
+	market.erase("location")
+	market["stamp"] = ""
+	market["round"] = 0
+	business["module_market"] = market
+	build.erase("dwelling")
 
 
 ## Safe capacity is the backplane's alone; permanent slot unlocks become
@@ -542,19 +649,20 @@ func _migrate_board_bonus_to_overflow() -> void:
 		stored.erase("meta_slot_bonus")
 
 
-## Dwellings stop being the source of capacity: the five cabinet systems are.
+## Rooms stop being the source of capacity: the five cabinet systems are.
 ## A save from before they existed is given the tiers its room was worth (the
-## pack's migration table), clamped to 1..4 with a warning if the table or the
-## save was odd, and never loses capacity on the way: a tier is raised until it
-## covers the bays, workflows and floor the save was demonstrably using. The
-## dwelling key is kept in `migration_debug` for one version so a bad
-## derivation can be traced. Nothing is charged or refunded.
+## entry tiers of the Infrastructure Tier that room now stands for), clamped
+## to 1..4 with a warning if the data or the save was odd, and never loses
+## capacity on the way: a tier is raised until it covers the bays, workflows
+## and floor the save was demonstrably using. The legacy room key is kept in
+## `migration_debug` for one version so a bad derivation can be traced.
+## Nothing is charged or refunded.
 func _migrate_to_v23() -> void:
-	var dwelling: String = str(build.get("dwelling", ""))
-	build["migration_debug"] = {"dwelling": dwelling}
+	var legacy_room: String = str(build.get("dwelling", ""))
+	build["migration_debug"] = {"dwelling": legacy_room}
 	var stored: Variant = build.get("cabinet_systems", null)
 	if not stored is Dictionary or Dictionary(stored).is_empty():
-		build["cabinet_systems"] = CabinetSystems.derive_from_dwelling(dwelling)
+		build["cabinet_systems"] = CabinetSystems._legacy_tiers_for_room(legacy_room)
 	CabinetSystems.ensure_state(self, true)
 	_raise_cabinet_tiers_to_cover_capacity()
 	compute["heat_capacity"] = maxf(
@@ -883,7 +991,7 @@ func _migrate_upgrade_counts() -> void:
 ## and carrying them would leave a run owed a draft nothing can ever open.
 func _migrate_off_the_ascension_ladder() -> void:
 	for stale in ["completed_ids", "highest_tier_completed", "pending_picks"]:
-		ascension.erase(stale)
+		investor.erase(stale)
 
 
 ## The contract stopped being something taken on part-way through a run and
@@ -895,16 +1003,16 @@ func _migrate_off_the_ascension_ladder() -> void:
 ## ceilings, violation counts — has no equivalent and is dropped, as is overtime.
 func _migrate_to_the_contract_as_the_level() -> void:
 	for stale in ["committed_round", "prompts_remaining", "violations"]:
-		ascension.erase(stale)
+		investor.erase(stale)
 	economy.erase("overtime_levy")
 	economy.erase("overtime_income_mark")
 	statistics.erase("overtime_rounds")
 	flags.erase("overtime")
 	flags.erase("ascension_qualified")
-	if str(ascension.get("status", "")) == "committed":
-		ascension["status"] = "active"
-	if not ascension.has("deadline_round") or int(ascension.get("deadline_round", 0)) <= 0:
-		ascension["deadline_round"] = 12
+	if str(investor.get("status", "")) == "committed":
+		investor["status"] = "active"
+	if not investor.has("deadline_round") or int(investor.get("deadline_round", 0)) <= 0:
+		investor["deadline_round"] = 12
 
 
 ## One global pipeline became a list of named workflows, each assignable to a
@@ -972,8 +1080,8 @@ func _migrate_to_round_and_prompt() -> void:
 	statistics["endless_rounds"] = int(statistics.get("endless_months", 0))
 	statistics.erase("endless_months")
 
-	ascension.erase("committed_month")
-	ascension.erase("rounds_remaining")
+	investor.erase("committed_month")
+	investor.erase("rounds_remaining")
 
 	for collection in ["active_jobs", "job_queue", "job_offers"]:
 		for job in business.get(collection, []):
@@ -1004,9 +1112,8 @@ func _default_economy(profile: Dictionary = {}) -> Dictionary:
 	var starting_cash: float = float(profile.get("starting_cash", DEFAULT_STARTING_CASH))
 	return {
 		"cash": starting_cash,
-		# Every location has a stake sized for its own rent; the difficulty is a
-		# multiplier on all of them rather than a figure that only bites in the
-		# bedroom, so a hard run is short of money in the warehouse too.
+		# The difficulty's stake is a multiplier on everything sized off the
+		# starting cash, so a hard run stays short of money at every scale.
 		"cash_multiplier": starting_cash / DEFAULT_STARTING_CASH,
 		"debt": 0.0,
 		"recurring_costs_base": 0.0,
@@ -1053,7 +1160,7 @@ func _default_business() -> Dictionary:
 		"job_board_seq": 0,
 		"module_market": {
 			"stock": [],
-			"location": "",
+			"stamp": "",
 			"round": 0,
 			"sequence": 0,
 			"rerolls": 0,
@@ -1074,7 +1181,9 @@ func _default_build() -> Dictionary:
 		"board": {"slot_count": BoardSystem.DEFAULT_SLOT_COUNT, "active_workflow": 0},
 		"workflows": [],
 		"workflow_capacity": BoardSystem.DEFAULT_WORKFLOW_CAPACITY,
-		"dwelling": "bedroom",
+		## The Infrastructure Tier bought in the Market, 0..6. The one machine-
+		## scale authority; see InfrastructureSystem.
+		"infrastructure_tier": 0,
 		"cabinet_systems": CabinetSystems.default_tiers(),
 		"upgrade_levels": {},
 		"upgrade_counts": {},
@@ -1123,16 +1232,8 @@ func _default_statistics() -> Dictionary:
 	}
 
 
-func _default_ascension() -> Dictionary:
-	return {
-		"status": "",
-		"contract_id": "",
-		"baseline_tokens": 0.0,
-		"tokens_burned": 0.0,
-		"deadline_round": 0,
-		"quality_sum": 0.0,
-		"quality_count": 0,
-	}
+func _default_investor() -> Dictionary:
+	return InvestorProgression.default_state()
 
 
 func _default_depth() -> Dictionary:
@@ -1154,15 +1255,14 @@ func _default_flags() -> Dictionary:
 		"loss_reason": "",
 		"victory": false,
 		"outcome": "",
-		"ascension_tier": 0,
 		"fire_risk": false,
 		"post_victory": false,
 		"post_victory_phase": "",
 		"depth_complete": false,
 		"depth_complete_pending": false,
 		"legacy_banked": false,
-		"location_completed": false,
-		"next_location": "",
+		"target_complete": false,
+		"game_completed": false,
 		"draft_kind": "",
 		"investor_draft_resolved": false,
 		"difficulty": "normal",
@@ -1184,8 +1284,8 @@ func _get_section(section_name: String) -> Variant:
 			return build
 		"statistics":
 			return statistics
-		"ascension":
-			return ascension
+		"investor":
+			return investor
 		"depth":
 			return depth
 		"flags":

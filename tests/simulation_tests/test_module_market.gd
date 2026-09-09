@@ -15,14 +15,15 @@ func run() -> void:
 	_test_rejects_offer_not_on_table()
 	_test_no_eligible_perks_cannot_wedge()
 	_test_first_round_has_stock()
-	_test_stock_size_scales_by_location()
+	_test_stock_size_scales_by_investor_level()
 	_test_market_eligibility_helpers()
 	_test_stock_excludes_owned_modules()
 	_test_opening_market_does_not_reroll()
 	_test_save_load_preserves_stock()
 	_test_next_round_naturally_restocks()
-	_test_chapter_transition_restocks()
-	_test_pricing_and_location_reward_scale()
+	_test_infrastructure_tier_restocks()
+	_test_investor_level_restocks()
+	_test_pricing_and_scale_reward_anchor()
 	_test_purchase_flow()
 	_test_cannot_buy_without_cash_or_absent()
 	_test_can_buy_several_in_one_round()
@@ -73,9 +74,9 @@ func _test_calibration_consumes_modules_and_cash() -> void:
 	var sim: Node = rig["sim"]
 	var target: String = rig["target"]
 	var spare: Array = rig["spare"]
-	# Bedroom major_purchase is 1200; rank 1 costs 1200 × 0.25 × 1.
+	# Tier 0 major_purchase is 1200; rank 1 costs 1200 × 0.25 × 1.
 	var cost: float = sim.module_calibration_cost(target)
-	assert_almost_eq(cost, 300.0, 0.01, "First rank costs a quarter of the bedroom's major purchase")
+	assert_almost_eq(cost, 300.0, 0.01, "First rank costs a quarter of tier 0's major purchase")
 	assert_eq(sim.module_calibration_rank(target), 0, "Modules start uncalibrated")
 	var cash_before: float = float(sim.run_state.economy.get("cash", 0.0))
 	var owned_before: int = Array(sim.run_state.build.get("modules", [])).size()
@@ -464,32 +465,46 @@ func _test_no_eligible_perks_cannot_wedge() -> void:
 func _test_first_round_has_stock() -> void:
 	var sim: Node = _sim(9100)
 	var stock: Array = sim.module_market_stock()
-	assert_eq(stock.size(), 3, "Bedroom round 1 stocks three modules")
-	assert_eq(str(sim.run_state.build.get("dwelling", "")), "bedroom", "Fresh run is in the bedroom")
+	assert_eq(stock.size(), 3, "Level 1 round 1 stocks three modules")
+	assert_eq(sim.investor_level(), 1, "Fresh run is at Investor Level 1")
 	sim.free()
 
 
-func _test_stock_size_scales_by_location() -> void:
-	var expected := {
-		"bedroom": 3,
-		"garage": 4,
-		"office_unit": 4,
-		"warehouse": 5,
-		"datacentre_campus": 5,
-		"private_power_grid": 6,
-		"moon_facility": 6,
-	}
-	for location in expected.keys():
-		var sim: Node = _sim(9100 + int(expected[location]))
-		sim.apply_run_location(sim.run_state, str(location), false)
+## `economy.module_market.slots_by_investor_level`, indexed by level - 1, the
+## last entry extending past the table. The machine's scale does not widen the
+## shelf; the investor's ladder does.
+func _test_stock_size_scales_by_investor_level() -> void:
+	var expected: Array = [3, 4, 4, 5, 5, 6, 6]
+	for index in range(expected.size()):
+		var level: int = index + 1
+		var sim: Node = _sim(9100 + level)
+		sim.investor_progression().activate_level(sim.run_state, level, ContentDatabase)
 		sim.run_state.calendar["round"] = 1
 		MarketService.restock_modules(sim, false)
 		assert_eq(
 			sim.module_market_stock().size(),
-			int(expected[location]),
-			"%s stocks %d modules" % [location, int(expected[location])]
+			int(expected[index]),
+			"Investor Level %d stocks %d modules" % [level, int(expected[index])]
 		)
 		sim.free()
+	var extended: Node = _sim(9150)
+	extended.investor_progression().activate_level(extended.run_state, expected.size() + 3, ContentDatabase)
+	extended.run_state.calendar["round"] = 1
+	MarketService.restock_modules(extended, false)
+	assert_eq(
+		extended.module_market_stock().size(), int(expected[-1]),
+		"Past the table the last entry extends"
+	)
+	var scaled: Node = _sim(9151)
+	scaled.apply_infrastructure_tier(scaled.run_state, 3)
+	scaled.run_state.calendar["round"] = 1
+	MarketService.restock_modules(scaled, false)
+	assert_eq(
+		scaled.module_market_stock().size(), int(expected[0]),
+		"A bigger machine at Level 1 still sees a Level 1 shelf"
+	)
+	extended.free()
+	scaled.free()
 
 
 func _test_market_eligibility_helpers() -> void:
@@ -498,20 +513,20 @@ func _test_market_eligibility_helpers() -> void:
 	var module := ModuleDefinition.new()
 	module.id = "op.market_gate_probe"
 	module.difficulty = PackedStringArray(["hard"])
-	module.min_location_tier = 2
+	module.min_investor_level = 3
 	assert_false(
 		ContentDatabase.module_is_eligible(module, state),
-		"Wrong difficulty and location keep a module out of stock"
+		"Wrong difficulty and Investor Level keep a module out of stock"
 	)
 	state.flags["difficulty"] = "hard"
 	assert_false(
 		ContentDatabase.module_is_eligible(module, state),
-		"Location gate still applies after difficulty is met"
+		"Investor Level gate still applies after difficulty is met"
 	)
-	state.build["dwelling"] = "office_unit"
+	state.investor["level"] = 3
 	assert_true(
 		ContentDatabase.module_is_eligible(module, state),
-		"Module becomes eligible when difficulty and location gates are met"
+		"Module becomes eligible when difficulty and Investor Level gates are met"
 	)
 	assert_false(
 		ContentDatabase.module_is_eligible(module, state, [module.id]),
@@ -558,7 +573,7 @@ func _test_save_load_preserves_stock() -> void:
 	assert_eq(sim2.module_market_stock(), stock, "Stock IDs survive save/load")
 	var loaded: Dictionary = Dictionary(sim2.run_state.business.get("module_market", {}))
 	assert_eq(int(loaded.get("rerolls", -1)), int(market.get("rerolls", 0)), "Reroll count survives")
-	assert_eq(str(loaded.get("location", "")), str(market.get("location", "")), "Location stamp survives")
+	assert_eq(str(loaded.get("stamp", "")), str(market.get("stamp", "")), "Scale stamp survives")
 	assert_eq(int(loaded.get("round", -1)), int(market.get("round", 0)), "Round stamp survives")
 	sim.free()
 	sim2.free()
@@ -579,23 +594,46 @@ func _test_next_round_naturally_restocks() -> void:
 	sim.free()
 
 
-func _test_chapter_transition_restocks() -> void:
+## The shelf is stamped "<investor level>.<infrastructure tier>": a bigger
+## machine is a new market, so buying a tier restocks without the round moving.
+func _test_infrastructure_tier_restocks() -> void:
 	var sim: Node = _sim(9204)
-	var bedroom_sequence: int = int(Dictionary(sim.run_state.business.get("module_market", {})).get("sequence", 0))
-	sim.apply_run_location(sim.run_state, "garage", false)
+	MarketService.ensure_module_stock(sim)
+	var before: Dictionary = Dictionary(sim.run_state.business.get("module_market", {}))
+	assert_eq(str(before.get("stamp", "")), "1.0", "A fresh run's shelf is stamped level 1, tier 0")
+	var sequence_before: int = int(before.get("sequence", 0))
+	sim.apply_infrastructure_tier(sim.run_state, 1)
 	sim.run_state.calendar["round"] = 1
 	MarketService.ensure_module_stock(sim)
 	var market: Dictionary = Dictionary(sim.run_state.business.get("module_market", {}))
-	assert_eq(str(market.get("location", "")), "garage", "Location stamp follows the chapter")
-	assert_eq(sim.module_market_stock().size(), 4, "Garage stocks four modules")
+	assert_eq(str(market.get("stamp", "")), "1.1", "The stamp follows the Infrastructure Tier")
+	assert_eq(sim.module_market_stock().size(), 3, "The shelf is still Level 1 wide")
 	assert_true(
-		int(market.get("sequence", 0)) > bedroom_sequence,
-		"Chapter transition advances the market sequence"
+		int(market.get("sequence", 0)) > sequence_before,
+		"A new tier advances the market sequence"
 	)
 	sim.free()
 
 
-func _test_pricing_and_location_reward_scale() -> void:
+## …and so is a new target: the next Investor Level opens a wider shelf at once.
+func _test_investor_level_restocks() -> void:
+	var sim: Node = _sim(9206)
+	MarketService.ensure_module_stock(sim)
+	var sequence_before: int = int(Dictionary(sim.run_state.business.get("module_market", {})).get("sequence", 0))
+	sim.investor_progression().activate_level(sim.run_state, 2, ContentDatabase)
+	sim.run_state.calendar["round"] = 1
+	MarketService.ensure_module_stock(sim)
+	var market: Dictionary = Dictionary(sim.run_state.business.get("module_market", {}))
+	assert_eq(str(market.get("stamp", "")), "2.0", "The stamp follows the Investor Level")
+	assert_eq(sim.module_market_stock().size(), 4, "Level 2 stocks four modules")
+	assert_true(
+		int(market.get("sequence", 0)) > sequence_before,
+		"A new level advances the market sequence"
+	)
+	sim.free()
+
+
+func _test_pricing_and_scale_reward_anchor() -> void:
 	var sim: Node = _sim(9205)
 	sim.run_state.economy["round_rent"] = 1000.0
 	var multipliers: Dictionary = ContentDatabase.balance["economy"]["module_market"][
@@ -615,15 +653,15 @@ func _test_pricing_and_location_reward_scale() -> void:
 				0.01,
 				"%s price follows the rent multiplier" % rarity
 			)
-	sim.apply_run_location(sim.run_state, "garage", false)
+	sim.apply_infrastructure_tier(sim.run_state, 1)
 	MarketService.ensure_module_stock(sim)
-	# Garage: rent share 1400 × 0.15 = 210, job share 5000 × 0.05 = 250,
+	# Tier 1: rent share 1400 × 0.15 = 210, job share 5000 × 0.05 = 250,
 	# major_purchase share 15000 × 0.02 = 300 — the wealth anchor wins.
 	assert_almost_eq(
 		sim.module_market_reroll_cost(),
 		300.0,
 		0.01,
-		"Garage reroll uses 2% of its 15000 major_purchase when that exceeds rent and job shares"
+		"Tier 1 reroll uses 2% of its 15000 major_purchase when that exceeds rent and job shares"
 	)
 	sim.free()
 

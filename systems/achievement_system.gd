@@ -137,7 +137,10 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.heat_ratio": float(run_state.compute.get("heat", 0.0)) / heat_capacity,
 		"run.max_heat_ratio": float(stats.get("max_heat_ratio", 0.0)),
 		"run.stage_repeats": int(stats.get("stage_repeats", 0)),
-		"run.location_tier": JobSystem.location_tier(run_state, ContentDatabase),
+		"run.investor_level": maxi(
+			InvestorProgression.FIRST_LEVEL,
+			int(run_state.investor.get("level", InvestorProgression.FIRST_LEVEL))
+		),
 		"run.jobs_accepted": int(stats.get("jobs_accepted", 0)),
 		"run.angel_offers_taken": int(stats.get("angel_offers_taken", 0)),
 		"run.angel_offers_declined": int(stats.get("angel_offers_declined", 0)),
@@ -164,11 +167,16 @@ func _context(run_state: RunState, score: Dictionary) -> Dictionary:
 		"run.hidden_bugs_created": int(stats.get("hidden_bugs_created", 0)),
 		"run.bugs_fixed": int(stats.get("bugs_fixed", 0)),
 		"run.hidden_bugs_revealed": int(stats.get("hidden_bugs_revealed", 0)),
-		"run.dwelling": str(run_state.build.get("dwelling", "bedroom")),
+		# The room is flavour only: it follows the infrastructure tier.
+		"run.room": InfrastructureSystem.room_id(run_state, ContentDatabase),
 		"run.outcome": str(run_state.flags.get("outcome", "")),
-		"run.ascension_tier": int(run_state.flags.get("ascension_tier", 0)),
+		# The authored `tier` of the target the run is (or was last) measured
+		# against: 1 for levels 1–2, 2 for 3–5, 3 for 6–7. 0 with no target.
+		"run.target_tier": int(
+			InvestorProgression.new().current_target(run_state, ContentDatabase).get("tier", 0)
+		),
 		"run.rounds_survived": int(score.get("rounds_survived", run_state.calendar.get("round", 1))),
-		"run.infrastructure_tier": int(score.get("infrastructure_tier", 0)),
+		"run.infrastructure_tier": InfrastructureSystem.tier(run_state, ContentDatabase),
 		"run.difficulty": str(run_state.flags.get("difficulty", "normal")),
 		"meta.achievements": MetaProgress.achievement_count(),
 		"meta.victories": MetaProgress.victories(),

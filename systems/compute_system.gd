@@ -76,7 +76,7 @@ func recalculate(run_state: RunState, effect_resolver: EffectResolver, subscript
 ## Modifiers get a say on top, for the length of one recalculation only.
 static func derive_cooling(run_state: RunState) -> float:
 	return (
-		UpgradeSystem.location_cooling(run_state, ContentDatabase)
+		UpgradeSystem.infrastructure_cooling(run_state, ContentDatabase)
 		+ UpgradeSystem.installed_cooling(run_state, ContentDatabase)
 		+ float(run_state.compute.get("meta_cooling", 0.0))
 	)
