@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Authoritative simulation state. UI observes this; it does not contain economic logic.
 
-const SAVE_VERSION := 26
+const SAVE_VERSION := 27
 
 ## The rooms in the order the old campaign climbed them. A pre-v26 save knew
 ## only its room (`build.dwelling`); its index here is the Infrastructure Tier
@@ -563,6 +563,8 @@ func _migrate(from_version: int) -> void:
 		_migrate_to_v25()
 	if from_version < 26:
 		_migrate_to_v26()
+	if from_version < 27:
+		_migrate_investor_delivered_tokens()
 	# Whatever version the save was, the tiers it carries are whole numbers
 	# inside the tier range, and every system is present.
 	CabinetSystems.ensure_state(self)
@@ -1013,6 +1015,18 @@ func _migrate_to_the_contract_as_the_level() -> void:
 		investor["status"] = "active"
 	if not investor.has("deadline_round") or int(investor.get("deadline_round", 0)) <= 0:
 		investor["deadline_round"] = 12
+
+
+## Investor progress is delivered tokens from accepted contracts, not gross
+## lifetime burn. Old saves keep their prior progress figure.
+func _migrate_investor_delivered_tokens() -> void:
+	if investor.has("tokens_burned"):
+		var legacy: float = float(investor.get("tokens_burned", 0.0))
+		var delivered: float = float(investor.get("tokens_delivered", 0.0))
+		if legacy > delivered:
+			investor["tokens_delivered"] = legacy
+	for stale in ["baseline_tokens", "tokens_burned", "quality_sum", "quality_count"]:
+		investor.erase(stale)
 
 
 ## One global pipeline became a list of named workflows, each assignable to a

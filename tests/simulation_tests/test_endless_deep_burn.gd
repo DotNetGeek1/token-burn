@@ -47,12 +47,7 @@ func _complete_the_game(sim: Node) -> Dictionary:
 	)
 	sim.run_state.economy["cash"] = 100000000.0
 	var target: Dictionary = sim.investor_target()
-	sim.run_state.statistics["lifetime_tokens"] = (
-		float(sim.run_state.investor.get("baseline_tokens", 0.0))
-		+ float(target.get("total_burn", 0.0)) + 1.0
-	)
-	sim.run_state.investor["quality_sum"] = 100.0
-	sim.run_state.investor["quality_count"] = 1
+	sim.run_state.investor["tokens_delivered"] = float(target.get("total_burn", 0.0)) + 1.0
 	sim.debug_finish_prompt({"ok": true, "messages": []})
 	return target
 

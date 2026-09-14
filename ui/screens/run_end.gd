@@ -223,7 +223,7 @@ func _contract_shortfall_text() -> String:
 	if total <= 0.0:
 		return ""
 	var burned: float = float(progress.get("tokens_burned", 0.0))
-	return "You burned %s of the %s he asked for — %.0f%% of the way there." % [
+	return "You delivered %s of the %s he asked for — %.0f%% of the way there." % [
 		NumberFormat.format(burned), NumberFormat.format(total), (burned / total) * 100.0,
 	]
 

@@ -213,6 +213,8 @@ func ship_focused_job(sim: Node) -> bool:
 	if not result.get("ok", false):
 		return false
 	sim.round_log.append("Shipped %s." % str(result.get("job", {}).get("name", "the contract")))
+	if _judge_investor(sim):
+		return true
 	_settle_if_resolved(sim)
 	return true
 
@@ -282,25 +284,51 @@ func burn_rng(sim: Node) -> DeterministicRng:
 	return DeterministicRng.new(absi(stream_seed) | 1)
 
 
-## Folds any job that finished this prompt into the contract's quality average,
-## exactly once each. Called both mid-session (so the ordinary evaluate/expire
-## path always sees settled quality) and again from `end_session` for jobs
-## shipped or abandoned without going through `finish_prompt` — the guard
-## flag is what keeps a job from being counted by both.
-func record_completed_quality(sim: Node, state: RunState) -> void:
+## Banks accepted contract deliveries toward the investor target, once each.
+func record_delivered_work(sim: Node, state: RunState) -> void:
 	for job in state.business.get("active_jobs", []):
 		if not job is Dictionary:
 			continue
-		if FeatureFlags.is_enabled("ready_to_ship_enabled") and not JobSystem.is_shipped(job):
+		if not JobSystem.is_shipped(job):
+			if FeatureFlags.is_enabled("ready_to_ship_enabled"):
+				continue
+			if float(job.get("tokens_remaining", 0.0)) > 0.0:
+				continue
+		elif float(job.get("tokens_remaining", 0.0)) > 0.0:
 			continue
-		if float(job.get("tokens_remaining", 0.0)) > 0.0:
+		if bool(job.get("_investor_delivery_recorded", false)):
 			continue
-		if bool(job.get("_ascension_quality_recorded", false)):
-			continue
-		# Judged on what the client receives, not what the pipeline produced:
-		# unfinished delivery and shipped known bugs both come off first.
-		sim.investor_progression().record_job_quality(state, JobSystem.delivered_quality(job))
-		job["_ascension_quality_recorded"] = true
+		JobSystem.settle_outcome(job)
+		job["_investor_delivery_recorded"] = true
+		if JobSystem.is_accepted(job):
+			sim.investor_progression().record_delivery(
+				state, JobSystem.advertised_token_credit(job)
+			)
+
+
+## Returns true when the investor target completed or failed the run this call.
+func _judge_investor(sim: Node) -> bool:
+	if not sim.investor_progression().is_active(sim.run_state):
+		return false
+	record_delivered_work(sim, sim.run_state)
+	var ascension_result: Dictionary = sim.investor_progression().evaluate_prompt(
+		sim.run_state, ContentDatabase
+	)
+	for message in ascension_result.get("messages", []):
+		sim.round_log.append(str(message))
+	var outcome: String = str(ascension_result.get("outcome", ""))
+	if outcome == InvestorProgression.STATUS_COMPLETED:
+		work_running = false
+		sim._reach_target_complete(sim.investor_progression().current_target(sim.run_state, ContentDatabase))
+		sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
+		return true
+	if outcome == InvestorProgression.STATUS_FAILED:
+		work_running = false
+		sim.run_state.flags["loss_reason"] = "The investor's target was failed."
+		sim._end_run(false, "ascension_failed")
+		sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
+		return true
+	return false
 
 
 ## Bookkeeping shared by every action that consumes a prompt.
@@ -318,29 +346,8 @@ func finish_prompt(sim: Node, result: Dictionary) -> void:
 		sim._end_run(false)
 		sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
 		return
-	if sim.investor_progression().is_active(sim.run_state):
-		# A job's quality has to be settled against the target's average
-		# before the target is judged, not after: judging first and
-		# recording second is how a losing final job can win on last round's
-		# quality, and a winning one can be refused for it.
-		record_completed_quality(sim, sim.run_state)
-		var ascension_result: Dictionary = sim.investor_progression().evaluate_prompt(
-			sim.run_state, ContentDatabase
-		)
-		for message in ascension_result.get("messages", []):
-			sim.round_log.append(str(message))
-		var outcome: String = str(ascension_result.get("outcome", ""))
-		if outcome == InvestorProgression.STATUS_COMPLETED:
-			work_running = false
-			sim._reach_target_complete(sim.investor_progression().current_target(sim.run_state, ContentDatabase))
-			sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
-			return
-		elif outcome == InvestorProgression.STATUS_FAILED:
-			work_running = false
-			sim.run_state.flags["loss_reason"] = "The investor's target was failed."
-			sim._end_run(false, "ascension_failed")
-			sim.work_session_finished.emit({"phase": sim.phase, "summary": last_session_summary})
-			return
+	if _judge_investor(sim):
+		return
 	elif DepthSystem.is_active(sim.run_state):
 		var depth_result: Dictionary = sim.depth_system().evaluate_prompt(sim.run_state)
 		for message in depth_result.get("messages", []):
@@ -416,9 +423,7 @@ func _should_auto_ship(sim: Node) -> bool:
 	var job: Dictionary = sim.job_system().focused_job(sim.run_state)
 	if not JobSystem.is_ready(job):
 		return false
-	if work_policy == POLICY_YOLO:
-		return JobSystem.delivered_quality(job) >= float(job.get("quality_threshold", 0.0))
-	return true
+	return JobSystem.delivered_quality(job) >= float(job.get("quality_threshold", 0.0))
 
 
 func set_work_policy(sim: Node, policy: String) -> void:
@@ -459,18 +464,16 @@ func end_session(sim: Node, reason: String) -> void:
 	var completed: Array = []
 	var failed: Array = []
 	for job in sim.run_state.business.get("active_jobs", []):
-		if JobSystem.is_shipped(job) or (
-			not FeatureFlags.is_enabled("ready_to_ship_enabled")
-			and float(job.get("tokens_remaining", 0.0)) <= 0.0
-		):
+		if not job is Dictionary:
+			continue
+		JobSystem.settle_outcome(job)
+		if str(job.get("outcome", "")) == JobSystem.OUTCOME_ACCEPTED:
 			completed.append(job)
 		else:
 			failed.append(job)
 
 	if sim.investor_progression().is_active(sim.run_state):
-		# Covers jobs settled by ship/abandon, which never pass through
-		# `finish_prompt`. Jobs already recorded there are skipped.
-		record_completed_quality(sim, sim.run_state)
+		record_delivered_work(sim, sim.run_state)
 
 	var messages: Array[String] = []
 	var reward: float = 0.0
@@ -609,6 +612,10 @@ func _build_session_summary(
 	var jobs: Array = completed_jobs + failed_jobs
 	var completed: int = completed_jobs.size()
 	var failed: int = failed_jobs.size()
+	var rejected: int = 0
+	for job in failed_jobs:
+		if job is Dictionary and str(job.get("outcome", "")) == JobSystem.OUTCOME_REJECTED:
+			rejected += 1
 	var tokens_done: float = 0.0
 	var quality_total: float = 0.0
 	var threshold_total: float = 0.0
@@ -642,6 +649,7 @@ func _build_session_summary(
 		"success": completed > 0 and failed == 0,
 		"completed": completed,
 		"failed": failed,
+		"rejected": rejected,
 		"reward": reward,
 		"spent": maxf(0.0, session_cash_start + reward - cash_after),
 		"cash_after": cash_after,

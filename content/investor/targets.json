@@ -1,5 +1,5 @@
 {
-  "design_note": "The investor's targets, one per Investor Level. Level 1 is live from the first prompt of a run; completing a target advances the level and activates the next one on the same continuous calendar. The entry marked `final` is the win (Token Burn complete); everything past it is Deep Burn. Ids are unchanged from the old per-location contracts so profile ascension history stays valid. Optional conditions: `max_heat_ratio` (heat never above this share of capacity while the target is live), `no_catastrophe` (no catastrophe while live), `min_profit` (cash gained since activation). `alternate` entries are retained content, never activated by level.",
+  "design_note": "The investor's targets, one per Investor Level. total_burn is delivered tokens from client-accepted contracts (scope complete, quality at or above the job bar), capped at each contract's advertised requirement. Level 1 is live from the first prompt; completing a target advances the level on the same calendar. The entry marked final is the win.",
   "contracts": [
     {
       "id": "ascension.first_scale_up",
@@ -10,7 +10,6 @@
       "flavour": "A regional logistics chain wants their whole ops stack rewritten by someone who has clearly never done this before. You have not.",
       "burn_label": "30 Megatokens",
       "total_burn": 30000000,
-      "quality_min": 30,
       "deadline_rounds": 12,
       "picks": 1,
       "unlocks_age": false,
@@ -25,7 +24,6 @@
       "flavour": "Train the first planetary-scale model. Or a very convincing imitation of one, if that is faster.",
       "burn_label": "200 Megatokens",
       "total_burn": 200000000,
-      "quality_min": 35,
       "deadline_rounds": 12,
       "picks": 1,
       "unlocks_age": false,
@@ -40,7 +38,6 @@
       "flavour": "Every startup in the business park wants inference and none of them want to buy a machine. You are now the utility, and utilities do not get to have an outage.",
       "burn_label": "2.5 Gigatokens",
       "total_burn": 2500000000,
-      "quality_min": 35,
       "deadline_rounds": 12,
       "picks": 2,
       "unlocks_age": false,
@@ -55,7 +52,6 @@
       "flavour": "Rewrite the entire public internet. Twice, because the first pass introduced a recursion bug that rewrote itself.",
       "burn_label": "25 Gigatokens",
       "total_burn": 25000000000,
-      "quality_min": 40,
       "deadline_rounds": 12,
       "picks": 2,
       "unlocks_age": false,
@@ -70,7 +66,6 @@
       "flavour": "Operate a nation's AI infrastructure for one round. The nation would like this to be quieter than it sounds.",
       "burn_label": "250 Gigatokens",
       "total_burn": 250000000000,
-      "quality_min": 35,
       "deadline_rounds": 12,
       "picks": 2,
       "unlocks_age": false,
@@ -85,7 +80,6 @@
       "flavour": "Route 80% of global AI traffic through your infrastructure. The remaining 20% is a rounding error you plan to acquire.",
       "burn_label": "3 Teratokens",
       "total_burn": 3000000000000,
-      "quality_min": 40,
       "deadline_rounds": 12,
       "picks": 3,
       "unlocks_age": true,
@@ -101,7 +95,6 @@
       "flavour": "Process \"The Final Prompt\" and become the default inference layer for civilisation. Support is not included.",
       "burn_label": "25 Teratokens",
       "total_burn": 25000000000000,
-      "quality_min": 45,
       "deadline_rounds": 12,
       "picks": 3,
       "unlocks_age": true,
@@ -116,7 +109,6 @@
       "flavour": "Train a model capable of recursively improving itself. Legal has asked that we not call it that in the contract.",
       "burn_label": "30 Teratokens",
       "total_burn": 30000000000000,
-      "quality_min": 75,
       "deadline_rounds": 12,
       "picks": 3,
       "unlocks_age": true,
@@ -131,7 +123,6 @@
       "flavour": "Process and preserve all human knowledge. Some of it was already wrong; that part processes fastest.",
       "burn_label": "35 Teratokens",
       "total_burn": 35000000000000,
-      "quality_min": 65,
       "deadline_rounds": 14,
       "picks": 3,
       "unlocks_age": true,
@@ -146,7 +137,6 @@
       "flavour": "Simulate an entire civilisation. It has already started asking questions about its render distance.",
       "burn_label": "45 Teratokens",
       "total_burn": 45000000000000,
-      "quality_min": 60,
       "deadline_rounds": 16,
       "picks": 3,
       "unlocks_age": true,
@@ -161,7 +151,6 @@
       "flavour": "Generate every advert every human will ever see. Reputation is not a load-bearing requirement here.",
       "burn_label": "60 Teratokens",
       "total_burn": 60000000000000,
-      "quality_min": 20,
       "deadline_rounds": 10,
       "picks": 3,
       "unlocks_age": true,
@@ -169,3 +158,4 @@
     }
   ]
 }
+

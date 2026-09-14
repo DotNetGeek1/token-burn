@@ -8,11 +8,10 @@ extends RefCounted
 ## The target marked `final` is the win. Past it the ladder is Deep Burn's.
 ##
 ## `run_state.investor` is the only gameplay progression authority: `level`
-## is what difficulty, economy pressure and content gates key off. State keeps
-## the old contract field names (`status`, `contract_id`, `baseline_tokens`,
-## `tokens_burned`, `deadline_round`, `quality_sum`, `quality_count`) and adds
-## `level`, `targets_completed`, `max_heat_ratio`, `catastrophes`,
-## `profit_baseline` for the optional conditions a target may carry.
+## is what difficulty, economy pressure and content gates key off. Progress is
+## `tokens_delivered` — tokens from client-accepted contracts only, capped at
+## each job's advertised requirement. Optional conditions: `max_heat_ratio`,
+## `no_catastrophe`, `min_profit`.
 ##
 ## Owned by Simulation as `_investor`. Stateless: everything lives on the run.
 
@@ -94,10 +93,7 @@ static func generate_target(level: int, content_db: Node = null) -> Dictionary:
 	var base: Dictionary = authored_target_for_level(top_level, content_db)
 	var steps: int = maxi(1, level - maxi(top_level, 0))
 	var growth: float = maxf(1.0, float(curve.get("token_growth", 5.0)))
-	var quality_step: float = float(curve.get("quality_step", 3.0))
-	var quality_cap: float = float(curve.get("quality_cap", 90.0))
 	var total_burn: float = float(base.get("total_burn", 25000000000000.0)) * pow(growth, float(steps))
-	var quality_min: float = minf(quality_cap, float(base.get("quality_min", 45.0)) + quality_step * float(steps))
 	var archetype: Dictionary = _archetype_for_level(level, curve)
 	var target: Dictionary = {
 		"id": "%s%d" % [GENERATED_ID_PREFIX, level],
@@ -110,7 +106,6 @@ static func generate_target(level: int, content_db: Node = null) -> Dictionary:
 		"flavour": "The investor's next figure. He did not explain where it came from.",
 		"burn_label": NumberFormat.format(total_burn),
 		"total_burn": total_burn,
-		"quality_min": quality_min,
 		"deadline_rounds": int(curve.get("deadline_rounds", DEFAULT_DEADLINE_ROUNDS)),
 		"picks": int(base.get("picks", 1)),
 		"unlocks_age": false,
@@ -177,11 +172,8 @@ static func default_state() -> Dictionary:
 		"contract_id": "",
 		"level": FIRST_LEVEL,
 		"targets_completed": 0,
-		"baseline_tokens": 0.0,
-		"tokens_burned": 0.0,
+		"tokens_delivered": 0.0,
 		"deadline_round": 0,
-		"quality_sum": 0.0,
-		"quality_count": 0,
 		"max_heat_ratio": 0.0,
 		"catastrophes": 0,
 		"in_catastrophe": false,
@@ -198,10 +190,8 @@ func targets_completed(run_state: RunState) -> int:
 	return maxi(0, int(run_state.investor.get("targets_completed", 0)))
 
 
-## Puts the run under the target for `new_level`, measured from where the run
-## stands right now: tokens from here, quality from here, the deadline
-## `deadline_rounds` from the current round on the continuous calendar. Nothing
-## else on the run moves.
+## Puts the run under the target for `new_level`. Delivered-token progress
+## resets; the deadline is `deadline_rounds` from the current calendar round.
 func activate_level(run_state: RunState, new_level: int, content_db: Node = null) -> bool:
 	var target: Dictionary = target_for_level(new_level, content_db)
 	var completed: int = targets_completed(run_state)
@@ -216,11 +206,8 @@ func activate_level(run_state: RunState, new_level: int, content_db: Node = null
 		"contract_id": str(target.get("id", "")),
 		"level": new_level,
 		"targets_completed": completed,
-		"baseline_tokens": float(run_state.statistics.get("lifetime_tokens", 0.0)),
-		"tokens_burned": 0.0,
+		"tokens_delivered": 0.0,
 		"deadline_round": current_round + deadline_rounds_for(target) - 1,
-		"quality_sum": 0.0,
-		"quality_count": 0,
 		"max_heat_ratio": 0.0,
 		"catastrophes": 0,
 		"in_catastrophe": false,
@@ -308,10 +295,22 @@ func record_catastrophe(run_state: RunState) -> void:
 	run_state.investor["catastrophes"] = int(run_state.investor.get("catastrophes", 0)) + 1
 
 
-## One prompt against the target: rolls up what has been burned, tracks the
-## heat ceiling, and reports whether that was the prompt that finished it.
-## Failure is not decided here — the target is only lost when its deadline
-## passes or the business does, both round-boundary events.
+## Banks tokens from a client-accepted contract toward the live target.
+func record_delivery(run_state: RunState, tokens: float) -> void:
+	if not is_active(run_state):
+		return
+	run_state.investor["tokens_delivered"] = float(run_state.investor.get("tokens_delivered", 0.0)) + maxf(
+		0.0, tokens
+	)
+
+
+static func _delivered_progress(inv: Dictionary) -> float:
+	if inv.has("tokens_delivered"):
+		return float(inv.get("tokens_delivered", 0.0))
+	return float(inv.get("tokens_burned", 0.0))
+
+
+## One prompt against the target: tracks heat and whether delivery quota is met.
 func evaluate_prompt(run_state: RunState, content_db: Node = null) -> Dictionary:
 	if not is_active(run_state):
 		return {}
@@ -321,10 +320,8 @@ func evaluate_prompt(run_state: RunState, content_db: Node = null) -> Dictionary
 		return {}
 
 	var inv: Dictionary = run_state.investor
-	inv["tokens_burned"] = (
-		float(run_state.statistics.get("lifetime_tokens", 0.0))
-		- float(inv.get("baseline_tokens", 0.0))
-	)
+	var delivered: float = _delivered_progress(inv)
+	inv["tokens_delivered"] = delivered
 	var capacity: float = maxf(1.0, float(run_state.compute.get("heat_capacity", 100.0)))
 	var heat_ratio: float = float(run_state.compute.get("heat", 0.0)) / capacity
 	inv["max_heat_ratio"] = maxf(float(inv.get("max_heat_ratio", 0.0)), heat_ratio)
@@ -337,13 +334,13 @@ func evaluate_prompt(run_state: RunState, content_db: Node = null) -> Dictionary
 
 	var messages: Array[String] = []
 	var outcome: String = STATUS_NONE
-	if float(inv["tokens_burned"]) >= float(target.get("total_burn", 0.0)):
+	if delivered >= float(target.get("total_burn", 0.0)):
 		var unmet: Array[String] = unmet_conditions(run_state, target)
 		if unmet.is_empty():
 			outcome = STATUS_COMPLETED
 			messages.append("%s: requirement met." % str(target.get("name", "Target")))
 		else:
-			messages.append("Burn requirement met, but %s." % " and ".join(unmet))
+			messages.append("Delivery quota met, but %s." % " and ".join(unmet))
 
 	if outcome != STATUS_NONE:
 		inv["status"] = outcome
@@ -352,7 +349,7 @@ func evaluate_prompt(run_state: RunState, content_db: Node = null) -> Dictionary
 		"outcome": outcome,
 		"messages": messages,
 		"level": level(run_state),
-		"tokens_burned": inv["tokens_burned"],
+		"tokens_burned": delivered,
 		"total_burn": float(target.get("total_burn", 0.0)),
 	}
 
@@ -362,8 +359,6 @@ func evaluate_prompt(run_state: RunState, content_db: Node = null) -> Dictionary
 func unmet_conditions(run_state: RunState, target: Dictionary) -> Array[String]:
 	var inv: Dictionary = run_state.investor
 	var unmet: Array[String] = []
-	if not _quality_met(inv, target):
-		unmet.append("the quality bar is not")
 	if target.has("max_heat_ratio"):
 		if float(inv.get("max_heat_ratio", 0.0)) > float(target["max_heat_ratio"]):
 			unmet.append("the rig ran hotter than the investor allowed")
@@ -384,38 +379,6 @@ func fail_on_deadline(run_state: RunState) -> void:
 	run_state.investor["status"] = STATUS_FAILED
 
 
-func _quality_met(inv: Dictionary, target: Dictionary) -> bool:
-	var required: float = float(target.get("quality_min", 0.0))
-	if required <= 0.0:
-		return true
-	var count: int = int(inv.get("quality_count", 0))
-	if count <= 0:
-		return false
-	var average: float = float(inv.get("quality_sum", 0.0)) / float(count)
-	return average >= required
-
-
-## Folds a delivered job's quality into the target's running average, so the
-## quality bar is judged on the work actually shipped under it. Callers pass
-## the delivered figure — `JobSystem.delivered_quality()` — rather than the raw
-## pipeline output, so unfinished delivery and shipped known bugs count against
-## the target exactly as they count against the fee.
-func record_job_quality(run_state: RunState, quality: float) -> void:
-	if not is_active(run_state):
-		return
-	run_state.investor["quality_sum"] = float(run_state.investor.get("quality_sum", 0.0)) + quality
-	run_state.investor["quality_count"] = int(run_state.investor.get("quality_count", 0)) + 1
-
-
-## Average quality of everything delivered under the target so far, or 0 when
-## nothing has shipped yet.
-func average_quality(run_state: RunState) -> float:
-	var count: int = int(run_state.investor.get("quality_count", 0))
-	if count <= 0:
-		return 0.0
-	return float(run_state.investor.get("quality_sum", 0.0)) / float(count)
-
-
 ## Reported for a finished target as well as a live one: the verdict screen has
 ## to be able to say how close a run came after the target has already failed.
 func progress(run_state: RunState, content_db: Node = null) -> Dictionary:
@@ -424,7 +387,7 @@ func progress(run_state: RunState, content_db: Node = null) -> Dictionary:
 		return {}
 	var inv: Dictionary = run_state.investor
 	var total: float = float(target.get("total_burn", 0.0))
-	var burned: float = float(inv.get("tokens_burned", 0.0))
+	var burned: float = _delivered_progress(inv)
 	var deadline: int = deadline_round(run_state, target)
 	return {
 		"level": level(run_state),
@@ -433,8 +396,6 @@ func progress(run_state: RunState, content_db: Node = null) -> Dictionary:
 		"tokens_burned": burned,
 		"total_burn": total,
 		"burn_ratio": 0.0 if total <= 0.0 else clampf(burned / total, 0.0, 1.0),
-		"quality_min": float(target.get("quality_min", 0.0)),
-		"quality_average": average_quality(run_state),
 		"max_heat_ratio": float(inv.get("max_heat_ratio", 0.0)),
 		"catastrophes": int(inv.get("catastrophes", 0)),
 		"profit": float(run_state.economy.get("cash", 0.0)) - float(inv.get("profit_baseline", 0.0)),

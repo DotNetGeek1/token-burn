@@ -50,12 +50,7 @@ func _meet_target(sim: Node) -> void:
 	var contract: Dictionary = ContentDatabase.get_investor_target(
 		str(sim.run_state.investor.get("contract_id", ""))
 	)
-	sim.run_state.statistics["lifetime_tokens"] = (
-		float(sim.run_state.investor.get("baseline_tokens", 0.0))
-		+ float(contract.get("total_burn", 0.0)) + 1.0
-	)
-	sim.run_state.investor["quality_sum"] = 100.0
-	sim.run_state.investor["quality_count"] = 1
+	sim.run_state.investor["tokens_delivered"] = float(contract.get("total_burn", 0.0)) + 1.0
 	sim.debug_finish_prompt({"ok": true, "messages": []})
 
 

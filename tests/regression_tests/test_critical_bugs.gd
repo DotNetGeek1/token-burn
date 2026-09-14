@@ -209,13 +209,22 @@ func _test_mixed_job_finalization() -> void:
 	sim.start_run(105)
 	sim.run_state.economy["cash"] = 0.0
 	sim.run_state.business["active_jobs"] = [
-		{"id": "done", "name": "Done", "tokens_remaining": 0.0, "token_requirement": 100.0, "reward": 1000.0, "quality": 80.0, "quality_threshold": 50.0, "shipped": true},
-		{"id": "fail", "name": "Fail", "tokens_remaining": 50.0, "token_requirement": 100.0, "reward": 1000.0, "quality": 10.0, "quality_threshold": 50.0},
+		{
+			"id": "done", "name": "Done", "tokens_remaining": 0.0, "token_requirement": 100.0,
+			"advertised_tokens": 100.0, "reward": 1000.0, "quality": 80.0, "quality_threshold": 50.0,
+			"shipped": true, "shipped_unfinished": false, "known_bugs": 0, "hidden_bugs": 0,
+		},
+		{
+			"id": "fail", "name": "Fail", "tokens_remaining": 50.0, "token_requirement": 100.0,
+			"reward": 1000.0, "quality": 10.0, "quality_threshold": 50.0, "prompts_remaining": 0,
+		},
 	]
 	sim.phase = sim.Phase.IN_ROUND
 	sim._end_session("collapsed")
-	var cash: float = float(sim.run_state.economy.get("cash", 0.0))
-	assert_true(cash >= 900.0, "Completed job in mixed batch paid in full")
+	assert_true(
+		float(sim.last_session_summary.get("reward", 0.0)) >= 900.0,
+		"Completed job in mixed batch paid in full"
+	)
 	sim.free()
 
 
@@ -618,7 +627,7 @@ func _dispatch_round_started(sim: Node) -> void:
 
 
 ## Deadline failures share reward.calculated with completions. Completion-worded
-## perks have to see job.completed or they double consolation and spawn passives.
+## perks must gate on job.completed; kill fees use job.kill_fee_ratio (default 0).
 func _test_failed_jobs_do_not_fire_completion_perks() -> void:
 	var sim := _make_sim()
 	sim.start_run(7704)
@@ -644,16 +653,23 @@ func _test_failed_jobs_do_not_fire_completion_perks() -> void:
 		sim.run_state, [job], sim.effect_resolver, sim.debug_collect_subscriptions(),
 		sim.tuning, sim.economy_system(), ContentDatabase, messages, sim.rng
 	)
-	var consolation: float = 1000.0 * 0.5 * float(
-		ContentDatabase.balance.get("job_scaling", {}).get("failed_job_consolation_ratio", 0.2)
+	assert_almost_eq(
+		float(payout.get("reward", 0.0)), 0.0, 0.01,
+		"Rejected and missed contracts pay nothing by default"
 	)
 	assert_almost_eq(
-		float(payout.get("reward", 0.0)), consolation, 0.01,
-		"Ship It does not double a failed consolation payout"
+		JobSystem.failed_kill_fee_payout(1000.0, 0.5, JobSystem.DEFAULT_KILL_FEE_RATIO),
+		0.0,
+		0.01,
+		"Baseline kill_fee_ratio is zero"
 	)
 	assert_almost_eq(
-		float(sim.run_state.economy.get("cash", 0.0)) - cash_before, consolation, 0.01,
-		"The consolation is what actually landed"
+		JobSystem.failed_kill_fee_payout(1000.0, 0.5, 0.15), 75.0, 0.01,
+		"Kill fee is completed_fraction × base_reward × kill_fee_ratio"
+	)
+	assert_almost_eq(
+		float(sim.run_state.economy.get("cash", 0.0)) - cash_before, 0.0, 0.01,
+		"No consolation fee lands"
 	)
 	assert_eq(_wrapper_stream_total(sim), 0.0, "The Wrapper does not spawn a passive from a failure")
 	sim.free()

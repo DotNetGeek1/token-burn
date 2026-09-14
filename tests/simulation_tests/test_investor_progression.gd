@@ -44,12 +44,7 @@ func _sim() -> Node:
 ## checks it, which is how a target is actually met.
 func _meet_target(sim: Node) -> void:
 	var target: Dictionary = sim.investor_target()
-	sim.run_state.statistics["lifetime_tokens"] = (
-		float(sim.run_state.investor.get("baseline_tokens", 0.0))
-		+ float(target.get("total_burn", 0.0)) + 1.0
-	)
-	sim.run_state.investor["quality_sum"] = 100.0
-	sim.run_state.investor["quality_count"] = 1
+	sim.run_state.investor["tokens_delivered"] = float(target.get("total_burn", 0.0)) + 1.0
 	sim.debug_finish_prompt({"ok": true, "messages": []})
 
 
@@ -91,8 +86,8 @@ func _test_a_run_starts_at_level_one_under_target_one() -> void:
 	)
 	assert_false(bool(target.get("final", false)), "The first target is not the game's end")
 	assert_almost_eq(
-		float(sim.run_state.investor.get("baseline_tokens", 0.0)), 0.0, 0.01,
-		"Measured from a run that has burned nothing"
+		float(sim.investor_progress().get("tokens_burned", 0.0)), 0.0, 0.01,
+		"Nothing delivered yet"
 	)
 	assert_eq(
 		int(sim.run_state.investor.get("deadline_round", 0)),
@@ -108,7 +103,7 @@ func _test_a_normal_job_does_not_advance_the_level() -> void:
 	sim.start_run(9102)
 	sim.run_state.economy["cash"] = 50000.0
 	var target_before: String = str(sim.run_state.investor.get("contract_id", ""))
-	var baseline_before: float = float(sim.run_state.investor.get("baseline_tokens", 0.0))
+	var delivered_before: float = float(sim.run_state.investor.get("tokens_delivered", 0.0))
 	var deadline_before: int = int(sim.run_state.investor.get("deadline_round", 0))
 	for _round in range(3):
 		_queue_trivial_job(sim)
@@ -120,9 +115,14 @@ func _test_a_normal_job_does_not_advance_the_level() -> void:
 		assert_false(bool(sim.run_state.flags.get("victory", false)), "Nor wins anything")
 	assert_true(sim.investor_active(), "The target is still live")
 	assert_eq(str(sim.run_state.investor.get("contract_id", "")), target_before, "And still the same one")
-	assert_almost_eq(
-		float(sim.run_state.investor.get("baseline_tokens", 0.0)), baseline_before, 0.01,
-		"Measured from the same baseline"
+	assert_true(
+		float(sim.run_state.investor.get("tokens_delivered", 0.0)) > delivered_before,
+		"Accepted contracts bank toward the target without completing it"
+	)
+	assert_true(
+		float(sim.run_state.investor.get("tokens_delivered", 0.0))
+		< float(sim.investor_target().get("total_burn", 0.0)),
+		"But three small jobs do not finish the investor target"
 	)
 	assert_eq(int(sim.run_state.investor.get("deadline_round", 0)), deadline_before, "Against the same deadline")
 	assert_eq(int(sim.run_state.calendar.get("round", 0)), 4, "Three rounds have passed on the calendar")

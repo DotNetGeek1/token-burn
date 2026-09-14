@@ -1312,7 +1312,7 @@ func _validate_investor_targets(errors: Array[String]) -> void:
 	if top_level > 0 and finals != 1:
 		errors.append("investor targets need exactly one `final` entry, found %d" % finals)
 	var curves: Dictionary = balance.get("investor_targets", {})
-	for key in ["token_growth", "quality_step", "quality_cap", "deadline_rounds"]:
+	for key in ["token_growth", "deadline_rounds"]:
 		var value: Variant = curves.get(key, null)
 		if not (value is int or value is float) or float(value) <= 0.0:
 			errors.append("balance.investor_targets needs positive %s" % key)

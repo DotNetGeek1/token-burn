@@ -9,7 +9,7 @@ extends TestCase
 func run() -> void:
 	if ContentDatabase.jobs.is_empty():
 		ContentDatabase.reload()
-	_test_quality_pay_is_a_curve_not_a_gate()
+	_test_quality_pay_is_a_gate_not_a_discount()
 	_test_quality_pay_reaches_the_fee()
 	_test_reputation_raises_every_fee()
 	_test_reputation_names_its_next_tier()
@@ -34,20 +34,10 @@ func _sim() -> Node:
 	return sim
 
 
-func _test_quality_pay_is_a_curve_not_a_gate() -> void:
-	var floor_mult: float = float(_config().get("penalty_floor", 0.5))
-	assert_almost_eq(_payout(0.0, 60.0), floor_mult, 0.001, "Delivering nothing pays the floor")
-	assert_almost_eq(_payout(60.0, 60.0), 1.0, 0.001, "Exactly on the bar pays the fee in full")
-	assert_almost_eq(
-		_payout(30.0, 60.0),
-		(floor_mult + 1.0) * 0.5,
-		0.001,
-		"Halfway to the bar pays halfway between the floor and the fee"
-	)
-	assert_true(
-		_payout(50.0, 60.0) > _payout(40.0, 60.0),
-		"Every point of quality under the bar is worth something, so there is no cliff"
-	)
+func _test_quality_pay_is_a_gate_not_a_discount() -> void:
+	assert_almost_eq(_payout(0.0, 60.0), 0.0, 0.001, "Under the bar pays nothing")
+	assert_almost_eq(_payout(59.0, 60.0), 0.0, 0.001, "One point short pays nothing")
+	assert_almost_eq(_payout(60.0, 60.0), 1.0, 0.001, "On the bar pays the fee in full")
 
 
 func _test_quality_pay_reaches_the_fee() -> void:

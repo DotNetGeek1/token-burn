@@ -349,6 +349,89 @@ static func is_ready(job: Dictionary) -> bool:
 	return float(job.get("tokens_remaining", 0.0)) <= 0.0
 
 
+const OUTCOME_ACCEPTED := "accepted"
+const OUTCOME_REJECTED := "rejected"
+const OUTCOME_ABANDONED := "abandoned"
+
+## Failed contracts: payout = completed_fraction × base_reward × kill_fee_ratio.
+## Baseline is zero; perks (e.g. KILL FEE) raise `job.kill_fee_ratio` on
+## `reward.calculated` while `job.completed` is false. Cash only — never investor
+## progress (`record_delivered_work` ignores non-accepted jobs).
+const DEFAULT_KILL_FEE_RATIO := 0.0
+
+
+## Whether the client accepted delivery: scope complete and quality at or above
+## the contract bar. Investor progress and payout both key off this.
+static func is_accepted(job: Dictionary) -> bool:
+	if bool(job.get("abandoned", false)):
+		return false
+	if not is_shipped(job):
+		if FeatureFlags.is_enabled("ready_to_ship_enabled"):
+			return false
+		if float(job.get("tokens_remaining", 0.0)) > 0.0:
+			return false
+	elif bool(job.get("shipped_unfinished", false)):
+		return false
+	var threshold: float = float(job.get("quality_threshold", 0.0))
+	return delivered_quality(job) >= threshold
+
+
+## Sets `job.outcome` once the contract is settled (shipped, deadlined, or
+## abandoned). Empty while still in progress.
+static func settle_outcome(job: Dictionary) -> String:
+	var existing: String = str(job.get("outcome", ""))
+	if existing != "":
+		return existing
+	if bool(job.get("abandoned", false)):
+		job["outcome"] = OUTCOME_ABANDONED
+		return OUTCOME_ABANDONED
+	if not is_shipped(job):
+		if (
+			not FeatureFlags.is_enabled("ready_to_ship_enabled")
+			and float(job.get("tokens_remaining", 0.0)) <= 0.0
+		):
+			if is_accepted(job):
+				job["outcome"] = OUTCOME_ACCEPTED
+				return OUTCOME_ACCEPTED
+			job["outcome"] = OUTCOME_REJECTED
+			return OUTCOME_REJECTED
+		if int(job.get("prompts_remaining", 0)) <= 0:
+			job["outcome"] = OUTCOME_REJECTED
+			return OUTCOME_REJECTED
+		return str(job.get("outcome", ""))
+	if is_accepted(job):
+		job["outcome"] = OUTCOME_ACCEPTED
+		return OUTCOME_ACCEPTED
+	job["outcome"] = OUTCOME_REJECTED
+	return OUTCOME_REJECTED
+
+
+static func advertised_token_credit(job: Dictionary) -> float:
+	return maxf(0.0, float(job.get("advertised_tokens", job.get("token_requirement", 0.0))))
+
+
+## How much of the contract was finished when it failed (for kill-fee math only).
+static func failed_completed_fraction(job: Dictionary) -> float:
+	var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
+	if bool(job.get("shipped_unfinished", false)):
+		return clampf(float(job.get("shipped_progress", 0.0)), 0.0, 1.0)
+	var remaining: float = maxf(0.0, float(job.get("tokens_remaining", 0.0)))
+	return clampf(1.0 - remaining / requirement, 0.0, 1.0)
+
+
+static func failed_kill_fee_payout(
+	base_reward: float, completed_fraction: float, kill_fee_ratio: float
+) -> float:
+	return completed_fraction * base_reward * kill_fee_ratio
+
+
+static func _deadline_ship_message(job: Dictionary) -> String:
+	settle_outcome(job)
+	if str(job.get("outcome", "")) == OUTCOME_ACCEPTED:
+		return "%s: deadline — delivered on time." % job.get("name", "Job")
+	return "%s: deadline — CLIENT REJECTED." % job.get("name", "Job")
+
+
 ## The contracts one prompt advances. One machine works one contract, so the
 ## rig's floor slots are how many lanes run side by side: the focused contract
 ## always takes a lane, and the rest go to whatever is nearest its deadline.
@@ -851,7 +934,7 @@ func end_prompt(
 		if int(job.get("prompts_remaining", 0)) <= 0:
 			if ready_mode:
 				_ship_job(job, true)
-				messages.append("%s: deadline — shipped as it stood." % job.get("name", "Job"))
+				messages.append(_deadline_ship_message(job))
 			continue
 		job["prompts_remaining"] = int(job.get("prompts_remaining", 1)) - 1
 		job["time_remaining_ratio"] = maxf(
@@ -860,9 +943,9 @@ func end_prompt(
 		if int(job.get("prompts_remaining", 0)) <= 0:
 			if ready_mode:
 				_ship_job(job, true)
-				messages.append("%s: deadline — shipped as it stood." % job.get("name", "Job"))
+				messages.append(_deadline_ship_message(job))
 			elif not complete:
-				messages.append("%s: deadline missed." % job.get("name", "Job"))
+				messages.append("%s: deadline missed — CLIENT REJECTED." % job.get("name", "Job"))
 
 	run_state.business["active_jobs"] = active_jobs
 	run_state.business["active_job"] = active_jobs[0] if active_jobs.size() == 1 else {}
@@ -957,6 +1040,10 @@ func finalize_completed_jobs(
 			continue
 		if float(job.get("tokens_remaining", 0.0)) > 0.0:
 			continue
+		settle_outcome(job)
+		if not is_accepted(job):
+			messages.append("%s: CLIENT REJECTED — no fee." % job.get("name", "Job"))
+			continue
 		total_reward += _calculate_reward(run_state, job, effect_resolver, subscriptions, tuning, economy_system, messages, true, rng)
 	return {"reward": total_reward}
 
@@ -972,40 +1059,42 @@ func finalize_failed_jobs(
 	messages: Array[String],
 	rng: DeterministicRng
 ) -> Dictionary:
-	var scaling: Dictionary = content_db.balance.get("job_scaling", {})
-	var consolation_ratio: float = float(scaling.get("failed_job_consolation_ratio", 0.2))
 	var total_reward: float = 0.0
 	for job in jobs:
 		# Walking away pays nothing. That is the point of walking away.
 		if bool(job.get("abandoned", false)):
 			messages.append("%s: abandoned, no fee." % job.get("name", "Job"))
 			continue
-		var requirement: float = maxf(1.0, float(job.get("token_requirement", 1.0)))
-		var remaining: float = maxf(0.0, float(job.get("tokens_remaining", 0.0)))
-		var progress: float = clampf(1.0 - (remaining / requirement), 0.0, 1.0)
-		if progress <= 0.0:
-			continue
-		var base_reward: float = float(job.get("reward", 0.0)) * progress * consolation_ratio
-		if base_reward <= 0.0:
-			continue
-		# Same event as a completed payout so the pipeline stays one place, but
-		# completion-worded perks read this flag and stay off consolation fees.
+		settle_outcome(job)
+		var base_reward: float = float(job.get("reward", 0.0))
+		var completed_fraction: float = failed_completed_fraction(job)
+		var kill_fee_ratio: float = DEFAULT_KILL_FEE_RATIO
 		job["completed"] = false
 		effect_resolver.begin_action("reward.failed.%s" % job.get("id", ""))
 		var mod_ctx := ModifierContext.new("reward.calculated", run_state)
 		mod_ctx.rng = rng.derive("reward.failed.%s" % job.get("id", ""))
 		mod_ctx.job = job
 		mod_ctx.set_value("job.reward", base_reward)
+		mod_ctx.set_value("job.completed_fraction", completed_fraction)
+		mod_ctx.set_value("job.kill_fee_ratio", kill_fee_ratio)
 		mod_ctx.set_value("job.completed", false)
 		effect_resolver.dispatch("reward.calculated", mod_ctx, subscriptions)
+		kill_fee_ratio = float(mod_ctx.get_value("job.kill_fee_ratio", DEFAULT_KILL_FEE_RATIO))
 		base_reward = float(mod_ctx.get_value("job.reward", base_reward))
-		economy_system.add_income(run_state, base_reward, tuning)
-		total_reward += base_reward
-		messages.append("%s: partial pay %s (%.0f%% done)." % [
-			job.get("name", "Job"),
-			NumberFormat.format_cash(base_reward),
-			progress * 100.0,
-		])
+		completed_fraction = float(mod_ctx.get_value("job.completed_fraction", completed_fraction))
+		var payout: float = failed_kill_fee_payout(base_reward, completed_fraction, kill_fee_ratio)
+		if payout > 0.0:
+			economy_system.add_income(run_state, payout, tuning)
+			total_reward += payout
+			messages.append("%s: kill fee %s (%.0f%% done)." % [
+				job.get("name", "Job"),
+				NumberFormat.format_cash(payout),
+				completed_fraction * 100.0,
+			])
+		elif is_shipped(job):
+			messages.append("%s: CLIENT REJECTED — no fee." % job.get("name", "Job"))
+		else:
+			messages.append("%s: deadline missed — no fee." % job.get("name", "Job"))
 	return {"reward": total_reward}
 
 
@@ -1077,19 +1166,16 @@ static func early_delivery_bonus(job: Dictionary) -> float:
 	return minf(cap, per_prompt * float(spare))
 
 
-## What the client pays for the quality they got, as a fraction of the fee.
-## Under the bar the fee tapers rather than halving on a knife edge, and over it
-## there is something to aim at: shipping at exactly the threshold used to pay
-## the same as shipping something genuinely good.
+## What the client pays for the quality they got. Only accepted deliveries are
+## paid; this multiplier applies bonuses above the bar.
 static func quality_payout_multiplier(quality: float, threshold: float) -> float:
 	var cfg: Dictionary = ContentDatabase.balance.get("job_scaling", {}).get("quality_payout", {})
-	var floor_mult: float = float(cfg.get("penalty_floor", 0.5))
 	var bonus_max: float = float(cfg.get("bonus_max", 0.3))
 	var bonus_span: float = maxf(1.0, float(cfg.get("bonus_span", 40.0)))
 	if threshold <= 0.0:
 		return 1.0
 	if quality < threshold:
-		return lerpf(floor_mult, 1.0, clampf(quality / threshold, 0.0, 1.0))
+		return 0.0
 	return 1.0 + bonus_max * clampf((quality - threshold) / bonus_span, 0.0, 1.0)
 
 
@@ -1259,6 +1345,7 @@ func _delivery_penalty(
 func _prepare_job(offer: Dictionary, run_state: RunState, content_db: Node) -> Dictionary:
 	var job: Dictionary = offer.duplicate(true)
 	_enforce_minimum_workload(job, run_state, content_db)
+	job["advertised_tokens"] = float(job.get("token_requirement", 0.0))
 	job["tokens_remaining"] = float(job.get("token_requirement", 0.0))
 	job["quality"] = 0.0
 	job["shipped"] = false

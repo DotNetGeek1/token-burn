@@ -21,8 +21,9 @@ func run() -> void:
 	_test_a_fresh_run_is_already_under_its_contract()
 	_test_the_target_belongs_to_the_run_s_level()
 	_test_progress_counts_from_the_first_prompt()
-	_test_the_quality_bar_gates_completion()
-	_test_a_real_final_job_decides_the_quality_bar()
+	_test_acceptance_banks_delivered_tokens()
+	_test_rejected_delivery_banks_nothing()
+	_test_a_real_final_job_decides_acceptance()
 	_test_the_year_running_out_ends_the_run()
 	_test_a_finished_contract_beats_the_deadline_to_it()
 	_test_there_is_no_overtime_left_to_fall_into()
@@ -78,12 +79,7 @@ func _settle_investor_draft(sim: Node) -> void:
 ## evaluator actually checks.
 func _meet_requirement(sim: Node, contract_id: String) -> Dictionary:
 	var contract: Dictionary = ContentDatabase.get_investor_target(contract_id)
-	sim.run_state.statistics["lifetime_tokens"] = (
-		float(sim.run_state.investor.get("baseline_tokens", 0.0))
-		+ float(contract.get("total_burn", 0.0)) + 1.0
-	)
-	sim.run_state.investor["quality_sum"] = 100.0
-	sim.run_state.investor["quality_count"] = 1
+	sim.run_state.investor["tokens_delivered"] = float(contract.get("total_burn", 0.0)) + 1.0
 	return contract
 
 
@@ -137,7 +133,7 @@ func _test_progress_counts_from_the_first_prompt() -> void:
 	sim.start_run(5002)
 	var contract: Dictionary = ContentDatabase.get_investor_target("ascension.first_scale_up")
 	var quarter: float = float(contract.get("total_burn", 0.0)) * 0.25
-	sim.run_state.statistics["lifetime_tokens"] = quarter
+	sim.run_state.investor["tokens_delivered"] = quarter
 	var result: Dictionary = InvestorProgression.new().evaluate_prompt(sim.run_state, ContentDatabase)
 	assert_eq(str(result.get("outcome", "x")), "", "A quarter of the way is not a finish")
 	assert_almost_eq(
@@ -151,87 +147,89 @@ func _test_progress_counts_from_the_first_prompt() -> void:
 	sim.free()
 
 
-func _test_the_quality_bar_gates_completion() -> void:
+func _test_acceptance_banks_delivered_tokens() -> void:
 	_fresh_profile()
 	var sim: Node = _sim()
 	sim.start_run(5003)
 	var contract: Dictionary = ContentDatabase.get_investor_target("ascension.first_scale_up")
-	sim.run_state.statistics["lifetime_tokens"] = float(contract.get("total_burn", 0.0)) + 1.0
-	var ascension := InvestorProgression.new()
-	# Everything shipped so far was under the bar, so the burn alone is not it.
-	sim.run_state.investor["quality_sum"] = 1.0
-	sim.run_state.investor["quality_count"] = 1
-	assert_eq(
-		str(ascension.evaluate_prompt(sim.run_state, ContentDatabase).get("outcome", "")), "",
-		"The burn target alone does not complete a contract with a quality bar"
+	var bar: float = 50.0
+	sim.run_state.business["active_jobs"] = [_delivered_job(bar + 5.0, 0, 10_000_000.0)]
+	record_delivered_for_test(sim)
+	assert_almost_eq(
+		float(sim.run_state.investor.get("tokens_delivered", 0.0)), 10_000_000.0, 1.0,
+		"An accepted contract banks its advertised tokens"
 	)
-	sim.run_state.investor["quality_sum"] = float(contract.get("quality_min", 0.0)) * 2.0
+	sim.run_state.investor["tokens_delivered"] = float(contract.get("total_burn", 0.0)) + 1.0
 	assert_eq(
-		str(ascension.evaluate_prompt(sim.run_state, ContentDatabase).get("outcome", "")), "completed",
-		"Clearing the bar on average completes it"
+		str(InvestorProgression.new().evaluate_prompt(sim.run_state, ContentDatabase).get("outcome", "")),
+		"completed",
+		"Enough delivered tokens complete the target"
 	)
 	sim.free()
 
 
-## The original bug was the contract being judged before the job that finished
-## it had been counted. These two cases drive that ordering with a real
-## completed contract rather than a hand-set average, and pin down which
-## quality is canonical: the one the client receives, after the known bugs the
-## player chose to ship have come off it.
-func _test_a_real_final_job_decides_the_quality_bar() -> void:
-	var bar: float = float(
-		ContentDatabase.get_investor_target("ascension.first_scale_up").get("quality_min", 0.0)
+func _test_rejected_delivery_banks_nothing() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(5003)
+	var bar: float = 50.0
+	sim.run_state.business["active_jobs"] = [_delivered_job(bar - 10.0, 0, 10_000_000.0)]
+	record_delivered_for_test(sim)
+	assert_almost_eq(
+		float(sim.run_state.investor.get("tokens_delivered", 0.0)), 0.0, 0.01,
+		"Under-bar delivery credits no investor progress"
 	)
-	assert_true(bar > 0.0, "The bedroom's contract has a quality bar to test against")
+	sim.free()
 
-	var clears: Node = _sim()
-	clears.start_run(5041)
-	_meet_burn_only(clears, "ascension.first_scale_up")
-	clears.run_state.business["active_jobs"] = [_delivered_job(bar + 10.0, 0)]
-	clears.debug_finish_prompt({"ok": true, "messages": []})
-	assert_true(
-		bool(clears.run_state.flags.get("victory", false)),
-		"A finished contract delivered above the bar wins the run on the prompt that finished it"
-	)
-	clears.free()
+
+func _test_a_real_final_job_decides_acceptance() -> void:
+	var bar: float = 50.0
 
 	var misses: Node = _sim()
 	misses.start_run(5042)
-	_meet_burn_only(misses, "ascension.first_scale_up")
-	# Same pipeline quality, but four known bugs went out with it — three
-	# points each, which is what drops the delivery under the bar.
-	misses.run_state.business["active_jobs"] = [_delivered_job(bar + 10.0, 4)]
-	misses.debug_finish_prompt({"ok": true, "messages": []})
-	assert_false(
-		bool(misses.run_state.flags.get("victory", false)),
-		"The same work shipped with known bugs does not clear the bar"
-	)
+	misses.run_state.business["active_jobs"] = [_delivered_job(bar + 10.0, 4, 1000.0)]
+	record_delivered_for_test(misses)
 	assert_almost_eq(
-		float(misses.run_state.investor.get("quality_sum", 0.0)), bar - 2.0, 0.01,
-		"Because the contract is judged on delivered quality, not what the pipeline produced"
+		float(misses.run_state.investor.get("tokens_delivered", 0.0)), 0.0, 0.01,
+		"Known bugs drop delivered quality under the bar, so nothing is banked"
 	)
 	misses.free()
+
+	var ordering: Node = _sim()
+	ordering.start_run(5043)
+	var contract: Dictionary = ContentDatabase.get_investor_target("ascension.first_scale_up")
+	var total: float = float(contract.get("total_burn", 0.0))
+	ordering.run_state.investor["tokens_delivered"] = total - 10_000_000.0
+	ordering.run_state.business["active_jobs"] = [_delivered_job(bar + 10.0, 0, 10_000_000.0)]
+	ordering.debug_finish_prompt({"ok": true, "messages": []})
+	assert_true(
+		bool(ordering.run_state.flags.get("victory", false)),
+		"Accepted delivery is banked before the target is judged on the finishing prompt"
+	)
+	ordering.free()
 
 
 ## The burn side of the contract met, with the quality average left empty so the
 ## job under test is the only thing deciding it.
 func _meet_burn_only(sim: Node, contract_id: String) -> void:
 	var contract: Dictionary = ContentDatabase.get_investor_target(contract_id)
-	sim.run_state.statistics["lifetime_tokens"] = (
-		float(sim.run_state.investor.get("baseline_tokens", 0.0))
-		+ float(contract.get("total_burn", 0.0)) + 1.0
-	)
-	sim.run_state.investor["quality_sum"] = 0.0
-	sim.run_state.investor["quality_count"] = 0
+	sim.run_state.investor["tokens_delivered"] = float(contract.get("total_burn", 0.0)) + 1.0
 
 
-func _delivered_job(quality: float, known_bugs: int) -> Dictionary:
+func record_delivered_for_test(sim: Node) -> void:
+	var session := WorkSession.new()
+	session.record_delivered_work(sim, sim.run_state)
+
+
+func _delivered_job(quality: float, known_bugs: int, advertised: float = 1000.0) -> Dictionary:
 	return {
 		"id": "job.final",
 		"name": "Final Contract",
-		"token_requirement": 1000.0,
+		"token_requirement": advertised,
+		"advertised_tokens": advertised,
 		"tokens_remaining": 0.0,
 		"shipped": true,
+		"quality_threshold": 50.0,
 		"quality": quality,
 		"known_bugs": known_bugs,
 		"hidden_bugs": 0,
@@ -654,13 +652,13 @@ func _test_contract_state_survives_a_save_round_trip() -> void:
 	var run_state := RunState.new()
 	run_state.reset()
 	assert_true(ascension.activate(run_state, ContentDatabase), "The run is under its contract")
-	run_state.investor["tokens_burned"] = 12345.0
+	run_state.investor["tokens_delivered"] = 12345.0
 
 	var reloaded := RunState.new()
 	reloaded.from_dict(run_state.to_dict())
 	assert_eq(str(reloaded.investor.get("status", "")), "active", "Which survives a save")
 	assert_eq(str(reloaded.investor.get("contract_id", "")), "ascension.first_scale_up", "So does which contract")
-	assert_almost_eq(float(reloaded.investor.get("tokens_burned", 0.0)), 12345.0, 0.01, "So does progress")
+	assert_almost_eq(float(reloaded.investor.get("tokens_delivered", 0.0)), 12345.0, 0.01, "So does progress")
 	assert_eq(int(reloaded.investor.get("deadline_round", 0)), 12, "So does the deadline")
 
 
@@ -690,7 +688,7 @@ func _test_a_save_mid_final_burn_becomes_the_run_s_contract() -> void:
 		str(run_state.investor.get("contract_id", "")), "ascension.first_scale_up",
 		"And it is still the same one"
 	)
-	assert_almost_eq(float(run_state.investor.get("tokens_burned", 0.0)), 50.0, 0.01, "With its progress intact")
+	assert_almost_eq(float(run_state.investor.get("tokens_delivered", 0.0)), 50.0, 0.01, "With its progress intact")
 	assert_eq(int(run_state.investor.get("deadline_round", 0)), 12, "And the year as its deadline")
 	for stale in ["committed_round", "prompts_remaining", "violations"]:
 		assert_false(run_state.investor.has(stale), "The Final Burn field %s is gone" % stale)

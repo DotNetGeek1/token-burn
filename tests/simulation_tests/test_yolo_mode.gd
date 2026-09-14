@@ -1,7 +1,7 @@
 extends TestCase
 
 ## YOLO always burns and never cools. It cashes out once both delivery and
-## quality are complete; AUTO still ships as soon as the token bar hits 100%.
+## quality are complete; AUTO waits for quality like YOLO before shipping.
 
 
 func run() -> void:
@@ -33,9 +33,14 @@ func _test_auto_ships_when_ready() -> void:
 	job["token_requirement"] = 10.0
 	job["tokens_remaining"] = 10.0
 	job["prompts_remaining"] = 8
+	job["quality_threshold"] = 100.0
+	job["bug_chance"] = 0.0
+	job["revision_risk"] = 0.0
 	sim.burn_batch()
 	assert_true(JobSystem.is_ready(sim.focused_job()), "The completing burn left it ready")
-	assert_true(sim._work.should_auto_ship(sim), "AUTO ships a ready contract")
+	assert_false(sim._work.should_auto_ship(sim), "AUTO waits for quality at the bar")
+	job["quality_threshold"] = JobSystem.delivered_quality(job)
+	assert_true(sim._work.should_auto_ship(sim), "AUTO ships when ready and quality clears the bar")
 	sim.free()
 
 

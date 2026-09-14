@@ -78,8 +78,8 @@ func _ready() -> void:
 	_readout.add_theme_constant_override("v_separation", 0)
 	column.add_child(_readout)
 	_rate_value = _readout_row("TOKENS/MIN", CabinetStyle.AMBER)
-	_burned_value = _readout_row("RUN BURNED", CabinetStyle.PHOSPHOR)
-	_goal_value = _readout_row("GOAL", CabinetStyle.PHOSPHOR_DIM)
+	_burned_value = _readout_row("DELIVERED", CabinetStyle.PHOSPHOR)
+	_goal_value = _readout_row("TARGET", CabinetStyle.PHOSPHOR_DIM)
 	_status = CabinetStyle.mono("NO RUN ACTIVE", CabinetStyle.FONT_TINY, CabinetStyle.PHOSPHOR_DIM)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(_status)

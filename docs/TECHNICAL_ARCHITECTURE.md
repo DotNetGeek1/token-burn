@@ -217,7 +217,7 @@ RunState
 │   ├── level             Investor Level 1..7 — the progression authority
 │   ├── contract_id       the live target
 │   ├── activated_round / deadline_round   on the continuous calendar
-│   └── tokens_burned, quality_*, targets_completed, ...
+│   └── tokens_delivered, targets_completed, ...
 ├── build
 │   ├── perks             Run Perks, permanent for the run
 │   ├── hardware
@@ -366,6 +366,12 @@ perk.acquired
 heat.threshold_crossed
 run.ended
 ```
+
+Failed contracts use the same event with `job.completed == false`. Payout is
+`job.completed_fraction × job.reward × job.kill_fee_ratio`. Baseline
+`job.kill_fee_ratio` is `0.0`; a KILL FEE–style perk sets it (e.g. to `0.15`)
+via effect targets on the modifier context. Failed payouts never add investor
+`tokens_delivered`.
 
 Suggested resolution order:
 

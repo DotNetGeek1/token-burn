@@ -12,6 +12,8 @@ func run() -> void:
 	_test_a_ready_job_can_burn_again()
 	_test_shipping_cashes_out()
 	_test_deadline_auto_ships()
+	_test_deadline_rejection_pays_nothing()
+	_test_advertised_cap_on_investor_credit()
 	_test_scope_creep_can_reopen_ready_work()
 
 
@@ -28,6 +30,7 @@ func _open_ready_job() -> Dictionary:
 	job["tokens_remaining"] = 10.0
 	job["prompts_remaining"] = 6
 	job["deadline_prompts"] = 6
+	job["quality_threshold"] = 0.0
 	return {"sim": sim, "job": job}
 
 
@@ -79,6 +82,59 @@ func _test_deadline_auto_ships() -> void:
 	sim.cool_hardware()
 	assert_true(JobSystem.is_shipped(job), "The deadline ships whatever is there")
 	assert_true(bool(job.get("shipped_unfinished", false)), "Including unfinished work")
+	JobSystem.settle_outcome(job)
+	assert_eq(str(job.get("outcome", "")), JobSystem.OUTCOME_REJECTED, "Unfinished deadline delivery is rejected")
+	sim.free()
+
+
+func _test_deadline_rejection_pays_nothing() -> void:
+	var pack: Dictionary = _open_ready_job()
+	var sim: Node = pack["sim"]
+	var job: Dictionary = pack["job"]
+	job["tokens_remaining"] = 5.0
+	job["quality_threshold"] = 100.0
+	job["quality"] = 10.0
+	job["prompts_remaining"] = 1
+	sim.cool_hardware()
+	assert_true(JobSystem.is_shipped(job), "Deadline still ships unfinished work")
+	assert_eq(str(job.get("outcome", "")), JobSystem.OUTCOME_REJECTED, "Client rejects under-bar delivery")
+	var messages: Array[String] = []
+	var payout: Dictionary = sim.job_system().finalize_failed_jobs(
+		sim.run_state, [job], sim.effect_resolver, sim.debug_collect_subscriptions(),
+		sim.tuning, sim.economy_system(), ContentDatabase, messages, sim.rng
+	)
+	assert_almost_eq(float(payout.get("reward", 0.0)), 0.0, 0.01, "No fee")
+	var rep_before: float = float(sim.run_state.business.get("reputation", 0.0))
+	sim._work.settle_reputation(sim, [], [job])
+	assert_almost_eq(float(sim.run_state.business.get("reputation", 0.0)), rep_before - 2.0, 0.01, "-2 reputation")
+	WorkSession.new().record_delivered_work(sim, sim.run_state)
+	assert_almost_eq(float(sim.run_state.investor.get("tokens_delivered", 0.0)), 0.0, 0.01, "No investor credit")
+	sim.free()
+
+
+func _test_advertised_cap_on_investor_credit() -> void:
+	var sim: Node = load("res://core/simulation.gd").new()
+	sim.autosave_enabled = false
+	sim.start_run(9702)
+	var job: Dictionary = {
+		"id": "job.cap",
+		"name": "Cap Test",
+		"advertised_tokens": 10_000_000.0,
+		"token_requirement": 16_000_000.0,
+		"tokens_remaining": 0.0,
+		"shipped": true,
+		"quality_threshold": 50.0,
+		"quality": 60.0,
+		"known_bugs": 0,
+		"hidden_bugs": 0,
+	}
+	sim.run_state.business["active_jobs"] = [job]
+	var session := WorkSession.new()
+	session.record_delivered_work(sim, sim.run_state)
+	assert_almost_eq(
+		float(sim.run_state.investor.get("tokens_delivered", 0.0)), 10_000_000.0, 1.0,
+		"Investor credit is capped at the advertised requirement, not gross burn"
+	)
 	sim.free()
 
 

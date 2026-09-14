@@ -183,9 +183,7 @@ func _test_a_purchase_changes_nothing_else() -> void:
 	state.build["perks"] = ["perk.test_marker_a", "perk.test_marker_b"]
 	state.calendar["round"] = 4
 	state.calendar["prompt"] = 3
-	state.investor["tokens_burned"] = 12345.0
-	state.investor["quality_sum"] = 80.0
-	state.investor["quality_count"] = 2
+	state.investor["tokens_delivered"] = 12345.0
 	var investor_before: Dictionary = state.investor.duplicate(true)
 	var perks_before: Array = Array(state.build.get("perks", [])).duplicate(true)
 	var calendar_before: Dictionary = state.calendar.duplicate(true)

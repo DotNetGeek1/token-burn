@@ -414,6 +414,10 @@ func _test_depth_complete_settles_the_active_session() -> void:
 		"Crossing the target is not a reputation of failed contracts"
 	)
 	assert_true(sim.can_burn(), "The session stays burnable after the crossing")
+	job = sim.focused_job()
+	job["tokens_remaining"] = 0.0
+	job["quality"] = 100.0
+	job["quality_threshold"] = 50.0
 	assert_true(sim.ship_focused_job(), "The current contract can still be delivered")
 	assert_eq(sim.phase, sim.Phase.RUN_END, "DEPTH COMPLETE opens after a normal settle")
 	assert_true(

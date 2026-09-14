@@ -4,7 +4,6 @@
   "deadline_slack_prompts": 2,
   "min_reward_cost_multiplier": 7.0,
   "min_reward_rent_share": 0.5,
-  "failed_job_consolation_ratio": 0.2,
   "queue_capacity_cap": 2.0,
   "max_burst_multiplier": 8.0,
   "early_delivery_bonus": {
@@ -43,7 +42,6 @@
     "per_tier_increase": 6
   },
   "quality_payout": {
-    "penalty_floor": 0.5,
     "bonus_max": 0.3,
     "bonus_span": 40
   },
