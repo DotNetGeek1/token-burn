@@ -143,9 +143,14 @@ grant:
 - The **cabinet tier cap** the Market will sell: tier 0 caps cabinet systems
   at tier 2, tiers 1–2 at 3, tiers 3+ at 4. A capped row explains itself
   (`NEEDS INFRASTRUCTURE TIER 3`) rather than disappearing.
-- The **cabinet entry tiers** the scale opens with (a system already bought
-  higher keeps what it had), permanent **capacity floors**, the board's
-  **overflow allowance**, and the **facility cost** the rent is set from.
+- Permanent **capacity floors** (compute rate and cooling scale with the
+  profile even when cabinet tiers are still low), the **cabinet tier cap**,
+  the board's **overflow allowance**, and the **facility cost** the rent is
+  set from. **Cabinet entry tiers** apply when a run is seeded at a scale
+  (new run, migration, tests); buying infrastructure in the Market does not
+  grant Power, Backplane or Control tiers — those stay player purchases.
+  System upgrade prices use the cost scale of the infrastructure tier that
+  *unlocks* that cabinet tier, not the run's current scale.
 
 The room — Bedroom, Garage, Office Unit, Warehouse, Data Centre Campus,
 Private Power Grid, Moon Facility — is presentation for the tier: the art the

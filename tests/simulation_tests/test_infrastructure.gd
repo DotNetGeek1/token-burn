@@ -23,6 +23,7 @@ func run() -> void:
 	_test_rent_follows_the_facility_cost()
 	_test_a_purchase_is_announced()
 	_test_the_top_tier_is_the_end_of_the_shelf()
+	_test_purchase_keeps_owned_tiers_and_unlock_pricing()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -101,20 +102,16 @@ func _test_a_purchase_gives_the_tier_s_authored_scale() -> void:
 		float(state.compute.get("heat_capacity", 0.0)), float(row1.get("heat_capacity", 0.0)), 0.5,
 		"The live heat capacity was re-derived"
 	)
-	# The cabinet opened at the tier's entry tiers, never below them.
-	var entry_tiers: Dictionary = InfrastructureSystem.cabinet_entry_tiers(state)
 	for system_id in CabinetSystems.system_ids():
-		assert_true(
-			CabinetSystems.tier(state, str(system_id)) >= int(entry_tiers.get(system_id, 1)),
-			"%s is at least the tier's entry tier" % str(system_id)
+		assert_eq(
+			CabinetSystems.tier(state, str(system_id)), 1,
+			"A purchase does not stamp %s to the scale's entry tier" % str(system_id)
 		)
-	# And the cabinet's next-tier price scales by the row's cost_scale.
-	var base_cost: float = CabinetSystems.cost_of_tier("control", CabinetSystems.tier(state, "control") + 1)
-	if base_cost > 0.0:
-		assert_almost_eq(
-			CabinetSystems.next_tier_cost(state, "control"), base_cost * float(row1.get("cost_scale", 1.0)), 0.01,
-			"A cabinet tier is priced through the tier's cost scale"
-		)
+	assert_almost_eq(
+		CabinetSystems.next_tier_cost(state, "control"),
+		CabinetSystems.cost_of_tier("control", 2, ContentDatabase), 0.01,
+		"Control 1→2 stays at the tier-0 cost scale"
+	)
 	sim.free()
 
 
@@ -285,4 +282,50 @@ func _test_the_top_tier_is_the_end_of_the_shelf() -> void:
 	assert_eq(str(row.get("effect", "x")), "", "With no effect to promise")
 	assert_false(bool(sim.purchase_infrastructure().get("ok", true)), "And a purchase is refused")
 	assert_eq(sim.infrastructure_tier(), top, "Leaving the run at the top")
+	sim.free()
+
+
+## Buying infrastructure must not grant cabinet tiers or reprice upgrades the
+## player was already saving for; higher cabinet tiers use the scale that
+## unlocks them.
+func _test_purchase_keeps_owned_tiers_and_unlock_pricing() -> void:
+	var sim: Node = _sim()
+	sim.start_run(9208)
+	var state: RunState = sim.run_state
+	var board := BoardSystem.new()
+	board.ensure_board(state, ContentDatabase)
+	var cost_infra1: float = InfrastructureSystem.cost_of_tier(1, ContentDatabase)
+	state.economy["cash"] = cost_infra1 + 1.0
+	assert_true(bool(sim.purchase_infrastructure().get("ok", false)), "Compute Cluster is bought")
+	for system_id in CabinetSystems.system_ids():
+		assert_eq(CabinetSystems.tier(state, str(system_id)), 1, "%s still tier 1" % str(system_id))
+	assert_almost_eq(CabinetSystems.next_tier_cost(state, "compute"), 250.0, 0.01, "Compute 1→2 unchanged")
+	assert_almost_eq(CabinetSystems.next_tier_cost(state, "cooling"), 450.0, 0.01, "Cooling 1→2 unchanged")
+	assert_almost_eq(CabinetSystems.next_tier_cost(state, "control"), 1500.0, 0.01, "Control 1→2 unchanged")
+	CabinetSystems.set_tier(state, "compute", 2)
+	assert_almost_eq(
+		CabinetSystems.next_tier_cost(state, "compute"), 750.0 * 12.5, 0.01,
+		"Compute 2→3 uses the scale that unlocks tier 3"
+	)
+	CabinetSystems.set_tier(state, "compute", 1)
+	for system_id in ["power", "backplane", "control"]:
+		assert_eq(CabinetSystems.tier(state, system_id), 1, "%s untouched before infra 2" % system_id)
+	state.economy["cash"] = InfrastructureSystem.cost_of_tier(2, ContentDatabase) + 1.0
+	assert_true(bool(sim.purchase_infrastructure().get("ok", false)), "Server Room is bought")
+	assert_eq(CabinetSystems.tier(state, "power"), 1, "Power does not auto-level")
+	assert_eq(CabinetSystems.tier(state, "backplane"), 1, "Backplane does not auto-level")
+	assert_eq(CabinetSystems.tier(state, "control"), 1, "Control does not auto-level")
+	board.ensure_board(state, ContentDatabase)
+	assert_eq(board.derived_supported_capacity(state, ContentDatabase), 3, "Still a 3-Bay Rail until bought")
+	assert_eq(board.derived_workflow_capacity(state, ContentDatabase), 1, "Still one workflow until bought")
+	assert_eq(ComputeSystem.job_slots(state), 1, "Still one parallel lane until power is bought")
+	var row2: Dictionary = _profile_of(2)
+	assert_almost_eq(
+		float(_live_scale(state)["base_token_rate"]), float(row2.get("base_token_rate", 0.0)), 0.5,
+		"Machine rate follows Server Room even at compute tier 1"
+	)
+	assert_almost_eq(
+		float(_live_scale(state)["cooling_capacity"]), float(row2.get("cooling_capacity", 0.0)), 0.5,
+		"Cooling follows Server Room even at cooling tier 1"
+	)
 	sim.free()

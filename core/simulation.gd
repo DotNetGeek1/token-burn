@@ -313,12 +313,12 @@ func reset_run(p_seed: int = 0, difficulty_override: String = "") -> void:
 	_life.reset_run(self, p_seed, difficulty_override)
 
 
-## Settles a run onto an Infrastructure Tier without charging for it: cabinet
-## entry tiers, rent, heat capacity and cooling follow the tier. Tests and
-## tools use it to stand a run up at a given scale; players buy tiers through
-## `purchase_infrastructure`.
-func apply_infrastructure_tier(state: RunState, new_tier: int) -> void:
-	_life.apply_infrastructure_tier(self, state, new_tier)
+## Settles a run onto an Infrastructure Tier without charging for it. With
+## `raise_systems` true (default), cabinet entry tiers are stamped; tests and
+## tools use that to stand a run at a given scale. Players buy through
+## `purchase_infrastructure`, which does not raise owned system tiers.
+func apply_infrastructure_tier(state: RunState, new_tier: int, raise_systems: bool = true) -> void:
+	_life.apply_infrastructure_tier(self, state, new_tier, raise_systems)
 
 
 ## Racks the machines earned through the permanent starting-rig unlock ladder.

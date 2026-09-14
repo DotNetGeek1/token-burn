@@ -113,9 +113,9 @@ static func upgrade_cabinet_system(sim: Node, system_id: String) -> Dictionary:
 
 # --- Infrastructure ----------------------------------------------------------
 
-## Buys the next Infrastructure Tier: the machine's scale. The tier's cabinet
-## entry tiers are raised into place, the rent becomes the tier's facility
-## cost, the rig's rate and heat are re-derived, a permanent-rig rung that
+## Buys the next Infrastructure Tier: the machine's scale. Owned cabinet
+## system tiers are unchanged; the rent becomes the tier's facility cost, the
+## rig's rate and heat are re-derived, a permanent-rig rung that
 ## had no floor before is racked, and the module shelf is restocked for the
 ## new scale. Returns the same shape as `upgrade_cabinet_system` — `ok`,
 ## `reason`, `tier`, `previous_tier`, `cost`, `effect` — so the SYSTEMS shelf
@@ -146,7 +146,7 @@ static func purchase_infrastructure(sim: Node) -> Dictionary:
 		)
 		return result
 	var reached: int = previous + 1
-	sim._life.apply_infrastructure_tier(sim, state, reached)
+	sim._life.apply_infrastructure_tier(sim, state, reached, false)
 	# A permanent rig rung the old scale had no floor for is racked now that
 	# there is room for it.
 	sim._life.install_permanent_rig(sim)

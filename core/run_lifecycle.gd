@@ -140,14 +140,14 @@ func reset_run(sim: Node, p_seed: int = 0, difficulty_override: String = "") -> 
 	)
 
 
-## Settles the run onto an Infrastructure Tier: the cabinet systems are raised
-## to the tier's entry tiers (never lowered — anything already bought above
-## them stays), the rent becomes the tier's facility cost, and heat capacity
-## and cooling are re-derived from the new floors. Nothing is granted and no
-## cash moves; the purchase flow and the investor's target are separate.
-func apply_infrastructure_tier(sim: Node, state: RunState, new_tier: int) -> void:
+## Settles the run onto an Infrastructure Tier. When `raise_systems` is true
+## (run start, save seeding, test teleports), cabinet tiers are raised to the
+## tier's entry tiers. Player purchases pass false so owned system tiers stay
+## put. Rent, heat capacity and cooling always follow the new scale.
+func apply_infrastructure_tier(sim: Node, state: RunState, new_tier: int, raise_systems: bool = true) -> void:
 	InfrastructureSystem.set_tier(state, new_tier, ContentDatabase)
-	CabinetSystems.raise_to_infrastructure(state, ContentDatabase)
+	if raise_systems:
+		CabinetSystems.raise_to_infrastructure(state, ContentDatabase)
 	InfrastructureSystem.apply_rent(state, ContentDatabase)
 	# A bigger cooling loop takes longer to cook. Heat is measured against this
 	# rather than a fixed hundred, so a higher tier buys headroom as well as

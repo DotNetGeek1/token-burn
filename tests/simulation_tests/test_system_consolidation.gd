@@ -42,7 +42,8 @@ func _test_chapter_capacity_and_cooling() -> void:
 		state.compute["heat"] = float(state.compute.heat_capacity) * 0.8
 		assert_true(HeatSystem.ambient_delta(state) <= 0.0, str(location) + " cooling offsets ambient heat before venting")
 		var cooling: float = 0.0
-		for level in range(1, 5):
+		var cooling_entry: int = InfrastructureSystem.cabinet_entry_tier(state, "cooling")
+		for level in range(cooling_entry, 5):
 			CabinetSystems.set_tier(state, "cooling", level)
 			var next: float = CabinetSystems.capacity(state, "cooling", "cooling_capacity")
 			assert_true(next > cooling, str(location) + " every cooling tier improves its sink")

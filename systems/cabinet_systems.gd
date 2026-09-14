@@ -19,11 +19,10 @@ extends RefCounted
 ## up a tier.
 ##
 ## Bays are the exception: the Workflow Backplane tier is the *only* source of
-## safe pipeline capacity. No infrastructure floor, no bonus stacks on top. An
-## infrastructure purchase still lifts the tier itself
-## (`raise_to_infrastructure`), which is how an industrial-cluster run has a
-## 7-Bay Rail. Anything the scale, a perk or an unlock adds arrives as overflow
-## allowance instead (see BoardSystem).
+## safe pipeline capacity. No infrastructure floor, no bonus stacks on top.
+## Bigger scales unlock higher backplane tiers in the Market; they do not grant
+## bays on purchase. Anything the scale, a perk or an unlock adds arrives as
+## overflow allowance instead (see BoardSystem).
 ##
 ## Everything here is static and reads content through `ContentDatabase`
 ## unless a database is passed in, the same way the other systems do.
@@ -233,12 +232,17 @@ static func capacity_at_tier(run_state: RunState, system_id: String, stat_key: S
 	var profile: Dictionary = InfrastructureSystem.profile(run_state, content_db)
 	var entry_tier: int = InfrastructureSystem.cabinet_entry_tier(run_state, system_id, content_db)
 	if stat_key == "base_token_rate":
-		value = float(profile.get(stat_key, 1000000.0)) * value / maxf(1.0, tier_value(system_id, stat_key, entry_tier, content_db))
+		var profile_rate: float = float(profile.get(stat_key, 1000000.0))
+		value = profile_rate * value / maxf(1.0, tier_value(system_id, stat_key, entry_tier, content_db))
+		if level < entry_tier:
+			value = maxf(value, profile_rate)
 	elif stat_key == "cooling_capacity" or stat_key == "heat_capacity":
 		# Infrastructure scale cannot mask a purchase: every tier adds 35%
 		# cooling and 15% heat headroom relative to the scale's entry tier.
 		var step: float = 0.35 if stat_key == "cooling_capacity" else 0.15
 		value = float(profile.get(stat_key, value)) * (1.0 + step * float(level - 1)) / (1.0 + step * float(entry_tier - 1))
+		if level < entry_tier:
+			value = maxf(value, maxf(infrastructure_floor(run_state, stat_key, content_db), float(profile.get(stat_key, value))))
 	elif stat_key == "hardware_slots":
 		value = maxf(float([2, 4, 8, 16][clampi(level - 1, 0, 3)]), infrastructure_floor(run_state, stat_key, content_db))
 	elif stat_key == BACKPLANE_STAT:
@@ -350,10 +354,10 @@ static func stat_snapshot(run_state: RunState, content_db: Node = null) -> Dicti
 
 # --- Infrastructure ----------------------------------------------------------
 
-## Settles the cabinet onto the run's infrastructure: every system is at least
-## the entry tier the scale is stated at. Never lowers a tier, so a system
-## bought early survives the purchase, and the scale profile's numbers are what
-## the run actually has the moment it is bought.
+## Seeds cabinet tiers for a run standing on an infrastructure scale: every
+## system is at least that tier's `cabinet_entry_tiers`. Never lowers a tier.
+## Run start, migration and test teleports use this; player infrastructure
+## purchases do not.
 static func raise_to_infrastructure(run_state: RunState, content_db: Node = null) -> Dictionary:
 	var current: Dictionary = tiers(run_state, content_db)
 	var floor_tiers: Dictionary = InfrastructureSystem.cabinet_entry_tiers(run_state, content_db)
@@ -389,7 +393,12 @@ static func next_tier_cost(run_state: RunState, system_id: String, content_db: N
 	var current: int = tier(run_state, system_id, content_db)
 	if current >= max_tier(content_db):
 		return -1.0
-	var cost: float = cost_of_tier(system_id, current + 1, content_db) * float(InfrastructureSystem.profile(run_state, content_db).get("cost_scale", 1.0))
+	var target_tier: int = current + 1
+	var unlock_infra: int = InfrastructureSystem.tier_required_for_cabinet(target_tier, content_db)
+	var cost_scale: float = float(
+		InfrastructureSystem.profile_at(unlock_infra, content_db).get("cost_scale", 1.0)
+	)
+	var cost: float = cost_of_tier(system_id, target_tier, content_db) * cost_scale
 	return cost * (1.0 - clampf(float(run_state.build.get("system_discount", 0.0)), 0.0, 0.9))
 
 
