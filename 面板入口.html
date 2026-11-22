@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title data-i18n="portal.title">godot-mcp-enhanced 面板入口</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#16181d;color:#d7dce3;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
+.box{max-width:520px;padding:32px}
+h1{font-size:18px;margin:0 0 12px}
+p{font-size:14px;line-height:1.7;color:#9aa3ad;margin:8px 0}
+code{background:#22262d;padding:2px 6px;border-radius:4px;font-size:13px}
+ul{padding-left:0;list-style:none}
+a.btn{display:inline-block;margin:6px 8px 6px 0;padding:8px 16px;background:#2d6cdf;color:#fff;border-radius:6px;text-decoration:none;font-size:14px}
+.status{margin-top:16px;font-size:13px;color:#6f7882}
+</style>
+</head>
+<body>
+<div class="box">
+<h1 data-i18n="header.title">godot-mcp-enhanced 监控面板</h1>
+<div id="list"></div>
+<div id="dead" style="display:none">
+<p data-i18n="portal.dead.p1">当前没有运行中的面板服务(godot-mcp server 未启动)。</p>
+<p><span data-i18n="portal.dead.p2">启动方式:打开任一 AI 客户端会话(面板随 godot-mcp server 自动启动),或运行</span><br><code>npx godot-mcp-enhanced dashboard --web</code></p>
+<p><span data-i18n="portal.dead.p3pre">启动后</span><a href="#" onclick="location.reload();return false" data-i18n="portal.dead.refresh">刷新本页</a><span data-i18n="portal.dead.p3post">即可自动进入。</span></p>
+</div>
+<p class="status" id="status" data-i18n="portal.scanning">正在扫描本机面板服务…</p>
+</div>
+<script>
+// i18n(2026-10-13):navigator.language 自动检测(zh* → zh,其余 en),无手动切换——
+// 入口页存活数秒即跳转,与主面板语言偏好(localStorage)不联动(file:// 与 http
+// origin 隔离,读不到);中文为 zh 兜底,en 时下方 data-i18n 替换。
+var I18N = {"zh":{"header.title":"godot-mcp-enhanced 监控面板","portal.title":"godot-mcp-enhanced 面板入口","portal.dead.p1":"当前没有运行中的面板服务(godot-mcp server 未启动)。","portal.dead.p2":"启动方式:打开任一 AI 客户端会话(面板随 godot-mcp server 自动启动),或运行","portal.dead.p3pre":"启动后","portal.dead.refresh":"刷新本页","portal.dead.p3post":"即可自动进入。","portal.scanning":"正在扫描本机面板服务…","portal.scanDone":"扫描完成:9550-9569 无响应。","portal.found":"发现 {n} 个实例,正在进入面板服务(:{port})…","portal.instance":"实例 :{port}"},"en":{"header.title":"godot-mcp-enhanced Monitor","portal.title":"godot-mcp-enhanced panel entry","portal.dead.p1":"No panel service is currently running (godot-mcp server not started).","portal.dead.p2":"To start: open any AI client session (the panel starts automatically with the godot-mcp server), or run","portal.dead.p3pre":"Once started, ","portal.dead.refresh":"refresh this page","portal.dead.p3post":" to enter automatically.","portal.scanning":"Scanning for local panel services…","portal.scanDone":"Scan complete: no response on 9550-9569.","portal.found":"Found {n} instance(s), entering the panel service (:{port})…","portal.instance":"Instance :{port}"}};
+var LANG = String(navigator.language || 'zh').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+function t(key, params) {
+  var s = (I18N[LANG] && I18N[LANG][key]) || I18N.zh[key] || key;
+  if (params) { for (var k in params) s = s.split('{' + k + '}').join(String(params[k])); }
+  return s;
+}
+if (LANG === 'en') {
+  document.title = t('portal.title');
+  document.documentElement.lang = 'en';
+  var els = document.querySelectorAll('[data-i18n]');
+  for (var i = 0; i < els.length; i++) els[i].textContent = t(els[i].getAttribute('data-i18n'));
+}
+var TOKEN = "";
+var PREFERRED = 9551;
+// 2B (2026-09-19 安全加固批2): token 经 hash(#token=)传递而非 query——hash 不发给服务器
+// (访问日志/Referer 不含 token),面板侧读 hash 握手 cookie 后 replaceState 连 hash 清除,
+// session/history 最终为干净 URL。query 通道由 CLI 打开旧链保留,portal 不再使用。
+function withToken(url) {
+  return TOKEN ? url + '#token=' + encodeURIComponent(TOKEN) : url;
+}
+function probe(port) {
+  return new Promise(function (resolve) {
+    fetch('http://127.0.0.1:' + port + '/', { mode: 'no-cors' })
+      .then(function () { resolve(port); })
+      .catch(function () { resolve(-1); });
+  });
+}
+var probes = [];
+// M6(2026-10-14 审查): 扫描段跟随写入时的 preferred 端口(PREFERRED..+19,与 server
+// PORT_ATTEMPTS=20 同宽);默认段(9550-9569)兜底同扫——入口页落盘后用户改
+// GODOT_MCP_WEB_GUI_PORT 也能找到新段实例。去重防双段重叠时重复探测。
+function addRange(lo, hi) { for (var p = lo; p <= hi; p++) { if (probes.indexOf(p) === -1) probes.push(p); } }
+addRange(9550, 9569);
+if (PREFERRED && PREFERRED !== 9550) addRange(PREFERRED, PREFERRED + 19);
+Promise.all(probes.map(function (p) { return probe(p); })).then(function (alive) {
+  var found = alive.filter(function (p) { return p >= 0; });
+  var st = document.getElementById('status');
+  var list = document.getElementById('list');
+  if (found.length === 0) {
+    document.getElementById('dead').style.display = 'block';
+    st.textContent = t('portal.scanDone');
+    return;
+  }
+  // 挑选(根治批 2026-10-08):preferred 活着优先(写入入口页的最近启动实例);
+  // 否则回退最大端口。探测为 no-cors opaque(读不到版本,给 health 开 CORS 会推翻
+  // M-4 收紧决策),故 preferred 是零安全代价下最准的"最新实例"判据。
+  var target = (PREFERRED && found.indexOf(PREFERRED) !== -1) ? PREFERRED : found[found.length - 1];
+  st.textContent = t('portal.found', { n: found.length, port: target });
+  for (var i = 0; i < found.length; i++) {
+    var a = document.createElement('a');
+    a.className = 'btn';
+    a.href = withToken('http://127.0.0.1:' + found[i] + '/');
+    a.textContent = (found[i] === target ? '★ ' : '') + t('portal.instance', { port: found[i] });
+    list.appendChild(a);
+  }
+  // 自动进入 target(★ 标注;点击上方按钮可选其他实例);
+  // 内嵌 token 时 URL 带 #token= → 首次即过鉴权,前端握手种 cookie 后长期免带。
+  location.replace(withToken('http://127.0.0.1:' + target + '/'));
+});
+</script>
+</body>
+</html>

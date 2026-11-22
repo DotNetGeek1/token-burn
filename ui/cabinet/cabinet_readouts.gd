@@ -18,6 +18,7 @@ var _drum: MultiplierDrum = null
 var _heat: HeatMeter = null
 var _feed: BurnFeed = null
 var _status: SystemStatus = null
+var _investor: InvestorTargetPanel = null
 var _screen: CabinetScreen = null
 
 ## The tokens-per-minute figure as the panel currently prints it, and where it
@@ -27,16 +28,25 @@ var _rate_target: float = 0.0
 var _rate_tween: Tween = null
 ## The ledger below the rate rows, kept so a climb re-prints only the figure.
 var _ledger_tail: Array = []
-var _rig_rate: float = 0.0
+var _investor_delivered_baseline: float = -1.0
+var _investor_snap_next: bool = true
 ## `[Signal, Callable]` pairs hooked up in `_init`, undone when the panel leaves
 ## the tree so a rebuilt cabinet does not leave a stale readout listening.
 var _hooks: Array = []
 
 
-func _init(drum: MultiplierDrum, heat: HeatMeter, feed: BurnFeed, status: SystemStatus, screen: CabinetScreen) -> void:
+func _init(
+	drum: MultiplierDrum,
+	heat: HeatMeter,
+	feed: BurnFeed,
+	investor: InvestorTargetPanel,
+	status: SystemStatus,
+	screen: CabinetScreen,
+) -> void:
 	_drum = drum
 	_heat = heat
 	_feed = feed
+	_investor = investor
 	_status = status
 	_screen = screen
 	_hook_rate_events()
@@ -147,13 +157,10 @@ func refresh_idle() -> void:
 ## multipliers, which is what "system status" means on this machine.
 func refresh_status() -> void:
 	var state := Simulation.run_state
-	var round_number: int = int(state.calendar.get("round", 1))
-	var deadline: int = round_number + Simulation.rounds_remaining() - 1
 	var cash: float = float(state.economy.get("cash", 0.0))
 	var entries: Array = [
 		{"key": "CREDITS", "value": NumberFormat.format_cash(cash), "color": CabinetStyle.RED if cash < 0.0 else CabinetStyle.PHOSPHOR},
 		{"key": "REP", "value": str(int(state.business.get("reputation", 0.0)))},
-		{"key": "ROUND", "value": "%d/%d" % [round_number, deadline], "color": CabinetStyle.RED if Simulation.rounds_remaining() <= 2 else CabinetStyle.PHOSPHOR},
 	]
 	var costs: Dictionary = Simulation.cost_forecast()
 	entries.append({"key": "BILLS", "value": NumberFormat.format_cash(float(costs.get("fixed_due", 0.0))), "color": CabinetStyle.AMBER if float(costs.get("fixed_due", 0.0)) > cash else CabinetStyle.PHOSPHOR_DIM})
@@ -173,14 +180,32 @@ func refresh_status() -> void:
 		})
 		index += 1
 	_ledger_tail = entries
-	_rig_rate = rig_token_rate()
 	_retarget_rate(effective_token_rate())
+	refresh_investor()
 
 
-## The rate rows sit at the top of the ledger: TOKENS is the effective
-## tokens-per-minute figure in amber (white while it is climbing), RIG the raw
-## hardware rate under it in dim phosphor so the gap between them is the
-## pipeline's doing.
+## The investor target panel: delivered progress, pace notch, rounds left.
+func refresh_investor() -> void:
+	if _investor == null or not is_instance_valid(_investor):
+		return
+	var progress: Dictionary = Simulation.investor_progress()
+	if not Simulation.investor_active() and progress.is_empty():
+		_investor.set_view({})
+		_investor_delivered_baseline = -1.0
+		_investor_snap_next = true
+		return
+	var view: Dictionary = Simulation.investor_pace_view()
+	if view.is_empty():
+		_investor.set_view({})
+		return
+	var delivered: float = float(view.get("delivered", 0.0))
+	var snap: bool = _investor_snap_next or delivered < _investor_delivered_baseline
+	_investor.set_view(view, snap)
+	_investor_snap_next = false
+	_investor_delivered_baseline = delivered
+
+
+## TOKENS per minute at the top of the ledger.
 func _rate_rows() -> Array:
 	var climbing: bool = is_rate_climbing()
 	return [
@@ -188,11 +213,6 @@ func _rate_rows() -> Array:
 			"key": "TOKENS",
 			"value": NumberFormat.format_token_rate(_rate_shown),
 			"color": CabinetStyle.WHITE if climbing else CabinetStyle.AMBER,
-		},
-		{
-			"key": "RIG",
-			"value": NumberFormat.format_token_rate(_rig_rate),
-			"color": CabinetStyle.PHOSPHOR_DIM,
 		},
 	]
 

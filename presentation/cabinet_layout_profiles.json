@@ -16,7 +16,7 @@
       "crt": [0.06, 0.0, 0.715, 0.70],
       "telemetry": [0.785, 0.0, 0.215, 0.70],
       "telemetry_orientation": "vertical",
-      "telemetry_shares": {"drum": 0.8, "heat": 0.6, "status": 2.2, "feed": 1.6},
+      "telemetry_shares": {"drum": 0.8, "heat": 0.6, "investor": 1.0, "status": 1.8, "feed": 1.6},
       "backplane": [0.0, 0.715, 0.56, 0.285],
       "command_deck": [0.575, 0.715, 0.425, 0.285],
       "dock_columns": 4,

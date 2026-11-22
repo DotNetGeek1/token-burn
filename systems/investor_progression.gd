@@ -30,6 +30,9 @@ const FIRST_LEVEL := 1
 ## Ids for targets past the authored list.
 const GENERATED_ID_PREFIX := "investor.generated."
 
+## How many rounds ahead/behind linear pace before the cabinet says AHEAD/BEHIND.
+const PACE_ROUND_TOLERANCE := 0.5
+
 
 # --- Content -----------------------------------------------------------------
 
@@ -207,6 +210,7 @@ func activate_level(run_state: RunState, new_level: int, content_db: Node = null
 		"level": new_level,
 		"targets_completed": completed,
 		"tokens_delivered": 0.0,
+		"activated_round": current_round,
 		"deadline_round": current_round + deadline_rounds_for(target) - 1,
 		"max_heat_ratio": 0.0,
 		"catastrophes": 0,
@@ -401,6 +405,43 @@ func progress(run_state: RunState, content_db: Node = null) -> Dictionary:
 		"profit": float(run_state.economy.get("cash", 0.0)) - float(inv.get("profit_baseline", 0.0)),
 		"deadline_round": deadline,
 		"rounds_remaining": maxi(0, deadline - int(run_state.calendar.get("round", 1)) + 1),
+	}
+
+
+## Linear pace for the live target window: where delivery should be by this
+## round, and how many rounds ahead or behind that the run is. Pace is counted
+## on rounds *completed*, so a target that has just gone live reads ON PACE
+## rather than a round behind before the first prompt is spent.
+func pace_view(run_state: RunState, content_db: Node = null) -> Dictionary:
+	var snapshot: Dictionary = progress(run_state, content_db)
+	if snapshot.is_empty():
+		return {}
+	var target: Dictionary = Dictionary(snapshot.get("target", {}))
+	var total_rounds: int = deadline_rounds_for(target)
+	var deadline: int = int(snapshot.get("deadline_round", 0))
+	var activation_round: int = deadline - total_rounds + 1
+	var current_round: int = int(run_state.calendar.get("round", 1))
+	var rounds_elapsed: int = clampi(current_round - activation_round, 0, total_rounds)
+	var pace_ratio: float = float(rounds_elapsed) / float(maxi(1, total_rounds))
+	var burn_ratio: float = float(snapshot.get("burn_ratio", 0.0))
+	var pace_rounds_delta: float = (burn_ratio - pace_ratio) * float(total_rounds)
+	var pace_label: String = "on_pace"
+	if pace_rounds_delta > PACE_ROUND_TOLERANCE:
+		pace_label = "ahead"
+	elif pace_rounds_delta < -PACE_ROUND_TOLERANCE:
+		pace_label = "behind"
+	return {
+		"level": int(snapshot.get("level", FIRST_LEVEL)),
+		"target_name": str(target.get("name", "")),
+		"delivered": float(snapshot.get("tokens_burned", 0.0)),
+		"total_burn": float(snapshot.get("total_burn", 0.0)),
+		"burn_ratio": burn_ratio,
+		"pace_ratio": pace_ratio,
+		"pace_rounds_delta": pace_rounds_delta,
+		"pace_label": pace_label,
+		"rounds_remaining": int(snapshot.get("rounds_remaining", 0)),
+		"deadline_round": deadline,
+		"activation_round": activation_round,
 	}
 
 

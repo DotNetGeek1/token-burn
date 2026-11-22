@@ -21,6 +21,7 @@ func run() -> void:
 	_test_each_target_is_harder_than_the_last()
 	_test_the_draft_is_dealt_once_and_gates_the_move()
 	_test_the_deadline_is_counted_on_the_continuous_calendar()
+	_test_pace_view_ahead_behind_and_activation_window()
 
 	if FileAccess.file_exists(SCRATCH_PROFILE):
 		DirAccess.remove_absolute(SCRATCH_PROFILE)
@@ -296,4 +297,33 @@ func _test_the_deadline_is_counted_on_the_continuous_calendar() -> void:
 		expected_deadline > InvestorProgression.deadline_rounds_for(target),
 		"So the deadline sits past where a restarted calendar would put it"
 	)
+	sim.free()
+
+
+func _test_pace_view_ahead_behind_and_activation_window() -> void:
+	_fresh_profile()
+	var sim: Node = _sim()
+	sim.start_run(9110)
+	var target: Dictionary = sim.investor_target()
+	var total: float = float(target.get("total_burn", 30_000_000.0))
+	var total_rounds: int = InvestorProgression.deadline_rounds_for(target)
+	var delivered: float = total * 0.41
+	sim.run_state.investor["tokens_delivered"] = delivered
+
+	sim.run_state.calendar["round"] = 3
+	var early: Dictionary = sim.investor_pace_view()
+	assert_eq(str(early.get("pace_label", "")), "ahead", "41 percent on round 3 of 12 is ahead of linear pace")
+	assert_almost_eq(float(early.get("pace_ratio", 0.0)), 2.0 / float(total_rounds), 0.001, "Pace notch is two completed rounds of twelve")
+
+	sim.run_state.calendar["round"] = 11
+	var late: Dictionary = sim.investor_pace_view()
+	assert_eq(str(late.get("pace_label", "")), "behind", "41 percent on round 11 of 12 is behind")
+
+	sim.run_state.calendar["round"] = 5
+	sim.investor_progression().activate_level(sim.run_state, 2, ContentDatabase)
+	sim.run_state.investor["tokens_delivered"] = 0.0
+	var mid: Dictionary = sim.investor_pace_view()
+	assert_eq(int(mid.get("activation_round", 0)), 5, "Level two starts counting from round five")
+	assert_almost_eq(float(mid.get("pace_ratio", 0.0)), 0.0, 0.001, "No round of the new window has been completed yet")
+	assert_eq(str(mid.get("pace_label", "")), "on_pace", "So a fresh target is on pace, not behind")
 	sim.free()

@@ -251,7 +251,7 @@ func _tuning_for(key: String) -> Dictionary:
 
 
 ## How the telemetry rail is shared between its instruments, as stretch ratios
-## keyed `drum`, `heat`, `status`, `feed`. Empty when the profile keeps the
+## keyed `drum`, `heat`, `investor`, `status`, `feed`. Empty when the profile keeps the
 ## shell's defaults.
 func telemetry_shares() -> Dictionary:
 	var raw: Variant = _profile.get("telemetry_shares")

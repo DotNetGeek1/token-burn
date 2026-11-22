@@ -766,6 +766,11 @@ func investor_progress() -> Dictionary:
 	return _investor_progression.progress(run_state, ContentDatabase)
 
 
+## Pace against the investor deadline for cabinet readouts.
+func investor_pace_view() -> Dictionary:
+	return _investor_progression.pace_view(run_state, ContentDatabase)
+
+
 ## Everything a readout needs about the investor's ladder at once.
 func investor_summary() -> Dictionary:
 	return _investor_progression.summary(run_state, ContentDatabase)

@@ -27,7 +27,7 @@ func _ready() -> void:
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_theme_constant_override("separation", 1)
 	add_child(column)
-	_caption = CabinetStyle.caption("SYSTEM STATUS")
+	_caption = CabinetStyle.caption("SYSTEM")
 	column.add_child(_caption)
 	column.add_child(CabinetStyle.rule(CabinetStyle.AMBER, 0.35))
 	_rows = HBoxContainer.new()

@@ -30,7 +30,7 @@ extends Control
 ##     │   │   │   ├── CrtFrame         (CabinetScreen in the bezel's opening)
 ##     │   │   │   ├── CommandDeck      (Override, CommitButton, Cooldown, LEDs)
 ##     │   │   │   └── WorkflowBackplane (WorkflowKeys header, ModuleDock grid)
-##     │   │   └── TelemetryRail        (MultiplierDrum, HeatMeter, SystemStatus, BurnFeed)
+##     │   │   └── TelemetryRail        (MultiplierDrum, HeatMeter, InvestorTargetPanel, SystemStatus, BurnFeed)
 ##     │   └── MaintenanceLayer         (menu, system mounts, caption; hidden by default)
 ##     └── OverlayRoot
 ##
@@ -43,8 +43,8 @@ extends Control
 ## round-end paperwork (debrief → bills → angels), the title screen in front of
 ## a cold start.
 
-## The telemetry rail's default stretch ratios: drum, heat, status, feed.
-const TELEMETRY_SHARES := {"drum": 1.0, "heat": 0.8, "status": 1.7, "feed": 1.7}
+## The telemetry rail's default stretch ratios: drum, heat, investor, status, feed.
+const TELEMETRY_SHARES := {"drum": 1.0, "heat": 0.8, "investor": 1.1, "status": 1.35, "feed": 1.7}
 
 # The parts that are not instruments
 var _layout_profile: CabinetLayout = null
@@ -88,6 +88,7 @@ var _screen: CabinetScreen = null
 var _drum: MultiplierDrum = null
 var _heat: HeatMeter = null
 var _feed: BurnFeed = null
+var _investor: InvestorTargetPanel = null
 var _status: SystemStatus = null
 var _override: DeckSwitch = null
 var _cooldown: DeckSwitch = null
@@ -166,6 +167,8 @@ func _build_instruments() -> void:
 	_drum.name = "MultiplierDrum"
 	_heat = HeatMeter.new()
 	_heat.name = "HeatMeter"
+	_investor = InvestorTargetPanel.new()
+	_investor.name = "InvestorTargetPanel"
 	_feed = BurnFeed.new()
 	_feed.name = "BurnFeed"
 	_status = SystemStatus.new()
@@ -193,7 +196,7 @@ func _build_instruments() -> void:
 	_dock.bay_pressed.connect(_on_bay_pressed)
 	_dock.bay_dropped.connect(_on_bay_dropped)
 
-	_readouts = CabinetReadouts.new(_drum, _heat, _feed, _status, _screen)
+	_readouts = CabinetReadouts.new(_drum, _heat, _feed, _investor, _status, _screen)
 
 
 ## The responsive shell: backdrop, chassis art, then the safe area with the
@@ -289,7 +292,7 @@ func _build_shell() -> void:
 	# Each instrument sits in a plain slot Control, so the stack shares the rail
 	# by ratio rather than by the instruments' own minimum sizes: a status
 	# panel with nine rows must not push the feed off the frame.
-	for entry in [[_drum, "drum"], [_heat, "heat"], [_status, "status"], [_feed, "feed"]]:
+	for entry in [[_drum, "drum"], [_heat, "heat"], [_investor, "investor"], [_status, "status"], [_feed, "feed"]]:
 		var instrument: Control = entry[0]
 		var slot := Control.new()
 		slot.name = "%sSlot" % instrument.name
@@ -304,6 +307,10 @@ func _build_shell() -> void:
 		_telemetry_slots[entry[1]] = slot
 	_feed.visibility_changed.connect(_on_feed_visibility)
 	_on_feed_visibility()
+	# A run with no target (content missing) hides the investor panel; its
+	# slot goes with it so the rail does not keep an empty well.
+	_investor.visibility_changed.connect(_on_investor_visibility)
+	_on_investor_visibility()
 
 
 ## How the rail is shared between its instruments when the profile does not
@@ -326,6 +333,11 @@ func _apply_telemetry_shares() -> void:
 ## while it is open the ledger steps aside for it. The ledger's figures are
 ## the round's standing (credits, rent, rounds) and nothing a batch changes
 ## mid-flight, so nothing is lost by covering it for the burn.
+func _on_investor_visibility() -> void:
+	if _telemetry_slots.has("investor"):
+		(_telemetry_slots["investor"] as Control).visible = _investor.visible
+
+
 func _on_feed_visibility() -> void:
 	var slot: Node = _feed.get_parent()
 	if slot is Control and slot != _telemetry_stack:
@@ -404,6 +416,8 @@ func _build_overlays() -> void:
 func _connect_events() -> void:
 	EventBus.run_started.connect(refresh_all)
 	EventBus.round_started.connect(refresh_all)
+	EventBus.investor_target_completed.connect(func(_level: int, _final: bool) -> void: refresh_all())
+	EventBus.investor_level_advanced.connect(func(_level: int) -> void: refresh_all())
 	EventBus.reward_calculated.connect(func(_a): refresh_all())
 	EventBus.perk_acquired.connect(func(_a): refresh_all())
 	EventBus.upgrade_purchased.connect(func(_a): refresh_all())

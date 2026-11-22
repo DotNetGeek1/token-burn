@@ -317,7 +317,7 @@ func _collect_instruments(node: Node, out: Array[Control], in_scroll: bool) -> v
 func _is_instrument(control: Control) -> bool:
 	if control is CabinetScreen or control is DeckSwitch or control is AbortLever:
 		return true
-	if control is MultiplierDrum or control is HeatMeter or control is SystemStatus:
+	if control is MultiplierDrum or control is HeatMeter or control is InvestorTargetPanel or control is SystemStatus:
 		return true
 	if control is ModuleBay:
 		return not bool(control.get("covered"))
